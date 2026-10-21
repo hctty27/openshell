@@ -1,3 +1,6 @@
+import { renderMessage, type DisplayText } from "../i18n/message";
+import { useTranslation } from "react-i18next";
+import { t } from "../i18n";
 import {
   createContext,
   useCallback,
@@ -8,23 +11,32 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { AlertTriangle, FolderPlus, Info, Pencil, ShieldAlert, Trash2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  FolderPlus,
+  Info,
+  Pencil,
+  ShieldAlert,
+  Trash2,
+  X,
+} from "lucide-react";
 
 export interface ConfirmDialogOptions {
-  title: string;
-  description: string;
-  confirmLabel?: string;
+  title: DisplayText;
+  description: DisplayText;
+  confirmLabel?: DisplayText;
   tone?: "default" | "warning" | "danger";
   preview?: string;
 }
 
 export interface InputDialogOptions {
-  title: string;
-  description?: string;
-  label: string;
+  icon?: "rename" | "create";
+  title: DisplayText;
+  description?: DisplayText;
+  label: DisplayText;
   defaultValue?: string;
-  placeholder?: string;
-  confirmLabel?: string;
+  placeholder?: DisplayText;
+  confirmLabel?: DisplayText;
 }
 
 interface DialogAPI {
@@ -33,14 +45,25 @@ interface DialogAPI {
 }
 
 type DialogRequest =
-  | { id: number; kind: "confirm"; options: ConfirmDialogOptions; resolve(value: boolean): void }
-  | { id: number; kind: "input"; options: InputDialogOptions; resolve(value: string | null): void };
+  | {
+      id: number;
+      kind: "confirm";
+      options: ConfirmDialogOptions;
+      resolve(value: boolean): void;
+    }
+  | {
+      id: number;
+      kind: "input";
+      options: InputDialogOptions;
+      resolve(value: string | null): void;
+    };
 
 const DialogContext = createContext<DialogAPI | null>(null);
 
 export function useDialogs(): DialogAPI {
   const context = useContext(DialogContext);
-  if (!context) throw new Error("useDialogs must be used inside DialogProvider");
+  if (!context)
+    throw new Error("useDialogs must be used inside DialogProvider");
   return context;
 }
 
@@ -51,6 +74,7 @@ function DialogContent({
   request: DialogRequest;
   onDone(result: boolean | string | null): void;
 }) {
+  useTranslation();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -59,11 +83,21 @@ function DialogContent({
   const descriptionID = useId();
   const isInput = request.kind === "input";
   const options = request.options;
-  const [value, setValue] = useState(isInput ? (options as InputDialogOptions).defaultValue ?? "" : "");
-  const tone = !isInput ? (options as ConfirmDialogOptions).tone ?? "default" : "default";
+  const [value, setValue] = useState(
+    isInput ? ((options as InputDialogOptions).defaultValue ?? "") : "",
+  );
+  const tone = !isInput
+    ? ((options as ConfirmDialogOptions).tone ?? "default")
+    : "default";
   const Icon = isInput
-    ? (options.title.includes("修改") || options.title.includes("重命名") ? Pencil : FolderPlus)
-    : tone === "danger" ? Trash2 : tone === "warning" ? ShieldAlert : Info;
+    ? (options as InputDialogOptions).icon === "rename"
+      ? Pencil
+      : FolderPlus
+    : tone === "danger"
+      ? Trash2
+      : tone === "warning"
+        ? ShieldAlert
+        : Info;
 
   const complete = (result: boolean | string | null) => {
     if (finished.current) return;
@@ -92,8 +126,11 @@ function DialogContent({
     }
   };
 
-  const preview = request.kind === "confirm" ? request.options.preview : undefined;
-  const description = options.description;
+  const preview =
+    request.kind === "confirm" ? request.options.preview : undefined;
+  const description = options.description
+    ? renderMessage(options.description)
+    : undefined;
 
   return (
     <dialog
@@ -111,35 +148,82 @@ function DialogContent({
         if (event.target === event.currentTarget) cancel();
       }}
     >
-      <form onSubmit={(event) => { event.preventDefault(); confirm(); }}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          confirm();
+        }}
+      >
         <div className="app-dialog__header">
-          <span className="app-dialog__icon" aria-hidden="true"><Icon size={19} /></span>
-          <h2 id={titleID}>{options.title}</h2>
-          <button type="button" className="app-dialog__close" aria-label="关闭弹窗" onClick={cancel}><X size={18} /></button>
+          <span className="app-dialog__icon" aria-hidden="true">
+            <Icon size={19} />
+          </span>
+          <h2 id={titleID}>{renderMessage(options.title)}</h2>
+          <button
+            type="button"
+            className="app-dialog__close"
+            aria-label={t("common:closeDialog")}
+            onClick={cancel}
+          >
+            <X size={18} />
+          </button>
         </div>
-        {description && <p id={descriptionID} className="app-dialog__description">{description}</p>}
+        {description && (
+          <p id={descriptionID} className="app-dialog__description">
+            {description}
+          </p>
+        )}
         {request.kind === "input" ? (
           <label className="app-dialog__field">
-            <span>{request.options.label}</span>
+            <span>{renderMessage(request.options.label)}</span>
             <input
               ref={inputRef}
               value={value}
               onChange={(event) => setValue(event.target.value)}
-              placeholder={request.options.placeholder}
+              placeholder={
+                request.options.placeholder
+                  ? renderMessage(request.options.placeholder)
+                  : undefined
+              }
               autoComplete="off"
               autoFocus
             />
           </label>
         ) : preview !== undefined ? (
           <div className="app-dialog__preview">
-            <pre>{preview.length > 4000 ? `${preview.slice(0, 4000)}\n…（预览已截断）` : preview}</pre>
-            {preview.includes("\n") && <small>共 {preview.split(/\r\n|\n|\r/).length} 行</small>}
+            <pre>
+              {preview.length > 4000
+                ? t("common:previewTruncated", { text: preview.slice(0, 4000) })
+                : preview}
+            </pre>
+            {preview.includes("\n") && (
+              <small>
+                {t("common:lineCount", {
+                  count: preview.split(/\r\n|\n|\r/).length,
+                })}
+              </small>
+            )}
           </div>
         ) : null}
         <div className="app-dialog__actions">
-          <button type="button" ref={cancelRef} className="app-dialog__secondary" onClick={cancel}>取消</button>
-          <button type="submit" className={`app-dialog__primary ${tone === "danger" ? "app-dialog__primary--danger" : ""}`} disabled={isInput && !value.trim()}>
-            {options.confirmLabel ?? (isInput ? "确定" : "确认")}
+          <button
+            type="button"
+            ref={cancelRef}
+            className="app-dialog__secondary"
+            onClick={cancel}
+          >
+            {t("common:cancel")}
+          </button>
+          <button
+            type="submit"
+            className={`app-dialog__primary ${tone === "danger" ? "app-dialog__primary--danger" : ""}`}
+            disabled={isInput && !value.trim()}
+          >
+            {options.confirmLabel
+              ? renderMessage(options.confirmLabel)
+              : isInput
+                ? t("common:ok")
+                : t("common:confirm")}
           </button>
         </div>
       </form>
@@ -148,33 +232,53 @@ function DialogContent({
 }
 
 export function DialogProvider({ children }: PropsWithChildren) {
+  useTranslation();
   const queue = useRef<DialogRequest[]>([]);
   const id = useRef(0);
   const [current, setCurrent] = useState<DialogRequest | null>(null);
 
-  const confirm = useCallback((options: ConfirmDialogOptions): Promise<boolean> =>
-    new Promise((resolve) => {
-      queue.current.push({ id: ++id.current, kind: "confirm", options, resolve });
-      if (queue.current.length === 1) setCurrent(queue.current[0]);
-    }), []);
+  const confirm = useCallback(
+    (options: ConfirmDialogOptions): Promise<boolean> =>
+      new Promise((resolve) => {
+        queue.current.push({
+          id: ++id.current,
+          kind: "confirm",
+          options,
+          resolve,
+        });
+        if (queue.current.length === 1) setCurrent(queue.current[0]);
+      }),
+    [],
+  );
 
-  const input = useCallback((options: InputDialogOptions): Promise<string | null> =>
-    new Promise((resolve) => {
-      queue.current.push({ id: ++id.current, kind: "input", options, resolve });
-      if (queue.current.length === 1) setCurrent(queue.current[0]);
-    }), []);
+  const input = useCallback(
+    (options: InputDialogOptions): Promise<string | null> =>
+      new Promise((resolve) => {
+        queue.current.push({
+          id: ++id.current,
+          kind: "input",
+          options,
+          resolve,
+        });
+        if (queue.current.length === 1) setCurrent(queue.current[0]);
+      }),
+    [],
+  );
 
   const done = useCallback((result: boolean | string | null) => {
     const request = queue.current.shift();
     if (request?.kind === "confirm") request.resolve(result === true);
-    else if (request?.kind === "input") request.resolve(typeof result === "string" ? result : null);
+    else if (request?.kind === "input")
+      request.resolve(typeof result === "string" ? result : null);
     setCurrent(queue.current[0] ?? null);
   }, []);
 
   return (
     <DialogContext.Provider value={{ confirm, input }}>
       {children}
-      {current && <DialogContent key={current.id} request={current} onDone={done} />}
+      {current && (
+        <DialogContent key={current.id} request={current} onDone={done} />
+      )}
     </DialogContext.Provider>
   );
 }

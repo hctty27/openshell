@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { t } from "../i18n";
 import { Settings2 } from "lucide-react";
 import type { QuickCommand, QuickCommandLayout, Tab } from "../types";
 
@@ -11,46 +13,67 @@ interface Props {
 
 export function visibleQuickCommands(commands: QuickCommand[], tab?: Tab) {
   if (!tab) return [];
-  return commands.filter((command) =>
-    command.scope === "global" ||
-    (command.scope === "group" && command.scopeId === tab.session.groupId) ||
-    (command.scope === "session" && command.scopeId === tab.session.id),
+  return commands.filter(
+    (command) =>
+      command.scope === "global" ||
+      (command.scope === "group" && command.scopeId === tab.session.groupId) ||
+      (command.scope === "session" && command.scopeId === tab.session.id),
   );
 }
 
-export default function QuickCommandBar({ tab, commands, layout, onManage, onRun }: Props) {
+export default function QuickCommandBar({
+  tab,
+  commands,
+  layout,
+  onManage,
+  onRun,
+}: Props) {
+  useTranslation();
   const visible = visibleQuickCommands(commands, tab);
   return (
-    <div className={`quick-command-bar ${layout}`} aria-label="快速命令栏">
+    <div
+      className={`quick-command-bar ${layout}`}
+      aria-label={t("terminal:quickCommands")}
+    >
       <button
         type="button"
         className="quick-command-manage"
         onClick={onManage}
-        title="管理快速命令"
+        title={t("terminal:manageQuickCommands")}
       >
         <Settings2 size={14} />
-        <span>管理</span>
+        <span>{t("common:manage")}</span>
       </button>
       <div
         className={`quick-command-list ${layout}`}
-        aria-label="命令按钮"
+        aria-label={t("terminal:commandButtons")}
         onWheel={(event) => {
           if (layout !== "single") return;
           const el = event.currentTarget;
-          if (el.scrollWidth > el.clientWidth && Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+          if (
+            el.scrollWidth > el.clientWidth &&
+            Math.abs(event.deltaY) > Math.abs(event.deltaX)
+          ) {
             el.scrollLeft += event.deltaY;
           }
         }}
       >
         {visible.length === 0 && (
-          <span className="quick-command-empty">暂无快捷命令，点击「管理」添加</span>
+          <span className="quick-command-empty">
+            {t("terminal:noQuickCommandsClickManageToAddOne")}
+          </span>
         )}
         {visible.map((command) => (
           <button
             key={command.id}
             type="button"
             className="quick-command-button"
-            title={`${command.category || "常用"} · ${command.command}${command.mode === "insert" ? "（仅填入）" : ""}`}
+            title={t("terminal:message", {
+              category: command.category || t("common:general"),
+              command: command.command,
+              suffix:
+                command.mode === "insert" ? t("terminal:insertOnlySuffix") : "",
+            })}
             disabled={tab?.status !== "connected" || !tab?.ref}
             onClick={() => onRun(command)}
           >

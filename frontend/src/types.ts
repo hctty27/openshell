@@ -45,6 +45,8 @@ export interface CommandResult {
   durationMillis: number;
   truncated: boolean;
   reason: string;
+  reasonCode?: string;
+  reasonParams?: Record<string, string | number>;
 }
 export interface ChatMessage {
   id: string;
@@ -66,7 +68,7 @@ export interface Tab {
   autoRun?: AutoSnapshot;
   chatBusy: boolean;
   executing: boolean;
-  error: string;
+  error: unknown;
 }
 export type Theme = "dark" | "light";
 export type QuickCommandLayout = "single" | "multi";
@@ -97,6 +99,8 @@ export interface AutoSnapshot {
   limit: number;
   allowChanges: boolean;
   reason: string;
+  reasonCode?: string;
+  reasonParams?: Record<string, string | number>;
   proposal?: Proposal;
 }
 export interface AutoEvent {
@@ -107,6 +111,7 @@ export interface AutoEvent {
   result?: CommandResult;
 }
 export interface AppState {
+  language?: import("./i18n/languages").Language;
   autoCommandLimit?: number;
   autoAllowChanges?: boolean;
   quickCommands?: QuickCommand[];

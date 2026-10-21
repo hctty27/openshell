@@ -1,3 +1,9 @@
+import { reasonText } from "./i18n/errors";
+import { message } from "./i18n/message";
+import { t as tr } from "./i18n";
+import { useTranslation } from "react-i18next";
+import { initializeI18n, i18n } from "./i18n";
+import { normalizeLanguage, type Language } from "./i18n/languages";
 import { useState, useEffect, useRef } from "react";
 import {
   Terminal,
@@ -42,7 +48,7 @@ import AISidebar from "./components/AISidebar";
 import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
 import { DialogProvider, useDialogs } from "./components/DialogProvider";
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.20";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.21";
 const initial: AppState = {
   sessions: [],
   groups: [],
@@ -53,32 +59,113 @@ const initial: AppState = {
 };
 const id = () => crypto.randomUUID();
 export default function App() {
-  return <DialogProvider><Workspace /></DialogProvider>;
+  useTranslation();
+  const [data, setData] = useState<AppState | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setFailed(false);
+    (async () => {
+      let loaded: AppState;
+      try {
+        loaded = await api.State();
+      } catch {
+        if (desktop) {
+          if (current) setFailed(true);
+          return;
+        }
+        loaded = initial;
+      }
+      if (!current) return;
+      await initializeI18n(normalizeLanguage(loaded.language));
+      if (current) setData(loaded);
+    })().catch(() => {
+      if (current) setFailed(true);
+    });
+    return () => {
+      current = false;
+    };
+  }, [attempt]);
+  if (!data)
+    return (
+      <main className="startup-screen" role="status">
+        {failed ? (
+          <>
+            <p>Unable to load workspace.</p>
+            <button onClick={() => setAttempt((n) => n + 1)}>Retry</button>
+          </>
+        ) : (
+          "Loading OpenShell…"
+        )}
+      </main>
+    );
+  return (
+    <DialogProvider>
+      <Workspace initialState={data} />
+    </DialogProvider>
+  );
 }
-function Workspace() {
+function Workspace({ initialState }: { initialState: AppState }) {
+  useTranslation();
+  const languageLock = useRef(false);
+  const [languageSaving, setLanguageSaving] = useState(false);
+  const [language, setLanguage] = useState<Language>(
+    normalizeLanguage(initialState.language),
+  );
+  const changeLanguage = async (next: Language) => {
+    if (languageLock.current || next === language) return;
+    languageLock.current = true;
+    setLanguageSaving(true);
+    try {
+      await api.SavePreference("language", next);
+      await i18n.changeLanguage(next);
+      setLanguage(next);
+      setState((old) => ({ ...old, language: next }));
+    } finally {
+      languageLock.current = false;
+      setLanguageSaving(false);
+    }
+  };
   const dialogs = useDialogs();
-  const [state, setState] = useState(initial),
+  const [state, setState] = useState(initialState),
     [tabs, setTabs] = useState<Tab[]>([]),
     [activeID, setActiveID] = useState(""),
     [showAI, setShowAI] = useState(true),
     [showSessions, setShowSessions] = useState(true),
     [showSessionPicker, setShowSessionPicker] = useState(false),
-    [fontSize, setFontSize] = useState(14),
-    [theme, setTheme] = useState<Theme>("dark"),
-    [quickCommandLayout, setQuickCommandLayout] =
-      useState<QuickCommandLayout>("single"),
-    [autoCopySelection, setAutoCopySelection] = useState(false),
-    [rightClickPaste, setRightClickPaste] = useState(false),
-    [confirmMultilinePaste, setConfirmMultilinePaste] = useState(true),
+    [fontSize, setFontSize] = useState(
+      Math.max(11, Math.min(24, Number(initialState.fontSize) || 14)),
+    ),
+    [theme, setTheme] = useState<Theme>(
+      initialState.theme === "light" ? "light" : "dark",
+    ),
+    [quickCommandLayout, setQuickCommandLayout] = useState<QuickCommandLayout>(
+      initialState.quickCommandLayout === "multi" ? "multi" : "single",
+    ),
+    [autoCopySelection, setAutoCopySelection] = useState(
+      initialState.autoCopySelection === true,
+    ),
+    [rightClickPaste, setRightClickPaste] = useState(
+      initialState.rightClickPaste === true,
+    ),
+    [confirmMultilinePaste, setConfirmMultilinePaste] = useState(
+      initialState.confirmMultilinePaste !== false,
+    ),
     [showQuickCommandManager, setShowQuickCommandManager] = useState(false),
     [quickCommandFocus, setQuickCommandFocus] = useState(0),
-    [profileID, setProfileID] = useState(""),
+    [profileID, setProfileID] = useState(
+      initialState.profiles.find((p) => p.id === initialState.activeProfile)
+        ?.id ??
+        initialState.profiles[0]?.id ??
+        "",
+    ),
     [dialog, setDialog] = useState<{
       kind: "session" | "settings";
       session?: Session;
       groupID?: string;
     } | null>(null),
-    [toast, setToast] = useState(""),
+    [toast, setToast] = useState<unknown>(""),
     [aiWidth, setAIWidth] = useState(370),
     [sessionWidth, setSessionWidth] = useState(235),
     [challenge, setChallenge] = useState<{
@@ -102,7 +189,7 @@ function Workspace() {
   const active = tabs.find((t) => t.id === activeID);
   const update = (tabID: string, fn: (tab: Tab) => Tab) =>
     setTabs((old) => old.map((t) => (t.id === tabID ? fn(t) : t)));
-  const notify = (error: unknown) => setToast(errorText(error));
+  const notify = (error: unknown) => setToast(error);
   const refresh = async () => {
     try {
       const data = await api.State();
@@ -131,7 +218,6 @@ function Workspace() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
   useEffect(() => {
-    refresh();
     const off = listen("ssh:disconnected", (ref: Ref) =>
       update(ref.tabId, (t) =>
         t.ref?.generation === ref.generation
@@ -139,7 +225,8 @@ function Workspace() {
               ...t,
               status: "disconnected",
               chatBusy: false,
-              error: t.error || "连接已断开，请重连",
+              error:
+                t.error || message("common:connectionLostReconnectToContinue"),
               proposal: null,
             }
           : t,
@@ -148,7 +235,11 @@ function Workspace() {
     const end = listen("ssh:terminal-ended", (ref: Ref) =>
       update(ref.tabId, (t) =>
         t.ref?.generation === ref.generation
-          ? { ...t, status: "disconnected", error: "终端进程已结束，请重连" }
+          ? {
+              ...t,
+              status: "disconnected",
+              error: message("common:terminalProcessEndedReconnectToContinue"),
+            }
           : t,
       ),
     );
@@ -180,7 +271,9 @@ function Workspace() {
                   ...m,
                   text:
                     event.text ||
-                    (s.proposal ? "已生成命令提议" : "本次回复未返回文本"),
+                    (s.proposal
+                      ? tr("common:commandProposalReady")
+                      : tr("common:noTextReturned")),
                 }
               : m,
           );
@@ -209,7 +302,7 @@ function Workspace() {
             m.id === event.messageId && !m.text && m.role === "assistant"
               ? {
                   ...m,
-                  text: s.reason || "任务已结束",
+                  text: reasonText(s) || tr("common:taskEnded"),
                   incomplete: s.status !== "completed",
                 }
               : m,
@@ -254,7 +347,7 @@ function Workspace() {
   const runQuickCommand = async (command: QuickCommand) => {
     const tab = active;
     if (!tab?.ref || tab.status !== "connected") {
-      notify("请先连接 SSH 服务器");
+      notify(message("common:connectToAnSshServerFirst"));
       return;
     }
     const risky =
@@ -263,20 +356,34 @@ function Workspace() {
       );
     if (command.confirm || risky) {
       const accepted = await dialogs.confirm({
-        title: risky ? "确认危险命令" : "确认快速命令",
-        description: `目标服务器：${tab.session.name}。将${command.mode === "run" ? "执行" : "填入"}以下命令。`,
+        title: risky
+          ? message("common:confirmDangerousCommand")
+          : message("common:confirmQuickCommand"),
+        description: message("common:targetTheFollowingCommand", {
+          name: tab.session.name,
+          action:
+            command.mode === "run"
+              ? tr("common:runAction")
+              : tr("common:insertAction"),
+        }),
         preview: command.command,
         tone: risky ? "warning" : "default",
-        confirmLabel: command.mode === "run" ? "确认执行" : "确认填入",
+        confirmLabel:
+          command.mode === "run"
+            ? message("common:runCommand")
+            : message("common:insertCommand"),
       });
       if (!accepted) return;
     }
     const current = tabsRef.current.find((item) => item.id === tab.id);
-    if (!current || current.status !== "connected" ||
-        current.ref?.generation !== tab.ref.generation ||
-        current.ref?.sessionId !== tab.ref.sessionId ||
-        activeIDRef.current !== tab.id) {
-      notify("SSH 会话已切换或断开，命令未执行");
+    if (
+      !current ||
+      current.status !== "connected" ||
+      current.ref?.generation !== tab.ref.generation ||
+      current.ref?.sessionId !== tab.ref.sessionId ||
+      activeIDRef.current !== tab.id
+    ) {
+      notify(message("common:sshConnectionChangedOrClosedCommandWasNot"));
       return;
     }
     try {
@@ -323,7 +430,7 @@ function Workspace() {
         error: "",
       }));
     } catch (e) {
-      update(tab.id, (t) => ({ ...t, status: "error", error: errorText(e) }));
+      update(tab.id, (t) => ({ ...t, status: "error", error: e }));
       notify(e);
     }
   };
@@ -355,7 +462,9 @@ function Workspace() {
   };
   const openFromPicker = (session: Session) => {
     setShowSessionPicker(false);
-    const existing = tabsRef.current.find((tab) => tab.session.id === session.id);
+    const existing = tabsRef.current.find(
+      (tab) => tab.session.id === session.id,
+    );
     if (!existing) {
       open(session);
       return;
@@ -369,12 +478,15 @@ function Workspace() {
   };
   const close = async (tab: Tab) => {
     if (tab.chatBusy || tab.executing || tab.proposal) {
-      if (!(await dialogs.confirm({
-        title: "关闭正在运行的任务？",
-        description: "此标签仍有 AI 任务或待处理提议。关闭将停止等待，但远端进程可能继续运行。",
-        tone: "warning",
-        confirmLabel: "仍要关闭",
-      }))) return;
+      if (
+        !(await dialogs.confirm({
+          title: message("common:closeRunningTask"),
+          description: message("common:thisTabHasAnAiTaskOrPending"),
+          tone: "warning",
+          confirmLabel: message("common:closeAnyway"),
+        }))
+      )
+        return;
     }
     try {
       await api.CloseTab(tab.id);
@@ -396,17 +508,22 @@ function Workspace() {
   };
   const removeSession = async (s: Session) => {
     if (tabs.some((t) => t.session.id === s.id)) {
-      notify("请先关闭此会话的终端标签");
+      notify(message("common:closeThisSessionSTerminalTabsFirst"));
       return;
     }
-    if (!(await dialogs.confirm({
-      title: "删除 SSH 会话",
-      description: `确定删除「${s.name}」？此操作无法撤销。`,
-      tone: "danger",
-      confirmLabel: "删除会话",
-    }))) return;
+    if (
+      !(await dialogs.confirm({
+        title: message("common:deleteSshSession"),
+        description: message("common:deleteThisCannotBeUndone", {
+          name: s.name,
+        }),
+        tone: "danger",
+        confirmLabel: message("common:deleteSession"),
+      }))
+    )
+      return;
     if (tabsRef.current.some((tab) => tab.session.id === s.id)) {
-      notify("会话已打开终端，请先关闭标签");
+      notify(message("common:closeTheSessionSOpenTerminalTabsFirst"));
       return;
     }
     try {
@@ -425,12 +542,17 @@ function Workspace() {
   };
   const group = async (g?: Group) => {
     const name = await dialogs.input({
-      title: g ? "修改分组名称" : "新建分组",
-      description: g ? "修改当前文件夹的名称。" : "创建一个文件夹，用于管理 SSH 会话。",
-      label: "分组名称",
+      icon: g ? "rename" : "create",
+      title: g ? message("common:renameFolder") : message("common:newFolder"),
+      description: g
+        ? message("common:changeThisFolderSName")
+        : message("common:createAFolderToOrganizeSshSessions"),
+      label: message("common:folderName"),
       defaultValue: g?.name ?? "",
-      placeholder: "例如：生产服务器",
-      confirmLabel: g ? "保存修改" : "创建分组",
+      placeholder: message("common:eGProduction"),
+      confirmLabel: g
+        ? message("common:saveChanges")
+        : message("common:createFolder"),
     });
     if (!name) return;
     try {
@@ -441,12 +563,17 @@ function Workspace() {
     }
   };
   const deleteGroup = async (g: Group) => {
-    if (!(await dialogs.confirm({
-      title: "删除分组",
-      description: `确定删除「${g.name}」？该分组内的 SSH 会话将移至默认分组，不会被删除。`,
-      tone: "danger",
-      confirmLabel: "删除分组",
-    }))) return;
+    if (
+      !(await dialogs.confirm({
+        title: message("common:deleteFolder"),
+        description: message("common:deleteItsSshSessionsWillMoveToThe", {
+          name: g.name,
+        }),
+        tone: "danger",
+        confirmLabel: message("common:deleteFolder"),
+      }))
+    )
+      return;
     try {
       await api.DeleteGroup(g.id);
       await refresh();
@@ -462,7 +589,9 @@ function Workspace() {
   ): ChatRequest => ({
     ref: tab.ref!,
     profileId: profileID,
-    text: tab.cwd ? `${text}\n\n当前 AI 工作目录：${tab.cwd}` : text,
+    text: tab.cwd
+      ? tr("common:currentAiWorkingDirectory", { text, cwd: tab.cwd })
+      : text,
     context,
     operate,
   });
@@ -504,8 +633,8 @@ function Workspace() {
                       text:
                         response.text ||
                         (response.proposal
-                          ? "已生成命令提议"
-                          : "本次回复未返回文本"),
+                          ? tr("common:commandProposalReady")
+                          : tr("common:noTextReturned")),
                     }
                   : m,
               ),
@@ -542,7 +671,8 @@ function Workspace() {
         roundSteps: 0,
         limit: state.autoCommandLimit ?? 10,
         allowChanges: state.autoAllowChanges ?? false,
-        reason: "正在启动自动任务",
+        reason: "",
+        reasonCode: "taskStarting",
       },
       messages: [...t.messages, { id: id(), role: "user", text }],
     }));
@@ -558,7 +688,12 @@ function Workspace() {
               chatBusy: false,
               executing: false,
               proposal: null,
-              autoRun: { ...t.autoRun, status: "error", reason: errorText(e) },
+              autoRun: {
+                ...t.autoRun,
+                status: "error",
+                reason: e instanceof Error ? e.message : String(e),
+                reasonCode: undefined,
+              },
             }
           : t,
       );
@@ -630,7 +765,11 @@ function Workspace() {
           proposal: null,
           messages: [
             ...t.messages,
-            { id: id(), role: "result", text: "已拒绝执行，命令未启动。" },
+            {
+              id: id(),
+              role: "result",
+              text: tr("common:commandRejectedNothingWasRun"),
+            },
           ],
         }));
     } catch (e) {
@@ -708,13 +847,17 @@ function Workspace() {
             onOpen={open}
             onEdit={(session) => {
               if (session && tabs.some((t) => t.session.id === session.id)) {
-                notify("请先关闭此会话的终端标签，再编辑连接信息");
+                notify(
+                  message("common:closeThisSessionSTerminalTabsBeforeEditing"),
+                );
                 return;
               }
               setDialog({ kind: "session", session });
             }}
             onDelete={removeSession}
-            onCreateInGroup={(groupID) => setDialog({ kind: "session", groupID })}
+            onCreateInGroup={(groupID) =>
+              setDialog({ kind: "session", groupID })
+            }
             onGroup={() => group()}
             onRenameGroup={group}
             onDeleteGroup={deleteGroup}
@@ -729,7 +872,11 @@ function Workspace() {
       <main className="workspace">
         <header className="workspace-header">
           <button
-            title={showSessions ? "收起会话" : "展开会话"}
+            title={
+              showSessions
+                ? tr("common:collapseSessions")
+                : tr("common:expandSessions")
+            }
             onClick={() => setShowSessions(!showSessions)}
           >
             {showSessions ? (
@@ -738,13 +885,18 @@ function Workspace() {
               <PanelLeftOpen size={17} />
             )}
           </button>
-          <span className="workspace-label">SSH 终端</span>
+          <span className="workspace-label">{tr("common:sshTerminal")}</span>
           <span className="header-divider" />
-          <span className="muted">{active?.session.name ?? "工作空间"}</span>
+          <span className="muted">
+            {active?.session.name ?? tr("common:workspace")}
+          </span>
           <div className="header-right">
-            <span className="local-badge">LOCAL</span>
+            <span className="local-badge">{tr("common:localLabel")}</span>
             {!showAI && (
-              <button title="展开 AI" onClick={() => setShowAI(true)}>
+              <button
+                title={tr("common:expandAi")}
+                onClick={() => setShowAI(true)}
+              >
                 <PanelRightOpen size={18} />
               </button>
             )}
@@ -757,7 +909,7 @@ function Workspace() {
               className={`terminal-tab ${activeID === tab.id ? "active" : ""}`}
             >
               <button
-                title="双击复制会话"
+                title={tr("common:doubleClickToDuplicateSession")}
                 onClick={() => setActiveID(tab.id)}
                 onDoubleClick={() => open(tab.session, tab.id)}
               >
@@ -770,7 +922,7 @@ function Workspace() {
                 )}
               </button>
               <button
-                title={`关闭 ${tab.session.name}`}
+                title={tr("common:closeTab", { name: tab.session.name })}
                 onClick={() => close(tab)}
               >
                 <X size={12} />
@@ -779,7 +931,7 @@ function Workspace() {
           ))}
           <button
             className="new-tab"
-            title="打开会话列表"
+            title={tr("common:openSessionList")}
             onClick={() => setShowSessionPicker(true)}
           >
             <Plus size={16} />
@@ -791,39 +943,41 @@ function Workspace() {
               <Terminal size={41} strokeWidth={1.3} />
               <span />
             </div>
-            <span className="eyebrow">A LIGHTER WAY TO CONNECT</span>
-            <h1>连接服务器，开始工作。</h1>
+            <span className="eyebrow">{tr("common:lighterConnection")}</span>
+            <h1>{tr("common:connectYourServerGetToWork")}</h1>
             <p>
-              专注的终端，顺手的 AI。
+              {tr("common:aFocusedTerminalAiAtYourSide")}
               <br />
-              你的会话、模型与操作，都由你掌握。
+              {tr("common:yourSessionsModelsAndActionsUnderYourControl")}
             </p>
             <button
               className="primary"
               onClick={() => setDialog({ kind: "session" })}
             >
               <Plus size={16} />
-              新建 SSH 会话
+              {tr("common:newSshSession")}
               <ArrowRight size={15} />
             </button>
             <div className="welcome-features">
               <span>
                 <Server size={15} />
-                会话管理
+                {tr("common:sessions")}
               </span>
               <span>
                 <Terminal size={15} />
-                SSH 终端
+                {tr("common:sshTerminal")}
               </span>
               <span>
                 <Sparkles size={15} />
-                自定义 AI
+                {tr("common:customAi")}
               </span>
             </div>
-            <div className="empty-shortcut">从左侧双击会话，快速打开连接</div>
+            <div className="empty-shortcut">
+              {tr("common:doubleClickASessionOnTheLeftTo")}
+            </div>
             {!desktop && (
               <div className="preview-notice">
-                界面预览 · 真实连接请使用 Windows 桌面应用
+                {tr("common:interfacePreviewUseTheWindowsAppForSsh")}
               </div>
             )}
           </div>
@@ -837,7 +991,7 @@ function Workspace() {
               </span>
               <div>
                 <button
-                  title="重新认证连接"
+                  title={tr("common:reauthenticate")}
                   disabled={active?.status === "connecting"}
                   onClick={() =>
                     active && setLogin({ tab: active, secret: "" })
@@ -846,14 +1000,14 @@ function Workspace() {
                   <ShieldCheck size={14} />
                 </button>
                 <button
-                  title="重新连接"
+                  title={tr("common:reconnect")}
                   disabled={active?.status === "connecting"}
                   onClick={() => active && connect(active)}
                 >
                   <RefreshCw size={14} />
                 </button>
                 <button
-                  title="发送选中内容或近期输出给 AI"
+                  title={tr("common:sendSelectedTextOrRecentOutputToAi")}
                   disabled={active?.status !== "connected"}
                   onClick={() => {
                     setShowAI(true);
@@ -894,16 +1048,23 @@ function Workspace() {
               {active?.status === "connecting" && (
                 <div className="terminal-overlay">
                   <LoaderCircle size={23} className="spin" />
-                  <p>正在连接 {active.session.host}…</p>
+                  <p>
+                    {tr("common:connecting")}
+                    {active.session.host}…
+                  </p>
                 </div>
               )}
               {active?.status !== "connected" &&
                 active?.status !== "connecting" && (
                   <div className="terminal-connect-state">
                     <span className="status-dot offline" />
-                    <span>{active?.error || "会话未连接"}</span>
+                    <span>
+                      {active?.error
+                        ? errorText(active.error)
+                        : tr("common:sessionDisconnected")}
+                    </span>
                     <button onClick={() => active && connect(active)}>
-                      连接
+                      {tr("common:connect")}
                     </button>
                   </div>
                 )}
@@ -926,10 +1087,10 @@ function Workspace() {
               className={`status-dot ${active?.status === "connected" ? "" : "offline"}`}
             />
             {active?.status === "connected"
-              ? "SSH 已连接"
+              ? tr("common:sshConnected")
               : active?.status === "connecting"
-                ? "连接中"
-                : "未连接"}
+                ? tr("common:connecting2")
+                : tr("common:disconnected")}
             {active?.status === "connected" && (
               <>
                 <span className="status-sep" />
@@ -994,7 +1155,9 @@ function Workspace() {
           }}
           onEdit={(session) => {
             if (tabsRef.current.some((tab) => tab.session.id === session.id)) {
-              notify("请先关闭此会话的终端标签，再编辑连接信息");
+              notify(
+                message("common:closeThisSessionSTerminalTabsBeforeEditing"),
+              );
               return;
             }
             setShowSessionPicker(false);
@@ -1017,6 +1180,9 @@ function Workspace() {
           profiles={state.profiles}
           autoCommandLimit={state.autoCommandLimit}
           autoAllowChanges={state.autoAllowChanges}
+          language={language}
+          languageSaving={languageSaving}
+          onLanguage={changeLanguage}
           fontSize={fontSize}
           theme={theme}
           onTheme={setTheme}
@@ -1047,7 +1213,10 @@ function Workspace() {
         <div className="modal-backdrop">
           <section className="compact-dialog" role="dialog" aria-modal="true">
             <ShieldCheck className="dialog-icon" size={24} />
-            <h2>连接 {login.tab.session.name}</h2>
+            <h2>
+              {tr("common:connect")}
+              {login.tab.session.name}
+            </h2>
             <p className="muted">
               {login.tab.session.username}@{login.tab.session.host}:
               {login.tab.session.port}
@@ -1062,8 +1231,8 @@ function Workspace() {
             >
               <label>
                 {login.tab.session.authType === "key"
-                  ? "私钥口令（未加密可留空）"
-                  : "登录密码"}
+                  ? tr("common:keyPassphraseLeaveEmptyForUnencryptedKeys")
+                  : tr("common:password")}
                 <input
                   autoFocus
                   type="password"
@@ -1073,17 +1242,19 @@ function Workspace() {
                   }
                 />
               </label>
-              <p className="small muted">仅用于本次连接，不保存到配置。</p>
+              <p className="small muted">
+                {tr("common:usedForThisConnectionOnlyNotSavedTo")}
+              </p>
               <footer>
                 <button
                   type="button"
                   className="secondary"
                   onClick={() => setLogin(null)}
                 >
-                  取消
+                  {tr("common:cancel")}
                 </button>
                 <button className="primary" type="submit">
-                  连接
+                  {tr("common:connect")}
                 </button>
               </footer>
             </form>
@@ -1095,18 +1266,22 @@ function Workspace() {
           <section className="compact-dialog" role="dialog" aria-modal="true">
             <ShieldCheck className="dialog-icon" size={25} />
             <h2>
-              {challenge.host.changed ? "服务器指纹已变化" : "确认服务器指纹"}
+              {challenge.host.changed
+                ? tr("common:serverFingerprintChanged")
+                : tr("common:verifyServerFingerprint")}
             </h2>
             <p className="muted">{challenge.host.address}</p>
             <code className="fingerprint">{challenge.host.fingerprint}</code>
             <p>
               {challenge.host.changed
-                ? "连接已阻止。请核验服务器重装或密钥变化原因，第一版不直接覆盖已信任指纹。"
-                : "请与服务器管理员或已知记录核对指纹，确认后保存并继续连接。"}
+                ? tr("common:connectionBlockedVerifyWhyTheServerKeyChanged")
+                : tr(
+                    "common:verifyTheFingerprintWithYourServerAdministratorOr",
+                  )}
             </p>
             <footer>
               <button className="secondary" onClick={() => setChallenge(null)}>
-                取消
+                {tr("common:cancel")}
               </button>
               {!challenge.host.changed && (
                 <button
@@ -1122,7 +1297,7 @@ function Workspace() {
                     }
                   }}
                 >
-                  信任并连接
+                  {tr("common:trustAndConnect")}
                 </button>
               )}
             </footer>
@@ -1134,25 +1309,28 @@ function Workspace() {
           <section className="context-dialog" role="dialog" aria-modal="true">
             <header>
               <div>
-                <span className="eyebrow">CONTEXT PREVIEW</span>
-                <h2>发送终端文本给 AI</h2>
+                <span className="eyebrow">{tr("common:contextPreview")}</span>
+                <h2>{tr("common:sendTerminalTextToAi")}</h2>
               </div>
-              <button title="关闭预览" onClick={() => setPreview(null)}>
+              <button
+                title={tr("common:closePreview")}
+                onClick={() => setPreview(null)}
+              >
                 <X size={18} />
               </button>
             </header>
             <p className="muted small">
-              仅发送下方文本。常见敏感字段已尝试遮盖，请检查内容。
-              {preview.truncated ? "内容已截断。" : ""}
+              {tr("common:onlyTheTextBelowWillBeSentCommon")}
+              {preview.truncated ? tr("common:contentTruncated") : ""}
             </p>
             <textarea
-              aria-label="终端文本预览"
+              aria-label={tr("common:terminalTextPreview")}
               value={preview.text}
               onChange={(e) => setPreview({ ...preview, text: e.target.value })}
             />
             <footer>
               <button className="secondary" onClick={() => setPreview(null)}>
-                取消
+                {tr("common:cancel")}
               </button>
               <button
                 className="primary"
@@ -1165,17 +1343,20 @@ function Workspace() {
                   setPreview(null);
                 }}
               >
-                附加到对话
+                {tr("common:attachToChat")}
               </button>
             </footer>
           </section>
         </div>
       )}
-      {toast && (
+      {!!toast && (
         <div className="toast" role="alert">
           <AlertCircle size={16} />
-          <span>{toast}</span>
-          <button title="关闭提示" onClick={() => setToast("")}>
+          <span>{errorText(toast)}</span>
+          <button
+            title={tr("common:dismissNotification")}
+            onClick={() => setToast("")}
+          >
             <X size={14} />
           </button>
         </div>

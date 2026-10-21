@@ -3,7 +3,7 @@ package ai
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
+	"github.com/hctty27/openshell/internal/apperror"
 	"io"
 	"strings"
 )
@@ -46,10 +46,10 @@ func parseSSE(r io.Reader, emit func(Delta)) (Reply, error) {
 		}
 		var c chunk
 		if e := json.Unmarshal([]byte(payload), &c); e != nil {
-			return errors.New("API 流格式错误，未生成可执行命令")
+			return apperror.New("invalidApiStreamNoExecutableCommandWasGenerated", nil)
 		}
 		if len(c.Error) > 0 && string(c.Error) != "null" {
-			return errors.New("API 在输出期间报告错误，未生成可执行命令")
+			return apperror.New("apiReportedAnErrorDuringStreamingNoExecutable", nil)
 		}
 		if len(c.Choices) == 0 {
 			return nil
@@ -57,7 +57,7 @@ func parseSSE(r io.Reader, emit func(Delta)) (Reply, error) {
 		v := c.Choices[0]
 		size += len(v.Delta.Content)
 		if size > 2*1024*1024 {
-			return errors.New("AI 输出超过上限")
+			return apperror.New("aiOutputLimitExceeded", nil)
 		}
 		reply.Text += v.Delta.Content
 		if emit != nil && v.Delta.Content != "" {
@@ -65,7 +65,7 @@ func parseSSE(r io.Reader, emit func(Delta)) (Reply, error) {
 		}
 		for _, d := range v.Delta.Calls {
 			if d.Index < 0 || d.Index > 15 {
-				return errors.New("工具调用数量过多")
+				return apperror.New("tooManyToolCalls", nil)
 			}
 			call := calls[d.Index]
 			if call == nil {
@@ -77,7 +77,7 @@ func parseSSE(r io.Reader, emit func(Delta)) (Reply, error) {
 			call.Function.Arguments += d.Function.Arguments
 			size += len(d.Function.Arguments)
 			if size > 2*1024*1024 {
-				return errors.New("AI 输出超过上限")
+				return apperror.New("aiOutputLimitExceeded", nil)
 			}
 		}
 		if v.Finish != nil {
@@ -102,7 +102,7 @@ func parseSSE(r io.Reader, emit func(Delta)) (Reply, error) {
 		}
 	}
 	if e := scanner.Err(); e != nil {
-		return Reply{}, errors.New("API 流读取失败")
+		return Reply{}, apperror.New("failedToReadApiStream", nil)
 	}
 	if len(data) > 0 {
 		if e := consume(); e != nil {
@@ -110,15 +110,15 @@ func parseSSE(r io.Reader, emit func(Delta)) (Reply, error) {
 		}
 	}
 	if !finished || (!done && finishReason != "stop" && finishReason != "tool_calls") {
-		return Reply{}, errors.New("API 流中断，未生成可执行命令")
+		return Reply{}, apperror.New("apiStreamInterruptedNoExecutableCommandWasGenerated", nil)
 	}
 	if finishReason != "stop" && finishReason != "tool_calls" {
-		return Reply{}, errors.New("AI 输出未完整结束，请缩短请求或调整模型配置")
+		return Reply{}, apperror.New("aiOutputEndedIncompletelyShortenTheRequestOr", nil)
 	}
 	for i := 0; i < len(calls); i++ {
 		c := calls[i]
 		if c == nil || c.ID == "" || c.Function.Name == "" || !json.Valid([]byte(c.Function.Arguments)) {
-			return Reply{}, errors.New("工具参数不完整")
+			return Reply{}, apperror.New("incompleteToolArguments", nil)
 		}
 		reply.ToolCalls = append(reply.ToolCalls, *c)
 	}

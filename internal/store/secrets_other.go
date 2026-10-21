@@ -4,16 +4,16 @@ package store
 
 import (
 	"context"
-	"errors"
+	"github.com/hctty27/openshell/internal/apperror"
 )
 
 type Secrets struct{}
 
 func NewSecrets() *Secrets { return &Secrets{} }
 func (s *Secrets) Get(context.Context, string) (string, error) {
-	return "", errors.New("当前系统不支持 Windows 凭据存储")
+	return "", apperror.New("windowsCredentialStorageIsUnavailableOnThisSystem", nil)
 }
 func (s *Secrets) Put(context.Context, string, string) error {
-	return errors.New("当前系统不支持 Windows 凭据存储")
+	return apperror.New("windowsCredentialStorageIsUnavailableOnThisSystem", nil)
 }
 func (s *Secrets) Delete(context.Context, string) error { return nil }

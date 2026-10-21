@@ -20,9 +20,9 @@ var secret = regexp.MustCompile(`(?i)((?:password|passwd|api[_-]?key|access[_-]?
 var privateKey = regexp.MustCompile(`(?s)-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----`)
 
 func Redact(text string) string {
-	text = privateKey.ReplaceAllString(text, "[私钥已遮盖]")
-	text = bearer.ReplaceAllString(text, "${1}[已遮盖]")
-	return secret.ReplaceAllString(text, "${1}[已遮盖]")
+	text = privateKey.ReplaceAllString(text, "[PRIVATE KEY REDACTED]")
+	text = bearer.ReplaceAllString(text, "${1}[REDACTED]")
+	return secret.ReplaceAllString(text, "${1}[REDACTED]")
 }
 func BuildPreview(text string, maxLines, maxBytes int) Preview {
 	text = ansi.ReplaceAllString(text, "")

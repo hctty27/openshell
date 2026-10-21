@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
+	"github.com/hctty27/openshell/internal/apperror"
 	"strings"
 )
 
@@ -49,13 +49,15 @@ type Proposal struct {
 	ToolCallID     string        `json:"toolCallId"`
 }
 type CommandResult struct {
-	Status         string `json:"status"`
-	Stdout         string `json:"stdout"`
-	Stderr         string `json:"stderr"`
-	ExitCode       *int   `json:"exitCode"`
-	DurationMillis int64  `json:"durationMillis"`
-	Truncated      bool   `json:"truncated"`
-	Reason         string `json:"reason"`
+	ReasonCode     string         `json:"reasonCode,omitempty"`
+	ReasonParams   map[string]any `json:"reasonParams,omitempty"`
+	Status         string         `json:"status"`
+	Stdout         string         `json:"stdout"`
+	Stderr         string         `json:"stderr"`
+	ExitCode       *int           `json:"exitCode"`
+	DurationMillis int64          `json:"durationMillis"`
+	Truncated      bool           `json:"truncated"`
+	Reason         string         `json:"reason"`
 }
 type AppError struct {
 	Code    string `json:"code"`
@@ -73,13 +75,13 @@ func NewID() string {
 }
 func ValidateSession(s Session) error {
 	if strings.TrimSpace(s.Host) == "" || strings.ContainsAny(s.Host, "\x00\r\n\t /@") || strings.TrimSpace(s.Username) == "" || strings.ContainsAny(s.Username, "\x00\r\n") {
-		return errors.New("请填写有效主机和用户名")
+		return apperror.New("enterAValidHostAndUsername", nil)
 	}
 	if s.Port < 1 || s.Port > 65535 {
-		return errors.New("端口必须在 1–65535 之间")
+		return apperror.New("portMustBeBetween1And65535", nil)
 	}
 	if s.AuthType != "" && s.AuthType != "password" && s.AuthType != "key" {
-		return errors.New("不支持的认证方式")
+		return apperror.New("unsupportedAuthenticationMethod", nil)
 	}
 	return nil
 }

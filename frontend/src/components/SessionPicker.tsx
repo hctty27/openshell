@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { t } from "../i18n";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   Folder,
@@ -32,6 +34,7 @@ interface ContextMenu {
 }
 
 export default function SessionPicker(p: Props) {
+  useTranslation();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
@@ -53,12 +56,19 @@ export default function SessionPicker(p: Props) {
 
   const term = query.trim().toLocaleLowerCase();
   const visible = p.sessions.filter((session) => {
-    const matches = [session.name, session.host, session.username, String(session.port)]
-      .some((value) => value.toLocaleLowerCase().includes(term));
-    return matches && (term !== "" || groupId === null || session.groupId === groupId);
+    const matches = [
+      session.name,
+      session.host,
+      session.username,
+      String(session.port),
+    ].some((value) => value.toLocaleLowerCase().includes(term));
+    return (
+      matches &&
+      (term !== "" || groupId === null || session.groupId === groupId)
+    );
   });
   const selected = visible.find((session) => session.id === selectedId);
-  const groups = [{ id: "", name: "默认分组" }, ...p.groups];
+  const groups = [{ id: "", name: t("common:defaultFolder") }, ...p.groups];
   const opened = new Set(p.openedSessionIds);
 
   const openContextMenu = (event: React.MouseEvent, session: Session) => {
@@ -86,7 +96,10 @@ export default function SessionPicker(p: Props) {
       }}
       onClick={(event) => {
         if (event.target === event.currentTarget) p.onClose();
-        else if (contextMenu && !(event.target as HTMLElement).closest(".session-picker__menu")) {
+        else if (
+          contextMenu &&
+          !(event.target as HTMLElement).closest(".session-picker__menu")
+        ) {
           setContextMenu(null);
         }
       }}
@@ -94,9 +107,14 @@ export default function SessionPicker(p: Props) {
       <header className="session-picker__header">
         <div className="session-picker__heading">
           <Server size={19} />
-          <h2 id={titleId}>会话管理</h2>
+          <h2 id={titleId}>{t("common:sessions")}</h2>
         </div>
-        <button type="button" aria-label="关闭会话管理" title="关闭" onClick={p.onClose}>
+        <button
+          type="button"
+          aria-label={t("sessions:closeSessionManager")}
+          title={t("common:close")}
+          onClick={p.onClose}
+        >
           <X size={18} />
         </button>
       </header>
@@ -105,8 +123,8 @@ export default function SessionPicker(p: Props) {
           <Search size={16} aria-hidden="true" />
           <input
             ref={searchRef}
-            aria-label="搜索会话"
-            placeholder="搜索名称、主机地址、用户名或端口"
+            aria-label={t("sessions:searchSessions")}
+            placeholder={t("sessions:searchByNameHostUsernameOrPort")}
             value={query}
             autoComplete="off"
             onChange={(event) => {
@@ -122,13 +140,22 @@ export default function SessionPicker(p: Props) {
             }}
           />
         </label>
-        <button type="button" className="session-picker__new-folder" title="新建分组" aria-label="新建分组" onClick={p.onNewGroup}>
+        <button
+          type="button"
+          className="session-picker__new-folder"
+          title={t("common:newFolder")}
+          aria-label={t("common:newFolder")}
+          onClick={p.onNewGroup}
+        >
           <Plus size={14} />
-          新建分组
+          {t("common:newFolder")}
         </button>
       </div>
       <div className="session-picker__main">
-        <nav className="session-picker__folders" aria-label="会话分组">
+        <nav
+          className="session-picker__folders"
+          aria-label={t("sessions:sessionFolders")}
+        >
           <button
             type="button"
             className={groupId === null ? "active" : ""}
@@ -140,7 +167,7 @@ export default function SessionPicker(p: Props) {
             }}
           >
             <FolderOpen size={16} />
-            <span>所有会话</span>
+            <span>{t("sessions:allSessions")}</span>
             <small>{p.sessions.length}</small>
           </button>
           {groups.map((group) => (
@@ -157,26 +184,42 @@ export default function SessionPicker(p: Props) {
             >
               <Folder size={15} />
               <span>{group.name}</span>
-              <small>{p.sessions.filter((session) => session.groupId === group.id).length}</small>
+              <small>
+                {
+                  p.sessions.filter((session) => session.groupId === group.id)
+                    .length
+                }
+              </small>
             </button>
           ))}
         </nav>
         <div className="session-picker__list">
           <div className="session-picker__columns" aria-hidden="true">
-            <span>名称</span>
-            <span>主机地址</span>
-            <span>用户名</span>
-            <span>端口</span>
+            <span>{t("common:name")}</span>
+            <span>{t("common:host")}</span>
+            <span>{t("common:username")}</span>
+            <span>{t("common:port")}</span>
           </div>
-          <div className="session-picker__rows" role="list" aria-label="SSH 会话列表">
+          <div
+            className="session-picker__rows"
+            role="list"
+            aria-label={t("sessions:sshSessionList")}
+          >
             {visible.map((session) => (
-              <div key={session.id} role="listitem" className="session-picker__item">
+              <div
+                key={session.id}
+                role="listitem"
+                className="session-picker__item"
+              >
                 <button
                   type="button"
-                  className={"session-picker__row" + (selectedId === session.id ? " selected" : "")}
-                  aria-label={"选择会话 " + session.name}
+                  className={
+                    "session-picker__row" +
+                    (selectedId === session.id ? " selected" : "")
+                  }
+                  aria-label={t("sessions:selectSession") + session.name}
                   aria-pressed={selectedId === session.id}
-                  title={"双击连接 " + session.name}
+                  title={t("sessions:doubleClickToConnect") + session.name}
                   onClick={() => setSelectedId(session.id)}
                   onDoubleClick={() => p.onConnect(session)}
                   onKeyDown={(event) => {
@@ -190,7 +233,12 @@ export default function SessionPicker(p: Props) {
                   <span className="session-picker__name">
                     <Server size={15} />
                     <span>{session.name}</span>
-                    {opened.has(session.id) && <i className="session-picker__opened" title="已打开" />}
+                    {opened.has(session.id) && (
+                      <i
+                        className="session-picker__opened"
+                        title={t("sessions:open")}
+                      />
+                    )}
                   </span>
                   <span title={session.host}>{session.host}</span>
                   <span title={session.username}>{session.username}</span>
@@ -199,8 +247,8 @@ export default function SessionPicker(p: Props) {
                 <button
                   type="button"
                   className="session-picker__more"
-                  aria-label={"更多操作 " + session.name}
-                  title="更多操作"
+                  aria-label={t("sessions:moreActions") + session.name}
+                  title={t("common:moreActions")}
                   onClick={(event) => {
                     if (contextMenu?.session.id === session.id) {
                       setContextMenu(null);
@@ -211,8 +259,20 @@ export default function SessionPicker(p: Props) {
                     setSelectedId(session.id);
                     setContextMenu({
                       session,
-                      x: Math.max(8, Math.min(rect.right - (bounds?.left ?? 0) - 180, (bounds?.width ?? 720) - 188)),
-                      y: Math.max(8, Math.min(rect.bottom - (bounds?.top ?? 0), (bounds?.height ?? 480) - 155)),
+                      x: Math.max(
+                        8,
+                        Math.min(
+                          rect.right - (bounds?.left ?? 0) - 180,
+                          (bounds?.width ?? 720) - 188,
+                        ),
+                      ),
+                      y: Math.max(
+                        8,
+                        Math.min(
+                          rect.bottom - (bounds?.top ?? 0),
+                          (bounds?.height ?? 480) - 155,
+                        ),
+                      ),
                     });
                   }}
                 >
@@ -223,38 +283,82 @@ export default function SessionPicker(p: Props) {
             {!visible.length && (
               <div className="session-picker__empty">
                 <Server size={25} />
-                <p>{p.sessions.length === 0 ? "还没有保存的 SSH 会话" : "没有找到匹配的会话"}</p>
-                <span>{p.sessions.length === 0 ? "点击下方「新建」添加服务器" : "试试其他关键词或文件夹"}</span>
+                <p>
+                  {p.sessions.length === 0
+                    ? t("sessions:noSavedSshSessions")
+                    : t("sessions:noMatchingSessions")}
+                </p>
+                <span>
+                  {p.sessions.length === 0
+                    ? t("sessions:clickNewBelowToAddAServer")
+                    : t("sessions:tryADifferentKeywordOrFolder")}
+                </span>
               </div>
             )}
           </div>
         </div>
       </div>
       {contextMenu && (
-        <div className="session-picker__menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
-          <button type="button" role="menuitem" onClick={() => p.onConnect(contextMenu.session)}>
-            <Server size={14} />连接
+        <div
+          className="session-picker__menu"
+          role="menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => p.onConnect(contextMenu.session)}
+          >
+            <Server size={14} />
+            {t("common:connect")}
           </button>
-          <button type="button" role="menuitem" onClick={() => p.onOpenNewTab(contextMenu.session)}>
-            <Plus size={14} />在新标签中打开
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => p.onOpenNewTab(contextMenu.session)}
+          >
+            <Plus size={14} />
+            {t("sessions:openInNewTab")}
           </button>
-          <button type="button" role="menuitem" onClick={() => p.onEdit(contextMenu.session)}>
-            <Pencil size={14} />编辑
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => p.onEdit(contextMenu.session)}
+          >
+            <Pencil size={14} />
+            {t("common:edit2")}
           </button>
-          <button type="button" role="menuitem" className="danger" onClick={() => { setContextMenu(null); p.onDelete(contextMenu.session); }}>
-            <Trash2 size={14} />删除
+          <button
+            type="button"
+            role="menuitem"
+            className="danger"
+            onClick={() => {
+              setContextMenu(null);
+              p.onDelete(contextMenu.session);
+            }}
+          >
+            <Trash2 size={14} />
+            {t("common:delete")}
           </button>
         </div>
       )}
       <footer className="session-picker__footer">
-        <span>双击会话连接，或选中后按 Enter</span>
+        <span>{t("sessions:doubleClickToConnectOrSelectAndPress")}</span>
         <div>
           <button type="button" className="secondary" onClick={p.onNew}>
-            <Plus size={15} />新建
+            <Plus size={15} />
+            {t("common:new")}
           </button>
-          <button type="button" className="secondary" onClick={p.onClose}>取消</button>
-          <button type="button" className="primary" disabled={!selected} onClick={() => selected && p.onConnect(selected)}>
-            连接
+          <button type="button" className="secondary" onClick={p.onClose}>
+            {t("common:cancel")}
+          </button>
+          <button
+            type="button"
+            className="primary"
+            disabled={!selected}
+            onClick={() => selected && p.onConnect(selected)}
+          >
+            {t("common:connect")}
           </button>
         </div>
       </footer>

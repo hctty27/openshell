@@ -1,3 +1,6 @@
+import { beforeEach as beforeLanguageTest } from "vitest";
+import { initializeI18n as setTestLanguage } from "../i18n";
+beforeLanguageTest(() => setTestLanguage("zh-CN"));
 import { render, cleanup, screen, fireEvent } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ComponentProps } from "react";
@@ -113,8 +116,22 @@ test("automatic limit exposes explicit continue and stop controls", () => {
 test("the model picker sits to the right of the mode selector in the composer", () => {
   const p = props();
   p.profiles = [
-    { id: "grok", name: "grok", baseUrl: "https://example.com/v1", model: "grok-4.7(xhigh)", secretRef: "", toolsEnabled: true },
-    { id: "gpt", name: "gpt", baseUrl: "https://example.com/v1", model: "gpt-6", secretRef: "", toolsEnabled: true },
+    {
+      id: "grok",
+      name: "grok",
+      baseUrl: "https://example.com/v1",
+      model: "grok-4.7(xhigh)",
+      secretRef: "",
+      toolsEnabled: true,
+    },
+    {
+      id: "gpt",
+      name: "gpt",
+      baseUrl: "https://example.com/v1",
+      model: "gpt-6",
+      secretRef: "",
+      toolsEnabled: true,
+    },
   ];
   p.profileID = "grok";
   const { container } = render(<AISidebar {...p} />);
@@ -144,7 +161,14 @@ test("model configuration stays available in the composer without profiles", () 
 test("model switching is disabled while an automatic task is active", () => {
   const p = props();
   p.profiles = [
-    { id: "grok", name: "grok", baseUrl: "https://example.com/v1", model: "grok-4.7", secretRef: "", toolsEnabled: true },
+    {
+      id: "grok",
+      name: "grok",
+      baseUrl: "https://example.com/v1",
+      model: "grok-4.7",
+      secretRef: "",
+      toolsEnabled: true,
+    },
   ];
   p.profileID = "grok";
   p.tab!.autoRun = {
@@ -158,5 +182,7 @@ test("model switching is disabled while an automatic task is active", () => {
     reason: "",
   };
   render(<AISidebar {...p} />);
-  expect((screen.getByLabelText("当前模型") as HTMLSelectElement).disabled).toBe(true);
+  expect(
+    (screen.getByLabelText("当前模型") as HTMLSelectElement).disabled,
+  ).toBe(true);
 });

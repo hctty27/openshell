@@ -3,6 +3,7 @@ package sshclient
 import (
 	"context"
 	"errors"
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
 	"io"
@@ -45,15 +46,15 @@ func cancelledResult(ctx context.Context, start time.Time) domain.CommandResult 
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		reason = "timed_out"
 	}
-	return domain.CommandResult{Status: "unknown", Reason: reason, DurationMillis: time.Since(start).Milliseconds()}
+	return domain.CommandResult{Status: "unknown", Reason: reason, ReasonCode: reason, DurationMillis: time.Since(start).Milliseconds()}
 }
 func (m *Manager) Run(ctx context.Context, ref domain.ConnectionRef, command, cwd string, timeout time.Duration) (domain.CommandResult, error) {
 	start := time.Now()
 	if !strings.HasPrefix(cwd, "/") || strings.ContainsRune(cwd, 0) || strings.TrimSpace(command) == "" || strings.ContainsRune(command, 0) {
-		return domain.CommandResult{}, errors.New("命令和绝对工作目录无效")
+		return domain.CommandResult{}, apperror.New("invalidCommandOrAbsoluteWorkingDirectory", nil)
 	}
 	if timeout <= 0 || timeout > 10*time.Minute {
-		return domain.CommandResult{}, errors.New("命令超时范围无效")
+		return domain.CommandResult{}, apperror.New("invalidCommandTimeout", nil)
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -67,7 +68,7 @@ func (m *Manager) Run(ctx context.Context, ref domain.ConnectionRef, command, cw
 	select {
 	case v := <-opening:
 		if v.err != nil {
-			return domain.CommandResult{Status: "unknown", Reason: "channel_failed"}, v.err
+			return domain.CommandResult{Status: "unknown", Reason: "channel_failed", ReasonCode: "channel_failed"}, v.err
 		}
 		s = v.session
 	case <-ctx.Done():
@@ -90,7 +91,7 @@ func (m *Manager) Run(ctx context.Context, ref domain.ConnectionRef, command, cw
 	select {
 	case e := <-starting:
 		if e != nil {
-			return domain.CommandResult{Status: "unknown", Reason: "start_failed", DurationMillis: time.Since(start).Milliseconds()}, e
+			return domain.CommandResult{Status: "unknown", Reason: "start_failed", ReasonCode: "start_failed", DurationMillis: time.Since(start).Milliseconds()}, e
 		}
 	case <-ctx.Done():
 		m.Disconnect(ref)
@@ -114,6 +115,7 @@ func (m *Manager) Run(ctx context.Context, ref domain.ConnectionRef, command, cw
 			} else {
 				result.Status = "unknown"
 				result.Reason = "connection_lost"
+				result.ReasonCode = "connection_lost"
 			}
 		}
 	case <-ctx.Done():

@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { t } from "../i18n";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
@@ -20,7 +22,14 @@ interface Props {
 
 const EDGE_GAP = 8;
 
-export default function FloatingContextMenu({ x, y, items, anchor, onClose }: Props) {
+export default function FloatingContextMenu({
+  x,
+  y,
+  items,
+  anchor,
+  onClose,
+}: Props) {
+  useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ left: x, top: y });
 
@@ -29,8 +38,14 @@ export default function FloatingContextMenu({ x, y, items, anchor, onClose }: Pr
     if (!menu) return;
     const bounds = menu.getBoundingClientRect();
     setPosition({
-      left: Math.max(EDGE_GAP, Math.min(x, window.innerWidth - bounds.width - EDGE_GAP)),
-      top: Math.max(EDGE_GAP, Math.min(y, window.innerHeight - bounds.height - EDGE_GAP)),
+      left: Math.max(
+        EDGE_GAP,
+        Math.min(x, window.innerWidth - bounds.width - EDGE_GAP),
+      ),
+      top: Math.max(
+        EDGE_GAP,
+        Math.min(y, window.innerHeight - bounds.height - EDGE_GAP),
+      ),
     });
     menu.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
   }, [x, y, items]);
@@ -51,7 +66,8 @@ export default function FloatingContextMenu({ x, y, items, anchor, onClose }: Pr
   }, [onClose]);
 
   const focusItem = (index: number) => {
-    const buttons = menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+    const buttons =
+      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
     if (!buttons?.length) return;
     buttons[(index + buttons.length) % buttons.length].focus();
   };
@@ -60,13 +76,19 @@ export default function FloatingContextMenu({ x, y, items, anchor, onClose }: Pr
     <div
       ref={menuRef}
       role="menu"
-      aria-label="会话操作"
+      aria-label={t("common:sessionActions")}
       className="session-context-menu"
       style={{ left: position.left, top: position.top }}
       onContextMenu={(event) => event.preventDefault()}
       onKeyDown={(event) => {
-        const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
-        const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        const buttons = Array.from(
+          menuRef.current?.querySelectorAll<HTMLButtonElement>(
+            '[role="menuitem"]',
+          ) ?? [],
+        );
+        const index = buttons.indexOf(
+          document.activeElement as HTMLButtonElement,
+        );
         if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
@@ -84,7 +106,12 @@ export default function FloatingContextMenu({ x, y, items, anchor, onClose }: Pr
       }}
     >
       {items.map(({ label, icon: Icon, onSelect, danger, separatorBefore }) => (
-        <div key={label} className={separatorBefore ? "session-context-menu__separated" : undefined}>
+        <div
+          key={label}
+          className={
+            separatorBefore ? "session-context-menu__separated" : undefined
+          }
+        >
           <button
             type="button"
             role="menuitem"

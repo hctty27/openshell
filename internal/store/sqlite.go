@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	_ "modernc.org/sqlite"
 	"os"
@@ -78,7 +79,7 @@ func (s *Store) SaveSession(ctx context.Context, v domain.Session) error {
 		return e
 	}
 	if v.ID == "" {
-		return errors.New("缺少会话 ID")
+		return apperror.New("missingSessionId", nil)
 	}
 	v.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	if v.CreatedAt == "" {
@@ -95,7 +96,7 @@ func (s *Store) ListGroups(ctx context.Context) ([]domain.Group, error) {
 }
 func (s *Store) SaveGroup(ctx context.Context, v domain.Group) error {
 	if v.ID == "" || v.Name == "" {
-		return errors.New("分组名不能为空")
+		return apperror.New("folderNameCannotBeEmpty", nil)
 	}
 	return s.save(ctx, "INSERT INTO groups(id,data)VALUES(?,?) ON CONFLICT(id)DO UPDATE SET data=excluded.data", v.ID, v)
 }
@@ -174,7 +175,7 @@ func (s *Store) SaveSessionWithSecret(ctx context.Context, v domain.Session, val
 	if value != "" && save {
 		v.CredentialRef = "session-" + domain.NewID()
 		if e := secret.Put(ctx, v.CredentialRef, value); e != nil {
-			return v, domain.Error("vault", "系统凭据无法保存，配置未保存")
+			return v, domain.Error("vault", apperror.New("vaultSave", nil).Error())
 		}
 	} else if !save {
 		v.CredentialRef = ""
@@ -187,7 +188,7 @@ func (s *Store) SaveSessionWithSecret(ctx context.Context, v domain.Session, val
 	}
 	if old.CredentialRef != "" && old.CredentialRef != v.CredentialRef {
 		if e := secret.Delete(ctx, old.CredentialRef); e != nil {
-			return v, domain.Error("cleanup", "会话已保存，旧系统凭据清理失败")
+			return v, domain.Error("cleanup", apperror.New("sessionCleanup", nil).Error())
 		}
 	}
 	return v, nil

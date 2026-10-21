@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"io"
 	"path"
@@ -23,15 +23,15 @@ type ToolInput struct {
 func ParseTool(name, args string) (ToolInput, error) {
 	var input ToolInput
 	if name != "propose_command" {
-		return input, errors.New("不支持的工具调用，未执行命令")
+		return input, apperror.New("unsupportedToolCallNoCommandWasRun", nil)
 	}
 	d := json.NewDecoder(bytes.NewBufferString(args))
 	d.DisallowUnknownFields()
 	if e := d.Decode(&input); e != nil {
-		return input, errors.New("工具参数格式错误")
+		return input, apperror.New("invalidToolArguments", nil)
 	}
 	if d.Decode(&struct{}{}) != io.EOF {
-		return input, errors.New("工具参数包含多余内容")
+		return input, apperror.New("toolArgumentsContainTrailingContent", nil)
 	}
 	if e := validate(input.Command, input.Purpose, input.Cwd); e != nil {
 		return input, e
@@ -40,12 +40,12 @@ func ParseTool(name, args string) (ToolInput, error) {
 }
 func validate(command, purpose, cwd string) error {
 	if strings.TrimSpace(command) == "" || len(command) > 32768 || strings.ContainsRune(command, 0) || strings.TrimSpace(purpose) == "" || len(purpose) > 4096 || !strings.HasPrefix(cwd, "/") || len(cwd) > 4096 || strings.ContainsAny(cwd, "\x00\r\n") {
-		return errors.New("请提供命令、目的和有效的绝对工作目录")
+		return apperror.New("provideACommandPurposeAndValidAbsoluteWorking", nil)
 	}
 	first := path.Base(strings.Trim(strings.Fields(command)[0], "\"'"))
 	switch first {
 	case "ssh", "scp", "sftp", "sshpass":
-		return errors.New("应用已通过 SSH 登录，命令会直接在目标服务器执行。请提交 ps 等原始命令，不要再次运行 ssh/scp/sftp/sshpass；本次未执行")
+		return apperror.New("alreadyConnectedThroughSshSubmitRawCommandsSuch", nil)
 	}
 	return nil
 }
@@ -72,13 +72,13 @@ func (c *Coordinator) Propose(ref domain.ConnectionRef, command, purpose, cwd st
 		seconds = 60
 	}
 	if seconds < 1 || seconds > 600 {
-		return domain.Proposal{}, errors.New("超时必须在 1–600 秒之间")
+		return domain.Proposal{}, apperror.New("timeoutMustBeBetween1And600Seconds", nil)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, item := range c.items {
 		if item.proposal.Ref.TabID == ref.TabID && (item.proposal.Status == "running" || item.proposal.Status == "awaiting_confirmation") {
-			return domain.Proposal{}, errors.New("请先处理当前命令提议")
+			return domain.Proposal{}, apperror.New("handleThePendingCommandProposalFirst", nil)
 		}
 	}
 	p := domain.Proposal{ID: domain.NewID(), Ref: ref, Command: command, Purpose: purpose, Cwd: cwd, TimeoutSeconds: seconds, Status: "awaiting_confirmation"}
@@ -90,7 +90,7 @@ func (c *Coordinator) Get(id string) (domain.Proposal, error) {
 	defer c.mu.Unlock()
 	e := c.items[id]
 	if e == nil {
-		return domain.Proposal{}, errors.New("提议不存在")
+		return domain.Proposal{}, apperror.New("proposalNotFound", nil)
 	}
 	return e.proposal, nil
 }
@@ -99,12 +99,12 @@ func (c *Coordinator) Confirm(ctx context.Context, id string) (domain.CommandRes
 	item := c.items[id]
 	if item == nil || item.proposal.Status != "awaiting_confirmation" {
 		c.mu.Unlock()
-		return domain.CommandResult{}, errors.New("提议已处理或失效")
+		return domain.CommandResult{}, apperror.New("proposalAlreadyHandledOrExpired", nil)
 	}
 	if c.valid == nil || !c.valid(item.proposal.Ref) {
 		item.proposal.Status = "invalidated"
 		c.mu.Unlock()
-		return domain.CommandResult{}, errors.New("目标连接已变化，请重新生成提议")
+		return domain.CommandResult{}, apperror.New("targetConnectionChangedGenerateANewProposal", nil)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	item.cancel = cancel
@@ -128,7 +128,7 @@ func (c *Coordinator) CancelWithState(id string) (bool, error) {
 	defer c.mu.Unlock()
 	item := c.items[id]
 	if item == nil {
-		return false, errors.New("提议不存在")
+		return false, apperror.New("proposalNotFound", nil)
 	}
 	if item.cancel != nil {
 		item.cancel()
@@ -168,13 +168,13 @@ func (c *Coordinator) Forget(tab string) {
 
 func (c *Coordinator) Revise(id, command, cwd string, seconds int) (domain.Proposal, error) {
 	if seconds < 1 || seconds > 600 {
-		return domain.Proposal{}, errors.New("超时必须在 1–600 秒之间")
+		return domain.Proposal{}, apperror.New("timeoutMustBeBetween1And600Seconds", nil)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	item := c.items[id]
 	if item == nil || item.proposal.Status != "awaiting_confirmation" {
-		return domain.Proposal{}, errors.New("提议不可编辑")
+		return domain.Proposal{}, apperror.New("proposalCannotBeEdited", nil)
 	}
 	if e := validate(command, item.proposal.Purpose, cwd); e != nil {
 		return domain.Proposal{}, e
