@@ -38,13 +38,14 @@ import TerminalPane from "./components/TerminalPane";
 import AISidebar from "./components/AISidebar";
 import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.13";
 const initial: AppState = {
   sessions: [],
   groups: [],
   profiles: [],
   fontSize: "14",
   activeProfile: "",
-  version: "0.1.13",
+  version: APP_VERSION,
 };
 const id = () => crypto.randomUUID();
 export default function App() {
@@ -698,7 +699,7 @@ export default function App() {
         <footer className="workspace-status">
           <span className="workspace-version">
             OpenShell <span className="status-sep" />
-            v0.1.13
+            v{APP_VERSION}
           </span>
           <span className="workspace-connection">
             <i

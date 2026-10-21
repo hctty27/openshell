@@ -8,7 +8,7 @@
 
 **项目地址：** https://github.com/hctty27/openshell
 
-**当前版本：** 0.1.13（测试版）
+**当前版本：** [GitHub Releases](https://github.com/hctty27/openshell/releases/latest)（测试版）
 
 支持浅色/深色主题：设置 → 外观 → 主题，点击“保存外观”后重启保留。终端采用固定 6px 细滚动条，并修复末行裁切。
 
@@ -24,7 +24,7 @@
 
 ## 使用
 
-1. 从 [Releases](https://github.com/hctty27/openshell/releases) 下载 Windows x64 的安装版（Setup.exe）或便携版（ZIP）。便携版解压后运行 **OpenShell-v0.1.13.exe**（文件名包含版本号，减少 Windows Explorer 旧图标缓存的影响）。
+1. 从 [Releases](https://github.com/hctty27/openshell/releases) 下载 Windows x64 的安装版（Setup.exe）或便携版（ZIP）。便携版解压后运行 **OpenShell-vX.Y.Z.exe**（实际文件名中的 X.Y.Z 为下载版本号，以减少 Windows Explorer 旧图标缓存的影响）。
 2. 新建会话，填写主机、端口、用户名和认证信息；单击会话在左下方查看详情，双击连接。
 3. 首次连接时核对服务器指纹，确认后继续。
 4. 设置 → AI API：填写接口地址、密钥和准确的模型 ID，测试连接后保存。
@@ -95,7 +95,18 @@ wails dev
 wails build -platform windows/amd64 -clean
 ```
 
-产物：`build/bin/OpenShell.exe`。仓库的 [Windows 自动打包工作流](.github/workflows/windows-release.yml) 还会生成 ZIP 便携包和 NSIS 安装包，并在新版本首次构建成功时上传到 GitHub Releases。前后端绑定位于 `frontend/wailsjs`，由 Wails 自动生成。
+产物：`build/bin/OpenShell.exe`。仓库的 [CI 工作流](.github/workflows/ci.yml) 在推送 main 或创建、更新 PR 时运行 Go 测试、前端构建、单元测试和 Chromium 界面回归，不生成安装包。[Windows 发布工作流](.github/workflows/windows-release.yml) 仅在推送 `vX.Y.Z` 格式的 Git Tag 后进行 Windows x64 完整打包，版本号自动注入 Go、前端、Wails 元数据和文件名；发布成功后 [Release 保留工作流](.github/workflows/keep-releases.yml) 自动只保留最新 3 个版本（不删除 Git Tag）。Actions 临时构建产物保存 7 天。前后端绑定位于 `frontend/wailsjs`，由 Wails 自动生成。
+
+发布新版本（例如 `v0.1.14`）：
+
+```sh
+git checkout main
+git pull --ff-only
+git tag v0.1.14
+git push origin v0.1.14
+```
+
+请先确保目标提交已通过 CI；仅推送 main 不会发布 Release。
 
 其他系统目前用于核心测试与 Windows 交叉编译；第一版只交付 Windows 桌面应用。
 
