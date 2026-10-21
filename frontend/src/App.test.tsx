@@ -12,6 +12,7 @@ import {
 import { expect, test, vi, afterEach } from "vitest";
 import App from "./App";
 import { api } from "./bridge";
+import type { Session } from "./types";
 vi.mock("./components/TerminalPane", () => ({ default: () => null }));
 vi.mock("./bridge", async () => ({
   ...(await vi.importActual<typeof import("./bridge")>("./bridge")),
@@ -22,6 +23,7 @@ vi.mock("./bridge", async () => ({
       ref: { tabId, sessionId, generation: 1 },
       home: "/root",
     })),
+    SaveSession: vi.fn(async (req: { session: Session }) => req.session),
     State: vi.fn(async () => ({
       sessions: [],
       groups: [],
@@ -224,6 +226,63 @@ test("the tab plus opens a session list and reuses an already opened SSH tab", a
   fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 us" }));
   expect(screen.getAllByTitle("关闭 us")).toHaveLength(1);
   expect(api.Connect).toHaveBeenCalledTimes(1);
+});
+
+test("edits an active session without disconnecting and updates every open tab", async () => {
+  vi.mocked(api.Connect).mockClear();
+  const session: Session = {
+    id: "us-id",
+    groupId: "",
+    name: "us",
+    host: "old.example",
+    port: 22,
+    username: "root",
+    authType: "key",
+    privateKeyPath: "/tmp/id",
+    credentialRef: "",
+  };
+  const changed: Session = { ...session, name: "US Updated", host: "new.example", port: 2222 };
+  const state = (sessions: Session[]) => ({
+    sessions,
+    groups: [],
+    profiles: [],
+    fontSize: "14",
+    language: "zh-CN" as const,
+    activeProfile: "",
+    version: "0.1.25",
+  });
+  vi.mocked(api.State)
+    .mockResolvedValueOnce(state([session]))
+    .mockResolvedValueOnce(state([changed]));
+  vi.mocked(api.SaveSession).mockResolvedValueOnce(changed);
+
+  await act(async () => {
+    render(<App />);
+  });
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选中会话 us" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  fireEvent.doubleClick(screen.getByTitle("双击复制会话"));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
+
+  const row = screen.getByRole("button", { name: "选中会话 us" });
+  fireEvent.contextMenu(row, { clientX: 100, clientY: 90 });
+  fireEvent.click(screen.getByRole("menuitem", { name: "编辑会话" }));
+  expect(screen.getByText(/此会话已连接/)).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("会话名称"), {
+    target: { value: "US Updated" },
+  });
+  fireEvent.change(screen.getByLabelText("主机地址"), {
+    target: { value: "new.example" },
+  });
+  fireEvent.change(screen.getByLabelText("端口"), {
+    target: { value: "2222" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "保存会话" }));
+  await waitFor(() => expect(api.SaveSession).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.getAllByTitle("关闭 US Updated")).toHaveLength(2));
+  expect(api.Connect).toHaveBeenCalledTimes(2);
+  expect(screen.getByText(/新参数将在下次连接时生效/)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "选中会话 US Updated" })).toBeTruthy();
 });
 
 test("double-clicking a terminal tab opens an independent SSH session beside it with the same name", async () => {

@@ -85,21 +85,22 @@ func TestSecretsAbsentFromEventsAndLogs(t *testing.T) {
 		t.Fatal("key leaked")
 	}
 }
-func TestEditingActiveSessionTargetRejected(t *testing.T) {
+func TestEditingOpenSessionIsAllowed(t *testing.T) {
 	a, _ := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
 	defer a.shutdown(context.Background())
 	row, e := a.SaveSession(SaveSessionRequest{Session: domain.Session{Host: "old.example", Port: 22, Username: "root"}})
 	if e != nil {
 		t.Fatal(e)
 	}
-	a.tabRefs["tab"] = domain.ConnectionRef{TabID: "tab", SessionID: row.ID, Generation: 1}
+	ref := domain.ConnectionRef{TabID: "tab", SessionID: row.ID, Generation: 1}
+	a.tabRefs["tab"] = ref
 	row.Host = "new.example"
-	if _, e = a.SaveSession(SaveSessionRequest{Session: row}); e == nil {
-		t.Fatal("active connection identity changed behind visible tab")
+	saved, e := a.SaveSession(SaveSessionRequest{Session: row})
+	if e != nil || saved.Host != "new.example" {
+		t.Fatal(saved, e)
 	}
-	saved, _ := a.store.GetSession(context.Background(), row.ID)
-	if saved.Host != "old.example" {
-		t.Fatal(saved.Host)
+	if a.tabRefs["tab"] != ref {
+		t.Fatal("saving session configuration changed active tab reference")
 	}
 }
 func TestExecFailureStillCompletesToolHistory(t *testing.T) {

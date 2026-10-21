@@ -78,6 +78,52 @@ func TestTwoServersEndToEnd(t *testing.T) {
 		t.Fatal(last)
 	}
 }
+func TestEditingConnectedSessionKeepsLiveSshTarget(t *testing.T) {
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+	server := testssh.Start(t)
+	row, err := a.SaveSession(SaveSessionRequest{
+		Session: domain.Session{Name: "Original", Host: server.Host, Port: server.Port, Username: "root", AuthType: "password"},
+		Secret: "test-password", SaveSecret: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := a.Connect("tab", row.ID, "")
+	if err != nil || first.Challenge == nil {
+		t.Fatal(first, err)
+	}
+	if err = a.TrustHost(first.Challenge.ID); err != nil {
+		t.Fatal(err)
+	}
+	connected, err := a.Connect("tab", row.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row.Name, row.Host, row.Port, row.Username = "Updated", "new.example", 2222, "deploy"
+	saved, err := a.SaveSession(SaveSessionRequest{Session: row, SaveSecret: true})
+	if err != nil || saved.Name != "Updated" || saved.Host != "new.example" {
+		t.Fatal(saved, err)
+	}
+	live, err := a.ssh.ConnectedSession(connected.Ref)
+	if err != nil || live.Host != server.Host || live.Port != server.Port || live.Username != "root" {
+		t.Fatal("SSH target changed after saving new settings", live, err)
+	}
+	if !a.ssh.Valid(connected.Ref) {
+		t.Fatal("saving disconnected the live SSH connection")
+	}
+	result, err := a.ssh.Run(context.Background(), connected.Ref, "printf CONNECTED", "/tmp", 5*time.Second)
+	if err != nil || result.Stdout != "CONNECTED" {
+		t.Fatal("existing SSH connection cannot execute commands after save", result, err)
+	}
+	stored, err := a.store.GetSession(context.Background(), row.ID)
+	if err != nil || stored.Name != "Updated" || stored.Host != "new.example" || stored.Port != 2222 || stored.Username != "deploy" {
+		t.Fatal("next connection settings not persisted", stored, err)
+	}
+}
 func TestDeleteActiveSession(t *testing.T) {
 	a, _ := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
 	defer a.shutdown(context.Background())

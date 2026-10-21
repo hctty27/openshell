@@ -1369,6 +1369,9 @@ kbd {
   flex-shrink: 0;
   color: var(--warning);
 }
+.toast--success > svg {
+  color: var(--accent);
+}
 .toast button {
   margin-left: 10px;
 }

@@ -78,5 +78,6 @@
   "aiDescription": "管理 AI 接口、模型与访问凭据",
   "automaticDescription": "配置自动执行的命令限制与权限范围",
   "saveSettings": "保存设置",
-  "settingsSaved": "设置已保存"
+  "settingsSaved": "设置已保存",
+  "connectedSessionEditingNotice": "此会话已连接。保存不会断开当前 SSH；连接参数将在下次连接时生效。"
 }

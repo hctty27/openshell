@@ -37,6 +37,7 @@ interface Props {
   onLanguage?(language: Language): Promise<void>;
   kind: "session" | "settings";
   session?: Session;
+  sessionConnected?: boolean;
   groupID?: string;
   groups: Group[];
   profiles: APIProfile[];
@@ -172,7 +173,11 @@ export default function SettingsDialog(p: Props) {
               <div className="form-note">
                 <Server size={17} />
                 <span>
-                  {t("settings:saveConnectionDetailsThenDoubleClickASession")}
+                  {t(
+                    p.sessionConnected
+                      ? "settings:connectedSessionEditingNotice"
+                      : "settings:saveConnectionDetailsThenDoubleClickASession",
+                  )}
                 </span>
               </div>
               <label>

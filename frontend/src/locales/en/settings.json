@@ -78,5 +78,6 @@
   "aiDescription": "Manage AI endpoints, models and credentials",
   "automaticDescription": "Configure command limits and permissions for automatic execution",
   "saveSettings": "Save settings",
-  "settingsSaved": "Settings saved"
+  "settingsSaved": "Settings saved",
+  "connectedSessionEditingNotice": "This session is connected. Saving won't disconnect SSH; connection changes take effect on the next connection."
 }

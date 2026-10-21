@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   LoaderCircle,
   AlertCircle,
+  Check,
   FolderOpen,
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
@@ -166,6 +167,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       groupID?: string;
     } | null>(null),
     [toast, setToast] = useState<unknown>(""),
+    [notice, setNotice] = useState(""),
     [aiWidth, setAIWidth] = useState(370),
     [sessionWidth, setSessionWidth] = useState(235),
     [challenge, setChallenge] = useState<{
@@ -184,6 +186,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
     streamIDs = useRef<Record<string, string>>({}),
     selections = useRef<Record<string, string>>({});
   tabsRef.current = tabs;
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   const activeIDRef = useRef(activeID);
   activeIDRef.current = activeID;
   const active = tabs.find((t) => t.id === activeID);
@@ -534,8 +541,35 @@ function Workspace({ initialState }: { initialState: AppState }) {
     }
   };
   const saveSession = async (req: SessionRequest) => {
+    const previous = state.sessions.find((session) => session.id === req.session.id);
     try {
-      await api.SaveSession(req);
+      const saved = await api.SaveSession(req);
+      setTabs((current) =>
+        current.map((tab) =>
+          tab.session.id === saved.id ? { ...tab, session: saved } : tab,
+        ),
+      );
+      const connectionChanged = previous && (
+        previous.host !== saved.host ||
+        previous.port !== saved.port ||
+        previous.username !== saved.username ||
+        previous.authType !== saved.authType ||
+        previous.privateKeyPath !== saved.privateKeyPath ||
+        req.secret !== "" ||
+        (previous.credentialRef !== "" && !req.saveSecret)
+      );
+      const connected = tabsRef.current.some(
+        (tab) =>
+          tab.session.id === saved.id &&
+          (tab.status === "connected" || tab.status === "connecting"),
+      );
+      setNotice(
+        tr(
+          connected && connectionChanged
+            ? "common:sessionConnectionChangesOnNextReconnect"
+            : "common:sessionSaved",
+        ),
+      );
     } finally {
       await refresh();
     }
@@ -845,15 +879,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
             groups={state.groups}
             active={active?.session.id ?? ""}
             onOpen={open}
-            onEdit={(session) => {
-              if (session && tabs.some((t) => t.session.id === session.id)) {
-                notify(
-                  message("common:closeThisSessionSTerminalTabsBeforeEditing"),
-                );
-                return;
-              }
-              setDialog({ kind: "session", session });
-            }}
+            onEdit={(session) => setDialog({ kind: "session", session })}
             onDelete={removeSession}
             onCreateInGroup={(groupID) =>
               setDialog({ kind: "session", groupID })
@@ -1154,12 +1180,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
             open(session);
           }}
           onEdit={(session) => {
-            if (tabsRef.current.some((tab) => tab.session.id === session.id)) {
-              notify(
-                message("common:closeThisSessionSTerminalTabsBeforeEditing"),
-              );
-              return;
-            }
             setShowSessionPicker(false);
             setDialog({ kind: "session", session });
           }}
@@ -1176,6 +1196,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
         <SettingsDialog
           key={`${dialog.kind}-${dialog.session?.id ?? dialog.groupID ?? ""}`}
           {...dialog}
+          sessionConnected={
+            !!dialog.session &&
+            tabs.some(
+              (tab) =>
+                tab.session.id === dialog.session?.id &&
+                (tab.status === "connected" || tab.status === "connecting"),
+            )
+          }
           groups={state.groups}
           profiles={state.profiles}
           autoCommandLimit={state.autoCommandLimit}
@@ -1347,6 +1375,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
               </button>
             </footer>
           </section>
+        </div>
+      )}
+      {!!notice && !toast && (
+        <div className="toast toast--success" role="status">
+          <Check size={16} />
+          <span>{notice}</span>
+          <button title={tr("common:dismissNotification")} onClick={() => setNotice("")}>
+            <X size={14} />
+          </button>
         </div>
       )}
       {!!toast && (

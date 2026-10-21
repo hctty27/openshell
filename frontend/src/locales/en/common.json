@@ -125,5 +125,7 @@
   "contextPreview": "CONTEXT PREVIEW",
   "lineCount": "{{count}} lines",
   "lineCount_one": "{{count}} line",
-  "lineCount_other": "{{count}} lines"
+  "lineCount_other": "{{count}} lines",
+  "sessionSaved": "Session settings saved",
+  "sessionConnectionChangesOnNextReconnect": "Connection settings updated. The current SSH connection stays active; new settings apply on the next connection."
 }
