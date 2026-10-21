@@ -51,7 +51,7 @@ export default function QuickCommandBar({ tab, commands, layout, onManage, onRun
             type="button"
             className="quick-command-button"
             title={`${command.category || "常用"} · ${command.command}${command.mode === "insert" ? "（仅填入）" : ""}`}
-            disabled={tab?.status !== "connected" || !tab.ref}
+            disabled={tab?.status !== "connected" || !tab?.ref}
             onClick={() => onRun(command)}
           >
             {command.name}
