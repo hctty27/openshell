@@ -45,24 +45,40 @@ test("shows workspace and collapsible AI sidebar", async () => {
   fireEvent.click(screen.getByTitle("收起 AI"));
   expect(screen.queryByText("AI 助手")).toBeNull();
 });
-test("theme previews immediately and is saved in appearance settings", async () => {
+test("theme previews immediately and is saved in general settings", async () => {
   await act(async () => {
     render(<App />);
   });
   fireEvent.click(screen.getByTitle("设置"));
-  fireEvent.change(screen.getByLabelText("主题"), {
-    target: { value: "light" },
-  });
+  fireEvent.click(screen.getByRole("button", { name: "浅色" }));
   expect(document.documentElement.dataset.theme).toBe("light");
-  fireEvent.click(screen.getByRole("button", { name: "保存外观" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
   await waitFor(() =>
     expect(api.SavePreference).toHaveBeenCalledWith("theme", "light"),
   );
-  fireEvent.change(screen.getByLabelText("主题"), {
-    target: { value: "dark" },
-  });
+  fireEvent.click(screen.getByRole("button", { name: "深色" }));
   expect(document.documentElement.dataset.theme).toBe("dark");
 });
+test("settings navigation separates general, terminal, AI and automatic options", async () => {
+  await act(async () => {
+    render(<App />);
+  });
+  fireEvent.click(screen.getByTitle("设置"));
+  expect(screen.getByRole("navigation", { name: "设置分类" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "通用" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "终端" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "AI 配置" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "自动执行" })).toBeTruthy();
+  expect(screen.queryByText("OpenShell · 中文终端预览")).toBeNull();
+  expect(screen.queryByText(/systemctl status redis/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "终端" }));
+  expect(screen.getByLabelText("字体大小")).toBeTruthy();
+  expect(screen.getByLabelText("快捷命令栏布局")).toBeTruthy();
+  expect(screen.queryByText("界面语言")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "通用" }));
+  expect(screen.getByLabelText("界面语言")).toBeTruthy();
+});
+
 test("opens session editor without connecting and rejects missing host", async () => {
   await act(async () => {
     render(<App />);
@@ -78,7 +94,7 @@ test("API settings expose custom endpoint key and model fields", async () => {
     render(<App />);
   });
   fireEvent.click(screen.getByTitle("设置"));
-  fireEvent.click(screen.getByRole("button", { name: "AI API" }));
+  fireEvent.click(screen.getByRole("button", { name: "AI 配置" }));
   expect(screen.getByLabelText("Base URL")).toBeTruthy();
   expect(screen.getByLabelText("API Key")).toBeTruthy();
   expect(screen.getByLabelText("模型名称")).toBeTruthy();
@@ -113,6 +129,7 @@ test("terminal mouse settings are opt-in and saved independently", async () => {
     render(<App />);
   });
   fireEvent.click(screen.getByTitle("设置"));
+  fireEvent.click(screen.getByRole("button", { name: "终端" }));
   const copy = screen.getByLabelText("选中自动复制") as HTMLInputElement;
   const paste = screen.getByLabelText("鼠标右键粘贴") as HTMLInputElement;
   expect(copy.checked).toBe(false);
@@ -122,7 +139,7 @@ test("terminal mouse settings are opt-in and saved independently", async () => {
   const confirm = screen.getByLabelText("多行粘贴前确认") as HTMLInputElement;
   expect(confirm.checked).toBe(true);
   fireEvent.click(confirm);
-  fireEvent.click(screen.getByRole("button", { name: "保存外观" }));
+  fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
   await waitFor(() => {
     expect(api.SavePreference).toHaveBeenCalledWith(
       "autoCopySelection",
