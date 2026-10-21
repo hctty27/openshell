@@ -1700,3 +1700,27 @@ kbd {
   .session-details { max-height: 44vh; }
   .brand { height: 58px; }
 }
+
+.group-heading > button.tree-toggle {
+  flex: 0 0 19px;
+  width: 19px;
+  padding: 3px 1px;
+  justify-content: center;
+}
+.group-heading > button.group-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 7px;
+  justify-content: flex-start;
+  padding: 5px 3px;
+  font-size: 11px;
+}
+.group-heading > button.group-select > svg {
+  flex-shrink: 0;
+}
+.group-heading > button.group-select small {
+  margin-left: auto;
+}
+.group-heading > button[title^="管理分组"] {
+  flex: 0 0 23px;
+}
