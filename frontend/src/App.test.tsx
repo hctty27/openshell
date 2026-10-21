@@ -24,7 +24,7 @@ vi.mock("./bridge", () => ({
       profiles: [],
       fontSize: "14",
       activeProfile: "",
-      version: "0.1.15",
+      version: "0.1.17",
     })),
   },
   listen: () => () => {},
