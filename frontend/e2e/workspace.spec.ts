@@ -115,6 +115,61 @@ test.beforeEach(async ({ page }) => {
               reason: "",
             };
           },
+          StartAutomatic: async (req: any, id: string) => {
+            const snapshot = {
+              id,
+              ref: req.ref,
+              status: "limit",
+              steps: 1,
+              roundSteps: 1,
+              limit: 1,
+              allowChanges: false,
+              reason: "已达到本轮命令上限",
+            };
+            (window as any).__auto = snapshot;
+            emit("auto:event", {
+              kind: "state",
+              state: { ...snapshot, status: "running" },
+            });
+            emit("auto:event", {
+              kind: "thinking",
+              state: { ...snapshot, status: "running" },
+              messageId: "auto-message",
+            });
+            emit("auto:event", {
+              kind: "reply",
+              state: snapshot,
+              messageId: "auto-message",
+              text: "已检查磁盘",
+            });
+            emit("auto:event", { kind: "state", state: snapshot });
+            return snapshot;
+          },
+          ResumeAutomatic: async (
+            id: string,
+            approved: string,
+            extend: boolean,
+          ) => {
+            (window as any).__resumed = { id, approved, extend };
+            const snapshot = {
+              ...(window as any).__auto,
+              status: "completed",
+              steps: 2,
+              reason: "任务已完成",
+            };
+            emit("auto:event", { kind: "state", state: snapshot });
+            return snapshot;
+          },
+          StopAutomatic: async (id: string) => {
+            emit("auto:event", {
+              kind: "state",
+              state: {
+                ...(window as any).__auto,
+                status: "stopped",
+                reason: "已停止",
+              },
+            });
+          },
           Continue: async () => ({ text: "当前目录是 /home/test。" }),
           PreviewContext: async () => ({
             text: "root@test:~$ pwd",
@@ -213,6 +268,21 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
     page.getByText("当前目录是 /home/test。", { exact: true }),
   ).toBeVisible();
   await page.screenshot({ path: "../tmp/ui-connected.png" });
+  await page.getByLabel("AI 模式").selectOption("auto");
+  await page.getByLabel("发送给 AI").fill("继续检查磁盘");
+  await page.getByTitle("发送消息").click();
+  await expect(page.getByRole("button", { name: "继续下一轮" })).toBeVisible();
+  await expect(page.getByLabel("AI 模式")).toBeDisabled();
+  await page.getByRole("button", { name: "继续下一轮" }).click();
+  await expect(page.getByText("任务已完成", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__resumed.extend)).toBe(
+    true,
+  );
+  await page.getByLabel("发送给 AI").fill("再次检查");
+  await page.getByTitle("发送消息").click();
+  await page.getByTitle("停止任务").click();
+  await expect(page.getByText("已停止", { exact: true })).toBeVisible();
+
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -327,7 +397,9 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
   await page.screenshot({ path: "../tmp/theme-dark.png" });
 });
 
-test("compact sidebar removes detail actions and aligns single-row footer heights", async ({ page }) => {
+test("compact sidebar removes detail actions and aligns single-row footer heights", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1200, height: 700 });
   await page.goto("/");
   await page.getByTitle("新建会话", { exact: true }).first().click();
@@ -338,10 +410,18 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   await page.getByRole("button", { name: "保存会话", exact: true }).click();
   await page.getByRole("button", { name: "选中会话 紧凑测试" }).click();
 
-  await expect(page.locator(".session-details .details-actions")).toHaveCount(0);
-  await expect(page.locator(".details-properties dd").first()).toHaveText("紧凑测试");
+  await expect(page.locator(".session-details .details-actions")).toHaveCount(
+    0,
+  );
+  await expect(page.locator(".details-properties dd").first()).toHaveText(
+    "紧凑测试",
+  );
   await page.getByTitle("管理 紧凑测试").click();
-  await expect(page.locator(".session-row .row-menu").getByRole("button", { name: "编辑" })).toBeVisible();
+  await expect(
+    page
+      .locator(".session-row .row-menu")
+      .getByRole("button", { name: "编辑" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "选中会话 紧凑测试" }).dblclick();
   await page.getByRole("button", { name: "信任并连接" }).click();
@@ -388,7 +468,9 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   expect(geometry.footerRightEdge - geometry.statusRightEdge).toBeLessThan(20);
 
   await page.getByTitle("设置", { exact: true }).click();
-  await page.getByRole("combobox", { name: "快速命令栏布局" }).selectOption("multi");
+  await page
+    .getByRole("combobox", { name: "快速命令栏布局" })
+    .selectOption("multi");
   await page.getByRole("button", { name: "保存外观" }).click();
   await expect(page.getByText("外观已保存")).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();

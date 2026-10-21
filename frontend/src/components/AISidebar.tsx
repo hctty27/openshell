@@ -14,7 +14,7 @@ import {
   Terminal,
   LoaderCircle,
 } from "lucide-react";
-import type { Tab, APIProfile, Proposal } from "../types";
+import type { Tab, APIProfile, Proposal, ChatMode } from "../types";
 import CommandProposal from "./CommandProposal";
 interface Props {
   tab: Tab | undefined;
@@ -23,7 +23,8 @@ interface Props {
   onProfile(id: string): void;
   onHide(): void;
   onSettings(): void;
-  onSend(text: string, operate: boolean, context: string): void;
+  onSend(text: string, mode: ChatMode, context: string): void;
+  onAutoContinue?(): void;
   onStop(): void;
   onClear(): void;
   onPreview(): void;
@@ -35,10 +36,22 @@ interface Props {
 }
 export default function AISidebar(p: Props) {
   const [input, setInput] = useState("");
-  const [operate, setOperate] = useState(true);
+  const [modes, setModes] = useState<Record<string, ChatMode>>({});
+  const selectedMode = modes[p.tab?.id ?? ""] ?? "confirm";
   const end = useRef<HTMLDivElement>(null);
   const profile = p.profiles.find((v) => v.id === p.profileID);
-  const busy = !!p.tab?.chatBusy || !!p.tab?.executing;
+  const automatic = p.tab?.autoRun;
+  const automaticActive =
+    !!automatic &&
+    ["ready", "running", "awaiting_confirmation", "limit"].includes(
+      automatic.status,
+    );
+  const mode: ChatMode = profile?.toolsEnabled ? selectedMode : "chat";
+  const busy =
+    !!p.tab?.chatBusy ||
+    !!p.tab?.executing ||
+    automatic?.status === "running" ||
+    automatic?.status === "ready";
   const blocked =
     !p.tab ||
     p.tab.status !== "connected" ||
@@ -51,7 +64,7 @@ export default function AISidebar(p: Props) {
   useEffect(() => setInput(""), [p.tab?.id]);
   const send = (text = input) => {
     if (blocked || !text.trim()) return;
-    p.onSend(text, operate, p.context);
+    p.onSend(text, mode, p.context);
     setInput("");
   };
   return (
@@ -65,7 +78,7 @@ export default function AISidebar(p: Props) {
         <div>
           <button
             title="清空对话"
-            disabled={busy || !!p.tab?.proposal}
+            disabled={busy || automaticActive || !!p.tab?.proposal}
             onClick={p.onClear}
           >
             <Trash2 size={15} />
@@ -81,6 +94,7 @@ export default function AISidebar(p: Props) {
             <span className="status-dot" />
             <select
               aria-label="当前模型"
+              disabled={automaticActive}
               value={p.profileID}
               onChange={(e) => p.onProfile(e.target.value)}
             >
@@ -180,6 +194,9 @@ export default function AISidebar(p: Props) {
                     )[m.result.reason] ?? m.result.reason}
                   </p>
                 )}
+                {m.command && (
+                  <code className="executed-command">{m.command}</code>
+                )}
                 <pre className="result-output">
                   {m.result.stdout || "(无标准输出)"}
                   {m.result.stderr && `\n[stderr]\n${m.result.stderr}`}
@@ -212,11 +229,37 @@ export default function AISidebar(p: Props) {
             onConfirm={p.onConfirm}
             onCancel={p.onCancel}
             onRevise={p.onRevise}
+            readOnly={automaticActive}
+            confirmDisabled={automatic?.status === "limit"}
           />
         )}
         <div ref={end} />
       </div>
       <div className="ai-composer">
+        {automatic && (
+          <div className="auto-progress" role="status">
+            <strong>
+              自动执行 · 本轮 {automatic.roundSteps}/{automatic.limit} · 累计{" "}
+              {automatic.steps} 条
+            </strong>
+            <span>
+              {automatic.reason ||
+                (p.tab?.executing ? "命令执行中" : "正在处理任务")}
+            </span>
+            {automatic.status === "limit" && (
+              <button className="secondary" onClick={p.onAutoContinue}>
+                继续下一轮
+              </button>
+            )}
+            {automaticActive && (
+              <small>
+                范围：
+                {automatic.allowChanges ? "允许修改操作" : "仅检查自动执行"} ·
+                目标固定在当前任务服务器
+              </small>
+            )}
+          </div>
+        )}
         {p.tab && (
           <div className="target-line">
             <span
@@ -245,7 +288,7 @@ export default function AISidebar(p: Props) {
             }
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            disabled={!p.tab || busy}
+            disabled={!p.tab || busy || automaticActive}
             onKeyDown={(e) => {
               if (
                 e.key === "Enter" &&
@@ -265,19 +308,25 @@ export default function AISidebar(p: Props) {
             >
               <Paperclip size={16} />
             </button>
-            <button
-              title={
-                profile?.toolsEnabled
-                  ? "切换普通对话或操作模式"
-                  : "此 API 已关闭工具调用"
-              }
+            <select
               className="mode-select"
-              onClick={() => setOperate(!operate)}
+              aria-label="AI 模式"
+              value={mode}
+              disabled={busy || automaticActive || !!p.tab?.proposal}
+              onChange={(e) =>
+                p.tab &&
+                setModes({ ...modes, [p.tab.id]: e.target.value as ChatMode })
+              }
             >
-              {operate && profile?.toolsEnabled ? "操作模式" : "普通对话"}
-              <ChevronDown size={12} />
-            </button>
-            {busy ? (
+              <option value="chat">普通对话</option>
+              <option value="confirm" disabled={!profile?.toolsEnabled}>
+                确认执行
+              </option>
+              <option value="auto" disabled={!profile?.toolsEnabled}>
+                自动执行
+              </option>
+            </select>
+            {busy || automaticActive ? (
               <button
                 title="停止任务"
                 className="send-button"

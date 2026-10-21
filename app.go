@@ -12,6 +12,7 @@ import (
 	"github.com/hctty27/openshell/internal/tasks"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ type App struct {
 	secrets       domain.SecretStore
 	ssh           *sshclient.Manager
 	coordinator   *tasks.Coordinator
+	automatic     *tasks.AutomaticRunner
 	provider      *ai.Provider
 	conversations *ai.ConversationStore
 	emit          sshclient.EmitFunc
@@ -36,29 +38,31 @@ type App struct {
 	tabRefs       map[string]domain.ConnectionRef
 }
 type QuickCommand struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Command   string `json:"command"`
-	Category  string `json:"category"`
-	Scope     string `json:"scope"`
-	ScopeID   string `json:"scopeId"`
-	Mode      string `json:"mode"`
-	Confirm   bool   `json:"confirm"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Command  string `json:"command"`
+	Category string `json:"category"`
+	Scope    string `json:"scope"`
+	ScopeID  string `json:"scopeId"`
+	Mode     string `json:"mode"`
+	Confirm  bool   `json:"confirm"`
 }
 
 type AppState struct {
-	Sessions           []domain.Session    `json:"sessions"`
-	Groups             []domain.Group      `json:"groups"`
-	Profiles           []domain.APIProfile `json:"profiles"`
-	QuickCommands      []QuickCommand      `json:"quickCommands"`
-	QuickCommandLayout string              `json:"quickCommandLayout"`
-	AutoCopySelection     bool               `json:"autoCopySelection"`
-	RightClickPaste       bool               `json:"rightClickPaste"`
-	ConfirmMultilinePaste bool               `json:"confirmMultilinePaste"`
-	FontSize           string              `json:"fontSize"`
-	Theme              string              `json:"theme"`
-	ActiveProfile      string              `json:"activeProfile"`
-	Version            string              `json:"version"`
+	Sessions              []domain.Session    `json:"sessions"`
+	Groups                []domain.Group      `json:"groups"`
+	Profiles              []domain.APIProfile `json:"profiles"`
+	QuickCommands         []QuickCommand      `json:"quickCommands"`
+	QuickCommandLayout    string              `json:"quickCommandLayout"`
+	AutoCopySelection     bool                `json:"autoCopySelection"`
+	RightClickPaste       bool                `json:"rightClickPaste"`
+	ConfirmMultilinePaste bool                `json:"confirmMultilinePaste"`
+	FontSize              string              `json:"fontSize"`
+	Theme                 string              `json:"theme"`
+	ActiveProfile         string              `json:"activeProfile"`
+	AutoCommandLimit      int                 `json:"autoCommandLimit"`
+	AutoAllowChanges      bool                `json:"autoAllowChanges"`
+	Version               string              `json:"version"`
 }
 
 type SaveSessionRequest struct {
@@ -111,10 +115,12 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 	}
 	a := &App{ctx: context.Background(), store: db, secrets: secrets, provider: ai.NewProvider(), conversations: ai.NewConversations(), emit: emit, transient: map[string]string{}, challenges: map[string]*sshclient.HostKeyError{}, chatCancels: map[string]context.CancelFunc{}, pending: map[string]string{}, tabRefs: map[string]domain.ConnectionRef{}}
 	a.connectEpoch = map[string]uint64{}
+	a.automatic = tasks.NewAutomaticRunner()
 	a.ssh = sshclient.NewManager(db, func(name string, payload any) {
 		if name == "ssh:disconnected" {
 			if ref, ok := payload.(domain.ConnectionRef); ok {
 				a.coordinator.Invalidate(ref)
+				a.automatic.Invalidate(ref)
 				a.CancelChat(ref.TabID)
 			}
 		}
@@ -135,6 +141,7 @@ func (a *App) shutdown(context.Context) {
 	}
 	a.mu.Unlock()
 	for _, ref := range refs {
+		a.automatic.Invalidate(ref)
 		a.coordinator.Invalidate(ref)
 	}
 	a.ssh.Close()
@@ -176,11 +183,17 @@ func (a *App) State() (AppState, error) {
 		layout = "single"
 	}
 	autoCopySelection, e := a.store.GetPreference(a.ctx, "autoCopySelection")
-	if e != nil { return AppState{}, e }
+	if e != nil {
+		return AppState{}, e
+	}
 	rightClickPaste, e := a.store.GetPreference(a.ctx, "rightClickPaste")
-	if e != nil { return AppState{}, e }
+	if e != nil {
+		return AppState{}, e
+	}
 	confirmMultilinePaste, e := a.store.GetPreference(a.ctx, "confirmMultilinePaste")
-	if e != nil { return AppState{}, e }
+	if e != nil {
+		return AppState{}, e
+	}
 	raw, e := a.store.GetPreference(a.ctx, "quickCommands")
 	if e != nil {
 		return AppState{}, e
@@ -191,13 +204,18 @@ func (a *App) State() (AppState, error) {
 			return AppState{}, err
 		}
 	}
+	limit, allow, e := a.automaticSettings()
+	if e != nil {
+		return AppState{}, e
+	}
 	return AppState{
+		AutoCommandLimit: limit, AutoAllowChanges: allow,
 		Sessions: sessions, Groups: groups, Profiles: profiles,
 		FontSize: font, Theme: theme, ActiveProfile: active,
 		QuickCommands: commands, QuickCommandLayout: layout,
 		AutoCopySelection: autoCopySelection == "true", RightClickPaste: rightClickPaste == "true",
 		ConfirmMultilinePaste: confirmMultilinePaste != "false",
-		Version: branding.Version,
+		Version:               branding.Version,
 	}, nil
 }
 
@@ -273,7 +291,12 @@ func (a *App) SavePreference(key, value string) error {
 		if value != "single" && value != "multi" {
 			return errors.New("不支持的命令栏布局")
 		}
-	case "autoCopySelection", "rightClickPaste", "confirmMultilinePaste":
+	case "autoCommandLimit":
+		n, e := strconv.Atoi(value)
+		if e != nil || n < 1 || n > 100 {
+			return errors.New("每轮命令上限必须为 1–100")
+		}
+	case "autoCopySelection", "rightClickPaste", "confirmMultilinePaste", "autoAllowChanges":
 		if value != "true" && value != "false" {
 			return errors.New("布尔设置必须为 true 或 false")
 		}
@@ -434,6 +457,7 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 	}
 	a.mu.Unlock()
 	if exists {
+		a.automatic.Invalidate(old)
 		a.coordinator.Invalidate(old)
 		a.CancelChat(tabID)
 		a.conversations.Clear(tabID)
@@ -501,11 +525,13 @@ func (a *App) ResizeTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	return a.ssh.Resize(ref, cols, rows)
 }
 func (a *App) Disconnect(ref domain.ConnectionRef) error {
+	a.automatic.Invalidate(ref)
 	a.CancelChat(ref.TabID)
 	a.coordinator.Invalidate(ref)
 	return a.ssh.Disconnect(ref)
 }
 func (a *App) CloseTab(tabID string) error {
+	a.automatic.Forget(tabID)
 	a.CancelChat(tabID)
 	a.coordinator.Forget(tabID)
 	a.conversations.Clear(tabID)
@@ -567,6 +593,12 @@ func (a *App) Continue(req ChatRequest) (ChatResponse, error) {
 	return a.chat(req, true)
 }
 func (a *App) chat(req ChatRequest, continuation bool) (ChatResponse, error) {
+	if a.automatic.Active(req.Ref.TabID) {
+		return ChatResponse{}, errors.New("请先停止当前自动任务")
+	}
+	return a.chatContext(a.ctx, req, continuation, false, nil)
+}
+func (a *App) chatContext(parent context.Context, req ChatRequest, continuation, automatic bool, frozen *automaticProfile) (ChatResponse, error) {
 	if !a.ssh.Valid(req.Ref) {
 		return ChatResponse{}, errors.New("SSH 未连接或连接已变化")
 	}
@@ -585,11 +617,18 @@ func (a *App) chat(req ChatRequest, continuation bool) (ChatResponse, error) {
 			return ChatResponse{}, errors.New("请先执行或拒绝当前命令提议")
 		}
 	}
-	ctx, cancel := context.WithCancel(a.ctx)
+	ctx, cancel := context.WithCancel(parent)
 	a.chatCancels[req.Ref.TabID] = cancel
 	a.mu.Unlock()
 	defer func() { cancel(); a.mu.Lock(); delete(a.chatCancels, req.Ref.TabID); a.mu.Unlock() }()
-	profile, key, e := a.profile(req.ProfileID)
+	var profile domain.APIProfile
+	var key string
+	var e error
+	if frozen != nil {
+		profile, key, e = frozen.profile, frozen.key, nil
+	} else {
+		profile, key, e = a.profile(req.ProfileID)
+	}
 	if e != nil {
 		return ChatResponse{}, e
 	}
@@ -606,7 +645,7 @@ func (a *App) chat(req ChatRequest, continuation bool) (ChatResponse, error) {
 		}
 		a.conversations.Append(req.Ref.TabID, ai.Message{Role: "user", Content: content})
 	}
-	system := ai.SystemMessage(s, profile.ToolsEnabled)
+	system := ai.SystemMessage(s, profile.ToolsEnabled, automatic)
 	messages := append([]ai.Message{system}, a.conversations.Messages(req.Ref.TabID)...)
 	reply, e := a.provider.Stream(ctx, profile, key, messages, func(delta ai.Delta) { a.emit("ai:delta", map[string]any{"ref": req.Ref, "text": delta.Text}) })
 	if e != nil {
@@ -645,6 +684,13 @@ func (a *App) chat(req ChatRequest, continuation bool) (ChatResponse, error) {
 	return response, nil
 }
 func (a *App) ReviseProposal(id, command, cwd string, seconds int) (domain.Proposal, error) {
+	p, err := a.coordinator.Get(id)
+	if err != nil {
+		return domain.Proposal{}, err
+	}
+	if a.automatic.Active(p.Ref.TabID) {
+		return domain.Proposal{}, errors.New("请先停止自动任务，再编辑命令")
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	next, e := a.coordinator.Revise(id, command, cwd, seconds)
@@ -656,11 +702,24 @@ func (a *App) ReviseProposal(id, command, cwd string, seconds int) (domain.Propo
 	return next, nil
 }
 func (a *App) ConfirmCommand(id string) (domain.CommandResult, error) {
+	p, err := a.coordinator.Get(id)
+	if err != nil {
+		return domain.CommandResult{}, err
+	}
+	if a.automatic.Active(p.Ref.TabID) {
+		return domain.CommandResult{}, errors.New("请通过自动任务确认命令")
+	}
+	return a.confirmCommandContext(a.ctx, id)
+}
+func (a *App) confirmCommandContext(ctx context.Context, id string) (domain.CommandResult, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.CommandResult{}, err
+	}
 	p, e := a.coordinator.Get(id)
 	if e != nil {
 		return domain.CommandResult{}, e
 	}
-	result, e := a.coordinator.Confirm(a.ctx, id)
+	result, e := a.coordinator.Confirm(ctx, id)
 	if e != nil && result.Status == "" {
 		return result, e
 	}

@@ -6,6 +6,8 @@ interface Props {
   host: string;
   username: string;
   executing: boolean;
+  readOnly?: boolean;
+  confirmDisabled?: boolean;
   onConfirm(): void;
   onCancel(): void;
   onRevise(command: string, cwd: string, seconds: number): Promise<void>;
@@ -35,6 +37,7 @@ export default function CommandProposal(p: Props) {
         className="command-editor"
         value={command}
         disabled={p.executing}
+        readOnly={p.readOnly}
         onChange={(e) => setCommand(e.target.value)}
         spellCheck={false}
       />
@@ -44,6 +47,7 @@ export default function CommandProposal(p: Props) {
           aria-label="执行工作目录"
           value={cwd}
           disabled={p.executing}
+          readOnly={p.readOnly}
           onChange={(e) => setCwd(e.target.value)}
         />
       </label>
@@ -56,6 +60,7 @@ export default function CommandProposal(p: Props) {
           max="600"
           value={seconds}
           disabled={p.executing}
+          readOnly={p.readOnly}
           onChange={(e) => setSeconds(Number(e.target.value))}
         />
         <span>秒</span>
@@ -78,7 +83,11 @@ export default function CommandProposal(p: Props) {
                 更新提议
               </button>
             ) : (
-              <button className="primary" onClick={p.onConfirm}>
+              <button
+                className="primary"
+                disabled={p.confirmDisabled}
+                onClick={p.onConfirm}
+              >
                 <Play size={13} />
                 确认执行
               </button>

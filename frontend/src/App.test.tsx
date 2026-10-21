@@ -20,7 +20,7 @@ vi.mock("./bridge", () => ({
       profiles: [],
       fontSize: "14",
       activeProfile: "",
-      version: "0.1.13",
+      version: "0.1.14",
     })),
   },
   listen: () => () => {},
@@ -89,9 +89,13 @@ test("renders application version on the left and SSH connection status on the r
     render(<App />);
   });
   const footer = document.querySelector(".workspace-status");
-  expect(footer?.firstElementChild?.classList.contains("workspace-version")).toBe(true);
-  expect(footer?.lastElementChild?.classList.contains("workspace-connection")).toBe(true);
-  expect(footer?.textContent).toContain("v0.1.13");
+  expect(
+    footer?.firstElementChild?.classList.contains("workspace-version"),
+  ).toBe(true);
+  expect(
+    footer?.lastElementChild?.classList.contains("workspace-connection"),
+  ).toBe(true);
+  expect(footer?.textContent).toContain("v0.1.14");
   expect(footer?.textContent).toContain("未连接");
 });
 
@@ -111,8 +115,36 @@ test("terminal mouse settings are opt-in and saved independently", async () => {
   fireEvent.click(confirm);
   fireEvent.click(screen.getByRole("button", { name: "保存外观" }));
   await waitFor(() => {
-    expect(api.SavePreference).toHaveBeenCalledWith("autoCopySelection", "true");
+    expect(api.SavePreference).toHaveBeenCalledWith(
+      "autoCopySelection",
+      "true",
+    );
     expect(api.SavePreference).toHaveBeenCalledWith("rightClickPaste", "true");
-    expect(api.SavePreference).toHaveBeenCalledWith("confirmMultilinePaste", "false");
+    expect(api.SavePreference).toHaveBeenCalledWith(
+      "confirmMultilinePaste",
+      "false",
+    );
+  });
+});
+
+test("automatic execution settings save bounded limit and scope", async () => {
+  await act(async () => {
+    render(<App />);
+  });
+  fireEvent.click(screen.getByTitle("设置"));
+  fireEvent.click(screen.getByRole("button", { name: "自动执行" }));
+  expect(
+    (screen.getByLabelText("每轮命令上限") as HTMLInputElement).value,
+  ).toBe("10");
+  fireEvent.change(screen.getByLabelText("每轮命令上限"), {
+    target: { value: "3" },
+  });
+  fireEvent.change(screen.getByLabelText("自动执行范围"), {
+    target: { value: "all" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "保存自动执行设置" }));
+  await waitFor(() => {
+    expect(api.SavePreference).toHaveBeenCalledWith("autoCommandLimit", "3");
+    expect(api.SavePreference).toHaveBeenCalledWith("autoAllowChanges", "true");
   });
 });

@@ -1713,8 +1713,12 @@ kbd {
   user-select: text;
 }
 @media (max-height: 650px) {
-  .session-details { max-height: 44vh; }
-  .brand { height: 58px; }
+  .session-details {
+    max-height: 44vh;
+  }
+  .brand {
+    height: 58px;
+  }
 }
 
 .group-heading > button.tree-toggle {
@@ -1740,7 +1744,6 @@ kbd {
 .group-heading > button[title^="管理分组"] {
   flex: 0 0 23px;
 }
-
 
 /* Quick commands live outside the xterm viewport, preserving terminal height measurements. */
 .quick-command-bar {
@@ -1854,8 +1857,14 @@ kbd {
   align-items: center;
   justify-content: space-between;
 }
-.quick-manager-side-head strong { font-size: 12px; }
-.quick-manager-items { min-height: 0; overflow-y: auto; flex: 1; }
+.quick-manager-side-head strong {
+  font-size: 12px;
+}
+.quick-manager-items {
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1;
+}
 .quick-manager-item {
   display: flex;
   align-items: center;
@@ -1884,8 +1893,14 @@ kbd {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.quick-manager-item-label small { color: var(--text-muted); margin-top: 5px; }
-.quick-manager-item > button:not(.quick-manager-item-label) { padding: 4px; color: var(--text-muted); }
+.quick-manager-item-label small {
+  color: var(--text-muted);
+  margin-top: 5px;
+}
+.quick-manager-item > button:not(.quick-manager-item-label) {
+  padding: 4px;
+  color: var(--text-muted);
+}
 .quick-manager-editor {
   min-width: 0;
   min-height: 0;
@@ -1895,7 +1910,10 @@ kbd {
   flex-direction: column;
   gap: 12px;
 }
-.quick-manager-editor h3 { font-size: 14px; margin: 0; }
+.quick-manager-editor h3 {
+  font-size: 14px;
+  margin: 0;
+}
 .quick-manager-editor label {
   font-size: 11px;
   display: flex;
@@ -1904,19 +1922,90 @@ kbd {
 }
 .quick-manager-editor input,
 .quick-manager-editor select,
-.quick-manager-editor textarea { width: 100%; }
+.quick-manager-editor textarea {
+  width: 100%;
+}
 .quick-manager-editor .checkbox {
   flex-direction: row;
   align-items: center;
 }
-.quick-manager-editor .checkbox input { width: 14px; }
-.quick-manager-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.quick-manager-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
-.quick-manager-actions .danger { margin-right: auto; color: var(--danger); }
-.quick-manager-actions .secondary { padding: 8px 12px; border: 1px solid var(--border); }
+.quick-manager-editor .checkbox input {
+  width: 14px;
+}
+.quick-manager-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.quick-manager-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.quick-manager-actions .danger {
+  margin-right: auto;
+  color: var(--danger);
+}
+.quick-manager-actions .secondary {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+}
 @media (max-width: 660px) {
-  .quick-manager-body { grid-template-columns: 1fr; overflow-y: auto; }
-  .quick-manager-side { max-height: 210px; border-right: 0; border-bottom: 1px solid var(--border); }
-  .quick-manager-editor { overflow: visible; }
-  .quick-manager-fields { grid-template-columns: 1fr; }
+  .quick-manager-body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .quick-manager-side {
+    max-height: 210px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .quick-manager-editor {
+    overflow: visible;
+  }
+  .quick-manager-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+select.mode-select {
+  width: 100px;
+  padding: 4px 5px;
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.auto-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 10px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.auto-progress strong {
+  color: var(--accent);
+  font-weight: 500;
+}
+.auto-progress small {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+.auto-progress button {
+  align-self: flex-start;
+  padding: 5px 9px;
+  min-height: 27px;
+}
+.executed-command {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }

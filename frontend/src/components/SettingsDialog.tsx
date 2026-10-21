@@ -26,6 +26,8 @@ interface Props {
   groups: Group[];
   profiles: APIProfile[];
   fontSize: number;
+  autoCommandLimit?: number;
+  autoAllowChanges?: boolean;
   theme: Theme;
   onTheme(theme: Theme): void;
   quickCommandLayout: QuickCommandLayout;
@@ -65,6 +67,8 @@ export default function SettingsDialog(p: Props) {
     p.kind === "session" ? "session" : "appearance",
   );
   const [session, setSession] = useState({ ...emptySession, ...p.session });
+  const [autoLimit, setAutoLimit] = useState(p.autoCommandLimit ?? 10);
+  const [allowChanges, setAllowChanges] = useState(p.autoAllowChanges ?? false);
   const [secret, setSecret] = useState("");
   const [saveSecret, setSaveSecret] = useState(!!p.session?.credentialRef);
   const [profile, setProfile] = useState<APIProfile>(
@@ -129,6 +133,13 @@ export default function SettingsDialog(p: Props) {
             >
               <KeyRound size={15} />
               AI API
+            </button>
+            <button
+              className={tab === "automatic" ? "active" : ""}
+              onClick={() => setTab("automatic")}
+            >
+              <SlidersHorizontal size={15} />
+              自动执行
             </button>
           </nav>
         )}
@@ -375,6 +386,43 @@ export default function SettingsDialog(p: Props) {
               </p>
             </>
           )}
+          {tab === "automatic" && (
+            <>
+              <div className="form-note">
+                自动执行会连续检查并根据命令结果处理任务；每次任务固定使用启动时的服务器、模型和执行范围。
+              </div>
+              <label>
+                每轮命令上限
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={autoLimit}
+                  onChange={(e) => setAutoLimit(Number(e.target.value))}
+                />
+              </label>
+              <label>
+                自动执行范围
+                <select
+                  aria-label="自动执行范围"
+                  value={allowChanges ? "all" : "inspection"}
+                  onChange={(e) => setAllowChanges(e.target.value === "all")}
+                >
+                  <option value="inspection">仅检查操作，修改需确认</option>
+                  <option value="all">允许修改操作</option>
+                </select>
+              </label>
+              <p className="muted small">
+                默认每轮 10
+                条，达到上限后点击继续下一轮。不能明确识别的检查命令与重复命令仍会等待确认。
+              </p>
+              {allowChanges && (
+                <p className="small danger-text">
+                  允许自动修改配置、安装、删除和重启。此设置只应用到之后启动的自动任务。
+                </p>
+              )}
+            </>
+          )}
           {tab === "appearance" && (
             <>
               <div className="form-note">
@@ -393,7 +441,13 @@ export default function SettingsDialog(p: Props) {
               </label>
               <label>
                 快速命令栏布局
-                <select aria-label="快速命令栏布局" value={p.quickCommandLayout} onChange={(e) => p.onQuickCommandLayout(e.target.value as QuickCommandLayout)}>
+                <select
+                  aria-label="快速命令栏布局"
+                  value={p.quickCommandLayout}
+                  onChange={(e) =>
+                    p.onQuickCommandLayout(e.target.value as QuickCommandLayout)
+                  }
+                >
                   <option value="single">单行横向滚动（默认）</option>
                   <option value="multi">多行自动换行</option>
                 </select>
@@ -411,24 +465,43 @@ export default function SettingsDialog(p: Props) {
                   <span>{p.fontSize} px</span>
                 </div>
               </label>
-              <div className="terminal-mouse-settings" role="group" aria-label="终端鼠标操作">
+              <div
+                className="terminal-mouse-settings"
+                role="group"
+                aria-label="终端鼠标操作"
+              >
                 <strong>终端鼠标操作</strong>
                 <label className="checkbox">
-                  <input type="checkbox" checked={p.autoCopySelection}
-                    onChange={(e) => p.onAutoCopySelection(e.target.checked)} />
+                  <input
+                    type="checkbox"
+                    checked={p.autoCopySelection}
+                    onChange={(e) => p.onAutoCopySelection(e.target.checked)}
+                  />
                   选中自动复制
                 </label>
-                <p className="muted small">鼠标选中文字后，自动复制到系统剪贴板。</p>
+                <p className="muted small">
+                  鼠标选中文字后，自动复制到系统剪贴板。
+                </p>
                 <label className="checkbox">
-                  <input type="checkbox" checked={p.rightClickPaste}
-                    onChange={(e) => p.onRightClickPaste(e.target.checked)} />
+                  <input
+                    type="checkbox"
+                    checked={p.rightClickPaste}
+                    onChange={(e) => p.onRightClickPaste(e.target.checked)}
+                  />
                   鼠标右键粘贴
                 </label>
-                <p className="muted small">在 SSH 终端内单击右键，直接粘贴剪贴板文本。</p>
+                <p className="muted small">
+                  在 SSH 终端内单击右键，直接粘贴剪贴板文本。
+                </p>
                 {p.rightClickPaste && (
                   <label className="checkbox nested-option">
-                    <input type="checkbox" checked={p.confirmMultilinePaste}
-                      onChange={(e) => p.onConfirmMultilinePaste(e.target.checked)} />
+                    <input
+                      type="checkbox"
+                      checked={p.confirmMultilinePaste}
+                      onChange={(e) =>
+                        p.onConfirmMultilinePaste(e.target.checked)
+                      }
+                    />
                     多行粘贴前确认
                   </label>
                 )}
@@ -517,6 +590,33 @@ export default function SettingsDialog(p: Props) {
                 保存配置
               </button>
             )}
+            {tab === "automatic" && (
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    if (
+                      !Number.isInteger(autoLimit) ||
+                      autoLimit < 1 ||
+                      autoLimit > 100
+                    )
+                      throw new Error("每轮命令上限必须为 1–100");
+                    await api.SavePreference(
+                      "autoCommandLimit",
+                      String(autoLimit),
+                    );
+                    await api.SavePreference(
+                      "autoAllowChanges",
+                      String(allowChanges),
+                    );
+                    await p.onRefresh();
+                  }, "自动执行设置已保存")
+                }
+              >
+                保存自动执行设置
+              </button>
+            )}
             {tab === "appearance" && (
               <button
                 className="primary"
@@ -525,10 +625,22 @@ export default function SettingsDialog(p: Props) {
                   run(async () => {
                     await api.SavePreference("fontSize", String(p.fontSize));
                     await api.SavePreference("theme", p.theme);
-                    await api.SavePreference("quickCommandLayout", p.quickCommandLayout);
-                    await api.SavePreference("autoCopySelection", String(p.autoCopySelection));
-                    await api.SavePreference("rightClickPaste", String(p.rightClickPaste));
-                    await api.SavePreference("confirmMultilinePaste", String(p.confirmMultilinePaste));
+                    await api.SavePreference(
+                      "quickCommandLayout",
+                      p.quickCommandLayout,
+                    );
+                    await api.SavePreference(
+                      "autoCopySelection",
+                      String(p.autoCopySelection),
+                    );
+                    await api.SavePreference(
+                      "rightClickPaste",
+                      String(p.rightClickPaste),
+                    );
+                    await api.SavePreference(
+                      "confirmMultilinePaste",
+                      String(p.confirmMultilinePaste),
+                    );
                   }, "外观已保存")
                 }
               >

@@ -12,8 +12,16 @@ import type {
   ChatResponse,
   Proposal,
   CommandResult,
+  AutoSnapshot,
 } from "./types";
 type Backend = {
+  StartAutomatic(req: ChatRequest, taskID: string): Promise<AutoSnapshot>;
+  ResumeAutomatic(
+    taskID: string,
+    approvedProposalID: string,
+    extend: boolean,
+  ): Promise<AutoSnapshot>;
+  StopAutomatic(taskID: string): Promise<void>;
   State(): Promise<AppState>;
   SaveSession(req: SessionRequest): Promise<Session>;
   DeleteSession(id: string): Promise<void>;

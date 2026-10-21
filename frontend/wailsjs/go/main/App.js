@@ -66,6 +66,10 @@ export function ResizeTerminal(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeTerminal'](arg1, arg2, arg3);
 }
 
+export function ResumeAutomatic(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResumeAutomatic'](arg1, arg2, arg3);
+}
+
 export function ReviseProposal(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['ReviseProposal'](arg1, arg2, arg3, arg4);
 }
@@ -86,8 +90,16 @@ export function SaveSession(arg1) {
   return window['go']['main']['App']['SaveSession'](arg1);
 }
 
+export function StartAutomatic(arg1, arg2) {
+  return window['go']['main']['App']['StartAutomatic'](arg1, arg2);
+}
+
 export function State() {
   return window['go']['main']['App']['State']();
+}
+
+export function StopAutomatic(arg1) {
+  return window['go']['main']['App']['StopAutomatic'](arg1);
 }
 
 export function TestAPI(arg1) {
