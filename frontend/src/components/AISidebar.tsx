@@ -88,30 +88,6 @@ export default function AISidebar(p: Props) {
           </button>
         </div>
       </header>
-      <div className="model-picker">
-        {p.profiles.length ? (
-          <>
-            <span className="status-dot" />
-            <select
-              aria-label="当前模型"
-              disabled={automaticActive}
-              value={p.profileID}
-              onChange={(e) => p.onProfile(e.target.value)}
-            >
-              {p.profiles.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} · {v.model}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={13} />
-          </>
-        ) : (
-          <button onClick={p.onSettings}>
-            配置你的 AI API <ArrowUpRight size={14} />
-          </button>
-        )}
-      </div>
       <div className="ai-conversation">
         {!p.tab?.messages.length && (
           <div className="ai-welcome">
@@ -326,6 +302,29 @@ export default function AISidebar(p: Props) {
                 自动执行
               </option>
             </select>
+            {p.profiles.length ? (
+              <div className="composer-model">
+                <span className="status-dot" />
+                <select
+                  aria-label="当前模型"
+                  title={profile ? `${profile.name} · ${profile.model}` : "选择 AI 模型"}
+                  disabled={automaticActive}
+                  value={p.profileID}
+                  onChange={(e) => p.onProfile(e.target.value)}
+                >
+                  {p.profiles.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} · {v.model}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={12} />
+              </div>
+            ) : (
+              <button className="composer-model-config" onClick={p.onSettings}>
+                配置模型 <ArrowUpRight size={12} />
+              </button>
+            )}
             {busy || automaticActive ? (
               <button
                 title="停止任务"

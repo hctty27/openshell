@@ -109,3 +109,54 @@ test("automatic limit exposes explicit continue and stop controls", () => {
   fireEvent.click(screen.getByTitle("停止任务"));
   expect(p.onStop).toHaveBeenCalledOnce();
 });
+
+test("the model picker sits to the right of the mode selector in the composer", () => {
+  const p = props();
+  p.profiles = [
+    { id: "grok", name: "grok", baseUrl: "https://example.com/v1", model: "grok-4.7(xhigh)", secretRef: "", toolsEnabled: true },
+    { id: "gpt", name: "gpt", baseUrl: "https://example.com/v1", model: "gpt-6", secretRef: "", toolsEnabled: true },
+  ];
+  p.profileID = "grok";
+  const { container } = render(<AISidebar {...p} />);
+  const mode = screen.getByLabelText("AI 模式");
+  const model = screen.getByLabelText("当前模型") as HTMLSelectElement;
+
+  expect(mode.closest(".composer-tools")?.contains(model)).toBe(true);
+  expect(mode.nextElementSibling?.contains(model)).toBe(true);
+  expect(container.querySelector(".model-picker")).toBeNull();
+  expect(model.value).toBe("grok");
+  expect(model.title).toBe("grok · grok-4.7(xhigh)");
+
+  fireEvent.change(model, { target: { value: "gpt" } });
+  expect(p.onProfile).toHaveBeenCalledWith("gpt");
+});
+
+test("model configuration stays available in the composer without profiles", () => {
+  const p = props();
+  const { container } = render(<AISidebar {...p} />);
+  const settings = screen.getByRole("button", { name: "配置模型" });
+  expect(settings.closest(".composer-tools")).toBeTruthy();
+  expect(container.querySelector(".model-picker")).toBeNull();
+  fireEvent.click(settings);
+  expect(p.onSettings).toHaveBeenCalledOnce();
+});
+
+test("model switching is disabled while an automatic task is active", () => {
+  const p = props();
+  p.profiles = [
+    { id: "grok", name: "grok", baseUrl: "https://example.com/v1", model: "grok-4.7", secretRef: "", toolsEnabled: true },
+  ];
+  p.profileID = "grok";
+  p.tab!.autoRun = {
+    id: "task",
+    ref: { tabId: "tab", sessionId: "session", generation: 1 },
+    status: "running",
+    steps: 1,
+    roundSteps: 1,
+    limit: 10,
+    allowChanges: false,
+    reason: "",
+  };
+  render(<AISidebar {...p} />);
+  expect((screen.getByLabelText("当前模型") as HTMLSelectElement).disabled).toBe(true);
+});
