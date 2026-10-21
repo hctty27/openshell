@@ -81,7 +81,8 @@ export default function TerminalPane(p: Props) {
     let selectingWithMouse = false;
     const paneElement = container.current;
     const onMouseDown = (event: MouseEvent) => {
-      if (event.button === 0 && callbacks.current.active) selectingWithMouse = true;
+      selectingWithMouse = event.button === 0 && callbacks.current.active &&
+        (term.modes.mouseTrackingMode === "none" || event.shiftKey);
     };
     const onMouseUp = (event: MouseEvent) => {
       if (event.button !== 0 || !selectingWithMouse) return;
@@ -116,9 +117,9 @@ export default function TerminalPane(p: Props) {
         }
       })();
     };
-    paneElement.addEventListener("mousedown", onMouseDown);
-    document.addEventListener("mouseup", onMouseUp);
-    paneElement.addEventListener("contextmenu", onContextMenu);
+    paneElement.addEventListener("mousedown", onMouseDown, true);
+    document.addEventListener("mouseup", onMouseUp, true);
+    paneElement.addEventListener("contextmenu", onContextMenu, true);
     let resizeTimer: ReturnType<typeof setTimeout>;
     const resize = () => {
       clearTimeout(resizeTimer);
@@ -143,9 +144,9 @@ export default function TerminalPane(p: Props) {
       clearTimeout(resizeTimer);
       observer.disconnect();
       off();
-      paneElement.removeEventListener("mousedown", onMouseDown);
-      document.removeEventListener("mouseup", onMouseUp);
-      paneElement.removeEventListener("contextmenu", onContextMenu);
+      paneElement.removeEventListener("mousedown", onMouseDown, true);
+      document.removeEventListener("mouseup", onMouseUp, true);
+      paneElement.removeEventListener("contextmenu", onContextMenu, true);
       input.dispose();
       resizeSubscription.dispose();
       selection.dispose();
