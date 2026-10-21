@@ -73,7 +73,7 @@ test("settings navigation separates general, terminal, AI and automatic options"
   expect(screen.queryByText(/systemctl status redis/)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "终端" }));
   expect(screen.getByLabelText("字体大小")).toBeTruthy();
-  expect(screen.getByLabelText("快捷命令栏布局")).toBeTruthy();
+  expect(screen.getByLabelText("快速命令栏布局")).toBeTruthy();
   expect(screen.queryByText("界面语言")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "通用" }));
   expect(screen.getByLabelText("界面语言")).toBeTruthy();
