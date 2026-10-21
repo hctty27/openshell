@@ -99,7 +99,7 @@ test("renders application version on the left and SSH connection status on the r
   expect(
     footer?.lastElementChild?.classList.contains("workspace-connection"),
   ).toBe(true);
-  expect(footer?.textContent).toContain("v0.1.15");
+  expect(footer?.textContent).toMatch(/OpenShell\s+v\d+\.\d+\.\d+/);
   expect(footer?.textContent).toContain("未连接");
 });
 
