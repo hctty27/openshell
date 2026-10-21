@@ -708,7 +708,8 @@ kbd {
   min-width: 0;
 }
 .ai-header {
-  height: 46px;
+  height: calc(var(--chrome-bar-height) * 2);
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -862,8 +863,9 @@ kbd {
 .composer-tools {
   display: flex;
   align-items: center;
+  min-width: 0;
   padding: 3px 8px 8px;
-  gap: 2px;
+  gap: 4px;
 }
 .composer-tools > button:first-child {
   color: var(--text-muted);
@@ -879,10 +881,11 @@ kbd {
   display: flex;
   align-items: center;
   position: relative;
-  flex: 1;
+  flex: 0 1 116px;
+  max-width: 116px;
   min-width: 0;
-  margin-left: 5px;
-  gap: 5px;
+  margin-left: 3px;
+  gap: 4px;
 }
 .composer-model > .status-dot {
   flex: 0 0 5px;
@@ -917,6 +920,7 @@ kbd {
   white-space: nowrap;
 }
 .send-button {
+  flex-shrink: 0;
   margin-left: auto;
   background: var(--accent-fill);
   color: var(--on-accent);
@@ -1918,7 +1922,8 @@ kbd {
 }
 
 select.mode-select {
-  width: 100px;
+  flex: 0 0 96px;
+  width: 96px;
   padding: 4px 5px;
   background: var(--field-bg);
   border: 1px solid var(--border);
