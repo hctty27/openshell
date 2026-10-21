@@ -212,6 +212,7 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   await expect(page.getByText("SSH 已连接", { exact: false })).toBeVisible();
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "AI 配置", exact: true }).click();
+  await page.getByLabel("配置名称", { exact: true }).fill("测试 API");
   await page
     .getByLabel("Base URL", { exact: true })
     .fill("https://api.example.com/v1");
@@ -518,6 +519,46 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   await expect(page.locator(".quick-command-bar.multi")).toBeVisible();
 });
 
+test("bilingual API placeholders translate without overwriting saved values", async ({ page }) => {
+  await page.goto("/?language=en");
+  await page.getByTitle("Settings", { exact: true }).click();
+  await page.getByRole("button", { name: "AI Settings", exact: true }).click();
+  const name = page.getByLabel("Profile name", { exact: true });
+  const url = page.getByLabel("Base URL", { exact: true });
+  await expect(name).toHaveValue("");
+  await expect(name).toHaveAttribute("placeholder", "Custom API");
+  await expect(url).toHaveValue("");
+  await expect(url).toHaveAttribute("placeholder", "https://api.example.com/v1");
+
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(page.getByRole("alert")).toContainText("Enter a profile name");
+  await name.fill("My saved API");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(page.getByRole("alert")).toContainText("Enter an API base URL");
+  await url.fill("https://api.example.com/v1");
+  await page.getByLabel("Model name", { exact: true }).fill("my-model");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(page.getByText("Profile saved")).toBeVisible();
+
+  await page.getByRole("button", { name: "General", exact: true }).click();
+  await page.locator("#settings-language").selectOption("zh-CN");
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await page.getByRole("button", { name: "AI 配置", exact: true }).click();
+  await expect(page.getByLabel("配置名称", { exact: true })).toHaveValue("My saved API");
+  await expect(page.getByLabel("Base URL", { exact: true })).toHaveValue("https://api.example.com/v1");
+
+  await page.getByTitle("新建 API 配置").click();
+  await expect(page.getByLabel("配置名称", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("配置名称", { exact: true })).toHaveAttribute("placeholder", "自定义 API");
+  await expect(page.getByLabel("Base URL", { exact: true })).toHaveValue("");
+  await page.getByRole("button", { name: "通用", exact: true }).click();
+  await page.locator("#settings-language").selectOption("en");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await page.getByRole("button", { name: "AI Settings", exact: true }).click();
+  await expect(page.getByLabel("Profile name", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Profile name", { exact: true })).toHaveAttribute("placeholder", "Custom API");
+});
+
 test("bilingual switching preserves terminal and draft and survives reload", async ({
   page,
 }) => {
@@ -640,6 +681,7 @@ test("AI header aligns with SSH title bar and compact model leaves space for Sen
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "AI 配置", exact: true }).click();
+  await page.getByLabel("配置名称", { exact: true }).fill("测试 API");
   await page
     .getByLabel("Base URL", { exact: true })
     .fill("https://api.example.com/v1");

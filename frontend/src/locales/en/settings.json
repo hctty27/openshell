@@ -24,6 +24,8 @@
   "deleteProfile": "Delete profile",
   "openaiCompatibleApi": "OpenAI-compatible API",
   "profileName": "Profile name",
+  "enterApiProfileName": "Enter a profile name",
+  "enterApiBaseUrl": "Enter an API base URL",
   "keySavedLeaveEmptyToKeepIt": "Key saved. Leave empty to keep it.",
   "skOptionalForLocalServicesWithoutAuthentication": "sk-… (optional for local services without authentication)",
   "modelName": "Model name",

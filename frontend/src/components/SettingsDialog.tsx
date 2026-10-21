@@ -72,7 +72,7 @@ const emptySession: Session = {
 const emptyProfile: APIProfile = {
   id: "",
   name: "",
-  baseUrl: "https://api.example.com/v1",
+  baseUrl: "",
   model: "",
   secretRef: "",
   toolsEnabled: true,
@@ -95,7 +95,7 @@ export default function SettingsDialog(p: Props) {
   const [profile, setProfile] = useState<APIProfile>(
     p.profiles[0]
       ? { ...p.profiles[0] }
-      : { ...emptyProfile, name: t("settings:customApi") },
+      : { ...emptyProfile },
   );
   const [key, setKey] = useState("");
   const [memoryOnly, setMemoryOnly] = useState(false);
@@ -324,11 +324,9 @@ export default function SettingsDialog(p: Props) {
                 <button
                   title={t("settings:newApiProfile")}
                   onClick={() => {
-                    setProfile({
-                      ...emptyProfile,
-                      name: t("settings:customApi"),
-                    });
+                    setProfile({ ...emptyProfile });
                     setKey("");
+                    setError("");
                     setSuccess("");
                   }}
                 >
@@ -352,10 +350,7 @@ export default function SettingsDialog(p: Props) {
                       await run(async () => {
                         await api.DeleteAPI(profile.id);
                         await p.onRefresh();
-                        setProfile({
-                          ...emptyProfile,
-                          name: t("settings:customApi"),
-                        });
+                        setProfile({ ...emptyProfile });
                         setKey("");
                       });
                     }}
@@ -372,6 +367,7 @@ export default function SettingsDialog(p: Props) {
                 {t("settings:profileName")}
                 <input
                   value={profile.name}
+                  placeholder={t("settings:customApi")}
                   onChange={(e) =>
                     setProfile({ ...profile, name: e.target.value })
                   }
@@ -384,7 +380,7 @@ export default function SettingsDialog(p: Props) {
                   onChange={(e) =>
                     setProfile({ ...profile, baseUrl: e.target.value })
                   }
-                  placeholder="https://your-api.com/v1"
+                  placeholder="https://api.example.com/v1"
                 />
               </label>
               <label>
@@ -686,14 +682,24 @@ export default function SettingsDialog(p: Props) {
               <button
                 className="primary"
                 disabled={busy}
-                onClick={() =>
-                  run(async () => {
+                onClick={() => {
+                  if (!profile.name.trim()) {
+                    setError(message("settings:enterApiProfileName"));
+                    setSuccess("");
+                    return;
+                  }
+                  if (!profile.baseUrl.trim()) {
+                    setError(message("settings:enterApiBaseUrl"));
+                    setSuccess("");
+                    return;
+                  }
+                  void run(async () => {
                     const saved = await api.SaveAPI(apiRequest());
                     setProfile(saved);
                     setKey("");
                     await p.onRefresh();
-                  }, message("settings:profileSaved"))
-                }
+                  }, message("settings:profileSaved"));
+                }}
               >
                 {busy ? <LoaderCircle size={15} className="spin" /> : null}
                 {t("settings:saveProfile")}

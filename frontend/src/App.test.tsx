@@ -95,7 +95,17 @@ test("API settings expose custom endpoint key and model fields", async () => {
   });
   fireEvent.click(screen.getByTitle("设置"));
   fireEvent.click(screen.getByRole("button", { name: "AI 配置" }));
-  expect(screen.getByLabelText("Base URL")).toBeTruthy();
+  const name = screen.getByLabelText("配置名称") as HTMLInputElement;
+  const baseUrl = screen.getByLabelText("Base URL") as HTMLInputElement;
+  expect(name.value).toBe("");
+  expect(name.placeholder).toBe("自定义 API");
+  expect(baseUrl.value).toBe("");
+  expect(baseUrl.placeholder).toBe("https://api.example.com/v1");
+  fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+  expect(screen.getByRole("alert").textContent).toBe("请输入配置名称");
+  fireEvent.change(name, { target: { value: "示例 API" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+  expect(screen.getByRole("alert").textContent).toBe("请输入 API 地址");
   expect(screen.getByLabelText("API Key")).toBeTruthy();
   expect(screen.getByLabelText("模型名称")).toBeTruthy();
   await waitFor(() => expect(screen.getByText("OpenAI 兼容接口")).toBeTruthy());
