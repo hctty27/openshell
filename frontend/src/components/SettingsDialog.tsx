@@ -24,6 +24,7 @@ import type {
 interface Props {
   kind: "session" | "settings";
   session?: Session;
+  groupID?: string;
   groups: Group[];
   profiles: APIProfile[];
   fontSize: number;
@@ -68,7 +69,11 @@ export default function SettingsDialog(p: Props) {
   const [tab, setTab] = useState(
     p.kind === "session" ? "session" : "appearance",
   );
-  const [session, setSession] = useState({ ...emptySession, ...p.session });
+  const [session, setSession] = useState({
+    ...emptySession,
+    groupId: p.groupID ?? "",
+    ...p.session,
+  });
   const [autoLimit, setAutoLimit] = useState(p.autoCommandLimit ?? 10);
   const [allowChanges, setAllowChanges] = useState(p.autoAllowChanges ?? false);
   const [secret, setSecret] = useState("");
