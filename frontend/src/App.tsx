@@ -56,6 +56,9 @@ export default function App() {
     [fontSize, setFontSize] = useState(14),
     [theme, setTheme] = useState<Theme>("dark"),
     [quickCommandLayout, setQuickCommandLayout] = useState<QuickCommandLayout>("single"),
+    [autoCopySelection, setAutoCopySelection] = useState(false),
+    [rightClickPaste, setRightClickPaste] = useState(false),
+    [confirmMultilinePaste, setConfirmMultilinePaste] = useState(true),
     [showQuickCommandManager, setShowQuickCommandManager] = useState(false),
     [quickCommandFocus, setQuickCommandFocus] = useState(0),
     [profileID, setProfileID] = useState(""),
@@ -92,6 +95,9 @@ export default function App() {
       setState(data);
       setTheme(data.theme === "light" ? "light" : "dark");
       setQuickCommandLayout(data.quickCommandLayout === "multi" ? "multi" : "single");
+      setAutoCopySelection(data.autoCopySelection === true);
+      setRightClickPaste(data.rightClickPaste === true);
+      setConfirmMultilinePaste(data.confirmMultilinePaste !== false);
       if (data.fontSize)
         setFontSize(Math.max(11, Math.min(24, Number(data.fontSize) || 14)));
       setProfileID((old) =>
@@ -644,6 +650,10 @@ export default function App() {
                   active={tab.id === activeID}
                   fontSize={fontSize}
                   theme={theme}
+                  autoCopySelection={autoCopySelection}
+                  rightClickPaste={rightClickPaste}
+                  confirmMultilinePaste={confirmMultilinePaste}
+                  onNotice={notify}
                   commandFocusVersion={quickCommandFocus}
                   onError={(text) => {
                     update(tab.id, (t) => ({
@@ -763,6 +773,12 @@ export default function App() {
           onTheme={setTheme}
           quickCommandLayout={quickCommandLayout}
           onQuickCommandLayout={setQuickCommandLayout}
+          autoCopySelection={autoCopySelection}
+          onAutoCopySelection={setAutoCopySelection}
+          rightClickPaste={rightClickPaste}
+          onRightClickPaste={setRightClickPaste}
+          confirmMultilinePaste={confirmMultilinePaste}
+          onConfirmMultilinePaste={setConfirmMultilinePaste}
           onClose={() => setDialog(null)}
           onSession={saveSession}
           onRefresh={refresh}

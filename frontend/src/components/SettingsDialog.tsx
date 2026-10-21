@@ -30,6 +30,12 @@ interface Props {
   onTheme(theme: Theme): void;
   quickCommandLayout: QuickCommandLayout;
   onQuickCommandLayout(layout: QuickCommandLayout): void;
+  autoCopySelection: boolean;
+  onAutoCopySelection(enabled: boolean): void;
+  rightClickPaste: boolean;
+  onRightClickPaste(enabled: boolean): void;
+  confirmMultilinePaste: boolean;
+  onConfirmMultilinePaste(enabled: boolean): void;
   onClose(): void;
   onSession(req: SessionRequest): Promise<void>;
   onRefresh(): Promise<void>;
@@ -405,6 +411,28 @@ export default function SettingsDialog(p: Props) {
                   <span>{p.fontSize} px</span>
                 </div>
               </label>
+              <div className="terminal-mouse-settings" role="group" aria-label="终端鼠标操作">
+                <strong>终端鼠标操作</strong>
+                <label className="checkbox">
+                  <input type="checkbox" checked={p.autoCopySelection}
+                    onChange={(e) => p.onAutoCopySelection(e.target.checked)} />
+                  选中自动复制
+                </label>
+                <p className="muted small">鼠标选中文字后，自动复制到系统剪贴板。</p>
+                <label className="checkbox">
+                  <input type="checkbox" checked={p.rightClickPaste}
+                    onChange={(e) => p.onRightClickPaste(e.target.checked)} />
+                  鼠标右键粘贴
+                </label>
+                <p className="muted small">在 SSH 终端内单击右键，直接粘贴剪贴板文本。</p>
+                {p.rightClickPaste && (
+                  <label className="checkbox nested-option">
+                    <input type="checkbox" checked={p.confirmMultilinePaste}
+                      onChange={(e) => p.onConfirmMultilinePaste(e.target.checked)} />
+                    多行粘贴前确认
+                  </label>
+                )}
+              </div>
               <div className="terminal-sample">
                 <span>root@server</span>:<b>~</b>$ systemctl status redis
                 <br />
@@ -498,6 +526,9 @@ export default function SettingsDialog(p: Props) {
                     await api.SavePreference("fontSize", String(p.fontSize));
                     await api.SavePreference("theme", p.theme);
                     await api.SavePreference("quickCommandLayout", p.quickCommandLayout);
+                    await api.SavePreference("autoCopySelection", String(p.autoCopySelection));
+                    await api.SavePreference("rightClickPaste", String(p.rightClickPaste));
+                    await api.SavePreference("confirmMultilinePaste", String(p.confirmMultilinePaste));
                   }, "外观已保存")
                 }
               >

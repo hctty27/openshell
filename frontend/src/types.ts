@@ -81,6 +81,9 @@ export interface QuickCommand {
 export interface AppState {
   quickCommands?: QuickCommand[];
   quickCommandLayout?: QuickCommandLayout;
+  autoCopySelection?: boolean;
+  rightClickPaste?: boolean;
+  confirmMultilinePaste?: boolean;
   sessions: Session[];
   groups: Group[];
   profiles: APIProfile[];
