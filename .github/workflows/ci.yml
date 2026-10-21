@@ -11,9 +11,37 @@ permissions:
 
 concurrency:
   group: openshell-ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.detect.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect release marker change
+        id: detect
+        shell: bash
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          echo "release=false" >> "$GITHUB_OUTPUT"
+          if [[ "$BEFORE" =~ ^0+$ ]]; then
+            echo "No previous commit; skipping automatic release."
+            exit 0
+          fi
+          if git diff --name-only "$BEFORE" "$AFTER" -- .github/release-version.txt |
+              grep -Fxq '.github/release-version.txt'; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
   go-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -50,3 +78,13 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npx playwright test --grep "compact sidebar removes detail actions"
+
+  release:
+    name: Windows release after CI
+    needs: [changes, go-tests, frontend-tests]
+    if: github.event_name == 'push' && needs.changes.outputs.release == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/windows-release.yml
+    with:
+      publish: true
