@@ -40,6 +40,7 @@ import TerminalPane from "./components/TerminalPane";
 import AISidebar from "./components/AISidebar";
 import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
+import { DialogProvider, useDialogs } from "./components/DialogProvider";
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.14";
 const initial: AppState = {
   sessions: [],
@@ -51,6 +52,10 @@ const initial: AppState = {
 };
 const id = () => crypto.randomUUID();
 export default function App() {
+  return <DialogProvider><Workspace /></DialogProvider>;
+}
+function Workspace() {
+  const dialogs = useDialogs();
   const [state, setState] = useState(initial),
     [tabs, setTabs] = useState<Tab[]>([]),
     [activeID, setActiveID] = useState(""),
@@ -89,6 +94,8 @@ export default function App() {
     streamIDs = useRef<Record<string, string>>({}),
     selections = useRef<Record<string, string>>({});
   tabsRef.current = tabs;
+  const activeIDRef = useRef(activeID);
+  activeIDRef.current = activeID;
   const active = tabs.find((t) => t.id === activeID);
   const update = (tabID: string, fn: (tab: Tab) => Tab) =>
     setTabs((old) => old.map((t) => (t.id === tabID ? fn(t) : t)));
@@ -251,13 +258,24 @@ export default function App() {
       /(?:^|[;&| ]+)(?:rm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)|mkfs(?:\.[\w]+)?|dd\s+|shutdown\b|reboot\b|poweroff\b|systemctl\s+(?:stop|restart|disable)\b)/i.test(
         command.command,
       );
-    if (
-      (command.confirm || risky) &&
-      !window.confirm(
-        `在「${tab.session.name}」${command.mode === "run" ? "执行" : "填入"}以下命令？\n\n${command.command}`,
-      )
-    )
+    if (command.confirm || risky) {
+      const accepted = await dialogs.confirm({
+        title: risky ? "确认危险命令" : "确认快速命令",
+        description: `目标服务器：${tab.session.name}。将${command.mode === "run" ? "执行" : "填入"}以下命令。`,
+        preview: command.command,
+        tone: risky ? "warning" : "default",
+        confirmLabel: command.mode === "run" ? "确认执行" : "确认填入",
+      });
+      if (!accepted) return;
+    }
+    const current = tabsRef.current.find((item) => item.id === tab.id);
+    if (!current || current.status !== "connected" ||
+        current.ref?.generation !== tab.ref.generation ||
+        current.ref?.sessionId !== tab.ref.sessionId ||
+        activeIDRef.current !== tab.id) {
+      notify("SSH 会话已切换或断开，命令未执行");
       return;
+    }
     try {
       const source = command.command + (command.mode === "run" ? "\r" : "");
       const bytes = new TextEncoder().encode(source);
@@ -327,13 +345,14 @@ export default function App() {
     else setTimeout(() => connect(tab), 0);
   };
   const close = async (tab: Tab) => {
-    if (
-      (tab.chatBusy || tab.executing || tab.proposal) &&
-      !confirm(
-        "此标签仍有 AI 任务或待处理提议。关闭将停止等待，远端进程可能继续运行。仍要关闭？",
-      )
-    )
-      return;
+    if (tab.chatBusy || tab.executing || tab.proposal) {
+      if (!(await dialogs.confirm({
+        title: "关闭正在运行的任务？",
+        description: "此标签仍有 AI 任务或待处理提议。关闭将停止等待，但远端进程可能继续运行。",
+        tone: "warning",
+        confirmLabel: "仍要关闭",
+      }))) return;
+    }
     try {
       await api.CloseTab(tab.id);
       setTabs((old) => old.filter((t) => t.id !== tab.id));
@@ -357,7 +376,16 @@ export default function App() {
       notify("请先关闭此会话的终端标签");
       return;
     }
-    if (!confirm(`删除会话“${s.name}”？`)) return;
+    if (!(await dialogs.confirm({
+      title: "删除 SSH 会话",
+      description: `确定删除「${s.name}」？此操作无法撤销。`,
+      tone: "danger",
+      confirmLabel: "删除会话",
+    }))) return;
+    if (tabsRef.current.some((tab) => tab.session.id === s.id)) {
+      notify("会话已打开终端，请先关闭标签");
+      return;
+    }
     try {
       await api.DeleteSession(s.id);
       await refresh();
@@ -373,8 +401,15 @@ export default function App() {
     }
   };
   const group = async (g?: Group) => {
-    const name = prompt(g ? "修改分组名称" : "新建分组名称", g?.name ?? "");
-    if (!name?.trim()) return;
+    const name = await dialogs.input({
+      title: g ? "修改分组名称" : "新建分组",
+      description: g ? "修改当前文件夹的名称。" : "创建一个文件夹，用于管理 SSH 会话。",
+      label: "分组名称",
+      defaultValue: g?.name ?? "",
+      placeholder: "例如：生产服务器",
+      confirmLabel: g ? "保存修改" : "创建分组",
+    });
+    if (!name) return;
     try {
       await api.SaveGroup({ id: g?.id ?? "", name: name.trim() });
       await refresh();
@@ -383,7 +418,12 @@ export default function App() {
     }
   };
   const deleteGroup = async (g: Group) => {
-    if (!confirm(`删除分组“${g.name}”？会话将移到默认分组。`)) return;
+    if (!(await dialogs.confirm({
+      title: "删除分组",
+      description: `确定删除「${g.name}」？该分组内的 SSH 会话将移至默认分组，不会被删除。`,
+      tone: "danger",
+      confirmLabel: "删除分组",
+    }))) return;
     try {
       await api.DeleteGroup(g.id);
       await refresh();
