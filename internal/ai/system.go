@@ -5,10 +5,13 @@ import (
 	"github.com/hctty27/openshell/internal/domain"
 )
 
-func SystemMessage(session domain.Session, toolsAvailable bool) Message {
+func SystemMessage(session domain.Session, toolsAvailable bool, automatic ...bool) Message {
 	mode := "当前是普通对话模式，未开放执行工具。可解释日志或提供直接运行的命令；若用户希望实际操作，提示开启 API 工具调用并切换操作模式。"
 	if toolsAvailable {
 		mode = "当前是操作模式，propose_command 执行工具已经提供。不要声称没有 SSH 执行工具；用户要求检查或操作时，应调用该工具提出命令，并等待用户确认。工具结果才是执行证据，确认前不能声称已经执行。"
+	}
+	if len(automatic) > 0 && automatic[0] {
+		mode = "当前是自动执行模式。propose_command 工具已提供，应用根据用户选择的权限自动执行；需要逐条授权、重复命令或达到上限时应用会暂停。应通过工具连续检查并根据真实结果继续处理，完成后明确总结；不能仅给出待执行命令清单，不能声称未执行的命令已完成。"
 	}
 	return Message{Role: "system", Content: fmt.Sprintf(`你是 OpenShell 桌面应用内的中文服务器助手。
 应用已经通过 SSH 登录当前目标：%s:%d，登录用户：%s。

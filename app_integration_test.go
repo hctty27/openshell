@@ -139,3 +139,79 @@ func TestCommittedCredentialWinsAfterCleanupFailure(t *testing.T) {
 		t.Fatal("stale cached password overrode committed credential", e)
 	}
 }
+
+func TestAutomaticSSHLoopBudgetAndToolHistory(t *testing.T) {
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+	sshServer := testssh.Start(t)
+	row, err := a.SaveSession(SaveSessionRequest{Session: domain.Session{Host: sshServer.Host, Port: sshServer.Port, Username: "root", AuthType: "password"}, Secret: "test-password", SaveSecret: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	connected, err := a.Connect("auto-tab", row.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.TrustHost(connected.Challenge.ID)
+	connected, err = a.Connect("auto-tab", row.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		var request struct {
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
+		}
+		json.NewDecoder(r.Body).Decode(&request)
+		if requests > 1 {
+			found := false
+			for _, m := range request.Messages {
+				if m.Role == "tool" {
+					found = true
+				}
+			}
+			if !found {
+				t.Error("automatic continuation missing tool result")
+			}
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		delta := map[string]any{"content": "已完成检查"}
+		if requests <= 2 {
+			command := "pwd"
+			if requests == 2 {
+				command = "uname -s"
+			}
+			arguments, _ := json.Marshal(map[string]string{"command": command, "purpose": "检查", "cwd": "/tmp"})
+			delta = map[string]any{"tool_calls": []any{map[string]any{"index": 0, "id": fmt.Sprintf("auto-call-%d", requests), "type": "function", "function": map[string]string{"name": "propose_command", "arguments": string(arguments)}}}}
+		}
+		data, _ := json.Marshal(map[string]any{"choices": []any{map[string]any{"delta": delta, "finish_reason": "tool_calls"}}})
+		fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", data)
+	}))
+	defer server.Close()
+	profile, err := a.SaveAPI(SaveAPIRequest{Profile: domain.APIProfile{Name: "automatic-test", BaseURL: server.URL, Model: "test", ToolsEnabled: true}, Key: "test", MemoryOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.SavePreference("autoCommandLimit", "1")
+	count := sshServer.Count()
+	state, err := a.StartAutomatic(ChatRequest{Ref: connected.Ref, ProfileID: profile.ID, Text: "检查服务器"}, "auto-task")
+	if err != nil || state.Status != "limit" || state.Steps != 1 || sshServer.Count() != count+1 {
+		t.Fatal(state, err, sshServer.Count(), count)
+	}
+	// Settings changes during a paused task apply only to the next task.
+	a.SavePreference("autoCommandLimit", "5")
+	state, err = a.ResumeAutomatic("auto-task", "", true)
+	if err != nil || state.Status != "completed" || state.Steps != 2 || state.Limit != 1 || sshServer.Count() != count+2 {
+		t.Fatal(state, err, sshServer.Count())
+	}
+	if requests != 3 {
+		t.Fatal("unexpected model calls", requests)
+	}
+}

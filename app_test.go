@@ -137,29 +137,68 @@ func TestAuthenticationChangeClearsTransientSecret(t *testing.T) {
 func TestTerminalClipboardPreferencesPersistAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.db")
 	a, err := newApp(path, &vault{m: map[string]string{}}, nil)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	initial, err := a.State()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if initial.AutoCopySelection || initial.RightClickPaste || !initial.ConfirmMultilinePaste {
 		t.Fatalf("unexpected clipboard defaults: %+v", initial)
 	}
 	for key, value := range map[string]string{
-		"autoCopySelection": "true",
-		"rightClickPaste": "true",
+		"autoCopySelection":     "true",
+		"rightClickPaste":       "true",
 		"confirmMultilinePaste": "false",
 	} {
-		if err := a.SavePreference(key, value); err != nil { t.Fatal(err) }
+		if err := a.SavePreference(key, value); err != nil {
+			t.Fatal(err)
+		}
 	}
 	a.shutdown(context.Background())
 	b, err := newApp(path, &vault{m: map[string]string{}}, nil)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer b.shutdown(context.Background())
 	state, err := b.State()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !state.AutoCopySelection || !state.RightClickPaste || state.ConfirmMultilinePaste {
 		t.Fatalf("clipboard settings not restored: %+v", state)
 	}
 	if err := b.SavePreference("rightClickPaste", "invalid"); err == nil {
 		t.Fatal("invalid boolean preference accepted")
+	}
+}
+
+func TestAutomaticSettingsValidationAndRestore(t *testing.T) {
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+	for _, v := range []string{"0", "101", "bad"} {
+		if err = a.SavePreference("autoCommandLimit", v); err == nil {
+			t.Fatal("invalid limit accepted", v)
+		}
+	}
+	if err = a.SavePreference("autoCommandLimit", "3"); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.SavePreference("autoAllowChanges", "true"); err != nil {
+		t.Fatal(err)
+	}
+	state, err := a.State()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(state)
+	var fields map[string]any
+	json.Unmarshal(data, &fields)
+	if fields["autoCommandLimit"] != float64(3) || fields["autoAllowChanges"] != true {
+		t.Fatal(fields)
 	}
 }

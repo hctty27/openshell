@@ -28,6 +28,8 @@ import type {
   ChatMessage,
   SessionRequest,
   ChatRequest,
+  ChatMode,
+  AutoEvent,
   Theme,
   QuickCommand,
   QuickCommandLayout,
@@ -38,7 +40,7 @@ import TerminalPane from "./components/TerminalPane";
 import AISidebar from "./components/AISidebar";
 import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.13";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.14";
 const initial: AppState = {
   sessions: [],
   groups: [],
@@ -56,7 +58,8 @@ export default function App() {
     [showSessions, setShowSessions] = useState(true),
     [fontSize, setFontSize] = useState(14),
     [theme, setTheme] = useState<Theme>("dark"),
-    [quickCommandLayout, setQuickCommandLayout] = useState<QuickCommandLayout>("single"),
+    [quickCommandLayout, setQuickCommandLayout] =
+      useState<QuickCommandLayout>("single"),
     [autoCopySelection, setAutoCopySelection] = useState(false),
     [rightClickPaste, setRightClickPaste] = useState(false),
     [confirmMultilinePaste, setConfirmMultilinePaste] = useState(true),
@@ -95,7 +98,9 @@ export default function App() {
       const data = await api.State();
       setState(data);
       setTheme(data.theme === "light" ? "light" : "dark");
-      setQuickCommandLayout(data.quickCommandLayout === "multi" ? "multi" : "single");
+      setQuickCommandLayout(
+        data.quickCommandLayout === "multi" ? "multi" : "single",
+      );
       setAutoCopySelection(data.autoCopySelection === true);
       setRightClickPaste(data.rightClickPaste === true);
       setConfirmMultilinePaste(data.confirmMultilinePaste !== false);
@@ -137,6 +142,73 @@ export default function App() {
           : t,
       ),
     );
+    const autoEvent = listen("auto:event", (event: AutoEvent) => {
+      const s = event.state;
+      update(s.ref.tabId, (t) => {
+        if (
+          t.ref?.generation !== s.ref.generation ||
+          t.ref.sessionId !== s.ref.sessionId ||
+          t.autoRun?.id !== s.id
+        )
+          return t;
+        if (event.kind === "thinking" && event.messageId)
+          streamIDs.current[s.ref.tabId] = event.messageId;
+        const terminal = ["completed", "stopped", "error"].includes(s.status);
+        const next = { ...t, autoRun: s };
+        if (event.kind === "thinking") {
+          next.chatBusy = true;
+          next.messages = [
+            ...t.messages,
+            { id: event.messageId!, role: "assistant", text: "" },
+          ];
+        } else if (event.kind === "reply") {
+          next.chatBusy = false;
+          next.proposal = s.proposal ?? null;
+          next.messages = t.messages.map((m) =>
+            m.id === event.messageId
+              ? {
+                  ...m,
+                  text:
+                    event.text ||
+                    (s.proposal ? "已生成命令提议" : "本次回复未返回文本"),
+                }
+              : m,
+          );
+        } else if (event.kind === "executing") {
+          next.executing = true;
+          next.proposal = s.proposal ?? null;
+        } else if (event.kind === "result") {
+          next.executing = false;
+          next.proposal = null;
+          next.messages = [
+            ...t.messages,
+            {
+              id: id(),
+              role: "result",
+              text: "",
+              result: event.result,
+              command: s.proposal?.command,
+            },
+          ];
+        }
+        if (terminal) {
+          next.chatBusy = false;
+          next.executing = false;
+          next.proposal = null;
+          next.messages = next.messages.map((m) =>
+            m.id === event.messageId && !m.text && m.role === "assistant"
+              ? {
+                  ...m,
+                  text: s.reason || "任务已结束",
+                  incomplete: s.status !== "completed",
+                }
+              : m,
+          );
+          delete streamIDs.current[s.ref.tabId];
+        }
+        return next;
+      });
+    });
     const delta = listen("ai:delta", (payload: { ref: Ref; text: string }) => {
       const messageID = streamIDs.current[payload.ref.tabId];
       if (messageID)
@@ -157,6 +229,7 @@ export default function App() {
       off();
       end();
       delta();
+      autoEvent();
     };
   }, []);
   useEffect(() => {
@@ -174,10 +247,17 @@ export default function App() {
       notify("请先连接 SSH 服务器");
       return;
     }
-    const risky = /(?:^|[;&| ]+)(?:rm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)|mkfs(?:\.[\w]+)?|dd\s+|shutdown\b|reboot\b|poweroff\b|systemctl\s+(?:stop|restart|disable)\b)/i.test(command.command);
-    if ((command.confirm || risky) && !window.confirm(
-      `在「${tab.session.name}」${command.mode === "run" ? "执行" : "填入"}以下命令？\n\n${command.command}`,
-    )) return;
+    const risky =
+      /(?:^|[;&| ]+)(?:rm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)|mkfs(?:\.[\w]+)?|dd\s+|shutdown\b|reboot\b|poweroff\b|systemctl\s+(?:stop|restart|disable)\b)/i.test(
+        command.command,
+      );
+    if (
+      (command.confirm || risky) &&
+      !window.confirm(
+        `在「${tab.session.name}」${command.mode === "run" ? "执行" : "填入"}以下命令？\n\n${command.command}`,
+      )
+    )
+      return;
     try {
       const source = command.command + (command.mode === "run" ? "\r" : "");
       const bytes = new TextEncoder().encode(source);
@@ -336,6 +416,7 @@ export default function App() {
     update(tab.id, (t) => ({
       ...t,
       chatBusy: true,
+      autoRun: continuation ? t.autoRun : undefined,
       messages: [
         ...t.messages,
         ...(continuation ? [] : [{ id: id(), role: "user" as const, text }]),
@@ -384,7 +465,63 @@ export default function App() {
       delete streamIDs.current[tab.id];
     }
   };
+  const startAutomatic = async (tab: Tab, text: string, context: string) => {
+    if (!tab.ref) return;
+    const taskID = id();
+    update(tab.id, (t) => ({
+      ...t,
+      proposal: null,
+      autoRun: {
+        id: taskID,
+        ref: tab.ref!,
+        status: "ready",
+        steps: 0,
+        roundSteps: 0,
+        limit: state.autoCommandLimit ?? 10,
+        allowChanges: state.autoAllowChanges ?? false,
+        reason: "正在启动自动任务",
+      },
+      messages: [...t.messages, { id: id(), role: "user", text }],
+    }));
+    setAttachments((old) => ({ ...old, [tab.id]: "" }));
+    try {
+      await api.StartAutomatic(requestFor(tab, text, true, context), taskID);
+    } catch (e) {
+      await api.StopAutomatic(taskID).catch(notify);
+      update(tab.id, (t) =>
+        t.autoRun?.id === taskID
+          ? {
+              ...t,
+              chatBusy: false,
+              executing: false,
+              proposal: null,
+              autoRun: { ...t.autoRun, status: "error", reason: errorText(e) },
+            }
+          : t,
+      );
+      notify(e);
+    }
+  };
+  const resumeAutomatic = async (extend: boolean) => {
+    if (!active?.autoRun) return;
+    try {
+      await api.ResumeAutomatic(
+        active.autoRun.id,
+        extend ? "" : (active.proposal?.id ?? ""),
+        extend,
+      );
+    } catch (e) {
+      notify(e);
+    }
+  };
+  const sendChat = (text: string, mode: ChatMode, context: string) => {
+    if (!active) return;
+    if (mode === "auto") return startAutomatic(active, text, context);
+    return chat(active, text, mode !== "chat", context);
+  };
   const confirmCommand = async () => {
+    if (active?.autoRun?.status === "awaiting_confirmation")
+      return resumeAutomatic(false);
     if (!active?.proposal) return;
     const tab = active,
       p = active.proposal;
@@ -412,6 +549,15 @@ export default function App() {
     }
   };
   const cancelCommand = async () => {
+    if (
+      active?.autoRun &&
+      ["ready", "running", "awaiting_confirmation", "limit"].includes(
+        active.autoRun.status,
+      )
+    ) {
+      await api.StopAutomatic(active.autoRun.id).catch(notify);
+      return;
+    }
     if (!active?.proposal) return;
     try {
       await api.CancelCommand(active.proposal.id);
@@ -430,7 +576,14 @@ export default function App() {
   };
   const stop = () => {
     if (!active) return;
-    if (active.executing) cancelCommand();
+    if (
+      active.autoRun &&
+      ["ready", "running", "awaiting_confirmation", "limit"].includes(
+        active.autoRun.status,
+      )
+    )
+      api.StopAutomatic(active.autoRun.id).catch(notify);
+    else if (active.executing) cancelCommand();
     else api.CancelChat(active.id).catch(notify);
   };
   const clear = async () => {
@@ -698,8 +851,7 @@ export default function App() {
         )}
         <footer className="workspace-status">
           <span className="workspace-version">
-            OpenShell <span className="status-sep" />
-            v{APP_VERSION}
+            OpenShell <span className="status-sep" />v{APP_VERSION}
           </span>
           <span className="workspace-connection">
             <i
@@ -734,9 +886,8 @@ export default function App() {
             }}
             onHide={() => setShowAI(false)}
             onSettings={() => setDialog({ kind: "settings" })}
-            onSend={(text, operate, context) =>
-              active && chat(active, text, operate, context)
-            }
+            onSend={sendChat}
+            onAutoContinue={() => resumeAutomatic(true)}
             onStop={stop}
             onClear={clear}
             onPreview={previewContext}
@@ -769,6 +920,8 @@ export default function App() {
           {...dialog}
           groups={state.groups}
           profiles={state.profiles}
+          autoCommandLimit={state.autoCommandLimit}
+          autoAllowChanges={state.autoAllowChanges}
           fontSize={fontSize}
           theme={theme}
           onTheme={setTheme}

@@ -52,6 +52,7 @@ export interface ChatMessage {
   text: string;
   incomplete?: boolean;
   result?: CommandResult;
+  command?: string;
 }
 export interface Tab {
   id: string;
@@ -62,6 +63,7 @@ export interface Tab {
   cwd: string;
   messages: ChatMessage[];
   proposal: Proposal | null;
+  autoRun?: AutoSnapshot;
   chatBusy: boolean;
   executing: boolean;
   error: string;
@@ -78,7 +80,35 @@ export interface QuickCommand {
   mode: "run" | "insert";
   confirm: boolean;
 }
+export type ChatMode = "chat" | "confirm" | "auto";
+export interface AutoSnapshot {
+  id: string;
+  ref: Ref;
+  status:
+    | "ready"
+    | "running"
+    | "awaiting_confirmation"
+    | "limit"
+    | "completed"
+    | "stopped"
+    | "error";
+  steps: number;
+  roundSteps: number;
+  limit: number;
+  allowChanges: boolean;
+  reason: string;
+  proposal?: Proposal;
+}
+export interface AutoEvent {
+  kind: string;
+  state: AutoSnapshot;
+  messageId?: string;
+  text?: string;
+  result?: CommandResult;
+}
 export interface AppState {
+  autoCommandLimit?: number;
+  autoAllowChanges?: boolean;
   quickCommands?: QuickCommand[];
   quickCommandLayout?: QuickCommandLayout;
   autoCopySelection?: boolean;

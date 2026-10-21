@@ -176,13 +176,46 @@ export namespace domain {
 
 export namespace main {
 	
+	export class QuickCommand {
+	    id: string;
+	    name: string;
+	    command: string;
+	    category: string;
+	    scope: string;
+	    scopeId: string;
+	    mode: string;
+	    confirm: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new QuickCommand(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.command = source["command"];
+	        this.category = source["category"];
+	        this.scope = source["scope"];
+	        this.scopeId = source["scopeId"];
+	        this.mode = source["mode"];
+	        this.confirm = source["confirm"];
+	    }
+	}
 	export class AppState {
 	    sessions: domain.Session[];
 	    groups: domain.Group[];
 	    profiles: domain.APIProfile[];
+	    quickCommands: QuickCommand[];
+	    quickCommandLayout: string;
+	    autoCopySelection: boolean;
+	    rightClickPaste: boolean;
+	    confirmMultilinePaste: boolean;
 	    fontSize: string;
 	    theme: string;
 	    activeProfile: string;
+	    autoCommandLimit: number;
+	    autoAllowChanges: boolean;
 	    version: string;
 	
 	    static createFrom(source: any = {}) {
@@ -194,9 +227,16 @@ export namespace main {
 	        this.sessions = this.convertValues(source["sessions"], domain.Session);
 	        this.groups = this.convertValues(source["groups"], domain.Group);
 	        this.profiles = this.convertValues(source["profiles"], domain.APIProfile);
+	        this.quickCommands = this.convertValues(source["quickCommands"], QuickCommand);
+	        this.quickCommandLayout = source["quickCommandLayout"];
+	        this.autoCopySelection = source["autoCopySelection"];
+	        this.rightClickPaste = source["rightClickPaste"];
+	        this.confirmMultilinePaste = source["confirmMultilinePaste"];
 	        this.fontSize = source["fontSize"];
 	        this.theme = source["theme"];
 	        this.activeProfile = source["activeProfile"];
+	        this.autoCommandLimit = source["autoCommandLimit"];
+	        this.autoAllowChanges = source["autoAllowChanges"];
 	        this.version = source["version"];
 	    }
 	
@@ -341,6 +381,7 @@ export namespace main {
 		}
 	}
 	
+	
 	export class SaveAPIRequest {
 	    profile: domain.APIProfile;
 	    key: string;
@@ -389,6 +430,57 @@ export namespace main {
 	        this.session = this.convertValues(source["session"], domain.Session);
 	        this.secret = source["secret"];
 	        this.saveSecret = source["saveSecret"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace tasks {
+	
+	export class AutoSnapshot {
+	    id: string;
+	    ref: domain.ConnectionRef;
+	    status: string;
+	    steps: number;
+	    roundSteps: number;
+	    limit: number;
+	    allowChanges: boolean;
+	    reason: string;
+	    proposal?: domain.Proposal;
+	
+	    static createFrom(source: any = {}) {
+	        return new AutoSnapshot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.ref = this.convertValues(source["ref"], domain.ConnectionRef);
+	        this.status = source["status"];
+	        this.steps = source["steps"];
+	        this.roundSteps = source["roundSteps"];
+	        this.limit = source["limit"];
+	        this.allowChanges = source["allowChanges"];
+	        this.reason = source["reason"];
+	        this.proposal = this.convertValues(source["proposal"], domain.Proposal);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

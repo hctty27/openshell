@@ -3,6 +3,7 @@
 import {main} from '../models';
 import {domain} from '../models';
 import {ai} from '../models';
+import {tasks} from '../models';
 
 export function CancelChat(arg1:string):Promise<void>;
 
@@ -36,6 +37,8 @@ export function PreviewContext(arg1:domain.ConnectionRef,arg2:string):Promise<ai
 
 export function ResizeTerminal(arg1:domain.ConnectionRef,arg2:number,arg3:number):Promise<void>;
 
+export function ResumeAutomatic(arg1:string,arg2:string,arg3:boolean):Promise<tasks.AutoSnapshot>;
+
 export function ReviseProposal(arg1:string,arg2:string,arg3:string,arg4:number):Promise<domain.Proposal>;
 
 export function SaveAPI(arg1:main.SaveAPIRequest):Promise<domain.APIProfile>;
@@ -46,7 +49,11 @@ export function SavePreference(arg1:string,arg2:string):Promise<void>;
 
 export function SaveSession(arg1:main.SaveSessionRequest):Promise<domain.Session>;
 
+export function StartAutomatic(arg1:main.ChatRequest,arg2:string):Promise<tasks.AutoSnapshot>;
+
 export function State():Promise<main.AppState>;
+
+export function StopAutomatic(arg1:string):Promise<void>;
 
 export function TestAPI(arg1:main.SaveAPIRequest):Promise<void>;
 
