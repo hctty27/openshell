@@ -147,14 +147,14 @@ test("floating menu dismisses on outside click and flips away from viewport edge
   const item = screen.getByRole("button", { name: "选中会话 生产服务器" });
   const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     if (this.classList.contains("session-context-menu")) {
-      return { width: 142, height: 96, top: 0, left: 0, right: 142, bottom: 96, x: 0, y: 0, toJSON: () => {} };
+      return { width: 132, height: 86, top: 0, left: 0, right: 132, bottom: 86, x: 0, y: 0, toJSON: () => {} };
     }
-    return { width: 200, height: 26, top: 0, left: 0, right: 200, bottom: 26, x: 0, y: 0, toJSON: () => {} };
+    return { width: 200, height: 24, top: 0, left: 0, right: 200, bottom: 24, x: 0, y: 0, toJSON: () => {} };
   });
   fireEvent.contextMenu(item, { clientX: window.innerWidth - 2, clientY: window.innerHeight - 2 });
   const menu = screen.getByRole("menu") as HTMLDivElement;
-  expect(Number.parseInt(menu.style.left)).toBeLessThanOrEqual(window.innerWidth - 150);
-  expect(Number.parseInt(menu.style.top)).toBeLessThanOrEqual(window.innerHeight - 104);
+  expect(Number.parseInt(menu.style.left)).toBeLessThanOrEqual(window.innerWidth - 140);
+  expect(Number.parseInt(menu.style.top)).toBeLessThanOrEqual(window.innerHeight - 94);
   fireEvent.pointerDown(document.body);
   expect(screen.queryByRole("menu")).toBeNull();
   rect.mockRestore();
