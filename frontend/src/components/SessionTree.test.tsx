@@ -99,7 +99,7 @@ test("right-clicking a folder opens a floating menu and preselects that folder",
   const menu = screen.getByRole("menu", { name: "会话操作" });
   expect(menu.parentElement).toBe(document.body);
   expect(menu.style.position).not.toBe("absolute");
-  expect(within(screen.getByTestId("session-details")).getByText("测试环境")).toBeTruthy();
+  expect(within(screen.getByTestId("session-details")).getAllByText("测试环境").length).toBeGreaterThan(0);
   fireEvent.click(screen.getByRole("menuitem", { name: "新建 SSH 会话" }));
   expect(onCreateInGroup).toHaveBeenCalledWith("g1");
   expect(screen.queryByRole("menu")).toBeNull();
