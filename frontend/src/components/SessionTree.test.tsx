@@ -65,6 +65,8 @@ test("selecting a folder shows folder summary and filtering reveals collapsed ma
   expect(details.getAllByText("文件夹").length).toBeGreaterThan(0);
   expect(details.getByText("1")).toBeTruthy();
   expect(details.queryByRole("button", { name: "连接" })).toBeNull();
+  fireEvent.click(screen.getByTitle("折叠分组 测试环境"));
+  expect(screen.queryByRole("button", { name: "选中会话 测试服务器" })).toBeNull();
   fireEvent.change(screen.getByPlaceholderText("搜索会话…"), {
     target: { value: "10.0.0.2" },
   });
