@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
       fontSize: "14",
       theme: localStorage.getItem("fixture-theme") || "dark",
       activeProfile: "",
-      version: "0.1.6",
+      version: "0.1.9",
     };
     const emit = (name: string, value: any) =>
       (listeners[name] ?? []).forEach((fn) => fn(value));
@@ -325,4 +325,58 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
     .getByRole("combobox", { name: "主题", exact: true })
     .selectOption("dark");
   await page.screenshot({ path: "../tmp/theme-dark.png" });
+});
+
+test("compact sidebar removes detail actions and aligns single-row footer heights", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 700 });
+  await page.goto("/");
+  await page.getByTitle("新建会话", { exact: true }).first().click();
+  await page.getByLabel("会话名称", { exact: true }).fill("紧凑测试");
+  await page.getByLabel("主机地址").fill("127.0.0.1");
+  await page.getByLabel("登录密码").fill("fixture-password");
+  await page.getByText("保存到 Windows 凭据管理器").click();
+  await page.getByRole("button", { name: "保存会话", exact: true }).click();
+  await page.getByRole("button", { name: "选中会话 紧凑测试" }).click();
+
+  await expect(page.locator(".session-details .details-actions")).toHaveCount(0);
+  await expect(page.locator(".details-properties dd").first()).toHaveText("紧凑测试");
+  await page.getByTitle("管理 紧凑测试").click();
+  await expect(page.locator(".session-row .row-menu").getByRole("button", { name: "编辑" })).toBeVisible();
+
+  await page.getByRole("button", { name: "选中会话 紧凑测试" }).dblclick();
+  await page.getByRole("button", { name: "信任并连接" }).click();
+  await expect(page.getByText("SSH 已连接", { exact: false })).toBeVisible();
+
+  const geometry = await page.evaluate(() => {
+    const box = (selector: string) =>
+      document.querySelector(selector)!.getBoundingClientRect();
+    return {
+      left: box(".sidebar-footer").height,
+      right: box(".workspace-status").height,
+      quick: box(".quick-command-bar").height,
+      quickButton: box(".quick-command-manage").height,
+      root: box(".tree-root").height,
+      group: box(".group-heading").height,
+      session: box(".session-row").height,
+      detail: box(".details-properties > div").height,
+      leftBottom: box(".sidebar-footer").bottom,
+      rightBottom: box(".workspace-status").bottom,
+    };
+  });
+  expect(geometry.left).toBe(27);
+  expect(geometry.right).toBe(27);
+  expect(geometry.quick).toBe(27);
+  expect(geometry.quickButton).toBe(21);
+  expect(geometry.root).toBe(26);
+  expect(geometry.group).toBe(26);
+  expect(geometry.session).toBe(26);
+  expect(geometry.detail).toBe(21);
+  expect(Math.abs(geometry.leftBottom - geometry.rightBottom)).toBeLessThan(1);
+
+  await page.getByTitle("设置", { exact: true }).click();
+  await page.getByRole("combobox", { name: "快速命令栏布局" }).selectOption("multi");
+  await page.getByRole("button", { name: "保存外观" }).click();
+  await expect(page.getByText("外观已保存")).toBeVisible();
+  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await expect(page.locator(".quick-command-bar.multi")).toBeVisible();
 });

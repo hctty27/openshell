@@ -290,12 +290,6 @@ export default function SessionTree(p: Props) {
             ))}
           </dl>
         </div>
-        {selectedSession && (
-          <div className="details-actions">
-            <button onClick={() => p.onOpen(selectedSession)}>连接</button>
-            <button onClick={() => p.onEdit(selectedSession)}>编辑</button>
-          </div>
-        )}
       </section>
       <div className="sidebar-footer">
         <span>

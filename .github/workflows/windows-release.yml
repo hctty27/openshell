@@ -42,7 +42,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 50
     env:
-      APP_VERSION: "0.1.8"
+      APP_VERSION: "0.1.9"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -99,7 +99,7 @@ jobs:
       - name: Publish build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: OpenShell-v0.1.8-windows-x64
+          name: OpenShell-v0.1.9-windows-x64
           path: |
             dist/*.zip
             dist/*.exe
@@ -118,5 +118,5 @@ jobs:
             Write-Host "Release $tag already exists; not replacing published binaries."
             exit 0
           }
-          gh release create $tag "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe" "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "OpenShell $tag" --notes "OpenShell 官方图标全新设计：开放圆环与终端提示符；桌面程序、安装包、便携版和应用界面统一品牌视觉。Windows x64 安装版与便携版；未经代码签名。"
+          gh release create $tag "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe" "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "OpenShell $tag" --notes "紧凑布局更新：会话树与属性行缩小间距，移除详情区连接/编辑按钮，左下本地工作空间和单行快速命令栏与 SSH 状态栏统一为 27px。保留多行模式与全新图标；Windows x64 安装版和便携版；未经代码签名。"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
