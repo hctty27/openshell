@@ -4,9 +4,11 @@
 
 轻量的 Windows SSH 客户端，集成会话管理、多标签终端和可自定义 API 的 AI 助手。
 
+**图标：** `build/appicon.png` 为 AI 主题图标；Windows 打包前使用 `python scripts/generate_app_icons.py` 生成多尺寸 ICO 和 PNG 图标（需安装 Pillow）。
+
 **项目地址：** https://github.com/hctty27/openshell
 
-**当前版本：** 0.1.9（测试版）
+**当前版本：** 0.1.10（测试版）
 
 支持浅色/深色主题：设置 → 外观 → 主题，点击“保存外观”后重启保留。终端采用固定 6px 细滚动条，并修复末行裁切。
 

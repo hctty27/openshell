@@ -14,14 +14,15 @@ Unicode true
   !error "APP_ICON is required"
 !endif
 
+!define MUI_ICON "${APP_ICON}"
+!define MUI_UNICON "${APP_ICON}"
+
 Name "OpenShell"
 OutFile "${APP_OUTPUT}"
 InstallDir "$LOCALAPPDATA\Programs\OpenShell"
 InstallDirRegKey HKCU "Software\OpenShell" "InstallDir"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
-Icon "${APP_ICON}"
-UninstallIcon "${APP_ICON}"
 VIProductVersion "${APP_VERSION}.0"
 VIAddVersionKey "ProductName" "OpenShell"
 VIAddVersionKey "FileDescription" "OpenShell SSH Client Installer"

@@ -15,6 +15,7 @@ on:
       - "wails.json"
       - "build/windows/**"
       - "build/appicon.png"
+      - "scripts/**"
   workflow_dispatch:
 
 permissions:
@@ -42,7 +43,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 50
     env:
-      APP_VERSION: "0.1.9"
+      APP_VERSION: "0.1.10"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -65,12 +66,26 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
 
+      - name: Generate AI icon assets
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "Pillow==11.3.0"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/generate_app_icons.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build Windows executable
         shell: pwsh
         run: |
           & "$(go env GOPATH)\bin\wails.exe" build -platform windows/amd64 -clean -webview2 embed
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path "build/bin/OpenShell.exe")) { throw "OpenShell.exe was not generated" }
+
+      - name: Validate OpenShell EXE icon
+        shell: pwsh
+        run: |
+          python scripts/verify_windows_icons.py --icon build/windows/icon.ico --exe build/bin/OpenShell.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Create portable ZIP
         shell: pwsh
@@ -96,10 +111,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path $setup)) { throw "Installer was not generated" }
 
+      - name: Validate NSIS installer icon
+        shell: pwsh
+        run: |
+          python scripts/verify_windows_icons.py --icon build/windows/icon.ico --exe "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Publish build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: OpenShell-v0.1.9-windows-x64
+          name: OpenShell-v0.1.10-windows-x64
           path: |
             dist/*.zip
             dist/*.exe
@@ -118,5 +139,5 @@ jobs:
             Write-Host "Release $tag already exists; not replacing published binaries."
             exit 0
           }
-          gh release create $tag "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe" "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "OpenShell $tag" --notes "紧凑布局更新：会话树与属性行缩小间距，移除详情区连接/编辑按钮，左下本地工作空间和单行快速命令栏与 SSH 状态栏统一为 27px。保留多行模式与全新图标；Windows x64 安装版和便携版；未经代码签名。"
+          gh release create $tag "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe" "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "OpenShell $tag" --notes "v0.1.10：启用 OpenShell AI 星环图标；修复 NSIS 安装包和卸载程序沿用默认图标的问题；桌面 EXE、安装包、网页图标与侧栏 Logo 统一，新增 PE 资源校验。Windows x64；未经代码签名。"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

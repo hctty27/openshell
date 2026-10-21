@@ -82,7 +82,7 @@ export default function SessionTree(p: Props) {
   return (
     <aside className="session-sidebar">
       <div className="brand">
-        <img className="brand-icon" src="/app-icon.svg" alt="OpenShell" />
+        <img className="brand-icon" src="/app-icon.png" alt="OpenShell" />
         <strong>
           OpenShell<span>WORKSPACE</span>
         </strong>
