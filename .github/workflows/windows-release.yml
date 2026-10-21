@@ -1,13 +1,13 @@
 name: Build and release Windows
 
 on:
-  push:
-    tags:
-      - "v*"
-    branches:
-      - main
-    paths:
-      - ".github/release-version.txt"
+  workflow_call:
+    inputs:
+      publish:
+        description: Publish a GitHub Release after CI succeeds
+        required: true
+        type: boolean
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,44 +17,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  go-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate semantic version
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            version="$GITHUB_REF_NAME"
-          else
-            version="$(tr -d '\r\n' < .github/release-version.txt)"
-          fi
-          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-            echo "::error::Release version must look like v0.1.15"
-            exit 1
-          }
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Run SSH integration tests on POSIX
-        run: go test ./...
-
   windows-x64:
-    needs: go-tests
     runs-on: windows-latest
     timeout-minutes: 50
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Set build version
+      - name: Validate and set build version
         shell: pwsh
         run: |
-          $tag = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME } else { (Get-Content ".github/release-version.txt" -Raw).Trim() }
+          $tag = (Get-Content ".github/release-version.txt" -Raw).Trim()
           if ($tag -notmatch "^v[0-9]+\.[0-9]+\.[0-9]+$") { throw "Invalid release version: $tag" }
           $version = $tag.Substring(1)
+          $packageVersion = (Get-Content "frontend/package.json" -Raw | ConvertFrom-Json).version
+          if ($packageVersion -ne $version) { throw "Version mismatch: $packageVersion vs $version" }
           "APP_VERSION=$version" >> $env:GITHUB_ENV
           "VITE_APP_VERSION=$version" >> $env:GITHUB_ENV
           $config = Get-Content wails.json -Raw | ConvertFrom-Json
@@ -63,25 +40,30 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+      - name: Locate Go modules cache
+        id: go-mod-cache
+        shell: pwsh
+        run: |
+          "path=$(go env GOMODCACHE)" >> $env:GITHUB_OUTPUT
+      - name: Cache Go modules only
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.go-mod-cache.outputs.path }}
+          key: windows-go-modules-v1-${{ hashFiles('go.sum') }}-wails-v2.17.0
+          restore-keys: |
+            windows-go-modules-v1-
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Verify frontend
+      - name: Build frontend
         working-directory: frontend
         run: |
           npm ci
           npm run build
-          npm test -- --run
-
-      - name: Verify 30px layout in Chromium
-        working-directory: frontend
-        run: |
-          npx playwright install chromium
-          npx playwright test --grep "compact sidebar removes detail actions"
 
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
@@ -97,7 +79,7 @@ jobs:
       - name: Build Windows executable
         shell: pwsh
         run: |
-          & "$(go env GOPATH)\bin\wails.exe" build -platform windows/amd64 -clean -webview2 embed -ldflags "-X github.com/hctty27/openshell/internal/branding.Version=$env:APP_VERSION"
+          & "$(go env GOPATH)\bin\wails.exe" build -platform windows/amd64 -clean -s -webview2 embed -ldflags "-X github.com/hctty27/openshell/internal/branding.Version=$env:APP_VERSION"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path "build/bin/OpenShell.exe")) { throw "OpenShell.exe was not generated" }
 
@@ -118,11 +100,15 @@ jobs:
           Compress-Archive -Path $portable -DestinationPath "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" -Force
           Remove-Item $portable
 
-      - name: Install NSIS
+      - name: Ensure NSIS is installed
         shell: pwsh
         run: |
-          choco install nsis --yes --no-progress
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $nsis = Join-Path ${env:ProgramFiles(x86)} "NSIS\makensis.exe"
+          if (!(Test-Path $nsis)) {
+            choco install nsis --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          if (!(Test-Path $nsis)) { throw "NSIS not found at $nsis" }
 
       - name: Create Windows installer
         shell: pwsh
@@ -145,7 +131,7 @@ jobs:
       - name: Publish build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: OpenShell-${{ github.ref_name }}-windows-x64
+          name: OpenShell-windows-x64-${{ github.run_id }}
           path: |
             dist/*.zip
             dist/*.exe
@@ -153,6 +139,7 @@ jobs:
           retention-days: 7
 
       - name: Publish GitHub Release
+        if: inputs.publish
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -172,10 +159,21 @@ jobs:
             "--generate-notes",
             "--notes", "Windows x64 安装版与便携版；未经代码签名。"
           )
-          if ($env:GITHUB_REF_TYPE -eq "tag") {
-            $releaseArgs += "--verify-tag"
-          } else {
-            $releaseArgs += @("--target", $env:GITHUB_SHA)
-          }
+          $releaseArgs += @("--target", $env:GITHUB_SHA)
           & gh @releaseArgs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Keep latest three GitHub Releases
+        if: inputs.publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $releases = @(gh release list --repo $env:GITHUB_REPOSITORY --limit 1000 --exclude-drafts --json tagName,publishedAt | ConvertFrom-Json | Sort-Object publishedAt -Descending)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $older = @($releases | Select-Object -Skip 3)
+          foreach ($release in $older) {
+            Write-Host "Deleting old Release $($release.tagName), keeping its Git tag."
+            gh release delete $release.tagName --repo $env:GITHUB_REPOSITORY --yes
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }

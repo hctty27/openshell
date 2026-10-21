@@ -100,18 +100,19 @@ wails dev
 wails build -platform windows/amd64 -clean
 ```
 
-产物：`build/bin/OpenShell.exe`。仓库的 [CI 工作流](.github/workflows/ci.yml) 在推送 main 或创建、更新 PR 时运行 Go 测试、前端构建、单元测试和 Chromium 界面回归，不生成安装包。[Windows 发布工作流](.github/workflows/windows-release.yml) 仅在推送 `vX.Y.Z` 格式的 Git Tag 后进行 Windows x64 完整打包，版本号自动注入 Go、前端、Wails 元数据和文件名；发布成功后 [Release 保留工作流](.github/workflows/keep-releases.yml) 自动只保留最新 3 个版本（不删除 Git Tag）。Actions 临时构建产物保存 7 天。前后端绑定位于 `frontend/wailsjs`，由 Wails 自动生成。
+产物：`build/bin/OpenShell.exe`。仓库现在使用两条 Actions 工作流：
 
-发布新版本（例如 `v0.1.14`）：
+- [CI](.github/workflows/ci.yml)：PR 与 `main` 推送均执行 Go、前端单元测试与 Chromium 回归；当且仅当 `main` 的版本标记变更且本次 CI 全部通过，才调用 Windows 正式发布。
+- [Build and release Windows](.github/workflows/windows-release.yml)：复用 CI 结果，Windows 只构建前端及 Wails EXE、制作和校验安装包/便携包，自动发布到 GitHub Releases 并只保留最新 3 个 Release（保留旧 Git Tag）。构建产物作为 Actions Artifacts 保留 7 天。
 
-```sh
-git checkout main
-git pull --ff-only
-git tag v0.1.14
-git push origin v0.1.14
-```
+发布新版本（例如 `v0.1.20`）：
 
-请先确保目标提交已通过 CI；仅推送 main 不会发布 Release。
+1. 同步更新 `.github/release-version.txt`、`frontend/package.json`、`frontend/package-lock.json`、`frontend/src/App.tsx` 中的默认版本，以及 `wails.json` 的版本，并更新 `CHANGELOG.md`。
+2. 将版本更新推送到 `main`。**不需要手工创建 Git Tag**：同一提交的 CI 通过后会自动构建 Windows 安装版与便携版，发布时自动创建 Tag。
+3. 若 CI 失败，不会发布新版本；修复后重新推送版本标记更新或执行一次新的版本提交。
+
+只想手动打包进行验证时，在 GitHub Actions 选择 **Build and release Windows → Run workflow**。手动运行只上传供下载的 Actions Artifacts，不创建或替换 GitHub Release。正式发布以 CI 结果为门禁，避免未经测试的安装包覆盖已有版本。
+
 
 其他系统目前用于核心测试与 Windows 交叉编译；第一版只交付 Windows 桌面应用。
 
