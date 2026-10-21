@@ -588,6 +588,7 @@ export default function SettingsDialog(p: Props) {
                   <input
                     className="settings-switch"
                     type="checkbox"
+                    aria-label={t("settings:copySelectionAutomatically")}
                     checked={p.autoCopySelection}
                     onChange={(e) => p.onAutoCopySelection(e.target.checked)}
                   />
@@ -600,6 +601,7 @@ export default function SettingsDialog(p: Props) {
                   <input
                     className="settings-switch"
                     type="checkbox"
+                    aria-label={t("settings:rightClickToPaste")}
                     checked={p.rightClickPaste}
                     onChange={(e) => p.onRightClickPaste(e.target.checked)}
                   />
@@ -612,6 +614,7 @@ export default function SettingsDialog(p: Props) {
                     <input
                       className="settings-switch"
                       type="checkbox"
+                      aria-label={t("settings:confirmMultilinePaste")}
                       checked={p.confirmMultilinePaste}
                       onChange={(e) => p.onConfirmMultilinePaste(e.target.checked)}
                     />
