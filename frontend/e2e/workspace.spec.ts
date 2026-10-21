@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
       profiles: [],
       fontSize: "14",
       activeProfile: "",
-      version: "0.1.2",
+      version: "0.1.3",
     };
     const emit = (name: string, value: any) =>
       (listeners[name] ?? []).forEach((fn) => fn(value));

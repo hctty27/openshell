@@ -190,7 +190,14 @@ export default function AISidebar(p: Props) {
               </>
             ) : (
               <div className="message-body">
-                {m.text || <LoaderCircle size={14} className="spin" />}
+                {m.text ||
+                  (p.tab?.chatBusy &&
+                  m.id === p.tab.messages.at(-1)?.id &&
+                  m.role === "assistant" ? (
+                    <LoaderCircle size={14} className="spin" />
+                  ) : (
+                    "本次回复未返回文本"
+                  ))}
               </div>
             )}
           </div>

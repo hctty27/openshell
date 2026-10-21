@@ -39,7 +39,7 @@ const initial: AppState = {
   profiles: [],
   fontSize: "14",
   activeProfile: "",
-  version: "0.1.2",
+  version: "0.1.3",
 };
 const id = () => crypto.randomUUID();
 export default function App() {
@@ -308,7 +308,16 @@ export default function App() {
               ...t,
               chatBusy: false,
               messages: t.messages.map((m) =>
-                m.id === messageID ? { ...m, text: response.text } : m,
+                m.id === messageID
+                  ? {
+                      ...m,
+                      text:
+                        response.text ||
+                        (response.proposal
+                          ? "已生成命令提议"
+                          : "本次回复未返回文本"),
+                    }
+                  : m,
               ),
               proposal: response.proposal ?? null,
             }
@@ -649,7 +658,7 @@ export default function App() {
           </span>
           <span>
             OpenShell <span className="status-sep" />
-            v0.1.2
+            v0.1.3
           </span>
         </footer>
       </main>
