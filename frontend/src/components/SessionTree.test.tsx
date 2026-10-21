@@ -54,7 +54,10 @@ test("single click selects and shows details without connecting; double click co
   fireEvent.doubleClick(item);
   expect(onOpen).toHaveBeenCalledTimes(1);
   expect(onOpen).toHaveBeenCalledWith(sessions[0]);
-  fireEvent.click(details.getByRole("button", { name: "编辑" }));
+  expect(details.queryByRole("button", { name: "连接" })).toBeNull();
+  expect(details.queryByRole("button", { name: "编辑" })).toBeNull();
+  fireEvent.click(screen.getByTitle("管理 生产服务器"));
+  fireEvent.click(screen.getByRole("button", { name: "编辑" }));
   expect(onEdit).toHaveBeenCalledWith(sessions[0]);
 });
 
