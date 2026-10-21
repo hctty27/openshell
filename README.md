@@ -4,13 +4,13 @@
 
 **项目地址：** https://github.com/hctty27/openshell
 
-**当前版本：** 0.1.5（测试版）
+**当前版本：** 0.1.6（测试版）
 
 支持浅色/深色主题：设置 → 外观 → 主题，点击“保存外观”后重启保留。终端采用固定 6px 细滚动条，并修复末行裁切。
 
 ## 功能
 
-- **会话管理**：分组、搜索、密码和本地私钥认证。
+- **会话管理**：Xshell 风格的树形分组、搜索、下方会话详情、密码和本地私钥认证。
 - **SSH 终端**：多标签、UTF-8、256 色、窗口尺寸同步、字体调整，支持 vim/top 和交互式 sudo。
 - **AI 助手**：流式对话、终端日志预览、每标签独立上下文。
 - **自定义 API**：Base URL、API Key、模型 ID、多配置，兼容 OpenAI Chat Completions。
@@ -19,8 +19,8 @@
 
 ## 使用
 
-1. 解压 Windows x64 测试包，运行 **OpenShell.exe**。
-2. 新建会话，填写主机、端口、用户名和认证信息，保存后双击连接。
+1. 从 [Releases](https://github.com/hctty27/openshell/releases) 下载 Windows x64 的安装版（Setup.exe）或便携版（ZIP）。便携版解压后运行 **OpenShell.exe**。
+2. 新建会话，填写主机、端口、用户名和认证信息；单击会话在左下方查看详情，双击连接。
 3. 首次连接时核对服务器指纹，确认后继续。
 4. 设置 → AI API：填写接口地址、密钥和准确的模型 ID，测试连接后保存。
 5. 右侧选择配置，使用“操作模式”描述任务，检查目标服务器、工作目录和命令后点击“确认执行”。
@@ -87,7 +87,7 @@ wails dev
 wails build -platform windows/amd64 -clean
 ```
 
-产物：`build/bin/OpenShell.exe`。前后端绑定位于 `frontend/wailsjs`，由 Wails 自动生成。
+产物：`build/bin/OpenShell.exe`。仓库的 [Windows 自动打包工作流](.github/workflows/windows-release.yml) 还会生成 ZIP 便携包和 NSIS 安装包，并在新版本首次构建成功时上传到 GitHub Releases。前后端绑定位于 `frontend/wailsjs`，由 Wails 自动生成。
 
 其他系统目前用于核心测试与 Windows 交叉编译；第一版只交付 Windows 桌面应用。
 
