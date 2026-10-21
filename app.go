@@ -228,11 +228,6 @@ func (a *App) State() (AppState, error) {
 func (a *App) SaveSession(req SaveSessionRequest) (domain.Session, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for _, ref := range a.tabRefs {
-		if req.Session.ID != "" && ref.SessionID == req.Session.ID {
-			return domain.Session{}, apperror.New("closeThisSessionSTerminalTabsBeforeEditing", nil)
-		}
-	}
 	req.Session.Host = strings.TrimSpace(req.Session.Host)
 	req.Session.Username = strings.TrimSpace(req.Session.Username)
 	req.Session.Name = strings.TrimSpace(req.Session.Name)
@@ -649,7 +644,7 @@ func (a *App) chatContext(parent context.Context, req ChatRequest, continuation,
 		return ChatResponse{}, e
 	}
 	profile.ToolsEnabled = profile.ToolsEnabled && req.Operate
-	s, e := a.store.GetSession(a.ctx, req.Ref.SessionID)
+	s, e := a.ssh.ConnectedSession(req.Ref)
 	if e != nil {
 		return ChatResponse{}, e
 	}

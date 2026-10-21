@@ -125,5 +125,7 @@
   "contextPreview": "上下文预览",
   "lineCount": "共 {{count}} 行",
   "lineCount_one": "共 {{count}} 行",
-  "lineCount_other": "共 {{count}} 行"
+  "lineCount_other": "共 {{count}} 行",
+  "sessionSaved": "会话配置已保存",
+  "sessionConnectionChangesOnNextReconnect": "连接配置已更新，当前 SSH 连接保持不变，新参数将在下次连接时生效"
 }

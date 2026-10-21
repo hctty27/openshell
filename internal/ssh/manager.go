@@ -38,6 +38,7 @@ type AuthInput struct {
 type EmitFunc func(string, any)
 type connection struct {
 	ref      domain.ConnectionRef
+	session  domain.Session
 	client   *ssh.Client
 	terminal *ssh.Session
 	stdin    interface{ Write([]byte) (int, error) }
@@ -151,7 +152,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 		return ref, apperror.New("connectionCancelled", nil)
 	}
 	delete(m.connecting, tab)
-	c := &connection{ref: ref, client: client, history: NewHistory(1024 * 1024)}
+	c := &connection{ref: ref, session: s, client: client, history: NewHistory(1024 * 1024)}
 	m.connections[tab] = c
 	m.mu.Unlock()
 	go func() {
@@ -177,6 +178,15 @@ func (m *Manager) OpenSession(ref domain.ConnectionRef) (*ssh.Session, error) {
 	client := c.client
 	m.mu.Unlock()
 	return client.NewSession()
+}
+func (m *Manager) ConnectedSession(ref domain.ConnectionRef) (domain.Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c := m.connections[ref.TabID]
+	if c == nil || c.ref != ref {
+		return domain.Session{}, domain.Error("stale", apperror.New("staleConnection", nil).Error())
+	}
+	return c.session, nil
 }
 func (m *Manager) Valid(ref domain.ConnectionRef) bool {
 	m.mu.Lock()
