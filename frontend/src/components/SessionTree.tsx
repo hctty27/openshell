@@ -7,7 +7,6 @@ import {
   Server,
   MoreHorizontal,
   ChevronDown,
-  Terminal,
   Settings,
   Network,
 } from "lucide-react";
@@ -83,9 +82,7 @@ export default function SessionTree(p: Props) {
   return (
     <aside className="session-sidebar">
       <div className="brand">
-        <span className="brand-icon">
-          <Terminal size={19} />
-        </span>
+        <img className="brand-icon" src="/app-icon.svg" alt="OpenShell" />
         <strong>
           OpenShell<span>WORKSPACE</span>
         </strong>

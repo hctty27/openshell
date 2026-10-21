@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="OpenShell — open terminal">
+  <defs>
+    <linearGradient id="surface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1A314C"/>
+      <stop offset="0.57" stop-color="#0D1B2F"/>
+      <stop offset="1" stop-color="#081322"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0.15" y1="0.1" x2="0.88" y2="0.91">
+      <stop offset="0" stop-color="#61ECDD"/>
+      <stop offset="0.49" stop-color="#40C6ED"/>
+      <stop offset="1" stop-color="#547DFA"/>
+    </linearGradient>
+    <linearGradient id="cursor" gradientUnits="userSpaceOnUse" x1="511" y1="619" x2="666" y2="619">
+      <stop offset="0" stop-color="#6CE9DE"/>
+      <stop offset="1" stop-color="#46B8F7"/>
+    </linearGradient>
+  </defs>
+  <rect x="50" y="50" width="924" height="924" rx="224" fill="url(#surface)"/>
+  <rect x="53" y="53" width="918" height="918" rx="221" fill="none" stroke="#698DB3" stroke-opacity="0.16" stroke-width="6"/>
+  <path d="M721 284 A329 329 0 1 0 819 592" fill="none" stroke="url(#ring)" stroke-width="88" stroke-linecap="round"/>
+  <path d="M365 427 L470 517 L365 607" fill="none" stroke="#F2F8FF" stroke-width="69" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M511 619 H666" fill="none" stroke="url(#cursor)" stroke-width="68" stroke-linecap="round"/>
+</svg>

@@ -176,11 +176,8 @@ kbd {
 .brand-icon {
   width: 32px;
   height: 32px;
-  display: grid;
-  place-items: center;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-border);
+  display: block;
+  object-fit: contain;
   border-radius: 8px;
 }
 .brand strong {
