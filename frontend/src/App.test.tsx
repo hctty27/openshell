@@ -20,7 +20,7 @@ vi.mock("./bridge", () => ({
       profiles: [],
       fontSize: "14",
       activeProfile: "",
-      version: "0.1.14",
+      version: "0.1.15",
     })),
   },
   listen: () => () => {},
@@ -95,7 +95,7 @@ test("renders application version on the left and SSH connection status on the r
   expect(
     footer?.lastElementChild?.classList.contains("workspace-connection"),
   ).toBe(true);
-  expect(footer?.textContent).toContain("v0.1.14");
+  expect(footer?.textContent).toContain("v0.1.15");
   expect(footer?.textContent).toContain("未连接");
 });
 
