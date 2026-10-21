@@ -35,6 +35,7 @@ import type {
   QuickCommandLayout,
 } from "./types";
 import SessionTree from "./components/SessionTree";
+import SessionPicker from "./components/SessionPicker";
 import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
 import AISidebar from "./components/AISidebar";
@@ -61,6 +62,7 @@ function Workspace() {
     [activeID, setActiveID] = useState(""),
     [showAI, setShowAI] = useState(true),
     [showSessions, setShowSessions] = useState(true),
+    [showSessionPicker, setShowSessionPicker] = useState(false),
     [fontSize, setFontSize] = useState(14),
     [theme, setTheme] = useState<Theme>("dark"),
     [quickCommandLayout, setQuickCommandLayout] =
@@ -343,6 +345,20 @@ function Workspace() {
     if (session.authType === "password" && !session.credentialRef)
       setLogin({ tab, secret: "" });
     else setTimeout(() => connect(tab), 0);
+  };
+  const openFromPicker = (session: Session) => {
+    setShowSessionPicker(false);
+    const existing = tabsRef.current.find((tab) => tab.session.id === session.id);
+    if (!existing) {
+      open(session);
+      return;
+    }
+    setActiveID(existing.id);
+    if (existing.status === "disconnected" || existing.status === "error") {
+      if (session.authType === "password" && !session.credentialRef)
+        setLogin({ tab: existing, secret: "" });
+      else void connect(existing);
+    }
   };
   const close = async (tab: Tab) => {
     if (tab.chatBusy || tab.executing || tab.proposal) {
@@ -751,8 +767,8 @@ function Workspace() {
           ))}
           <button
             className="new-tab"
-            title="新建会话"
-            onClick={() => setDialog({ kind: "session" })}
+            title="打开会话列表"
+            onClick={() => setShowSessionPicker(true)}
           >
             <Plus size={16} />
           </button>
@@ -953,6 +969,33 @@ function Workspace() {
             }}
           />
         </>
+      )}
+      {showSessionPicker && (
+        <SessionPicker
+          sessions={state.sessions}
+          groups={state.groups}
+          openedSessionIds={tabs.map((tab) => tab.session.id)}
+          onConnect={openFromPicker}
+          onOpenNewTab={(session) => {
+            setShowSessionPicker(false);
+            open(session);
+          }}
+          onEdit={(session) => {
+            if (tabsRef.current.some((tab) => tab.session.id === session.id)) {
+              notify("请先关闭此会话的终端标签，再编辑连接信息");
+              return;
+            }
+            setShowSessionPicker(false);
+            setDialog({ kind: "session", session });
+          }}
+          onDelete={(session) => void removeSession(session)}
+          onNew={() => {
+            setShowSessionPicker(false);
+            setDialog({ kind: "session" });
+          }}
+          onNewGroup={() => void group()}
+          onClose={() => setShowSessionPicker(false)}
+        />
       )}
       {dialog && (
         <SettingsDialog

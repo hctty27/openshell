@@ -14,6 +14,10 @@ vi.mock("./bridge", () => ({
   desktop: false,
   api: {
     SavePreference: vi.fn(async () => {}),
+    Connect: vi.fn(async (tabId: string, sessionId: string) => ({
+      ref: { tabId, sessionId, generation: 1 },
+      home: "/root",
+    })),
     State: vi.fn(async () => ({
       sessions: [],
       groups: [],
@@ -147,4 +151,42 @@ test("automatic execution settings save bounded limit and scope", async () => {
     expect(api.SavePreference).toHaveBeenCalledWith("autoCommandLimit", "3");
     expect(api.SavePreference).toHaveBeenCalledWith("autoAllowChanges", "true");
   });
+});
+
+test("the tab plus opens a session list and reuses an already opened SSH tab", async () => {
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{
+      id: "us-id",
+      groupId: "",
+      name: "us",
+      host: "38.65.94.188",
+      port: 22,
+      username: "root",
+      authType: "key",
+      privateKeyPath: "",
+      credentialRef: "saved",
+    }],
+    groups: [],
+    profiles: [],
+    fontSize: "14",
+    activeProfile: "",
+    version: "0.1.14",
+  });
+  await act(async () => {
+    render(<App />);
+  });
+  fireEvent.click(screen.getByTitle("打开会话列表"));
+  expect(screen.getByRole("dialog", { name: "会话管理" })).toBeTruthy();
+  expect(screen.queryByLabelText("主机地址")).toBeNull();
+  const row = screen.getByRole("button", { name: "选择会话 us" });
+  fireEvent.click(row);
+  expect(screen.queryByTitle("关闭 us")).toBeNull();
+  fireEvent.doubleClick(row);
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  expect(screen.getAllByTitle("关闭 us")).toHaveLength(1);
+
+  fireEvent.click(screen.getByTitle("打开会话列表"));
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 us" }));
+  expect(screen.getAllByTitle("关闭 us")).toHaveLength(1);
+  expect(api.Connect).toHaveBeenCalledTimes(1);
 });
