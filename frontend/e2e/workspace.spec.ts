@@ -489,3 +489,63 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
   await expect(page.locator(".quick-command-bar.multi")).toBeVisible();
 });
+
+test("AI header aligns with SSH tab strip and compact model leaves space for Send", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/");
+
+  await page.getByTitle("设置", { exact: true }).click();
+  await page.getByRole("button", { name: "AI API", exact: true }).click();
+  await page.getByLabel("Base URL", { exact: true }).fill("https://api.example.com/v1");
+  await page.getByLabel("模型名称", { exact: true }).fill("grok-4.7(xhigh)-very-long-model-name");
+  await page.getByRole("button", { name: "保存配置", exact: true }).click();
+  await expect(page.getByText("配置已保存")).toBeVisible();
+  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await expect(page.getByLabel("当前模型")).toBeVisible();
+
+  for (const width of [310, 370, 500]) {
+    await page.locator(".app").evaluate((element, value) => {
+      (element as HTMLElement).style.setProperty("--ai-width", `${value}px`);
+    }, width);
+
+    const positions = await page.evaluate(() => {
+      const rect = (selector: string) =>
+        document.querySelector(selector)!.getBoundingClientRect();
+      const header = rect(".ai-header");
+      const workspaceHeader = rect(".workspace-header");
+      const tabs = rect(".tab-strip");
+      const mode = rect(".mode-select");
+      const model = rect(".composer-model");
+      const send = rect(".send-button");
+      const tools = rect(".composer-tools");
+      return {
+        headerHeight: header.height,
+        headerTop: header.top,
+        mainTop: workspaceHeader.top,
+        headerBottom: header.bottom,
+        tabsBottom: tabs.bottom,
+        modelWidth: model.width,
+        modeRight: mode.right,
+        modelLeft: model.left,
+        modelRight: model.right,
+        sendLeft: send.left,
+        sendRight: send.right,
+        toolsRight: tools.right,
+      };
+    });
+
+    expect(positions.headerHeight).toBe(60);
+    expect(Math.abs(positions.headerTop - positions.mainTop)).toBeLessThanOrEqual(1);
+    expect(Math.abs(positions.headerBottom - positions.tabsBottom)).toBeLessThanOrEqual(1);
+    expect(positions.modelWidth).toBeLessThanOrEqual(116);
+    expect(positions.modelWidth).toBeGreaterThan(50);
+    expect(positions.modelLeft).toBeGreaterThan(positions.modeRight);
+    expect(positions.sendLeft - positions.modelRight).toBeGreaterThanOrEqual(4);
+    expect(positions.sendRight).toBeLessThanOrEqual(positions.toolsRight);
+  }
+
+  await expect(page.getByLabel("当前模型")).toHaveAttribute(
+    "title",
+    /grok-4\.7\(xhigh\)-very-long-model-name/,
+  );
+});
