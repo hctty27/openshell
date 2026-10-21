@@ -94,7 +94,7 @@ export default function FloatingContextMenu({ x, y, items, anchor, onClose }: Pr
               onSelect();
             }}
           >
-            <Icon size={13} />
+            <Icon size={12} />
             <span>{label}</span>
           </button>
         </div>
