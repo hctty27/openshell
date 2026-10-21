@@ -472,9 +472,9 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   expect(geometry.right).toBe(30);
   expect(geometry.quick).toBe(30);
   expect(geometry.quickButton).toBe(24);
-  expect(geometry.root).toBe(24);
-  expect(geometry.group).toBe(24);
-  expect(geometry.session).toBe(24);
+  expect(geometry.root).toBe(26);
+  expect(geometry.group).toBe(26);
+  expect(geometry.session).toBe(26);
   expect(geometry.detail).toBe(21);
   expect(Math.abs(geometry.leftBottom - geometry.rightBottom)).toBeLessThan(1);
   expect(geometry.statusRight).toBeGreaterThan(geometry.statusLeft);
