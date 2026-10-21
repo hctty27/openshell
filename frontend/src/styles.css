@@ -1498,7 +1498,7 @@ kbd {
   border-radius: 5px;
 }
 .tree-root {
-  height: 24px;
+  height: 26px;
   gap: 0;
   color: var(--text-secondary);
 }
@@ -1513,7 +1513,7 @@ kbd {
   justify-content: flex-start;
   min-width: 0;
   gap: 7px;
-  padding: 3px 1px;
+  padding: 5px 1px;
   font-size: 12px;
   font-weight: 600;
   overflow: hidden;
@@ -1526,7 +1526,7 @@ kbd {
 }
 .tree-toggle {
   flex: 0 0 23px;
-  padding: 3px;
+  padding: 5px;
   color: var(--text-muted);
 }
 .tree-groups {
@@ -1535,10 +1535,10 @@ kbd {
   margin-left: 11px;
 }
 .group {
-  margin-bottom: 0;
+  margin-bottom: 1px;
 }
 .group-heading {
-  height: 24px;
+  height: 26px;
 }
 .group-heading > button:first-child {
   min-width: 0;
@@ -1548,7 +1548,7 @@ kbd {
   color: var(--accent);
 }
 .session-row {
-  min-height: 24px;
+  min-height: 26px;
   margin: 0 0 0 17px;
   border: 1px solid transparent;
 }
@@ -1562,7 +1562,7 @@ kbd {
   margin-left: auto;
 }
 .session-open {
-  padding: 2px 5px 2px 7px;
+  padding: 3px 5px 3px 7px;
   gap: 7px;
   line-height: 18px;
 }
