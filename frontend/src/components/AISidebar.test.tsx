@@ -121,8 +121,8 @@ test("the model picker sits to the right of the mode selector in the composer", 
   const mode = screen.getByLabelText("AI 模式");
   const model = screen.getByLabelText("当前模型") as HTMLSelectElement;
 
-  expect(mode.closest(".composer-tools")).toContain(model);
-  expect(mode.nextElementSibling).toContain(model);
+  expect(mode.closest(".composer-tools")?.contains(model)).toBe(true);
+  expect(mode.nextElementSibling?.contains(model)).toBe(true);
   expect(container.querySelector(".model-picker")).toBeNull();
   expect(model.value).toBe("grok");
   expect(model.title).toBe("grok · grok-4.7(xhigh)");
