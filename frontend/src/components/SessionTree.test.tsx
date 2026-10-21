@@ -33,9 +33,9 @@ afterEach(cleanup);
 
 test("shows a collapsible session tree with root and groups", () => {
   renderTree();
-  expect(screen.getByRole("button", { name: /所有会话/ })).toBeTruthy();
-  expect(screen.getByRole("button", { name: /默认分组/ })).toBeTruthy();
-  expect(screen.getByRole("button", { name: /测试环境/ })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "所有会话" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "选中分组 默认分组" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "选中分组 测试环境" })).toBeTruthy();
   fireEvent.click(screen.getByTitle("折叠所有会话"));
   expect(screen.queryByRole("button", { name: "选中会话 生产服务器" })).toBeNull();
   fireEvent.click(screen.getByTitle("展开所有会话"));
@@ -60,9 +60,9 @@ test("single click selects and shows details without connecting; double click co
 
 test("selecting a folder shows folder summary and filtering reveals collapsed matches", () => {
   renderTree();
-  fireEvent.click(screen.getByRole("button", { name: /测试环境/ }));
+  fireEvent.click(screen.getByRole("button", { name: "选中分组 测试环境" }));
   const details = within(screen.getByTestId("session-details"));
-  expect(details.getByText("文件夹")).toBeTruthy();
+  expect(details.getAllByText("文件夹").length).toBeGreaterThan(0);
   expect(details.getByText("1")).toBeTruthy();
   expect(details.queryByRole("button", { name: "连接" })).toBeNull();
   fireEvent.change(screen.getByPlaceholderText("搜索会话…"), {
