@@ -106,7 +106,7 @@ export default function TerminalPane(p: Props) {
         try {
           const text = await ClipboardGetText();
           if (disposed || !callbacks.current.active || !callbacks.current.rightClickPaste || !text) return;
-          if (callbacks.current.confirmMultilinePaste && /[\\r\\n]/.test(text) &&
+          if (callbacks.current.confirmMultilinePaste && /[\r\n]/.test(text) &&
               !window.confirm("剪贴板包含多行内容，粘贴到远程终端可能立即执行命令。确定粘贴吗？")) return;
           if (disposed || !callbacks.current.active || !callbacks.current.rightClickPaste) return;
           term.focus();
