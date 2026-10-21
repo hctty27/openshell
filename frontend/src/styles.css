@@ -708,7 +708,7 @@ kbd {
   min-width: 0;
 }
 .ai-header {
-  height: calc(var(--chrome-bar-height) * 2);
+  height: var(--chrome-bar-height);
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   display: flex;
