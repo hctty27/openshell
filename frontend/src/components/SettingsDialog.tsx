@@ -11,6 +11,7 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import { api, errorText } from "../bridge";
+import { useDialogs } from "./DialogProvider";
 import type {
   Session,
   Group,
@@ -63,6 +64,7 @@ const emptyProfile: APIProfile = {
   toolsEnabled: true,
 };
 export default function SettingsDialog(p: Props) {
+  const dialogs = useDialogs();
   const [tab, setTab] = useState(
     p.kind === "session" ? "session" : "appearance",
   );
@@ -301,14 +303,19 @@ export default function SettingsDialog(p: Props) {
                 {profile.id && (
                   <button
                     title="删除 API 配置"
-                    onClick={() => {
-                      if (confirm("删除此 API 配置及其保存的密钥？"))
-                        run(async () => {
-                          await api.DeleteAPI(profile.id);
-                          await p.onRefresh();
-                          setProfile({ ...emptyProfile });
-                          setKey("");
-                        });
+                    onClick={async () => {
+                      if (!(await dialogs.confirm({
+                        title: "删除 AI API 配置",
+                        description: "确定删除此 API 配置及保存的密钥？此操作无法撤销。",
+                        tone: "danger",
+                        confirmLabel: "删除配置",
+                      }))) return;
+                      await run(async () => {
+                        await api.DeleteAPI(profile.id);
+                        await p.onRefresh();
+                        setProfile({ ...emptyProfile });
+                        setKey("");
+                      });
                     }}
                   >
                     <Trash2 size={16} />

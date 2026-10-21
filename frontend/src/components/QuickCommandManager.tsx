@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Save, Trash2, X } from "lucide-react";
 import type { Group, QuickCommand, Session } from "../types";
 import { errorText } from "../bridge";
+import { useDialogs } from "./DialogProvider";
 
 interface Props {
   commands: QuickCommand[];
@@ -23,6 +24,7 @@ const empty = (): QuickCommand => ({
 });
 
 export default function QuickCommandManager(p: Props) {
+  const dialogs = useDialogs();
   const [draft, setDraft] = useState<QuickCommand>(empty);
   const [category, setCategory] = useState("");
   const [busy, setBusy] = useState(false);
@@ -79,7 +81,12 @@ export default function QuickCommandManager(p: Props) {
     if (await persist(next, "命令已保存")) setDraft(empty());
   };
   const remove = async (item: QuickCommand) => {
-    if (!window.confirm(`确定删除「${item.name}」？`)) return;
+    if (!(await dialogs.confirm({
+      title: "删除快速命令",
+      description: `确定删除「${item.name}」？此操作无法撤销。`,
+      tone: "danger",
+      confirmLabel: "删除命令",
+    }))) return;
     if (await persist(p.commands.filter((c) => c.id !== item.id), "命令已删除")) {
       if (draft.id === item.id) setDraft(empty());
     }
