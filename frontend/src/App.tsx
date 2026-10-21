@@ -29,18 +29,22 @@ import type {
   SessionRequest,
   ChatRequest,
   Theme,
+  QuickCommand,
+  QuickCommandLayout,
 } from "./types";
 import SessionTree from "./components/SessionTree";
 import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
 import AISidebar from "./components/AISidebar";
+import QuickCommandBar from "./components/QuickCommandBar";
+import QuickCommandManager from "./components/QuickCommandManager";
 const initial: AppState = {
   sessions: [],
   groups: [],
   profiles: [],
   fontSize: "14",
   activeProfile: "",
-  version: "0.1.6",
+  version: "0.1.7",
 };
 const id = () => crypto.randomUUID();
 export default function App() {
@@ -51,6 +55,9 @@ export default function App() {
     [showSessions, setShowSessions] = useState(true),
     [fontSize, setFontSize] = useState(14),
     [theme, setTheme] = useState<Theme>("dark"),
+    [quickCommandLayout, setQuickCommandLayout] = useState<QuickCommandLayout>("single"),
+    [showQuickCommandManager, setShowQuickCommandManager] = useState(false),
+    [quickCommandFocus, setQuickCommandFocus] = useState(0),
     [profileID, setProfileID] = useState(""),
     [dialog, setDialog] = useState<{
       kind: "session" | "settings";
@@ -84,6 +91,7 @@ export default function App() {
       const data = await api.State();
       setState(data);
       setTheme(data.theme === "light" ? "light" : "dark");
+      setQuickCommandLayout(data.quickCommandLayout === "multi" ? "multi" : "single");
       if (data.fontSize)
         setFontSize(Math.max(11, Math.min(24, Number(data.fontSize) || 14)));
       setProfileID((old) =>
@@ -149,6 +157,31 @@ export default function App() {
     const timer = setTimeout(() => setToast(""), 7000);
     return () => clearTimeout(timer);
   }, [toast]);
+  const saveQuickCommands = async (commands: QuickCommand[]) => {
+    await api.SavePreference("quickCommands", JSON.stringify(commands));
+    setState((current) => ({ ...current, quickCommands: commands }));
+  };
+  const runQuickCommand = async (command: QuickCommand) => {
+    const tab = active;
+    if (!tab?.ref || tab.status !== "connected") {
+      notify("请先连接 SSH 服务器");
+      return;
+    }
+    const risky = /(?:^|[;&| ]+)(?:rm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)|mkfs(?:\.[\w]+)?|dd\s+|shutdown\b|reboot\b|poweroff\b|systemctl\s+(?:stop|restart|disable)\b)/i.test(command.command);
+    if ((command.confirm || risky) && !window.confirm(
+      `在「${tab.session.name}」${command.mode === "run" ? "执行" : "填入"}以下命令？\n\n${command.command}`,
+    )) return;
+    try {
+      const source = command.command + (command.mode === "run" ? "\r" : "");
+      const bytes = new TextEncoder().encode(source);
+      let binary = "";
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      await api.WriteTerminal(tab.ref, btoa(binary));
+      setQuickCommandFocus((n) => n + 1);
+    } catch (e) {
+      notify(e);
+    }
+  };
   const connect = async (tab: Tab, secret = "") => {
     update(tab.id, (t) => ({
       ...t,
@@ -611,6 +644,7 @@ export default function App() {
                   active={tab.id === activeID}
                   fontSize={fontSize}
                   theme={theme}
+                  commandFocusVersion={quickCommandFocus}
                   onError={(text) => {
                     update(tab.id, (t) => ({
                       ...t,
@@ -642,6 +676,13 @@ export default function App() {
                   </div>
                 )}
             </div>
+            <QuickCommandBar
+              tab={active}
+              commands={state.quickCommands ?? []}
+              layout={quickCommandLayout}
+              onManage={() => setShowQuickCommandManager(true)}
+              onRun={runQuickCommand}
+            />
           </>
         )}
         <footer className="workspace-status">
@@ -665,7 +706,7 @@ export default function App() {
           </span>
           <span>
             OpenShell <span className="status-sep" />
-            v0.1.6
+            v0.1.7
           </span>
         </footer>
       </main>
@@ -720,10 +761,21 @@ export default function App() {
           fontSize={fontSize}
           theme={theme}
           onTheme={setTheme}
+          quickCommandLayout={quickCommandLayout}
+          onQuickCommandLayout={setQuickCommandLayout}
           onClose={() => setDialog(null)}
           onSession={saveSession}
           onRefresh={refresh}
           onFont={setFontSize}
+        />
+      )}
+      {showQuickCommandManager && (
+        <QuickCommandManager
+          commands={state.quickCommands ?? []}
+          groups={state.groups}
+          sessions={state.sessions}
+          onSave={saveQuickCommands}
+          onClose={() => setShowQuickCommandManager(false)}
         />
       )}
       {login && (

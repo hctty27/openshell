@@ -2,5 +2,5 @@ package branding
 
 const (
 	Name    = "OpenShell"
-	Version = "0.1.6"
+	Version = "0.1.7"
 )

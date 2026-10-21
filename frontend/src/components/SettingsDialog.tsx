@@ -18,6 +18,7 @@ import type {
   SessionRequest,
   APIRequest,
   Theme,
+  QuickCommandLayout,
 } from "../types";
 interface Props {
   kind: "session" | "settings";
@@ -27,6 +28,8 @@ interface Props {
   fontSize: number;
   theme: Theme;
   onTheme(theme: Theme): void;
+  quickCommandLayout: QuickCommandLayout;
+  onQuickCommandLayout(layout: QuickCommandLayout): void;
   onClose(): void;
   onSession(req: SessionRequest): Promise<void>;
   onRefresh(): Promise<void>;
@@ -383,6 +386,13 @@ export default function SettingsDialog(p: Props) {
                 </select>
               </label>
               <label>
+                快速命令栏布局
+                <select aria-label="快速命令栏布局" value={p.quickCommandLayout} onChange={(e) => p.onQuickCommandLayout(e.target.value as QuickCommandLayout)}>
+                  <option value="single">单行横向滚动（默认）</option>
+                  <option value="multi">多行自动换行</option>
+                </select>
+              </label>
+              <label>
                 字体大小
                 <div className="font-control">
                   <input
@@ -487,6 +497,7 @@ export default function SettingsDialog(p: Props) {
                   run(async () => {
                     await api.SavePreference("fontSize", String(p.fontSize));
                     await api.SavePreference("theme", p.theme);
+                    await api.SavePreference("quickCommandLayout", p.quickCommandLayout);
                   }, "外观已保存")
                 }
               >

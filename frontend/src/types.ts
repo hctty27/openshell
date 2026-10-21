@@ -67,7 +67,20 @@ export interface Tab {
   error: string;
 }
 export type Theme = "dark" | "light";
+export type QuickCommandLayout = "single" | "multi";
+export interface QuickCommand {
+  id: string;
+  name: string;
+  command: string;
+  category: string;
+  scope: "global" | "group" | "session";
+  scopeId: string;
+  mode: "run" | "insert";
+  confirm: boolean;
+}
 export interface AppState {
+  quickCommands?: QuickCommand[];
+  quickCommandLayout?: QuickCommandLayout;
   sessions: Session[];
   groups: Group[];
   profiles: APIProfile[];

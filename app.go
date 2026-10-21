@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/hctty27/openshell/internal/ai"
 	"github.com/hctty27/openshell/internal/branding"
@@ -34,15 +35,29 @@ type App struct {
 	pending       map[string]string
 	tabRefs       map[string]domain.ConnectionRef
 }
-type AppState struct {
-	Sessions      []domain.Session    `json:"sessions"`
-	Groups        []domain.Group      `json:"groups"`
-	Profiles      []domain.APIProfile `json:"profiles"`
-	FontSize      string              `json:"fontSize"`
-	Theme         string              `json:"theme"`
-	ActiveProfile string              `json:"activeProfile"`
-	Version       string              `json:"version"`
+type QuickCommand struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Command   string `json:"command"`
+	Category  string `json:"category"`
+	Scope     string `json:"scope"`
+	ScopeID   string `json:"scopeId"`
+	Mode      string `json:"mode"`
+	Confirm   bool   `json:"confirm"`
 }
+
+type AppState struct {
+	Sessions           []domain.Session    `json:"sessions"`
+	Groups             []domain.Group      `json:"groups"`
+	Profiles           []domain.APIProfile `json:"profiles"`
+	QuickCommands      []QuickCommand      `json:"quickCommands"`
+	QuickCommandLayout string              `json:"quickCommandLayout"`
+	FontSize           string              `json:"fontSize"`
+	Theme              string              `json:"theme"`
+	ActiveProfile      string              `json:"activeProfile"`
+	Version            string              `json:"version"`
+}
+
 type SaveSessionRequest struct {
 	Session    domain.Session `json:"session"`
 	Secret     string         `json:"secret"`
@@ -144,11 +159,37 @@ func (a *App) State() (AppState, error) {
 		return AppState{}, e
 	}
 	theme, e := a.store.GetPreference(a.ctx, "theme")
+	if e != nil {
+		return AppState{}, e
+	}
 	if theme != "light" {
 		theme = "dark"
 	}
-	return AppState{Sessions: sessions, Groups: groups, Profiles: profiles, FontSize: font, Theme: theme, ActiveProfile: active, Version: branding.Version}, e
+	layout, e := a.store.GetPreference(a.ctx, "quickCommandLayout")
+	if e != nil {
+		return AppState{}, e
+	}
+	if layout != "multi" {
+		layout = "single"
+	}
+	raw, e := a.store.GetPreference(a.ctx, "quickCommands")
+	if e != nil {
+		return AppState{}, e
+	}
+	commands := []QuickCommand{}
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &commands); err != nil {
+			return AppState{}, err
+		}
+	}
+	return AppState{
+		Sessions: sessions, Groups: groups, Profiles: profiles,
+		FontSize: font, Theme: theme, ActiveProfile: active,
+		QuickCommands: commands, QuickCommandLayout: layout,
+		Version: branding.Version,
+	}, nil
 }
+
 func (a *App) SaveSession(req SaveSessionRequest) (domain.Session, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -211,14 +252,66 @@ func (a *App) SaveGroup(g domain.Group) (domain.Group, error) {
 }
 func (a *App) DeleteGroup(id string) error { return a.store.DeleteGroup(a.ctx, id) }
 func (a *App) SavePreference(key, value string) error {
-	if key != "fontSize" && key != "activeProfile" && key != "theme" {
+	switch key {
+	case "fontSize", "activeProfile":
+	case "theme":
+		if value != "dark" && value != "light" {
+			return errors.New("不支持的主题")
+		}
+	case "quickCommandLayout":
+		if value != "single" && value != "multi" {
+			return errors.New("不支持的命令栏布局")
+		}
+	case "quickCommands":
+		if err := validateQuickCommands(value); err != nil {
+			return err
+		}
+	default:
 		return errors.New("不支持的设置")
-	}
-	if key == "theme" && value != "dark" && value != "light" {
-		return errors.New("不支持的主题")
 	}
 	return a.store.SetPreference(a.ctx, key, value)
 }
+
+func validateQuickCommands(raw string) error {
+	if len(raw) > 256*1024 {
+		return errors.New("快速命令配置过大")
+	}
+	var commands []QuickCommand
+	if err := json.Unmarshal([]byte(raw), &commands); err != nil {
+		return errors.New("快速命令配置格式无效")
+	}
+	if len(commands) > 200 {
+		return errors.New("最多保存 200 条快速命令")
+	}
+	seen := make(map[string]bool, len(commands))
+	for _, c := range commands {
+		if c.ID == "" || seen[c.ID] || len(c.ID) > 100 {
+			return errors.New("快速命令 ID 重复或无效")
+		}
+		seen[c.ID] = true
+		if n := len([]rune(strings.TrimSpace(c.Name))); n == 0 || n > 40 {
+			return errors.New("命令名称必须为 1–40 个字符")
+		}
+		if len(c.Command) == 0 || len(c.Command) > 4096 ||
+			strings.IndexFunc(c.Command, func(r rune) bool { return r < 32 || r == 127 }) >= 0 {
+			return errors.New("命令必须为 1–4096 字节且不含控制字符的单行文本")
+		}
+		if len([]rune(c.Category)) > 40 {
+			return errors.New("命令分类过长")
+		}
+		if c.Mode != "run" && c.Mode != "insert" {
+			return errors.New("无效的命令执行方式")
+		}
+		if c.Scope != "global" && c.Scope != "group" && c.Scope != "session" {
+			return errors.New("无效的命令作用范围")
+		}
+		if c.Scope != "global" && c.ScopeID == "" {
+			return errors.New("请选择目标分组或会话")
+		}
+	}
+	return nil
+}
+
 func (a *App) SaveAPI(req SaveAPIRequest) (domain.APIProfile, error) {
 	p := req.Profile
 	if _, e := ai.NormalizeEndpoint(p.BaseURL); e != nil {
