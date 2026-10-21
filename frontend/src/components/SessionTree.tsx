@@ -92,7 +92,10 @@ export default function SessionTree(p: Props) {
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    showContextMenu(kind, id, event.currentTarget, event.clientX, event.clientY);
+    const anchor = event.currentTarget.querySelector<HTMLButtonElement>(
+      ".tree-root-label, .group-select, .session-open",
+    ) ?? event.currentTarget;
+    showContextMenu(kind, id, anchor, event.clientX, event.clientY);
   };
   const openWithKeyboard = (
     event: KeyboardEvent<HTMLButtonElement>,
