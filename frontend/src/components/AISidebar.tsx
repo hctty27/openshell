@@ -103,7 +103,6 @@ export default function AISidebar(p: Props) {
             <div className="suggestions">
               {[
                 "检查服务器运行状态",
-                "帮我排查 Redis 启动失败",
                 "查看磁盘空间占用",
               ].map((text) => (
                 <button
