@@ -8,7 +8,12 @@ import {
   X,
   Server,
   KeyRound,
-  SlidersHorizontal,
+  Settings2,
+  Terminal,
+  Bot,
+  ShieldCheck,
+  Sun,
+  Moon,
   FolderOpen,
   Plus,
   Trash2,
@@ -76,7 +81,7 @@ export default function SettingsDialog(p: Props) {
   useTranslation();
   const dialogs = useDialogs();
   const [tab, setTab] = useState(
-    p.kind === "session" ? "session" : "appearance",
+    p.kind === "session" ? "session" : "general",
   );
   const [session, setSession] = useState({
     ...emptySession,
@@ -120,49 +125,47 @@ export default function SettingsDialog(p: Props) {
         if (e.target === e.currentTarget && !busy) p.onClose();
       }}
     >
-      <section role="dialog" aria-modal="true" className="settings-dialog">
+      <section role="dialog" aria-modal="true" className={`settings-dialog settings-dialog--${p.kind}`}>
         <header>
           <div>
-            <span className="eyebrow">
-              {t("settings:workspaceSettingsLabel")}
-            </span>
             <h2>
               {p.kind === "session"
                 ? p.session
                   ? t("common:editSession")
                   : t("common:newSshSession")
-                : t("settings:workspaceSettings")}
+                : t("settings:settingsTitle")}
             </h2>
           </div>
           <button title={t("common:close")} disabled={busy} onClick={p.onClose}>
             <X size={19} />
           </button>
         </header>
-        {p.kind === "settings" && (
-          <nav className="settings-tabs">
-            <button
-              className={tab === "appearance" ? "active" : ""}
-              onClick={() => setTab("appearance")}
-            >
-              <SlidersHorizontal size={15} />
-              {t("settings:appearance")}
-            </button>
-            <button
-              className={tab === "api" ? "active" : ""}
-              onClick={() => setTab("api")}
-            >
-              <KeyRound size={15} />
-              AI API
-            </button>
-            <button
-              className={tab === "automatic" ? "active" : ""}
-              onClick={() => setTab("automatic")}
-            >
-              <SlidersHorizontal size={15} />
-              {t("ai:automatic")}
-            </button>
-          </nav>
-        )}
+        <div className="settings-layout">
+          {p.kind === "settings" && (
+            <nav className="settings-sidebar" aria-label={t("settings:settingsNavigation")}>
+              {[
+                { id: "general", label: t("settings:general"), icon: Settings2 },
+                { id: "terminal", label: t("settings:terminal"), icon: Terminal },
+                { id: "api", label: t("settings:aiSettings"), icon: Bot },
+                { id: "automatic", label: t("ai:automatic"), icon: ShieldCheck },
+              ].map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={tab === id ? "active" : ""}
+                  aria-current={tab === id ? "page" : undefined}
+                  onClick={() => {
+                    setTab(id);
+                    setError("");
+                    setSuccess("");
+                  }}
+                >
+                  <Icon size={16} aria-hidden="true" />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </nav>
+          )}
         <div className="settings-body">
           {tab === "session" && (
             <>
@@ -291,7 +294,11 @@ export default function SettingsDialog(p: Props) {
             </>
           )}
           {tab === "api" && (
-            <>
+            <section className="settings-panel" aria-labelledby="settings-api-title">
+              <div className="settings-panel-heading">
+                <h3 id="settings-api-title">{t("settings:aiSettings")}</h3>
+                <p>{t("settings:aiDescription")}</p>
+              </div>
               <div className="api-presets">
                 <select
                   aria-label={t("settings:apiProfile")}
@@ -427,11 +434,15 @@ export default function SettingsDialog(p: Props) {
               <p className="muted small">
                 {t("settings:disableToolCallsForApisThatOnlySupport")}
               </p>
-            </>
+            </section>
           )}
           {tab === "automatic" && (
-            <>
-              <div className="form-note">
+            <section className="settings-panel" aria-labelledby="settings-automatic-title">
+              <div className="settings-panel-heading">
+                <h3 id="settings-automatic-title">{t("ai:automatic")}</h3>
+                <p>{t("settings:automaticDescription")}</p>
+              </div>
+              <div className="settings-inline-note">
                 {t(
                   "settings:automaticModeProcessesTasksUsingCommandResultsEach",
                 )}
@@ -469,13 +480,22 @@ export default function SettingsDialog(p: Props) {
                   )}
                 </p>
               )}
-            </>
+            </section>
           )}
-          {tab === "appearance" && (
-            <>
-              <label>
-                Language / 语言
+          {tab === "general" && (
+            <section className="settings-panel" aria-labelledby="settings-general-title">
+              <div className="settings-panel-heading">
+                <h3 id="settings-general-title">{t("settings:general")}</h3>
+                <p>{t("settings:generalDescription")}</p>
+              </div>
+              <div className="settings-control-row">
+                <div className="settings-control-copy">
+                  <label htmlFor="settings-language">{t("settings:interfaceLanguage")}</label>
+                  <p>{t("settings:languageDescription")}</p>
+                </div>
                 <select
+                  id="settings-language"
+                  className="settings-control-select"
                   value={p.language ?? "en"}
                   disabled={p.languageSaving}
                   onChange={(e) => {
@@ -491,105 +511,117 @@ export default function SettingsDialog(p: Props) {
                     </option>
                   ))}
                 </select>
-              </label>
-              <div className="form-note">
-                <SlidersHorizontal size={17} />
-                <span>
-                  {t("settings:themeAndTerminalSettingsApplyToTheWhole")}
-                </span>
               </div>
-              <label>
-                {t("settings:theme")}
+              <div className="settings-theme-group">
+                <h4>{t("settings:theme")}</h4>
+                <p>{t("settings:themeDescription")}</p>
+                <div className="settings-theme-options" role="group" aria-label={t("settings:theme")}>
+                  {(["light", "dark"] as const).map((theme) => {
+                    const Icon = theme === "light" ? Sun : Moon;
+                    return (
+                      <button
+                        key={theme}
+                        type="button"
+                        className={`settings-theme-option ${p.theme === theme ? "selected" : ""}`}
+                        aria-pressed={p.theme === theme}
+                        onClick={() => p.onTheme(theme)}
+                      >
+                        <span className={`settings-theme-preview settings-theme-preview--${theme}`} aria-hidden="true">
+                          <span className="settings-theme-preview-sidebar" />
+                          <span className="settings-theme-preview-main">
+                            <span />
+                            <span />
+                            <span />
+                          </span>
+                        </span>
+                        <span className="settings-theme-option-label">
+                          <Icon size={14} aria-hidden="true" />
+                          {t(`settings:${theme}`)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          )}
+          {tab === "terminal" && (
+            <section className="settings-panel" aria-labelledby="settings-terminal-title">
+              <div className="settings-panel-heading">
+                <h3 id="settings-terminal-title">{t("settings:terminal")}</h3>
+                <p>{t("settings:terminalDescription")}</p>
+              </div>
+              <div className="settings-terminal-group">
+                <div className="settings-font-heading">
+                  <label htmlFor="settings-font-size">{t("settings:fontSize")}</label>
+                  <output htmlFor="settings-font-size">{p.fontSize} px</output>
+                </div>
+                <input
+                  id="settings-font-size"
+                  type="range"
+                  min="11"
+                  max="24"
+                  value={p.fontSize}
+                  onChange={(e) => p.onFont(Number(e.target.value))}
+                />
+              </div>
+              <div className="settings-terminal-group">
+                <label htmlFor="settings-quick-commands">{t("settings:quickCommandLayout")}</label>
                 <select
-                  value={p.theme}
-                  onChange={(e) => p.onTheme(e.target.value as Theme)}
-                >
-                  <option value="dark">{t("settings:dark")}</option>
-                  <option value="light">{t("settings:light")}</option>
-                </select>
-              </label>
-              <label>
-                {t("settings:quickCommandLayout")}
-                <select
-                  aria-label={t("settings:quickCommandLayout")}
+                  id="settings-quick-commands"
                   value={p.quickCommandLayout}
                   onChange={(e) =>
                     p.onQuickCommandLayout(e.target.value as QuickCommandLayout)
                   }
                 >
-                  <option value="single">
-                    {t("settings:singleRowWithHorizontalScrollingDefault")}
-                  </option>
-                  <option value="multi">
-                    {t("settings:multipleRowsWithWrapping")}
-                  </option>
+                  <option value="single">{t("settings:singleRowWithHorizontalScrollingDefault")}</option>
+                  <option value="multi">{t("settings:multipleRowsWithWrapping")}</option>
                 </select>
-              </label>
-              <label>
-                {t("settings:fontSize")}
-                <div className="font-control">
+              </div>
+              <div className="settings-terminal-group">
+                <h4>{t("settings:terminalMouseActions")}</h4>
+                <label className="settings-toggle-row">
+                  <span className="settings-toggle-copy">
+                    <strong>{t("settings:copySelectionAutomatically")}</strong>
+                    <small>{t("settings:copyTextToTheClipboardAfterSelectingIt")}</small>
+                  </span>
                   <input
-                    type="range"
-                    min="11"
-                    max="24"
-                    value={p.fontSize}
-                    onChange={(e) => p.onFont(Number(e.target.value))}
-                  />
-                  <span>{p.fontSize} px</span>
-                </div>
-              </label>
-              <div
-                className="terminal-mouse-settings"
-                role="group"
-                aria-label={t("settings:terminalMouseActions")}
-              >
-                <strong>{t("settings:terminalMouseActions")}</strong>
-                <label className="checkbox">
-                  <input
+                    className="settings-switch"
                     type="checkbox"
+                    aria-label={t("settings:copySelectionAutomatically")}
                     checked={p.autoCopySelection}
                     onChange={(e) => p.onAutoCopySelection(e.target.checked)}
                   />
-                  {t("settings:copySelectionAutomatically")}
                 </label>
-                <p className="muted small">
-                  {t("settings:copyTextToTheClipboardAfterSelectingIt")}
-                </p>
-                <label className="checkbox">
+                <label className="settings-toggle-row">
+                  <span className="settings-toggle-copy">
+                    <strong>{t("settings:rightClickToPaste")}</strong>
+                    <small>{t("settings:rightClickInTheSshTerminalToPaste")}</small>
+                  </span>
                   <input
+                    className="settings-switch"
                     type="checkbox"
+                    aria-label={t("settings:rightClickToPaste")}
                     checked={p.rightClickPaste}
                     onChange={(e) => p.onRightClickPaste(e.target.checked)}
                   />
-                  {t("settings:rightClickToPaste")}
                 </label>
-                <p className="muted small">
-                  {t("settings:rightClickInTheSshTerminalToPaste")}
-                </p>
                 {p.rightClickPaste && (
-                  <label className="checkbox nested-option">
+                  <label className="settings-toggle-row settings-toggle-row--nested">
+                    <span className="settings-toggle-copy">
+                      <strong>{t("settings:confirmMultilinePaste")}</strong>
+                    </span>
                     <input
+                      className="settings-switch"
                       type="checkbox"
+                      aria-label={t("settings:confirmMultilinePaste")}
                       checked={p.confirmMultilinePaste}
-                      onChange={(e) =>
-                        p.onConfirmMultilinePaste(e.target.checked)
-                      }
+                      onChange={(e) => p.onConfirmMultilinePaste(e.target.checked)}
                     />
-                    {t("settings:confirmMultilinePaste")}
                   </label>
                 )}
               </div>
-              <div className="terminal-sample">
-                <span>root@server</span>:<b>~</b>$ systemctl status redis
-                <br />
-                <i>● redis.service — Ready to accept connections</i>
-                <br />
-                {t("settings:openshellTerminalPreview")}
-              </div>
-              <p className="muted small">
-                {t("settings:systemMonospaceFontUtf8256ColorsAnd")}
-              </p>
-            </>
+            </section>
           )}
           {!!error && (
             <div className="form-error" role="alert">
@@ -602,6 +634,7 @@ export default function SettingsDialog(p: Props) {
               {renderMessage(success)}
             </div>
           )}
+        </div>
         </div>
         <footer>
           <button className="secondary" disabled={busy} onClick={p.onClose}>
@@ -695,7 +728,7 @@ export default function SettingsDialog(p: Props) {
                 {t("settings:saveAutomaticSettings")}
               </button>
             )}
-            {tab === "appearance" && (
+            {(tab === "general" || tab === "terminal") && (
               <button
                 className="primary"
                 disabled={busy}
@@ -719,10 +752,10 @@ export default function SettingsDialog(p: Props) {
                       "confirmMultilinePaste",
                       String(p.confirmMultilinePaste),
                     );
-                  }, message("settings:appearanceSaved"))
+                  }, message("settings:settingsSaved"))
                 }
               >
-                {t("settings:saveAppearance")}
+                {t("settings:saveSettings")}
               </button>
             )}
           </div>

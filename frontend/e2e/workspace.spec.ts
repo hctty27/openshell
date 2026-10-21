@@ -211,7 +211,7 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   await page.getByRole("button", { name: "信任并连接" }).click();
   await expect(page.getByText("SSH 已连接", { exact: false })).toBeVisible();
   await page.getByTitle("设置", { exact: true }).click();
-  await page.getByRole("button", { name: "AI API", exact: true }).click();
+  await page.getByRole("button", { name: "AI 配置", exact: true }).click();
   await page
     .getByLabel("Base URL", { exact: true })
     .fill("https://api.example.com/v1");
@@ -226,8 +226,8 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   for (const theme of ["light", "dark"]) {
     await page.getByTitle("设置", { exact: true }).click();
     await page
-      .getByRole("combobox", { name: "主题", exact: true })
-      .selectOption(theme);
+      .getByRole("button", { name: theme === "light" ? "浅色" : "深色", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "关闭", exact: true })
       .last()
@@ -304,6 +304,7 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
     () => (window as any).__resizes.length,
   );
   await page.getByTitle("设置", { exact: true }).click();
+  await page.getByRole("button", { name: "终端", exact: true }).click();
   await page.getByRole("slider").focus();
   await page.getByRole("slider").press("ArrowRight");
   await expect
@@ -369,15 +370,14 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
   expect((await geometry()).opacity).toBe("1");
   await page.getByTitle("设置", { exact: true }).click();
   await page
-    .getByRole("combobox", { name: "主题", exact: true })
-    .selectOption("light");
+    .getByRole("button", { name: "浅色", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(page.locator(".terminal-pane.active .xterm-viewport")).toHaveCSS(
     "background-color",
     "rgb(250, 251, 253)",
   );
-  await page.getByRole("button", { name: "保存外观" }).click();
-  await expect(page.getByText("外观已保存")).toBeVisible();
+  await page.getByRole("button", { name: "保存设置" }).click();
+  await expect(page.getByText("设置已保存")).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
   await page.screenshot({ path: "../tmp/theme-light.png" });
   for (const size of [
@@ -403,8 +403,7 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.getByTitle("设置", { exact: true }).click();
   await page
-    .getByRole("combobox", { name: "主题", exact: true })
-    .selectOption("dark");
+    .getByRole("button", { name: "深色", exact: true }).click();
   await page.screenshot({ path: "../tmp/theme-dark.png" });
 });
 
@@ -509,11 +508,12 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   expect(geometry.footerRightEdge - geometry.statusRightEdge).toBeLessThan(20);
 
   await page.getByTitle("设置", { exact: true }).click();
+  await page.getByRole("button", { name: "终端", exact: true }).click();
   await page
     .getByRole("combobox", { name: "快速命令栏布局" })
     .selectOption("multi");
-  await page.getByRole("button", { name: "保存外观" }).click();
-  await expect(page.getByText("外观已保存")).toBeVisible();
+  await page.getByRole("button", { name: "保存设置" }).click();
+  await expect(page.getByText("设置已保存")).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
   await expect(page.locator(".quick-command-bar.multi")).toBeVisible();
 });
@@ -543,16 +543,16 @@ test("bilingual switching preserves terminal and draft and survives reload", asy
     .getByLabel("Send to AI", { exact: true })
     .fill("Keep my draft 原文");
   await page.getByTitle("Settings", { exact: true }).click();
-  await expect(page.getByLabel("Language / 语言")).toHaveValue("en");
+  await expect(page.locator("#settings-language")).toHaveValue("en");
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({
     path: "../tmp/i18n-en-settings.png",
     animations: "disabled",
   });
-  await page.getByLabel("Language / 语言").selectOption("zh-CN");
+  await page.locator("#settings-language").selectOption("zh-CN");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(
-    page.getByRole("heading", { name: "工作空间设置" }),
+    page.getByRole("heading", { name: "设置", exact: true }),
   ).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({
@@ -579,10 +579,10 @@ test("bilingual switching preserves terminal and draft and survives reload", asy
   await page.keyboard.press("Escape");
   await page.reload();
   await page.getByTitle("设置", { exact: true }).click();
-  await expect(page.getByLabel("Language / 语言")).toHaveValue("zh-CN");
-  await page.getByLabel("Language / 语言").selectOption("en");
+  await expect(page.locator("#settings-language")).toHaveValue("zh-CN");
+  await page.locator("#settings-language").selectOption("en");
   await expect(
-    page.getByRole("button", { name: "Save appearance" }),
+    page.getByRole("button", { name: "Save settings" }),
   ).toBeVisible();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
@@ -595,10 +595,10 @@ test("bilingual settings and session picker fit a compact window", async ({
   await page.goto("/?language=en");
   await page.getByTitle("Settings", { exact: true }).click();
   for (const language of ["en", "zh-CN"]) {
-    await page.getByLabel("Language / 语言").selectOption(language);
+    await page.locator("#settings-language").selectOption(language);
     for (const name of language === "en"
-      ? ["Appearance", "AI API", "Automatic"]
-      : ["外观", "AI API", "自动执行"]) {
+      ? ["General", "Terminal", "AI Settings", "Automatic"]
+      : ["通用", "终端", "AI 配置", "自动执行"]) {
       await page.getByRole("button", { name, exact: true }).click();
       const dialog = page.locator(".settings-dialog");
       expect(
@@ -616,12 +616,12 @@ test("bilingual settings and session picker fit a compact window", async ({
         }),
       ).toBe(true);
       await page.screenshot({
-        path: `../tmp/i18n-${language}-${name === "AI API" ? "api" : name === "Automatic" || name === "自动执行" ? "auto" : "appearance"}-compact.png`,
+        path: `../tmp/i18n-${language}-${name === "AI Settings" || name === "AI 配置" ? "api" : name === "Automatic" || name === "自动执行" ? "auto" : name === "Terminal" || name === "终端" ? "terminal" : "general"}-compact.png`,
       });
     }
     await page
       .getByRole("button", {
-        name: language === "en" ? "Appearance" : "外观",
+        name: language === "en" ? "General" : "通用",
         exact: true,
       })
       .click();
@@ -639,7 +639,7 @@ test("AI header aligns with SSH title bar and compact model leaves space for Sen
   await page.goto("/");
 
   await page.getByTitle("设置", { exact: true }).click();
-  await page.getByRole("button", { name: "AI API", exact: true }).click();
+  await page.getByRole("button", { name: "AI 配置", exact: true }).click();
   await page
     .getByLabel("Base URL", { exact: true })
     .fill("https://api.example.com/v1");
