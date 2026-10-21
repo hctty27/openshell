@@ -429,10 +429,10 @@ test("compact sidebar removes detail actions and aligns single-row footer height
     const icon = element.querySelector("svg")!.getBoundingClientRect();
     return { width: menu.width, height: menu.height, rowHeight: firstItem.height, iconWidth: icon.width };
   });
-  expect(compactMenu.width).toBe(142);
-  expect(compactMenu.height).toBeLessThanOrEqual(100);
-  expect(compactMenu.rowHeight).toBe(28);
-  expect(compactMenu.iconWidth).toBe(13);
+  expect(compactMenu.width).toBe(132);
+  expect(compactMenu.height).toBeLessThanOrEqual(92);
+  expect(compactMenu.rowHeight).toBe(25);
+  expect(compactMenu.iconWidth).toBe(12);
   await page.keyboard.press("Escape");
   await expect(contextMenu).toHaveCount(0);
 
@@ -472,9 +472,9 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   expect(geometry.right).toBe(30);
   expect(geometry.quick).toBe(30);
   expect(geometry.quickButton).toBe(24);
-  expect(geometry.root).toBe(26);
-  expect(geometry.group).toBe(26);
-  expect(geometry.session).toBe(26);
+  expect(geometry.root).toBe(24);
+  expect(geometry.group).toBe(24);
+  expect(geometry.session).toBe(24);
   expect(geometry.detail).toBe(21);
   expect(Math.abs(geometry.leftBottom - geometry.rightBottom)).toBeLessThan(1);
   expect(geometry.statusRight).toBeGreaterThan(geometry.statusLeft);
