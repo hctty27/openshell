@@ -1,6 +1,7 @@
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import TerminalPane from "./TerminalPane";
+import { DialogProvider } from "./DialogProvider";
 import { api } from "../bridge";
 import { ClipboardGetText, ClipboardSetText } from "../../wailsjs/runtime/runtime";
 import type { Tab } from "../types";
@@ -59,9 +60,9 @@ const tab: Tab = {
   proposal: null, chatBusy: false, executing: false, error: "",
 };
 const renderTerminal = (options: Partial<Parameters<typeof TerminalPane>[0]> = {}) =>
-  render(<TerminalPane tab={tab} active fontSize={14} theme="dark"
+  render(<DialogProvider><TerminalPane tab={tab} active fontSize={14} theme="dark"
     autoCopySelection rightClickPaste confirmMultilinePaste
-    onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} {...options} />);
+    onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} {...options} /></DialogProvider>);
 
 beforeEach(() => {
   refs.terms.length = 0;
@@ -88,9 +89,9 @@ test("copies selected text on left mouse release, but not when disabled", async 
   fireEvent.mouseUp(document, { button: 0 });
   await waitFor(() => expect(ClipboardSetText).toHaveBeenCalledWith("root@server:~"));
   vi.mocked(ClipboardSetText).mockClear();
-  rerender(<TerminalPane tab={tab} active fontSize={14} theme="dark"
+  rerender(<DialogProvider><TerminalPane tab={tab} active fontSize={14} theme="dark"
     autoCopySelection={false} rightClickPaste confirmMultilinePaste
-    onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />);
+    onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} /></DialogProvider>);
   fireEvent.mouseDown(pane, { button: 0 });
   fireEvent.mouseUp(document, { button: 0 });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
@@ -104,9 +105,11 @@ test("right click pastes via terminal input, multi-line paste requires confirmat
   await waitFor(() => expect(refs.terms[0].paste).toHaveBeenCalledWith("echo hello"));
   expect(api.WriteTerminal).toHaveBeenCalled();
   vi.mocked(ClipboardGetText).mockResolvedValueOnce("pwd\nrm -rf example");
-  vi.stubGlobal("confirm", vi.fn(() => false));
   fireEvent.contextMenu(pane);
-  await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(1));
+  expect(await screen.findByRole("dialog", { name: "确认粘贴多行命令" })).toBeTruthy();
+  expect(screen.getByText(/pwd/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(refs.terms[0].paste).toHaveBeenCalledTimes(1);
 });
 
@@ -115,4 +118,17 @@ test("mouse reporting in interactive applications is not overridden", async () =
   refs.terms[0].modes.mouseTrackingMode = "vt200";
   fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
   expect(ClipboardGetText).not.toHaveBeenCalled();
+});
+
+test("multiline confirmation only pastes to the original connected tab", async () => {
+  vi.mocked(ClipboardGetText).mockResolvedValueOnce("pwd\nwhoami");
+  const { container, rerender } = renderTerminal();
+  fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
+  expect(await screen.findByRole("dialog", { name: "确认粘贴多行命令" })).toBeTruthy();
+  rerender(<DialogProvider><TerminalPane tab={tab} active={false} fontSize={14} theme="dark"
+    autoCopySelection rightClickPaste confirmMultilinePaste
+    onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} /></DialogProvider>);
+  fireEvent.click(screen.getByRole("button", { name: "确认粘贴" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(refs.terms[0].paste).not.toHaveBeenCalled();
 });
