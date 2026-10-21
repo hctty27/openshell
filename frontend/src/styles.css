@@ -1486,3 +1486,217 @@ kbd {
     padding-right: 13px;
   }
 }
+
+/* Xshell-style tree and docked session properties */
+.session-list {
+  min-height: 105px;
+  padding: 0 8px 9px;
+}
+.tree-root,
+.group-heading,
+.session-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: 5px;
+}
+.tree-root {
+  height: 32px;
+  gap: 0;
+  color: var(--text-secondary);
+}
+.tree-root.selected,
+.group-heading.selected,
+.session-row.selected {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.tree-root-label {
+  flex: 1;
+  justify-content: flex-start;
+  min-width: 0;
+  gap: 7px;
+  padding: 5px 1px;
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+}
+.tree-root-label span,
+.group-heading span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tree-root > small {
+  color: var(--text-muted);
+  padding-right: 9px;
+  font-size: 10px;
+}
+.tree-toggle {
+  flex: 0 0 23px;
+  padding: 5px;
+  color: var(--text-muted);
+}
+.tree-groups {
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+  margin-left: 11px;
+}
+.group {
+  margin-bottom: 2px;
+}
+.group-heading {
+  height: 30px;
+}
+.group-heading > button:first-child {
+  min-width: 0;
+}
+.group-heading.selected > button:first-child,
+.tree-root.selected > .tree-root-label {
+  color: var(--accent);
+}
+.session-row {
+  min-height: 30px;
+  margin: 1px 0 1px 17px;
+  border: 1px solid transparent;
+}
+.session-row.active .session-open::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent-fill);
+  margin-left: auto;
+}
+.session-open {
+  padding: 6px 5px 6px 7px;
+  gap: 8px;
+}
+.session-open strong {
+  max-width: none;
+  font-size: 12px;
+}
+.session-open small {
+  display: none;
+}
+.session-row > button:last-of-type {
+  width: 22px;
+  min-width: 22px;
+  opacity: 0;
+}
+.session-row:hover > button:last-of-type,
+.session-row.selected > button:last-of-type,
+.session-row > button:last-of-type:focus-visible {
+  opacity: 1;
+}
+.session-row .row-menu {
+  top: 28px;
+}
+.details-resizer {
+  flex-shrink: 0;
+  height: 6px;
+  border-top: 1px solid var(--border);
+  cursor: row-resize;
+  position: relative;
+}
+.details-resizer::after {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 2px;
+  margin: 1px auto;
+  border-radius: 3px;
+  background: var(--text-muted);
+  opacity: 0.35;
+}
+.details-resizer:hover {
+  background: var(--accent-soft);
+}
+.session-details {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 170px;
+  max-height: 55vh;
+  background: var(--panel);
+  overflow: hidden;
+}
+.details-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 35px;
+  padding: 0 16px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+}
+.details-heading small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.details-body {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 13px;
+}
+.details-identity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--info);
+  padding-bottom: 11px;
+  min-width: 0;
+}
+.details-identity strong {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.details-properties {
+  margin: 0;
+  font-size: 11px;
+}
+.details-properties > div {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 5px;
+  min-height: 27px;
+  align-items: start;
+}
+.details-properties dt {
+  color: var(--text-muted);
+}
+.details-properties dd {
+  margin: 0;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.details-actions {
+  display: flex;
+  gap: 7px;
+  border-top: 1px solid var(--border);
+  padding: 10px 13px;
+  flex-shrink: 0;
+}
+.details-actions button {
+  height: 28px;
+  flex: 1;
+  border: 1px solid var(--border);
+  font-size: 11px;
+}
+.details-actions button:first-child {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+@media (max-height: 650px) {
+  .session-details { max-height: 44vh; }
+  .brand { height: 58px; }
+}
