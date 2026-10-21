@@ -9,8 +9,10 @@ on:
 permissions:
   contents: read
 
+# New PR commits supersede outdated PR checks. Every main push keeps its
+# own group so a release-marker build cannot be displaced by a later push.
 concurrency:
-  group: openshell-ci-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -75,6 +77,11 @@ jobs:
       - name: Run frontend unit tests
         working-directory: frontend
         run: npm test -- --run
+      - name: Cache Playwright browser binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json') }}
       - name: Verify compact layout in Chromium
         working-directory: frontend
         run: |
