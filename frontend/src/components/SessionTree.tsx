@@ -109,7 +109,6 @@ export default function SessionTree(p: Props) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <kbd>/</kbd>
       </div>
       <div className="session-list">
         <div className={"tree-root" + (selected.kind === "root" ? " selected" : "")}>
@@ -136,22 +135,27 @@ export default function SessionTree(p: Props) {
           <div key={g.id} className="group">
             <div className={"group-heading" + (selected.kind === "group" && selected.id === g.id ? " selected" : "")}>
               <button
-                aria-pressed={selected.kind === "group" && selected.id === g.id}
-                onClick={() => {
-                  setSelected({ kind: "group", id: g.id });
-                  setCollapsed((old) => ({ ...old, [g.id]: !old[g.id] }));
-                  setMenu("");
-                }}
+                className="tree-toggle"
+                title={collapsed[g.id] ? "展开分组 " + g.name : "折叠分组 " + g.name}
+                onClick={() => setCollapsed((old) => ({ ...old, [g.id]: !old[g.id] }))}
               >
                 <ChevronDown
                   size={13}
                   className={collapsed[g.id] ? "rotated" : ""}
                 />
+              </button>
+              <button
+                className="group-select"
+                aria-label={"选中分组 " + g.name}
+                aria-pressed={selected.kind === "group" && selected.id === g.id}
+                onClick={() => {
+                  setSelected({ kind: "group", id: g.id });
+                  setMenu("");
+                }}
+              >
                 <Folder size={14} />
                 <span>{g.name}</span>
-                <small>
-                  {visible.filter((s) => s.groupId === g.id).length}
-                </small>
+                <small>{visible.filter((s) => s.groupId === g.id).length}</small>
               </button>
               {g.id && (
                 <button
@@ -273,7 +277,7 @@ export default function SessionTree(p: Props) {
       <section className="session-details" style={{ height: detailsHeight }} data-testid="session-details">
         <div className="details-heading">
           <span>详细信息</span>
-          <small>{selectedSession ? "SSH" : "文件夹"}</small>
+          <small>{selectedSession ? "SSH" : selectedGroup ? "文件夹" : "目录"}</small>
         </div>
         <div className="details-body">
           <div className="details-identity">
