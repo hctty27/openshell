@@ -53,7 +53,7 @@ jobs:
         shell: pwsh
         run: |
           $tag = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME } else { (Get-Content ".github/release-version.txt" -Raw).Trim() }
-          if ($tag -notmatch "^v[0-9]+\\.[0-9]+\\.[0-9]+$") { throw "Invalid release version: $tag" }
+          if ($tag -notmatch "^v[0-9]+\.[0-9]+\.[0-9]+$") { throw "Invalid release version: $tag" }
           $version = $tag.Substring(1)
           "APP_VERSION=$version" >> $env:GITHUB_ENV
           "VITE_APP_VERSION=$version" >> $env:GITHUB_ENV
