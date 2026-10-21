@@ -679,6 +679,10 @@ kbd {
 }
 .xterm {
   height: 100%;
+  background-color: var(--surface);
+}
+.xterm .xterm-viewport {
+  background-color: var(--surface);
 }
 .xterm .xterm-scrollable-element > .scrollbar.vertical {
   opacity: 1;
@@ -1070,9 +1074,10 @@ kbd {
     11px/1.7 Consolas,
     monospace;
   min-height: 75px;
-  background: var(--accent-fill);
-  border-color: var(--accent-border);
-  color: var(--accent);
+  background: var(--field-bg);
+  border-color: var(--border);
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
   padding: 9px;
 }
 .inline-field {

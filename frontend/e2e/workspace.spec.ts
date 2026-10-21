@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
       fontSize: "14",
       theme: localStorage.getItem("fixture-theme") || "dark",
       activeProfile: "",
-      version: "0.1.4",
+      version: "0.1.5",
     };
     const emit = (name: string, value: any) =>
       (listeners[name] ?? []).forEach((fn) => fn(value));
@@ -159,6 +159,48 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   await page.getByLabel("发送给 AI").fill("检查服务器目录");
   await page.getByTitle("发送消息").click();
   await expect(page.getByText("待确认的命令")).toBeVisible();
+  for (const theme of ["light", "dark"]) {
+    await page.getByTitle("设置", { exact: true }).click();
+    await page
+      .getByRole("combobox", { name: "主题", exact: true })
+      .selectOption(theme);
+    await page
+      .getByRole("button", { name: "关闭", exact: true })
+      .last()
+      .click();
+    const editor = page.getByRole("textbox", { name: "待执行命令" });
+    for (const action of ["idle", "hover", "focus"]) {
+      if (action === "hover") await editor.hover();
+      if (action === "focus") await editor.focus();
+      const contrast = await editor.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const luminance = (color: string) => {
+          const channels = color
+            .match(/[\d.]+/g)!
+            .slice(0, 3)
+            .map(Number)
+            .map((value) => {
+              const v = value / 255;
+              return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+            });
+          return (
+            channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+          );
+        };
+        const foreground = luminance(style.color),
+          background = luminance(style.backgroundColor);
+        return (
+          (Math.max(foreground, background) + 0.05) /
+          (Math.min(foreground, background) + 0.05)
+        );
+      });
+      expect(
+        contrast,
+        `${theme} command editor ${action}`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+    await page.screenshot({ path: `../tmp/command-${theme}.png` });
+  }
   expect(await page.evaluate(() => (window as any).__executions.length)).toBe(
     0,
   );
@@ -249,6 +291,10 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
     .getByRole("combobox", { name: "主题", exact: true })
     .selectOption("light");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.locator(".terminal-pane.active .xterm-viewport")).toHaveCSS(
+    "background-color",
+    "rgb(250, 251, 253)",
+  );
   await page.getByRole("button", { name: "保存外观" }).click();
   await expect(page.getByText("外观已保存")).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
