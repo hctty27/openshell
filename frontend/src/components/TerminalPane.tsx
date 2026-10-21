@@ -6,6 +6,7 @@ import { api, listen, errorText } from "../bridge";
 import { ClipboardGetText, ClipboardSetText } from "../../wailsjs/runtime/runtime";
 import type { Tab, Ref, Theme } from "../types";
 import { terminalThemes } from "../terminalThemes";
+import { useDialogs } from "./DialogProvider";
 interface Props {
   tab: Tab;
   active: boolean;
@@ -20,6 +21,9 @@ interface Props {
   onSelection(text: string): void;
 }
 export default function TerminalPane(p: Props) {
+  const dialogs = useDialogs();
+  const dialogsRef = useRef(dialogs);
+  dialogsRef.current = dialogs;
   const container = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const fit = useRef<FitAddon | null>(null);
@@ -28,6 +32,7 @@ export default function TerminalPane(p: Props) {
   useEffect(() => {
     const ref = p.tab.ref;
     if (!ref || p.tab.status !== "connected" || !container.current) return;
+    let pastePending = false;
     let disposed = false,
       pending = 0,
       overloaded = false;
@@ -103,17 +108,33 @@ export default function TerminalPane(p: Props) {
       if (term.modes.mouseTrackingMode !== "none") return;
       event.preventDefault();
       event.stopPropagation();
+      if (pastePending) return;
+      pastePending = true;
       void (async () => {
         try {
           const text = await ClipboardGetText();
           if (disposed || !callbacks.current.active || !callbacks.current.rightClickPaste || !text) return;
-          if (callbacks.current.confirmMultilinePaste && /[\r\n]/.test(text) &&
-              !window.confirm("剪贴板包含多行内容，粘贴到远程终端可能立即执行命令。确定粘贴吗？")) return;
-          if (disposed || !callbacks.current.active || !callbacks.current.rightClickPaste) return;
+          if (callbacks.current.confirmMultilinePaste && /[\r\n]/.test(text)) {
+            const accepted = await dialogsRef.current.confirm({
+              title: "确认粘贴多行命令",
+              description: `目标服务器：${callbacks.current.tab.session.name}。检测到剪贴板包含多行内容，粘贴后可能立即执行命令。`,
+              preview: text,
+              tone: "warning",
+              confirmLabel: "确认粘贴",
+            });
+            if (!accepted) return;
+          }
+          const currentRef = callbacks.current.tab.ref;
+          if (disposed || !callbacks.current.active || !callbacks.current.rightClickPaste ||
+              currentRef?.sessionId !== ref.sessionId || currentRef?.generation !== ref.generation) {
+            return;
+          }
           term.focus();
           term.paste(text);
         } catch (error) {
-          callbacks.current.onNotice(errorText(error));
+          if (!disposed) callbacks.current.onNotice(errorText(error));
+        } finally {
+          pastePending = false;
         }
       })();
     };
