@@ -564,7 +564,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           (tab.status === "connected" || tab.status === "connecting"),
       );
       setNotice(
-        message(
+        tr(
           connected && connectionChanged
             ? "common:sessionConnectionChangesOnNextReconnect"
             : "common:sessionSaved",
