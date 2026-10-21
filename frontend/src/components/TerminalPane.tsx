@@ -10,6 +10,7 @@ interface Props {
   active: boolean;
   fontSize: number;
   theme: Theme;
+  commandFocusVersion?: number;
   onError(text: string): void;
   onSelection(text: string): void;
 }
@@ -122,6 +123,9 @@ export default function TerminalPane(p: Props) {
       });
     }
   }, [p.active]);
+  useEffect(() => {
+    if (p.active && p.commandFocusVersion) terminal.current?.focus();
+  }, [p.commandFocusVersion]);
   return (
     <div
       className={`terminal-pane ${p.active ? "active" : ""}`}
