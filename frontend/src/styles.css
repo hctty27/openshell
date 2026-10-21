@@ -21,7 +21,7 @@
   --danger-soft: #914b4d14;
   --danger-border: #954a4c66;
   --hover: #ffffff09;
-  --overlay: #04090fd4;
+  --overlay: #04090fa6;
   --terminal-overlay: #0b1017df;
   --scrollbar: #53657b;
   --terminal-scroll-track: #8194aa12;
@@ -49,7 +49,7 @@
   --danger-soft: #ab34470c;
   --danger-border: #ab344740;
   --hover: #1c344609;
-  --overlay: #e3e9f0bb;
+  --overlay: #e3e9f080;
   --terminal-overlay: #fafbfde8;
   --scrollbar: #8795a7;
   --terminal-scroll-track: #52647e12;
@@ -1108,7 +1108,7 @@ kbd {
   position: fixed;
   inset: 0;
   background: var(--overlay);
-  backdrop-filter: blur(5px);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
