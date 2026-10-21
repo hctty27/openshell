@@ -2317,6 +2317,20 @@ select.mode-select {
 }
 
 
+/* Keep the SSH session editor at its original content-driven height. */
+.settings-dialog--session .settings-layout {
+  display: block;
+  flex: none;
+}
+
+.settings-dialog--session h2 {
+  margin-top: 0;
+}
+
+.settings-dialog--session .settings-body {
+  overflow: visible;
+}
+
 /* Workspace settings: fixed sidebar and independently scrollable content. */
 .settings-dialog--settings {
   width: 800px;
