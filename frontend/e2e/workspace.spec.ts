@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
       fontSize: "14",
       theme: localStorage.getItem("fixture-theme") || "dark",
       activeProfile: "",
-      version: "0.1.5",
+      version: "0.1.6",
     };
     const emit = (name: string, value: any) =>
       (listeners[name] ?? []).forEach((fn) => fn(value));
