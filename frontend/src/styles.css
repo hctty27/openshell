@@ -1,5 +1,5 @@
 :root {
-  --compact-status-height: 27px;
+  --chrome-bar-height: 30px;
   --surface: #0b1017;
   --panel: #101720;
   --raised: #121c28;
@@ -373,7 +373,7 @@ kbd {
   padding: 6px;
 }
 .sidebar-footer {
-  height: var(--compact-status-height);
+  height: var(--chrome-bar-height);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -416,7 +416,7 @@ kbd {
   background: var(--surface);
 }
 .workspace-header {
-  height: 46px;
+  height: var(--chrome-bar-height);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -426,7 +426,9 @@ kbd {
   flex-shrink: 0;
 }
 .workspace-header > button {
-  padding: 5px;
+  width: 24px;
+  height: 24px;
+  padding: 3px;
   color: var(--text-muted);
 }
 .workspace-label {
@@ -451,12 +453,13 @@ kbd {
   letter-spacing: 1px;
 }
 .tab-strip {
-  height: 39px;
+  height: var(--chrome-bar-height);
   display: flex;
   align-items: stretch;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   flex-shrink: 0;
 }
 .terminal-tab {
@@ -474,7 +477,8 @@ kbd {
   justify-content: start;
   flex: 1;
   min-width: 0;
-  padding: 11px 12px;
+  height: 100%;
+  padding: 4px 12px;
   border-radius: 0;
 }
 .terminal-tab > button:first-child > span:nth-child(2) {
@@ -617,7 +621,7 @@ kbd {
   font-size: 9px;
 }
 .workspace-status {
-  height: var(--compact-status-height);
+  height: var(--chrome-bar-height);
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -631,6 +635,10 @@ kbd {
   display: flex;
   align-items: center;
   gap: 7px;
+  white-space: nowrap;
+}
+.workspace-status .workspace-connection {
+  margin-left: auto;
 }
 .status-sep {
   height: 9px;
@@ -639,7 +647,7 @@ kbd {
   margin: 0 3px;
 }
 .terminal-toolbar {
-  height: 33px;
+  height: var(--chrome-bar-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -661,7 +669,9 @@ kbd {
   gap: 3px;
 }
 .terminal-toolbar button {
-  padding: 5px;
+  width: 25px;
+  height: 25px;
+  padding: 4px;
 }
 .terminal-container {
   position: relative;
@@ -1628,7 +1638,7 @@ kbd {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 31px;
+  height: var(--chrome-bar-height);
   padding: 0 16px;
   flex-shrink: 0;
   color: var(--text-secondary);
@@ -1714,7 +1724,7 @@ kbd {
 /* Quick commands live outside the xterm viewport, preserving terminal height measurements. */
 .quick-command-bar {
   min-width: 0;
-  min-height: var(--compact-status-height);
+  min-height: var(--chrome-bar-height);
   padding: 2px 9px;
   display: flex;
   align-items: center;
@@ -1725,8 +1735,8 @@ kbd {
 }
 .quick-command-manage,
 .quick-command-button {
-  height: 21px;
-  min-height: 21px;
+  height: 24px;
+  min-height: 24px;
   max-width: 220px;
   padding: 1px 9px;
   line-height: 17px;
@@ -1751,10 +1761,10 @@ kbd {
   scrollbar-color: var(--scrollbar) transparent;
 }
 .quick-command-bar.single {
-  height: var(--compact-status-height);
+  height: var(--chrome-bar-height);
 }
 .quick-command-list.single {
-  height: 21px;
+  height: 24px;
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;

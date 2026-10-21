@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
       fontSize: "14",
       theme: localStorage.getItem("fixture-theme") || "dark",
       activeProfile: "",
-      version: "0.1.9",
+      version: "0.1.11",
     };
     const emit = (name: string, value: any) =>
       (listeners[name] ?? []).forEach((fn) => fn(value));
@@ -351,6 +351,10 @@ test("compact sidebar removes detail actions and aligns single-row footer height
     const box = (selector: string) =>
       document.querySelector(selector)!.getBoundingClientRect();
     return {
+      header: box(".workspace-header").height,
+      tabs: box(".tab-strip").height,
+      server: box(".terminal-toolbar").height,
+      detailsHeading: box(".details-heading").height,
       left: box(".sidebar-footer").height,
       right: box(".workspace-status").height,
       quick: box(".quick-command-bar").height,
@@ -361,17 +365,27 @@ test("compact sidebar removes detail actions and aligns single-row footer height
       detail: box(".details-properties > div").height,
       leftBottom: box(".sidebar-footer").bottom,
       rightBottom: box(".workspace-status").bottom,
+      statusLeft: box(".workspace-version").x,
+      statusRight: box(".workspace-connection").x,
+      statusRightEdge: box(".workspace-connection").right,
+      footerRightEdge: box(".workspace-status").right,
     };
   });
-  expect(geometry.left).toBe(27);
-  expect(geometry.right).toBe(27);
-  expect(geometry.quick).toBe(27);
-  expect(geometry.quickButton).toBe(21);
+  expect(geometry.header).toBe(30);
+  expect(geometry.tabs).toBe(30);
+  expect(geometry.server).toBe(30);
+  expect(geometry.detailsHeading).toBe(30);
+  expect(geometry.left).toBe(30);
+  expect(geometry.right).toBe(30);
+  expect(geometry.quick).toBe(30);
+  expect(geometry.quickButton).toBe(24);
   expect(geometry.root).toBe(26);
   expect(geometry.group).toBe(26);
   expect(geometry.session).toBe(26);
   expect(geometry.detail).toBe(21);
   expect(Math.abs(geometry.leftBottom - geometry.rightBottom)).toBeLessThan(1);
+  expect(geometry.statusRight).toBeGreaterThan(geometry.statusLeft);
+  expect(geometry.footerRightEdge - geometry.statusRightEdge).toBeLessThan(20);
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("combobox", { name: "快速命令栏布局" }).selectOption("multi");
