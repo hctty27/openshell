@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - main
+    paths:
+      - ".github/release-version.txt"
 
 permissions:
   contents: read
@@ -17,14 +21,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Validate semantic version tag
+      - uses: actions/checkout@v4
+      - name: Validate semantic version
         shell: bash
         run: |
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-            echo "::error::Release tag must look like v0.1.14"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="$GITHUB_REF_NAME"
+          else
+            version="$(tr -d '\r\n' < .github/release-version.txt)"
+          fi
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::Release version must look like v0.1.15"
             exit 1
           }
-      - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -40,10 +49,12 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Set build version from tag
+      - name: Set build version
         shell: pwsh
         run: |
-          $version = $env:GITHUB_REF_NAME.Substring(1)
+          $tag = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME } else { (Get-Content ".github/release-version.txt" -Raw).Trim() }
+          if ($tag -notmatch "^v[0-9]+\\.[0-9]+\\.[0-9]+$") { throw "Invalid release version: $tag" }
+          $version = $tag.Substring(1)
           "APP_VERSION=$version" >> $env:GITHUB_ENV
           "VITE_APP_VERSION=$version" >> $env:GITHUB_ENV
           $config = Get-Content wails.json -Raw | ConvertFrom-Json
@@ -152,5 +163,19 @@ jobs:
             Write-Host "Release $tag already exists; not replacing published binaries."
             exit 0
           }
-          gh release create $tag "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe" "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" --repo $env:GITHUB_REPOSITORY --verify-tag --title "OpenShell $tag" --generate-notes --notes "Windows x64 安装版与便携版；未经代码签名。"
+          $releaseArgs = @(
+            "release", "create", $tag,
+            "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe",
+            "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip",
+            "--repo", $env:GITHUB_REPOSITORY,
+            "--title", "OpenShell $tag",
+            "--generate-notes",
+            "--notes", "Windows x64 安装版与便携版；未经代码签名。"
+          )
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $releaseArgs += "--verify-tag"
+          } else {
+            $releaseArgs += @("--target", $env:GITHUB_SHA)
+          }
+          & gh @releaseArgs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
