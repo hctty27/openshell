@@ -21,7 +21,7 @@ export function visibleQuickCommands(commands: QuickCommand[], tab?: Tab) {
 export default function QuickCommandBar({ tab, commands, layout, onManage, onRun }: Props) {
   const visible = visibleQuickCommands(commands, tab);
   return (
-    <div className="quick-command-bar" aria-label="快速命令栏">
+    <div className={`quick-command-bar ${layout}`} aria-label="快速命令栏">
       <button
         type="button"
         className="quick-command-manage"
