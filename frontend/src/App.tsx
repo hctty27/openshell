@@ -76,6 +76,7 @@ function Workspace() {
     [dialog, setDialog] = useState<{
       kind: "session" | "settings";
       session?: Session;
+      groupID?: string;
     } | null>(null),
     [toast, setToast] = useState(""),
     [aiWidth, setAIWidth] = useState(370),
@@ -707,6 +708,7 @@ function Workspace() {
               setDialog({ kind: "session", session });
             }}
             onDelete={removeSession}
+            onCreateInGroup={(groupID) => setDialog({ kind: "session", groupID })}
             onGroup={() => group()}
             onRenameGroup={group}
             onDeleteGroup={deleteGroup}
@@ -999,7 +1001,7 @@ function Workspace() {
       )}
       {dialog && (
         <SettingsDialog
-          key={`${dialog.kind}-${dialog.session?.id ?? ""}`}
+          key={`${dialog.kind}-${dialog.session?.id ?? dialog.groupID ?? ""}`}
           {...dialog}
           groups={state.groups}
           profiles={state.profiles}

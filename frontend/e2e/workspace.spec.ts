@@ -416,12 +416,15 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   await expect(page.locator(".details-properties dd").first()).toHaveText(
     "紧凑测试",
   );
-  await page.getByTitle("管理 紧凑测试").click();
-  await expect(
-    page
-      .locator(".session-row .row-menu")
-      .getByRole("button", { name: "编辑" }),
-  ).toBeVisible();
+  await expect(page.locator(".tree-root > small, .group-heading small")).toHaveCount(0);
+  await expect(page.getByTitle("管理 紧凑测试")).toHaveCount(0);
+  await page.getByRole("button", { name: "选中会话 紧凑测试" }).click({ button: "right" });
+  const contextMenu = page.getByRole("menu", { name: "会话操作" });
+  await expect(contextMenu.getByRole("menuitem", { name: "编辑会话" })).toBeVisible();
+  await expect(contextMenu).toHaveCSS("position", "fixed");
+  expect(await contextMenu.evaluate((element) => element.parentElement === document.body)).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(contextMenu).toHaveCount(0);
 
   await page.getByRole("button", { name: "选中会话 紧凑测试" }).dblclick();
   await page.getByRole("button", { name: "信任并连接" }).click();
