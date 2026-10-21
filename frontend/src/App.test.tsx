@@ -190,3 +190,65 @@ test("the tab plus opens a session list and reuses an already opened SSH tab", a
   expect(screen.getAllByTitle("关闭 us")).toHaveLength(1);
   expect(api.Connect).toHaveBeenCalledTimes(1);
 });
+
+test("double-clicking a terminal tab opens an independent SSH session beside it with the same name", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [
+      {
+        id: "us-id",
+        groupId: "",
+        name: "us",
+        host: "server.example.com",
+        port: 22,
+        username: "root",
+        authType: "key",
+        privateKeyPath: "",
+        credentialRef: "saved",
+      },
+      {
+        id: "eu-id",
+        groupId: "",
+        name: "eu",
+        host: "another.example.com",
+        port: 22,
+        username: "root",
+        authType: "key",
+        privateKeyPath: "",
+        credentialRef: "saved",
+      },
+    ],
+    groups: [],
+    profiles: [],
+    fontSize: "14",
+    activeProfile: "",
+    version: "0.1.18",
+  });
+  await act(async () => {
+    render(<App />);
+  });
+
+  fireEvent.click(screen.getByTitle("打开会话列表"));
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 us" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+
+  fireEvent.click(screen.getByTitle("打开会话列表"));
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 eu" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
+
+  const tabNames = () =>
+    Array.from(document.querySelectorAll(".terminal-tab > button:first-child"))
+      .map((element) => element.textContent);
+  expect(tabNames()).toEqual(["us", "eu"]);
+
+  fireEvent.doubleClick(screen.getAllByTitle("双击复制会话")[0]);
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(3));
+
+  expect(tabNames()).toEqual(["us", "us", "eu"]);
+  expect(screen.getAllByTitle("关闭 us")).toHaveLength(2);
+  expect(document.querySelectorAll(".terminal-tab")[1].classList.contains("active")).toBe(true);
+
+  const calls = vi.mocked(api.Connect).mock.calls;
+  expect(calls[2][1]).toBe("us-id");
+  expect(calls[2][0]).not.toBe(calls[0][0]);
+});

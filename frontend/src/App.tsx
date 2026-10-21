@@ -327,7 +327,7 @@ function Workspace() {
       notify(e);
     }
   };
-  const open = (session: Session) => {
+  const open = (session: Session, afterTabID?: string) => {
     const tab: Tab = {
       id: id(),
       session,
@@ -341,7 +341,13 @@ function Workspace() {
       executing: false,
       error: "",
     };
-    setTabs((old) => [...old, tab]);
+    setTabs((old) => {
+      const index = afterTabID
+        ? old.findIndex((item) => item.id === afterTabID)
+        : -1;
+      if (index < 0) return [...old, tab];
+      return [...old.slice(0, index + 1), tab, ...old.slice(index + 1)];
+    });
     setActiveID(tab.id);
     if (session.authType === "password" && !session.credentialRef)
       setLogin({ tab, secret: "" });
@@ -750,7 +756,11 @@ function Workspace() {
               key={tab.id}
               className={`terminal-tab ${activeID === tab.id ? "active" : ""}`}
             >
-              <button onClick={() => setActiveID(tab.id)}>
+              <button
+                title="双击复制会话"
+                onClick={() => setActiveID(tab.id)}
+                onDoubleClick={() => open(tab.session, tab.id)}
+              >
                 <span
                   className={`status-dot ${tab.status === "connected" ? "" : tab.status === "connecting" ? "connecting" : "offline"}`}
                 />
