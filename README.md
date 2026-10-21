@@ -1,14 +1,14 @@
 # OpenShell
 
-<img src="build/appicon.png" alt="OpenShell 应用图标" width="88" height="88" />
+<img src="build/openshell-icon.svg" alt="OpenShell 应用图标" width="88" height="88" />
 
 轻量的 Windows SSH 客户端，集成会话管理、多标签终端和可自定义 API 的 AI 助手。
 
-**图标：** `build/appicon.png` 为 AI 主题图标；Windows 打包前使用 `python scripts/generate_app_icons.py` 生成多尺寸 ICO 和 PNG 图标（需安装 Pillow）。
+**图标：** 极简终端 + AI 星芒；`build/openshell-icon.svg` 为可编辑矢量源稿，`build/appicon.png` 为多尺寸 ICO 的 PNG 来源；Windows 构建使用 `python scripts/generate_app_icons.py`（需 Pillow）。
 
 **项目地址：** https://github.com/hctty27/openshell
 
-**当前版本：** 0.1.11（测试版）
+**当前版本：** 0.1.12（测试版）
 
 支持浅色/深色主题：设置 → 外观 → 主题，点击“保存外观”后重启保留。终端采用固定 6px 细滚动条，并修复末行裁切。
 
@@ -24,7 +24,7 @@
 
 ## 使用
 
-1. 从 [Releases](https://github.com/hctty27/openshell/releases) 下载 Windows x64 的安装版（Setup.exe）或便携版（ZIP）。便携版解压后运行 **OpenShell.exe**。
+1. 从 [Releases](https://github.com/hctty27/openshell/releases) 下载 Windows x64 的安装版（Setup.exe）或便携版（ZIP）。便携版解压后运行 **OpenShell-v0.1.12.exe**（文件名包含版本号，减少 Windows Explorer 旧图标缓存的影响）。
 2. 新建会话，填写主机、端口、用户名和认证信息；单击会话在左下方查看详情，双击连接。
 3. 首次连接时核对服务器指纹，确认后继续。
 4. 设置 → AI API：填写接口地址、密钥和准确的模型 ID，测试连接后保存。

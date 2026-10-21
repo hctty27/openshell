@@ -1,14 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="OpenShell AI icon">
-<defs>
-<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#1256AC"/><stop offset=".45" stop-color="#071B46"/><stop offset="1" stop-color="#030C25"/></linearGradient>
-<linearGradient id="orbit" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#70FFFF"/><stop offset=".42" stop-color="#13D5F6"/><stop offset=".68" stop-color="#7477F7"/><stop offset="1" stop-color="#B04FFB"/></linearGradient>
-<linearGradient id="star" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#A3FFFC"/><stop offset=".65" stop-color="#32CFFA"/><stop offset="1" stop-color="#C46FFC"/></linearGradient>
-</defs>
-<rect x="24" y="24" width="976" height="976" rx="180" fill="url(#bg)" stroke="#147EFF" stroke-width="11"/>
-<path d="M215 735 V325 Q215 258 287 264 L680 303 Q742 310 742 372 V680" fill="none" stroke="#13AAFF" stroke-width="61" stroke-linecap="round"/>
-<path d="M215 735 V325 Q215 258 287 264 L680 303 Q742 310 742 372 V680" fill="none" stroke="url(#orbit)" stroke-width="41" stroke-linecap="round"/>
-<path d="M344 467 L427 540 L344 612 M475 628 H558" fill="none" stroke="#F6FEFF" stroke-width="55" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M177 669 Q90 819 269 864 C438 925 703 778 833 623 C967 462 820 358 779 355" fill="none" stroke="url(#orbit)" stroke-width="72" stroke-linecap="round"/>
-<path d="M787 143 Q811 285 935 303 Q806 329 787 457 Q761 326 642 303 Q764 284 787 143Z" fill="url(#star)"/>
-<text x="700" y="899" font-family="Segoe UI,Arial,sans-serif" font-size="172" font-weight="800" fill="#97EEFF">AI</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="OpenShell — SSH Terminal with AI">
+  <rect x="54" y="54" width="916" height="916" rx="196" fill="#09234D"/>
+  <path d="M676 300 H317 Q240 300 240 377 V722 Q240 799 317 799 H724 Q801 799 801 722 V523" fill="none" stroke="#F9FBFE" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M359 485 L444 555 L359 625" fill="none" stroke="#F9FBFE" stroke-width="63" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M523 649 H636" fill="none" stroke="#F9FBFE" stroke-width="63" stroke-linecap="round"/>
+  <path d="M814 242 C826 307 865 346 931 358 C865 370 826 409 814 474 C802 409 763 370 697 358 C763 346 802 307 814 242 Z" fill="#33DBC4"/>
 </svg>
