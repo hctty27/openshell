@@ -2009,3 +2009,87 @@ select.mode-select {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+
+
+/* Shared in-app confirmation, input and command-preview dialogs. */
+.app-dialog {
+  color: var(--text-primary);
+  background: var(--raised);
+  width: min(440px, calc(100vw - 32px));
+  max-height: min(85vh, 680px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 24px 75px #0005;
+  overflow: auto;
+}
+.app-dialog::backdrop {
+  background: var(--overlay);
+  backdrop-filter: blur(3px);
+}
+.app-dialog form { padding: 24px; }
+.app-dialog__header { display: flex; align-items: center; gap: 12px; }
+.app-dialog__icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  border-radius: 10px;
+  background: var(--accent-soft);
+}
+.app-dialog--warning .app-dialog__icon { color: var(--warning); background: var(--info-soft); }
+.app-dialog--danger .app-dialog__icon { color: var(--danger); background: var(--danger-soft); }
+.app-dialog h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin: 0;
+}
+.app-dialog__close {
+  margin-left: auto;
+  padding: 6px;
+  color: var(--text-muted);
+}
+.app-dialog__description {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 16px 0 0;
+  overflow-wrap: anywhere;
+}
+.app-dialog__field { display: flex; flex-direction: column; gap: 8px; margin-top: 22px; }
+.app-dialog__field span { font-size: 12px; color: var(--text-secondary); }
+.app-dialog__field input { width: 100%; color: var(--text-primary); }
+.app-dialog__preview {
+  margin-top: 18px;
+  padding: 12px 14px;
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.app-dialog__preview pre {
+  margin: 0;
+  max-height: min(32vh, 240px);
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px/1.7 "Cascadia Mono", Consolas, monospace;
+  color: var(--text-primary);
+}
+.app-dialog__preview small { display: block; margin-top: 8px; color: var(--text-muted); }
+.app-dialog__actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 26px; }
+.app-dialog__actions button { min-height: 34px; padding: 7px 16px; font-weight: 500; }
+.app-dialog__secondary {
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--panel);
+}
+.app-dialog__primary { color: var(--on-accent); background: var(--accent-fill); }
+.app-dialog__primary:hover { color: var(--on-accent); filter: brightness(1.07); background: var(--accent-fill); }
+.app-dialog__primary--danger { color: white; background: #b93e4c; }
+.app-dialog__primary--danger:hover { color: white; background: #a72f3e; }
