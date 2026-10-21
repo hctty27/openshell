@@ -490,7 +490,7 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   await expect(page.locator(".quick-command-bar.multi")).toBeVisible();
 });
 
-test("AI header aligns with SSH tab strip and compact model leaves space for Send", async ({ page }) => {
+test("AI header aligns with SSH title bar and compact model leaves space for Send", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/");
 
@@ -513,7 +513,7 @@ test("AI header aligns with SSH tab strip and compact model leaves space for Sen
         document.querySelector(selector)!.getBoundingClientRect();
       const header = rect(".ai-header");
       const workspaceHeader = rect(".workspace-header");
-      const tabs = rect(".tab-strip");
+
       const mode = rect(".mode-select");
       const model = rect(".composer-model");
       const send = rect(".send-button");
@@ -523,7 +523,7 @@ test("AI header aligns with SSH tab strip and compact model leaves space for Sen
         headerTop: header.top,
         mainTop: workspaceHeader.top,
         headerBottom: header.bottom,
-        tabsBottom: tabs.bottom,
+        titleBottom: workspaceHeader.bottom,
         modelWidth: model.width,
         modeRight: mode.right,
         modelLeft: model.left,
@@ -534,9 +534,9 @@ test("AI header aligns with SSH tab strip and compact model leaves space for Sen
       };
     });
 
-    expect(positions.headerHeight).toBe(60);
+    expect(positions.headerHeight).toBe(30);
     expect(Math.abs(positions.headerTop - positions.mainTop)).toBeLessThanOrEqual(1);
-    expect(Math.abs(positions.headerBottom - positions.tabsBottom)).toBeLessThanOrEqual(1);
+    expect(Math.abs(positions.headerBottom - positions.titleBottom)).toBeLessThanOrEqual(1);
     expect(positions.modelWidth).toBeLessThanOrEqual(116);
     expect(positions.modelWidth).toBeGreaterThan(50);
     expect(positions.modelLeft).toBeGreaterThan(positions.modeRight);
