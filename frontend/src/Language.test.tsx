@@ -55,7 +55,7 @@ test("startup failure is retryable", async () => {
 test("language changes save immediately and failed saves retain the previous language", async () => {
   render(<App />);
   fireEvent.click(await screen.findByTitle("Settings"));
-  const select = screen.getByLabelText("Language / 语言");
+  const select = screen.getByLabelText("Interface language");
   fireEvent.change(select, { target: { value: "zh-CN" } });
   await waitFor(() => expect(i18n.language).toBe("zh-CN"));
   expect(api.SavePreference).toHaveBeenCalledWith("language", "zh-CN");
@@ -74,7 +74,7 @@ test("language selection is locked while persistence is pending", async () => {
   vi.mocked(api.SavePreference).mockReturnValueOnce(
     new Promise((r) => (resolve = r)),
   );
-  const select = screen.getByLabelText("Language / 语言") as HTMLSelectElement;
+  const select = screen.getByLabelText("Interface language") as HTMLSelectElement;
   fireEvent.change(select, { target: { value: "zh-CN" } });
   expect(select.disabled).toBe(true);
   expect(i18n.language).toBe("en");
