@@ -41,7 +41,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 50
     env:
-      APP_VERSION: "0.1.6"
+      APP_VERSION: "0.1.7"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -98,7 +98,7 @@ jobs:
       - name: Publish build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: OpenShell-v0.1.6-windows-x64
+          name: OpenShell-v0.1.7-windows-x64
           path: |
             dist/*.zip
             dist/*.exe
@@ -117,5 +117,5 @@ jobs:
             Write-Host "Release $tag already exists; not replacing published binaries."
             exit 0
           }
-          gh release create $tag "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe" "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "OpenShell $tag" --notes "新增 Xshell 风格树形会话管理：单击选中、双击连接、下方显示服务器详情和可拖动面板。Windows x64 便携版和安装版。此版本未进行代码签名。"
+          gh release create $tag "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe" "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "OpenShell $tag" --notes "新增终端底部快速命令栏：固定管理按钮、自定义命令、单行横向滚动或多行模式、会话/分组命令、执行确认与 SQLite 持久化。包含 Windows x64 便携版和安装版。此版本未进行代码签名。"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
