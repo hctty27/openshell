@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "OpenShell",
+  "outputfilename": "OpenShell",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Cheng"
+  },
+  "info": {
+    "companyName": "Cheng",
+    "productName": "OpenShell",
+    "productVersion": "0.1.2",
+    "copyright": "Copyright 2026 Cheng",
+    "comments": "OpenShell — lightweight SSH client with a customizable AI assistant"
+  }
+}
