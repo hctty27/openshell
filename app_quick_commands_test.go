@@ -34,7 +34,7 @@ func TestQuickCommandPreferencesPersistAndValidate(t *testing.T) {
     }
     for _, invalid := range []string{
         "not json",
-        `[{"id":"1","name":"test","command":"rm -rf /\\nwhoami","scope":"global","mode":"run"}]`,
+        `[{"id":"1","name":"test","command":"rm -rf /\nwhoami","scope":"global","mode":"run"}]`,
         `[{"id":"1","name":"test","command":"pwd","scope":"global","mode":"run"},{"id":"1","name":"second","command":"ls","scope":"global","mode":"run"}]`,
         `[{"id":"1","name":"test","command":"pwd","scope":"session","mode":"run"}]`,
     } {
