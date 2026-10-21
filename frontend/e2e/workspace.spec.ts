@@ -9,6 +9,10 @@ test.beforeEach(async ({ page }) => {
       groups: [],
       profiles: [],
       fontSize: "14",
+      language:
+        localStorage.getItem("fixture-language") ||
+        new URLSearchParams(location.search).get("language") ||
+        "zh-CN",
       theme: localStorage.getItem("fixture-theme") || "dark",
       activeProfile: "",
       version: "0.1.11",
@@ -44,6 +48,8 @@ test.beforeEach(async ({ page }) => {
           SavePreference: async (key: string, value: string) => {
             state[key] = value;
             if (key === "theme") localStorage.setItem("fixture-theme", value);
+            if (key === "language")
+              localStorage.setItem("fixture-language", value);
           },
           SaveAPI: async (req: any) => {
             const p = { ...req.profile, id: "api-1" };
@@ -124,7 +130,8 @@ test.beforeEach(async ({ page }) => {
               roundSteps: 1,
               limit: 1,
               allowChanges: false,
-              reason: "已达到本轮命令上限",
+              reason: "Round limit reached",
+              reasonCode: "roundLimit",
             };
             (window as any).__auto = snapshot;
             emit("auto:event", {
@@ -155,7 +162,8 @@ test.beforeEach(async ({ page }) => {
               ...(window as any).__auto,
               status: "completed",
               steps: 2,
-              reason: "任务已完成",
+              reason: "Task completed",
+              reasonCode: "taskCompleted",
             };
             emit("auto:event", { kind: "state", state: snapshot });
             return snapshot;
@@ -166,7 +174,8 @@ test.beforeEach(async ({ page }) => {
               state: {
                 ...(window as any).__auto,
                 status: "stopped",
-                reason: "已停止",
+                reason: "Stopped",
+                reasonCode: "taskStopped",
               },
             });
           },
@@ -281,7 +290,9 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   await page.getByLabel("发送给 AI").fill("再次检查");
   await page.getByTitle("发送消息").click();
   await page.getByTitle("停止任务").click();
-  await expect(page.getByText("已停止", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("已停止，不再执行后续命令", { exact: true }),
+  ).toBeVisible();
 
   expect(
     await page.evaluate(
@@ -304,7 +315,7 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   });
   await page.getByTitle("重新连接", { exact: true }).click();
   await expect(
-    page.getByRole("main").getByText("PTY 拒绝", { exact: true }),
+    page.getByRole("main").getByText("操作失败: PTY 拒绝", { exact: true }),
   ).toBeVisible();
   await page.getByTitle("收起 AI").click();
   await expect(page.getByText("AI 助手", { exact: true })).toHaveCount(0);
@@ -416,18 +427,35 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   await expect(page.locator(".details-properties dd").first()).toHaveText(
     "紧凑测试",
   );
-  await expect(page.locator(".tree-root > small, .group-heading small")).toHaveCount(0);
+  await expect(
+    page.locator(".tree-root > small, .group-heading small"),
+  ).toHaveCount(0);
   await expect(page.getByTitle("管理 紧凑测试")).toHaveCount(0);
-  await page.getByRole("button", { name: "选中会话 紧凑测试" }).click({ button: "right" });
+  await page
+    .getByRole("button", { name: "选中会话 紧凑测试" })
+    .click({ button: "right" });
   const contextMenu = page.getByRole("menu", { name: "会话操作" });
-  await expect(contextMenu.getByRole("menuitem", { name: "编辑会话" })).toBeVisible();
+  await expect(
+    contextMenu.getByRole("menuitem", { name: "编辑会话" }),
+  ).toBeVisible();
   await expect(contextMenu).toHaveCSS("position", "fixed");
-  expect(await contextMenu.evaluate((element) => element.parentElement === document.body)).toBe(true);
+  expect(
+    await contextMenu.evaluate(
+      (element) => element.parentElement === document.body,
+    ),
+  ).toBe(true);
   const compactMenu = await contextMenu.evaluate((element) => {
     const menu = element.getBoundingClientRect();
-    const firstItem = element.querySelector('[role="menuitem"]')!.getBoundingClientRect();
+    const firstItem = element
+      .querySelector('[role="menuitem"]')!
+      .getBoundingClientRect();
     const icon = element.querySelector("svg")!.getBoundingClientRect();
-    return { width: menu.width, height: menu.height, rowHeight: firstItem.height, iconWidth: icon.width };
+    return {
+      width: menu.width,
+      height: menu.height,
+      rowHeight: firstItem.height,
+      iconWidth: icon.width,
+    };
   });
   expect(compactMenu.width).toBe(132);
   expect(compactMenu.height).toBeLessThanOrEqual(92);
@@ -490,14 +518,134 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   await expect(page.locator(".quick-command-bar.multi")).toBeVisible();
 });
 
-test("AI header aligns with SSH title bar and compact model leaves space for Send", async ({ page }) => {
+test("bilingual switching preserves terminal and draft and survives reload", async ({
+  page,
+}) => {
+  await page.goto("/?language=en");
+  await expect(
+    page.getByRole("heading", { name: "Connect your server. Get to work." }),
+  ).toBeVisible();
+  await page.screenshot({ path: "../tmp/i18n-en-empty.png" });
+  await page.getByTitle("New session", { exact: true }).first().click();
+  await page.getByLabel("Session name", { exact: true }).fill("My Server 原名");
+  await page.getByLabel("Host", { exact: true }).fill("127.0.0.1");
+  await page.getByLabel("Password", { exact: true }).fill("fixture-password");
+  await page.getByLabel("Save to Windows Credential Manager").check();
+  await page.getByRole("button", { name: "Save session", exact: true }).click();
+  await page.getByText("My Server 原名", { exact: true }).first().dblclick();
+  await page.getByRole("button", { name: "Trust and connect" }).click();
+  await expect(page.getByText("SSH connected", { exact: false })).toBeVisible();
+  await expect(page.locator(".xterm")).toHaveCount(1);
+  await page
+    .locator(".xterm")
+    .evaluate((el) => ((window as any).__originalTerminal = el));
+  await page
+    .getByLabel("Send to AI", { exact: true })
+    .fill("Keep my draft 原文");
+  await page.getByTitle("Settings", { exact: true }).click();
+  await expect(page.getByLabel("Language / 语言")).toHaveValue("en");
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({
+    path: "../tmp/i18n-en-settings.png",
+    animations: "disabled",
+  });
+  await page.getByLabel("Language / 语言").selectOption("zh-CN");
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(
+    page.getByRole("heading", { name: "工作空间设置" }),
+  ).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({
+    path: "../tmp/i18n-zh-settings.png",
+    animations: "disabled",
+  });
+  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await expect(page.getByLabel("发送给 AI", { exact: true })).toHaveValue(
+    "Keep my draft 原文",
+  );
+  expect(
+    await page
+      .locator(".xterm")
+      .evaluate((el) => el === (window as any).__originalTerminal),
+  ).toBe(true);
+  await expect(page.getByTitle("关闭 My Server 原名")).toHaveCount(1);
+  await page.screenshot({ path: "../tmp/i18n-zh-terminal.png" });
+  await page
+    .getByText("My Server 原名", { exact: true })
+    .first()
+    .click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "编辑会话" })).toBeVisible();
+  await page.screenshot({ path: "../tmp/i18n-zh-menu.png" });
+  await page.keyboard.press("Escape");
+  await page.reload();
+  await page.getByTitle("设置", { exact: true }).click();
+  await expect(page.getByLabel("Language / 语言")).toHaveValue("zh-CN");
+  await page.getByLabel("Language / 语言").selectOption("en");
+  await expect(
+    page.getByRole("button", { name: "Save appearance" }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+});
+
+test("bilingual settings and session picker fit a compact window", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 700 });
+  await page.goto("/?language=en");
+  await page.getByTitle("Settings", { exact: true }).click();
+  for (const language of ["en", "zh-CN"]) {
+    await page.getByLabel("Language / 语言").selectOption(language);
+    for (const name of language === "en"
+      ? ["Appearance", "AI API", "Automatic"]
+      : ["外观", "AI API", "自动执行"]) {
+      await page.getByRole("button", { name, exact: true }).click();
+      const dialog = page.locator(".settings-dialog");
+      expect(
+        await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+      ).toBe(true);
+      expect(
+        await dialog.evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          return (
+            box.left >= 0 &&
+            box.right <= innerWidth &&
+            box.top >= 0 &&
+            box.bottom <= innerHeight
+          );
+        }),
+      ).toBe(true);
+      await page.screenshot({
+        path: `../tmp/i18n-${language}-${name === "AI API" ? "api" : name === "Automatic" || name === "自动执行" ? "auto" : "appearance"}-compact.png`,
+      });
+    }
+    await page
+      .getByRole("button", {
+        name: language === "en" ? "Appearance" : "外观",
+        exact: true,
+      })
+      .click();
+  }
+  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await page.getByTitle("打开会话列表").click();
+  await expect(page.getByRole("dialog", { name: "会话管理" })).toBeVisible();
+  await page.screenshot({ path: "../tmp/i18n-zh-picker-compact.png" });
+});
+
+test("AI header aligns with SSH title bar and compact model leaves space for Send", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/");
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "AI API", exact: true }).click();
-  await page.getByLabel("Base URL", { exact: true }).fill("https://api.example.com/v1");
-  await page.getByLabel("模型名称", { exact: true }).fill("grok-4.7(xhigh)-very-long-model-name");
+  await page
+    .getByLabel("Base URL", { exact: true })
+    .fill("https://api.example.com/v1");
+  await page
+    .getByLabel("模型名称", { exact: true })
+    .fill("grok-4.7(xhigh)-very-long-model-name");
   await page.getByRole("button", { name: "保存配置", exact: true }).click();
   await expect(page.getByText("配置已保存")).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
@@ -535,8 +683,12 @@ test("AI header aligns with SSH title bar and compact model leaves space for Sen
     });
 
     expect(positions.headerHeight).toBe(30);
-    expect(Math.abs(positions.headerTop - positions.mainTop)).toBeLessThanOrEqual(1);
-    expect(Math.abs(positions.headerBottom - positions.titleBottom)).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(positions.headerTop - positions.mainTop),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(positions.headerBottom - positions.titleBottom),
+    ).toBeLessThanOrEqual(1);
     expect(positions.modelWidth).toBeLessThanOrEqual(116);
     expect(positions.modelWidth).toBeGreaterThan(50);
     expect(positions.modelLeft).toBeGreaterThan(positions.modeRight);

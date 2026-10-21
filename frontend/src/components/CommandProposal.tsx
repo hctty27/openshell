@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { t } from "../i18n";
 import { useState } from "react";
 import { Play, Square, ShieldCheck, Check, Clock, Code2 } from "lucide-react";
 import type { Proposal } from "../types";
@@ -13,6 +15,7 @@ interface Props {
   onRevise(command: string, cwd: string, seconds: number): Promise<void>;
 }
 export default function CommandProposal(p: Props) {
+  useTranslation();
   const [command, setCommand] = useState(p.proposal.command);
   const [cwd, setCwd] = useState(p.proposal.cwd);
   const [seconds, setSeconds] = useState(p.proposal.timeoutSeconds);
@@ -24,7 +27,11 @@ export default function CommandProposal(p: Props) {
     <section className="proposal">
       <div className="proposal-heading">
         <Code2 size={15} />
-        <span>{p.executing ? "命令执行中" : "待确认的命令"}</span>
+        <span>
+          {p.executing
+            ? t("ai:runningCommand")
+            : t("ai:commandAwaitingConfirmation")}
+        </span>
         <span className="proposal-badge">SSH</span>
       </div>
       <p>{p.proposal.purpose}</p>
@@ -33,7 +40,7 @@ export default function CommandProposal(p: Props) {
         {p.username}@{p.host}
       </div>
       <textarea
-        aria-label="待执行命令"
+        aria-label={t("ai:pendingCommand")}
         className="command-editor"
         value={command}
         disabled={p.executing}
@@ -42,9 +49,9 @@ export default function CommandProposal(p: Props) {
         spellCheck={false}
       />
       <label className="inline-field">
-        目录
+        {t("common:directory")}
         <input
-          aria-label="执行工作目录"
+          aria-label={t("ai:workingDirectory")}
           value={cwd}
           disabled={p.executing}
           readOnly={p.readOnly}
@@ -54,7 +61,7 @@ export default function CommandProposal(p: Props) {
       <label className="inline-field">
         <Clock size={12} />
         <input
-          aria-label="命令超时秒数"
+          aria-label={t("ai:commandTimeoutInSeconds")}
           type="number"
           min="1"
           max="600"
@@ -63,24 +70,24 @@ export default function CommandProposal(p: Props) {
           readOnly={p.readOnly}
           onChange={(e) => setSeconds(Number(e.target.value))}
         />
-        <span>秒</span>
+        <span>{t("ai:seconds")}</span>
       </label>
       <div className="proposal-actions">
         {p.executing ? (
           <button className="secondary" onClick={p.onCancel}>
             <Square size={12} />
-            停止
+            {t("common:stop")}
           </button>
         ) : (
           <>
-            <button onClick={p.onCancel}>拒绝</button>
+            <button onClick={p.onCancel}>{t("common:reject")}</button>
             {dirty ? (
               <button
                 className="primary"
                 onClick={() => p.onRevise(command, cwd, seconds)}
               >
                 <Check size={13} />
-                更新提议
+                {t("ai:updateProposal")}
               </button>
             ) : (
               <button
@@ -89,13 +96,13 @@ export default function CommandProposal(p: Props) {
                 onClick={p.onConfirm}
               >
                 <Play size={13} />
-                确认执行
+                {t("common:runCommand")}
               </button>
             )}
           </>
         )}
       </div>
-      <small>独立执行，不继承手动终端的目录和临时状态。</small>
+      <small>{t("ai:runsIndependentlyOfTheManualTerminalSDirectory")}</small>
     </section>
   );
 }

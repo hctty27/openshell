@@ -2,7 +2,7 @@ package tasks
 
 import (
 	"context"
-	"errors"
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"strings"
 	"sync"
@@ -13,6 +13,8 @@ type AutoReply struct {
 	Proposal *domain.Proposal
 }
 type AutoSnapshot struct {
+	ReasonCode   string               `json:"reasonCode,omitempty"`
+	ReasonParams map[string]any       `json:"reasonParams,omitempty"`
 	ID           string               `json:"id"`
 	Ref          domain.ConnectionRef `json:"ref"`
 	Status       string               `json:"status"`
@@ -58,15 +60,15 @@ func NewAutomaticRunner() *AutomaticRunner {
 }
 func (r *AutomaticRunner) Start(parent context.Context, id string, ref domain.ConnectionRef, limit int, allowChanges bool, cb AutoCallbacks) error {
 	if id == "" || len(id) > 128 || limit < 1 || limit > 100 {
-		return errors.New("无效自动任务或命令上限（1–100）")
+		return apperror.New("invalidAutomaticTaskOrCommandLimit1100", nil)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.cancelled[id] {
-		return errors.New("任务已停止")
+		return apperror.New("taskStopped", nil)
 	}
 	if r.tasks[id] != nil {
-		return errors.New("任务已存在")
+		return apperror.New("taskAlreadyExists", nil)
 	}
 	for key, t := range r.tasks {
 		t.mu.Lock()
@@ -74,7 +76,7 @@ func (r *AutomaticRunner) Start(parent context.Context, id string, ref domain.Co
 		sameTab := t.state.Ref.TabID == ref.TabID
 		t.mu.Unlock()
 		if sameTab && active {
-			return errors.New("此标签已有自动任务")
+			return apperror.New("thisTabAlreadyHasAnAutomaticTask", nil)
 		}
 		if sameTab && !active {
 			delete(r.tasks, key)
@@ -106,6 +108,13 @@ func (t *automaticTask) finish(status, reason string) AutoSnapshot {
 	if t.state.Status != "stopped" {
 		t.state.Status = status
 		t.state.Reason = reason
+		if fallback, ok := automaticReasons[reason]; ok {
+			t.state.Reason = fallback
+		}
+		t.state.ReasonCode = reason
+		if strings.HasPrefix(reason, apperror.Prefix) {
+			t.state.ReasonCode = ""
+		}
 	}
 	state := t.state
 	t.mu.Unlock()
@@ -151,7 +160,8 @@ func (r *AutomaticRunner) Stop(id string) {
 		return
 	}
 	t.state.Status = "stopped"
-	t.state.Reason = "已停止，不再执行后续命令"
+	t.state.Reason = automaticReasons["taskStopped"]
+	t.state.ReasonCode = "taskStopped"
 	p := t.state.Proposal
 	t.cancel()
 	t.mu.Unlock()
@@ -176,27 +186,28 @@ func (r *AutomaticRunner) Invalidate(ref domain.ConnectionRef) {
 func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot, error) {
 	t := r.get(id)
 	if t == nil {
-		return AutoSnapshot{}, errors.New("自动任务不存在")
+		return AutoSnapshot{}, apperror.New("automaticTaskNotFound", nil)
 	}
 	t.mu.Lock()
 	if t.busy || autoTerminal(t.state.Status) {
 		t.mu.Unlock()
-		return t.snapshot(), errors.New("任务正在执行或已结束")
+		return t.snapshot(), apperror.New("taskIsRunningOrHasAlreadyEnded", nil)
 	}
 	if extend {
 		if t.state.Status != "limit" {
 			t.mu.Unlock()
-			return t.snapshot(), errors.New("当前任务未达到上限")
+			return t.snapshot(), apperror.New("taskHasNotReachedItsRoundLimit", nil)
 		}
 		t.state.RoundSteps = 0
 	}
 	if approvedID != "" && (t.state.Status != "awaiting_confirmation" || t.state.Proposal == nil || t.state.Proposal.ID != approvedID) {
 		t.mu.Unlock()
-		return t.snapshot(), errors.New("确认的命令已变化")
+		return t.snapshot(), apperror.New("confirmedCommandHasChanged", nil)
 	}
 	t.busy = true
 	t.state.Status = "running"
 	t.state.Reason = ""
+	t.state.ReasonCode = ""
 	t.mu.Unlock()
 	defer func() { t.mu.Lock(); t.busy = false; t.mu.Unlock() }()
 	t.emit("state", "", nil)
@@ -225,7 +236,7 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 				return t.finish("error", err.Error()), nil
 			}
 			if reply.Proposal != nil && reply.Proposal.Ref != s.Ref {
-				return t.finish("error", "命令目标与任务连接不一致"), nil
+				return t.finish("error", "taskTargetChanged"), nil
 			}
 			t.mu.Lock()
 			cancelled := t.ctx.Err() != nil
@@ -242,21 +253,21 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 			}
 			t.emit("reply", reply.Text, nil)
 			if reply.Proposal == nil {
-				return t.finish("completed", "任务已完成"), nil
+				return t.finish("completed", "taskCompleted"), nil
 			}
 			s = t.snapshot()
 		}
 		if s.RoundSteps >= s.Limit {
-			return t.finish("limit", "已达到本轮命令上限，等待你选择继续"), nil
+			return t.finish("limit", "roundLimit"), nil
 		}
 		p := *s.Proposal
 		signature := p.Cwd + "\x00" + strings.TrimSpace(p.Command)
 		reason := ""
 		if !s.AllowChanges && !IsInspectionCommand(p.Command) {
-			reason = "此命令未被识别为检查操作，需要确认"
+			reason = "inspectionConfirmation"
 		}
 		if t.seen[signature] {
-			reason = "重复命令需要确认，避免自动重试"
+			reason = "repeatedCommand"
 		}
 		if reason != "" && approvedID != p.ID {
 			return t.finish("awaiting_confirmation", reason), nil
@@ -286,7 +297,7 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 			return t.finish("error", err.Error()), nil
 		}
 		if result.Status == "unknown" || result.Status == "cancelled" || result.Status == "" {
-			return t.finish("stopped", "远端执行结果无法确认，已停止自动任务"), nil
+			return t.finish("stopped", "remoteResultUnknown"), nil
 		}
 	}
 }
@@ -306,4 +317,14 @@ func (r *AutomaticRunner) Forget(tabID string) {
 		delete(r.tasks, id)
 		r.mu.Unlock()
 	}
+}
+
+var automaticReasons = map[string]string{
+	"taskStopped":            "Stopped. No further commands will run.",
+	"taskCompleted":          "Task completed",
+	"taskTargetChanged":      "Command target does not match the task connection",
+	"roundLimit":             "Round limit reached. Continue when ready.",
+	"inspectionConfirmation": "Unrecognized inspection command. Confirmation required.",
+	"repeatedCommand":        "Repeated command. Confirmation required.",
+	"remoteResultUnknown":    "Remote result unconfirmed. Automatic task stopped.",
 }

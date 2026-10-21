@@ -1,3 +1,6 @@
+import { beforeEach as beforeLanguageTest } from "vitest";
+import { initializeI18n as setTestLanguage } from "./i18n";
+beforeLanguageTest(() => setTestLanguage("zh-CN"));
 import {
   render,
   screen,
@@ -10,7 +13,8 @@ import { expect, test, vi, afterEach } from "vitest";
 import App from "./App";
 import { api } from "./bridge";
 vi.mock("./components/TerminalPane", () => ({ default: () => null }));
-vi.mock("./bridge", () => ({
+vi.mock("./bridge", async () => ({
+  ...(await vi.importActual<typeof import("./bridge")>("./bridge")),
   desktop: false,
   api: {
     SavePreference: vi.fn(async () => {}),
@@ -23,6 +27,7 @@ vi.mock("./bridge", () => ({
       groups: [],
       profiles: [],
       fontSize: "14",
+      language: "zh-CN",
       activeProfile: "",
       version: "0.1.17",
     })),
@@ -155,20 +160,23 @@ test("automatic execution settings save bounded limit and scope", async () => {
 
 test("the tab plus opens a session list and reuses an already opened SSH tab", async () => {
   vi.mocked(api.State).mockResolvedValueOnce({
-    sessions: [{
-      id: "us-id",
-      groupId: "",
-      name: "us",
-      host: "38.65.94.188",
-      port: 22,
-      username: "root",
-      authType: "key",
-      privateKeyPath: "",
-      credentialRef: "saved",
-    }],
+    sessions: [
+      {
+        id: "us-id",
+        groupId: "",
+        name: "us",
+        host: "38.65.94.188",
+        port: 22,
+        username: "root",
+        authType: "key",
+        privateKeyPath: "",
+        credentialRef: "saved",
+      },
+    ],
     groups: [],
     profiles: [],
     fontSize: "14",
+    language: "zh-CN",
     activeProfile: "",
     version: "0.1.14",
   });
@@ -221,6 +229,7 @@ test("double-clicking a terminal tab opens an independent SSH session beside it 
     groups: [],
     profiles: [],
     fontSize: "14",
+    language: "zh-CN",
     activeProfile: "",
     version: "0.1.18",
   });
@@ -237,8 +246,9 @@ test("double-clicking a terminal tab opens an independent SSH session beside it 
   await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
 
   const tabNames = () =>
-    Array.from(document.querySelectorAll(".terminal-tab > button:first-child"))
-      .map((element) => element.textContent);
+    Array.from(
+      document.querySelectorAll(".terminal-tab > button:first-child"),
+    ).map((element) => element.textContent);
   expect(tabNames()).toEqual(["us", "eu"]);
 
   fireEvent.doubleClick(screen.getAllByTitle("双击复制会话")[0]);
@@ -246,7 +256,9 @@ test("double-clicking a terminal tab opens an independent SSH session beside it 
 
   expect(tabNames()).toEqual(["us", "us", "eu"]);
   expect(screen.getAllByTitle("关闭 us")).toHaveLength(2);
-  expect(document.querySelectorAll(".terminal-tab")[1].classList.contains("active")).toBe(true);
+  expect(
+    document.querySelectorAll(".terminal-tab")[1].classList.contains("active"),
+  ).toBe(true);
 
   const calls = vi.mocked(api.Connect).mock.calls;
   expect(calls[2][1]).toBe("us-id");

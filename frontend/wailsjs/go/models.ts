@@ -42,6 +42,8 @@ export namespace domain {
 	    }
 	}
 	export class CommandResult {
+	    reasonCode?: string;
+	    reasonParams?: Record<string, any>;
 	    status: string;
 	    stdout: string;
 	    stderr: string;
@@ -56,6 +58,8 @@ export namespace domain {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.reasonCode = source["reasonCode"];
+	        this.reasonParams = source["reasonParams"];
 	        this.status = source["status"];
 	        this.stdout = source["stdout"];
 	        this.stderr = source["stderr"];
@@ -203,6 +207,7 @@ export namespace main {
 	    }
 	}
 	export class AppState {
+	    language: string;
 	    sessions: domain.Session[];
 	    groups: domain.Group[];
 	    profiles: domain.APIProfile[];
@@ -224,6 +229,7 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.language = source["language"];
 	        this.sessions = this.convertValues(source["sessions"], domain.Session);
 	        this.groups = this.convertValues(source["groups"], domain.Group);
 	        this.profiles = this.convertValues(source["profiles"], domain.APIProfile);
@@ -456,6 +462,8 @@ export namespace main {
 export namespace tasks {
 	
 	export class AutoSnapshot {
+	    reasonCode?: string;
+	    reasonParams?: Record<string, any>;
 	    id: string;
 	    ref: domain.ConnectionRef;
 	    status: string;
@@ -472,6 +480,8 @@ export namespace tasks {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.reasonCode = source["reasonCode"];
+	        this.reasonParams = source["reasonParams"];
 	        this.id = source["id"];
 	        this.ref = this.convertValues(source["ref"], domain.ConnectionRef);
 	        this.status = source["status"];

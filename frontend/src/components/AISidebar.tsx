@@ -1,3 +1,6 @@
+import { reasonText } from "../i18n/errors";
+import { useTranslation } from "react-i18next";
+import { t } from "../i18n";
 import { useState, useEffect, useRef } from "react";
 import {
   Sparkles,
@@ -35,6 +38,7 @@ interface Props {
   onRevise(command: string, cwd: string, seconds: number): Promise<void>;
 }
 export default function AISidebar(p: Props) {
+  useTranslation();
   const [input, setInput] = useState("");
   const [modes, setModes] = useState<Record<string, ChatMode>>({});
   const selectedMode = modes[p.tab?.id ?? ""] ?? "confirm";
@@ -73,17 +77,17 @@ export default function AISidebar(p: Props) {
         <span className="ai-icon">
           <Sparkles size={17} />
         </span>
-        <strong>AI 助手</strong>
-        <span className="beta-label">BETA</span>
+        <strong>{t("common:aiAssistant")}</strong>
+        <span className="beta-label">{t("ai:betaLabel")}</span>
         <div>
           <button
-            title="清空对话"
+            title={t("ai:clearChat")}
             disabled={busy || automaticActive || !!p.tab?.proposal}
             onClick={p.onClear}
           >
             <Trash2 size={15} />
           </button>
-          <button title="收起 AI" onClick={p.onHide}>
+          <button title={t("ai:collapseAi")} onClick={p.onHide}>
             <PanelRightClose size={17} />
           </button>
         </div>
@@ -94,16 +98,16 @@ export default function AISidebar(p: Props) {
             <div className="ai-welcome-icon">
               <Sparkles size={27} />
             </div>
-            <h3>你的服务器助手</h3>
+            <h3>{t("ai:yourServerAssistant")}</h3>
             <p>
-              描述问题，让 AI 帮你分析日志、
+              {t("ai:describeAProblemLetAiAnalyzeLogs")}
               <br />
-              生成命令并处理服务器任务。
+              {t("ai:proposeCommandsAndHandleServerTasks")}
             </p>
             <div className="suggestions">
               {[
-                "检查服务器运行状态",
-                "查看磁盘空间占用",
+                t("ai:checkServerHealth"),
+                t("ai:checkDiskUsage"),
               ].map((text) => (
                 <button
                   key={text}
@@ -119,9 +123,9 @@ export default function AISidebar(p: Props) {
             <div className="ai-explainer">
               <Check size={13} />
               <span>
-                命令由你确认后执行
+                {t("ai:reviewCommandsBeforeRunning")}
                 <br />
-                使用你自己的模型与 API
+                {t("ai:useYourOwnModelAndApi")}
               </span>
             </div>
           </div>
@@ -130,11 +134,11 @@ export default function AISidebar(p: Props) {
           <div key={m.id} className={`message ${m.role}`}>
             <div className="message-label">
               {m.role === "user"
-                ? "你"
+                ? t("ai:you")
                 : m.role === "result"
-                  ? "执行结果"
-                  : "AI 助手"}
-              {m.incomplete && <span> · 输出未完成</span>}
+                  ? t("ai:commandResult")
+                  : t("common:aiAssistant")}
+              {m.incomplete && <span> {t("ai:incompleteOutput")}</span>}
             </div>
             {m.role === "result" && m.result ? (
               <>
@@ -148,36 +152,32 @@ export default function AISidebar(p: Props) {
                   )}
                   <strong>
                     {m.result.status === "completed"
-                      ? "执行完成"
+                      ? t("ai:completed")
                       : m.result.status === "unknown"
-                        ? "结果未知"
-                        : "执行失败"}
+                        ? t("ai:resultUnknown")
+                        : t("ai:failed")}
                   </strong>
                   <span>
-                    退出码 {m.result.exitCode ?? "未知"} ·{" "}
-                    {(m.result.durationMillis / 1000).toFixed(2)}s
+                    {t("ai:exitCodeValue", {
+                      code: m.result.exitCode ?? t("common:unknown"),
+                      seconds: (m.result.durationMillis / 1000).toFixed(2),
+                    })}
                   </span>
                 </div>
                 {m.result.reason && (
-                  <p className="small muted">
-                    {(
-                      {
-                        timed_out: "已超时，远端进程是否结束尚未确认",
-                        cancelled: "已停止等待，远端进程是否结束尚未确认",
-                        connection_lost: "连接中断，无法确认远端结果",
-                      } as Record<string, string>
-                    )[m.result.reason] ?? m.result.reason}
-                  </p>
+                  <p className="small muted">{reasonText(m.result)}</p>
                 )}
                 {m.command && (
                   <code className="executed-command">{m.command}</code>
                 )}
                 <pre className="result-output">
-                  {m.result.stdout || "(无标准输出)"}
+                  {m.result.stdout || t("ai:noStandardOutput")}
                   {m.result.stderr && `\n[stderr]\n${m.result.stderr}`}
                 </pre>
                 {m.result.truncated && (
-                  <p className="small muted">输出超过上限，已截断。</p>
+                  <p className="small muted">
+                    {t("ai:outputLimitReachedContentTruncated")}
+                  </p>
                 )}
               </>
             ) : (
@@ -188,7 +188,7 @@ export default function AISidebar(p: Props) {
                   m.role === "assistant" ? (
                     <LoaderCircle size={14} className="spin" />
                   ) : (
-                    "本次回复未返回文本"
+                    t("common:noTextReturned")
                   ))}
               </div>
             )}
@@ -214,23 +214,30 @@ export default function AISidebar(p: Props) {
         {automatic && (
           <div className="auto-progress" role="status">
             <strong>
-              自动执行 · 本轮 {automatic.roundSteps}/{automatic.limit} · 累计{" "}
-              {automatic.steps} 条
+              {t("ai:automaticProgress", {
+                round: automatic.roundSteps,
+                limit: automatic.limit,
+                count: automatic.steps,
+              })}
             </strong>
             <span>
-              {automatic.reason ||
-                (p.tab?.executing ? "命令执行中" : "正在处理任务")}
+              {reasonText(automatic) ||
+                (p.tab?.executing
+                  ? t("ai:runningCommand")
+                  : t("ai:processingTask"))}
             </span>
             {automatic.status === "limit" && (
               <button className="secondary" onClick={p.onAutoContinue}>
-                继续下一轮
+                {t("ai:nextRound")}
               </button>
             )}
             {automaticActive && (
               <small>
-                范围：
-                {automatic.allowChanges ? "允许修改操作" : "仅检查自动执行"} ·
-                目标固定在当前任务服务器
+                {t("ai:scope")}
+                {automatic.allowChanges
+                  ? t("ai:changesAllowed")
+                  : t("ai:automaticInspectionOnly")}{" "}
+                {t("ai:targetFixedToThisTaskSServer")}
               </small>
             )}
           </div>
@@ -243,23 +250,30 @@ export default function AISidebar(p: Props) {
             <span title={`${p.tab.session.username}@${p.tab.session.host}`}>
               {p.tab.session.name}
             </span>
-            <code title={p.tab.cwd}>{p.tab.cwd || "目录未获取"}</code>
+            <code title={p.tab.cwd}>
+              {p.tab.cwd || t("ai:directoryUnavailable")}
+            </code>
           </div>
         )}
         {p.context && (
           <div className="attachment">
             <Paperclip size={13} />
-            <span>已附加终端文本 · {p.context.length} 字符</span>
-            <button title="移除终端文本" onClick={p.onClearContext}>
+            <span>{t("ai:attachedText", { count: p.context.length })}</span>
+            <button
+              title={t("ai:removeTerminalText")}
+              onClick={p.onClearContext}
+            >
               <X size={13} />
             </button>
           </div>
         )}
         <div className="composer-box">
           <textarea
-            aria-label="发送给 AI"
+            aria-label={t("ai:sendToAi")}
             placeholder={
-              p.tab ? "描述你想完成的操作…" : "连接服务器后开始对话…"
+              p.tab
+                ? t("ai:describeWhatYouWantToDo")
+                : t("ai:connectToAServerToStartChatting")
             }
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -277,7 +291,7 @@ export default function AISidebar(p: Props) {
           />
           <div className="composer-tools">
             <button
-              title="附加终端输出"
+              title={t("ai:attachTerminalOutput")}
               disabled={!p.tab || p.tab.status !== "connected" || busy}
               onClick={p.onPreview}
             >
@@ -285,7 +299,7 @@ export default function AISidebar(p: Props) {
             </button>
             <select
               className="mode-select"
-              aria-label="AI 模式"
+              aria-label={t("ai:aiMode")}
               value={mode}
               disabled={busy || automaticActive || !!p.tab?.proposal}
               onChange={(e) =>
@@ -293,20 +307,24 @@ export default function AISidebar(p: Props) {
                 setModes({ ...modes, [p.tab.id]: e.target.value as ChatMode })
               }
             >
-              <option value="chat">普通对话</option>
+              <option value="chat">{t("ai:chat")}</option>
               <option value="confirm" disabled={!profile?.toolsEnabled}>
-                确认执行
+                {t("ai:confirmMode")}
               </option>
               <option value="auto" disabled={!profile?.toolsEnabled}>
-                自动执行
+                {t("ai:automatic")}
               </option>
             </select>
             {p.profiles.length ? (
               <div className="composer-model">
                 <span className="status-dot" />
                 <select
-                  aria-label="当前模型"
-                  title={profile ? `${profile.name} · ${profile.model}` : "选择 AI 模型"}
+                  aria-label={t("ai:currentModel")}
+                  title={
+                    profile
+                      ? `${profile.name} · ${profile.model}`
+                      : t("ai:selectAiModel")
+                  }
                   disabled={automaticActive}
                   value={p.profileID}
                   onChange={(e) => p.onProfile(e.target.value)}
@@ -321,12 +339,13 @@ export default function AISidebar(p: Props) {
               </div>
             ) : (
               <button className="composer-model-config" onClick={p.onSettings}>
-                配置模型 <ArrowUpRight size={12} />
+                {t("ai:configureModel")}
+                <ArrowUpRight size={12} />
               </button>
             )}
             {busy || automaticActive ? (
               <button
-                title="停止任务"
+                title={t("ai:stopTask")}
                 className="send-button"
                 onClick={p.onStop}
               >
@@ -334,7 +353,7 @@ export default function AISidebar(p: Props) {
               </button>
             ) : (
               <button
-                title="发送消息"
+                title={t("ai:sendMessage")}
                 className="send-button"
                 disabled={blocked || !input.trim()}
                 onClick={() => send()}
@@ -346,8 +365,8 @@ export default function AISidebar(p: Props) {
         </div>
         <p className="composer-note">
           {p.tab?.proposal
-            ? "请先执行或拒绝当前提议"
-            : "Enter 发送 · Shift + Enter 换行"}
+            ? t("ai:runOrRejectThePendingProposalFirst")
+            : t("ai:enterToSendShiftEnterForANew")}
         </p>
       </div>
     </aside>

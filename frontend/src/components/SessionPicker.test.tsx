@@ -1,3 +1,6 @@
+import { beforeEach as beforeLanguageTest } from "vitest";
+import { initializeI18n as setTestLanguage } from "../i18n";
+beforeLanguageTest(() => setTestLanguage("zh-CN"));
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import SessionPicker from "./SessionPicker";
@@ -44,7 +47,15 @@ function setup() {
       onClose={onClose}
     />,
   );
-  return { onConnect, onOpenNewTab, onEdit, onDelete, onNew, onNewGroup, onClose };
+  return {
+    onConnect,
+    onOpenNewTab,
+    onEdit,
+    onDelete,
+    onNew,
+    onNewGroup,
+    onClose,
+  };
 }
 
 afterEach(cleanup);
@@ -74,7 +85,9 @@ test("clicking a folder filters the list without connecting", () => {
   const { onConnect } = setup();
   fireEvent.click(screen.getByRole("button", { name: /生产环境/ }));
   expect(screen.queryByRole("button", { name: "选择会话 us" })).toBeNull();
-  expect(screen.getByRole("button", { name: "选择会话 hk-server" })).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "选择会话 hk-server" }),
+  ).toBeTruthy();
   expect(onConnect).not.toHaveBeenCalled();
 });
 
@@ -87,7 +100,9 @@ test("supports footer actions, context actions and dismissing", () => {
   fireEvent.contextMenu(screen.getByRole("button", { name: "选择会话 us" }));
   fireEvent.click(screen.getByRole("menuitem", { name: /在新标签中打开/ }));
   expect(onOpenNewTab).toHaveBeenCalledWith(us);
-  fireEvent.contextMenu(screen.getByRole("button", { name: "选择会话 hk-server" }));
+  fireEvent.contextMenu(
+    screen.getByRole("button", { name: "选择会话 hk-server" }),
+  );
   fireEvent.click(screen.getByRole("menuitem", { name: "删除" }));
   expect(onDelete).toHaveBeenCalledWith(hk);
   fireEvent.click(screen.getByRole("button", { name: "关闭会话管理" }));

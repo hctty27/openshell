@@ -2,8 +2,7 @@ package sshclient
 
 import (
 	"context"
-	"errors"
-	"fmt"
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
 	"net"
@@ -27,9 +26,9 @@ type HostKeyError struct {
 
 func (e *HostKeyError) Error() string {
 	if e.Changed {
-		return "服务器指纹已变化，连接已阻止"
+		return apperror.New("fingerprintChanged", nil).Error()
 	}
-	return "首次连接，请确认服务器指纹"
+	return apperror.New("fingerprintFirst", nil).Error()
 }
 
 type AuthInput struct {
@@ -69,12 +68,12 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 		return domain.ConnectionRef{}, e
 	}
 	if tab == "" {
-		return domain.ConnectionRef{}, errors.New("无效终端")
+		return domain.ConnectionRef{}, apperror.New("invalidTerminal", nil)
 	}
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
-		return domain.ConnectionRef{}, errors.New("应用已关闭")
+		return domain.ConnectionRef{}, apperror.New("applicationIsClosed", nil)
 	}
 	if cancel := m.connecting[tab]; cancel != nil {
 		cancel()
@@ -94,7 +93,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	if s.AuthType == "key" {
 		key, e := os.ReadFile(s.PrivateKeyPath)
 		if e != nil {
-			return ref, domain.Error("private_key", "无法读取私钥文件")
+			return ref, domain.Error("private_key", apperror.New("privateKeyRead", nil).Error())
 		}
 		var signer ssh.Signer
 		if auth.Passphrase != "" {
@@ -103,7 +102,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 			signer, e = ssh.ParsePrivateKey(key)
 		}
 		if e != nil {
-			return ref, domain.Error("private_key", "私钥格式或口令不正确")
+			return ref, domain.Error("private_key", apperror.New("privateKeyInvalid", nil).Error())
 		}
 		method = ssh.PublicKeys(signer)
 	} else {
@@ -123,7 +122,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	}}
 	raw, e := (&net.Dialer{}).DialContext(ctx, "tcp", address)
 	if e != nil {
-		return ref, domain.Error("connect", "连接失败："+e.Error())
+		return ref, domain.Error("connect", apperror.Wrap("sshConnect", e, nil).Error())
 	}
 	raw.SetDeadline(time.Now().Add(15 * time.Second))
 	done := make(chan struct{})
@@ -141,7 +140,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 		if hostErr != nil {
 			return ref, hostErr
 		}
-		return ref, domain.Error("authentication", "SSH 握手或认证失败")
+		return ref, domain.Error("authentication", apperror.New("sshAuthentication", nil).Error())
 	}
 	raw.SetDeadline(time.Time{})
 	client := ssh.NewClient(cc, chans, reqs)
@@ -149,7 +148,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	if m.generations[tab] != ref.Generation || m.closed {
 		m.mu.Unlock()
 		client.Close()
-		return ref, errors.New("连接已取消")
+		return ref, apperror.New("connectionCancelled", nil)
 	}
 	delete(m.connecting, tab)
 	c := &connection{ref: ref, client: client, history: NewHistory(1024 * 1024)}
@@ -173,7 +172,7 @@ func (m *Manager) OpenSession(ref domain.ConnectionRef) (*ssh.Session, error) {
 	c := m.connections[ref.TabID]
 	if c == nil || c.ref != ref {
 		m.mu.Unlock()
-		return nil, domain.Error("stale", "连接已失效，请重新连接")
+		return nil, domain.Error("stale", apperror.New("staleConnection", nil).Error())
 	}
 	client := c.client
 	m.mu.Unlock()
@@ -241,7 +240,7 @@ func (m *Manager) Home(ref domain.ConnectionRef) (string, error) {
 	close(done)
 	home := strings.TrimSpace(string(out))
 	if e != nil || !strings.HasPrefix(home, "/") {
-		return "", fmt.Errorf("无法获取主目录，请填写绝对工作目录")
+		return "", apperror.New("couldNotGetHomeDirectoryEnterAnAbsolute", nil)
 	}
 	return home, nil
 }

@@ -1,9 +1,15 @@
+import { useTranslation } from "react-i18next";
+import { message, type DisplayText } from "../i18n/message";
+import { t } from "../i18n";
 import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { api, listen, errorText } from "../bridge";
-import { ClipboardGetText, ClipboardSetText } from "../../wailsjs/runtime/runtime";
+import {
+  ClipboardGetText,
+  ClipboardSetText,
+} from "../../wailsjs/runtime/runtime";
 import type { Tab, Ref, Theme } from "../types";
 import { terminalThemes } from "../terminalThemes";
 import { useDialogs } from "./DialogProvider";
@@ -15,12 +21,13 @@ interface Props {
   autoCopySelection: boolean;
   rightClickPaste: boolean;
   confirmMultilinePaste: boolean;
-  onNotice(text: string): void;
+  onNotice(text: unknown): void;
   commandFocusVersion?: number;
-  onError(text: string): void;
+  onError(text: unknown): void;
   onSelection(text: string): void;
 }
 export default function TerminalPane(p: Props) {
+  useTranslation();
   const dialogs = useDialogs();
   const dialogsRef = useRef(dialogs);
   dialogsRef.current = dialogs;
@@ -60,7 +67,9 @@ export default function TerminalPane(p: Props) {
       if (pending > 2 * 1024 * 1024) {
         overloaded = true;
         callbacks.current.onError(
-          "终端输出超过处理上限，已断开连接；请限制日志输出量后重连",
+          message(
+            "terminal:terminalOutputExceededTheProcessingLimitDisconnectedLimit",
+          ),
         );
         api.Disconnect(ref);
         return;
@@ -75,7 +84,7 @@ export default function TerminalPane(p: Props) {
       for (const b of bytes) encoded += String.fromCharCode(b);
       api
         .WriteTerminal(ref, btoa(encoded))
-        .catch((e) => callbacks.current.onError(errorText(e)));
+        .catch((e) => callbacks.current.onError(e));
     });
     const resizeSubscription = term.onResize(({ cols, rows }) =>
       api.ResizeTerminal(ref, cols, rows).catch(() => {}),
@@ -86,25 +95,36 @@ export default function TerminalPane(p: Props) {
     let selectingWithMouse = false;
     const paneElement = container.current;
     const onMouseDown = (event: MouseEvent) => {
-      selectingWithMouse = event.button === 0 && callbacks.current.active &&
+      selectingWithMouse =
+        event.button === 0 &&
+        callbacks.current.active &&
         (term.modes.mouseTrackingMode === "none" || event.shiftKey);
     };
     const onMouseUp = (event: MouseEvent) => {
       if (event.button !== 0 || !selectingWithMouse) return;
       selectingWithMouse = false;
       setTimeout(() => {
-        if (disposed || !callbacks.current.active || !callbacks.current.autoCopySelection) return;
+        if (
+          disposed ||
+          !callbacks.current.active ||
+          !callbacks.current.autoCopySelection
+        )
+          return;
         const text = term.getSelection();
         if (!text) return;
         void ClipboardSetText(text)
           .then((success) => {
-            if (!success) callbacks.current.onNotice("选中内容复制失败");
+            if (!success)
+              callbacks.current.onNotice(
+                message("terminal:failedToCopySelection"),
+              );
           })
-          .catch((error) => callbacks.current.onNotice(errorText(error)));
+          .catch((error) => callbacks.current.onNotice(error));
       }, 0);
     };
     const onContextMenu = (event: MouseEvent) => {
-      if (!callbacks.current.active || !callbacks.current.rightClickPaste) return;
+      if (!callbacks.current.active || !callbacks.current.rightClickPaste)
+        return;
       if (term.modes.mouseTrackingMode !== "none") return;
       event.preventDefault();
       event.stopPropagation();
@@ -113,26 +133,40 @@ export default function TerminalPane(p: Props) {
       void (async () => {
         try {
           const text = await ClipboardGetText();
-          if (disposed || !callbacks.current.active || !callbacks.current.rightClickPaste || !text) return;
+          if (
+            disposed ||
+            !callbacks.current.active ||
+            !callbacks.current.rightClickPaste ||
+            !text
+          )
+            return;
           if (callbacks.current.confirmMultilinePaste && /[\r\n]/.test(text)) {
             const accepted = await dialogsRef.current.confirm({
-              title: "确认粘贴多行命令",
-              description: `目标服务器：${callbacks.current.tab.session.name}。检测到剪贴板包含多行内容，粘贴后可能立即执行命令。`,
+              title: message("terminal:confirmMultilinePaste"),
+              description: message(
+                "terminal:targetTheClipboardContainsMultipleLinesPastingMay",
+                { name: callbacks.current.tab.session.name },
+              ),
               preview: text,
               tone: "warning",
-              confirmLabel: "确认粘贴",
+              confirmLabel: message("terminal:paste"),
             });
             if (!accepted) return;
           }
           const currentRef = callbacks.current.tab.ref;
-          if (disposed || !callbacks.current.active || !callbacks.current.rightClickPaste ||
-              currentRef?.sessionId !== ref.sessionId || currentRef?.generation !== ref.generation) {
+          if (
+            disposed ||
+            !callbacks.current.active ||
+            !callbacks.current.rightClickPaste ||
+            currentRef?.sessionId !== ref.sessionId ||
+            currentRef?.generation !== ref.generation
+          ) {
             return;
           }
           term.focus();
           term.paste(text);
         } catch (error) {
-          if (!disposed) callbacks.current.onNotice(errorText(error));
+          if (!disposed) callbacks.current.onNotice(error);
         } finally {
           pastePending = false;
         }
@@ -158,7 +192,7 @@ export default function TerminalPane(p: Props) {
       api
         .OpenTerminal(ref, Math.max(term.cols, 20), Math.max(term.rows, 5))
         .then(() => term.focus())
-        .catch((e) => callbacks.current.onError(errorText(e)));
+        .catch((e) => callbacks.current.onError(e));
     });
     return () => {
       disposed = true;
@@ -201,7 +235,7 @@ export default function TerminalPane(p: Props) {
     <div
       className={`terminal-pane ${p.active ? "active" : ""}`}
       ref={container}
-      aria-label={`终端 ${p.tab.session.name}`}
+      aria-label={t("terminal:terminal", { name: p.tab.session.name })}
     />
   );
 }

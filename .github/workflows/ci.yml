@@ -79,7 +79,7 @@ jobs:
         working-directory: frontend
         run: |
           npx playwright install --with-deps chromium
-          npx playwright test --grep "compact sidebar removes detail actions|AI header aligns with SSH title bar"
+          npx playwright test --grep "compact sidebar removes detail actions|AI header aligns with SSH title bar|bilingual"
 
   release:
     name: Windows release after CI

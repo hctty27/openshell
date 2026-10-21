@@ -2,7 +2,7 @@ package sshclient
 
 import (
 	"encoding/base64"
-	"errors"
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
 	"io"
@@ -65,7 +65,7 @@ func (w *terminalWriter) Write(p []byte) (int, error) {
 }
 func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	if cols < 1 || rows < 1 {
-		return errors.New("无效终端尺寸")
+		return apperror.New("invalidTerminalDimensions", nil)
 	}
 	s, e := m.OpenSession(ref)
 	if e != nil {
@@ -76,7 +76,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	if c == nil || c.ref != ref || c.terminal != nil {
 		m.mu.Unlock()
 		s.Close()
-		return errors.New("终端不存在或已打开")
+		return apperror.New("terminalMissingOrAlreadyOpen", nil)
 	}
 	c.terminal = s
 	m.mu.Unlock()
@@ -103,7 +103,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	p, e := base64.StdEncoding.DecodeString(data)
 	if e != nil || len(p) > 1024*1024 {
-		return errors.New("无效终端输入")
+		return apperror.New("invalidTerminalInput", nil)
 	}
 	m.mu.Lock()
 	c := m.connections[ref.TabID]
@@ -118,7 +118,7 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 }
 func (m *Manager) Resize(ref domain.ConnectionRef, cols, rows int) error {
 	if cols < 1 || cols > 1000 || rows < 1 || rows > 1000 {
-		return errors.New("无效终端尺寸")
+		return apperror.New("invalidTerminalDimensions", nil)
 	}
 	m.mu.Lock()
 	c := m.connections[ref.TabID]

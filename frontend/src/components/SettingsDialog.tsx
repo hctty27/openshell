@@ -1,3 +1,8 @@
+import { renderMessage, type DisplayText } from "../i18n/message";
+import { useTranslation } from "react-i18next";
+import { message } from "../i18n/message";
+import { t } from "../i18n";
+import { languages, type Language } from "../i18n/languages";
 import { useState } from "react";
 import {
   X,
@@ -22,6 +27,9 @@ import type {
   QuickCommandLayout,
 } from "../types";
 interface Props {
+  language?: Language;
+  languageSaving?: boolean;
+  onLanguage?(language: Language): Promise<void>;
   kind: "session" | "settings";
   session?: Session;
   groupID?: string;
@@ -58,13 +66,14 @@ const emptySession: Session = {
 };
 const emptyProfile: APIProfile = {
   id: "",
-  name: "自定义 API",
+  name: "",
   baseUrl: "https://api.example.com/v1",
   model: "",
   secretRef: "",
   toolsEnabled: true,
 };
 export default function SettingsDialog(p: Props) {
+  useTranslation();
   const dialogs = useDialogs();
   const [tab, setTab] = useState(
     p.kind === "session" ? "session" : "appearance",
@@ -79,16 +88,18 @@ export default function SettingsDialog(p: Props) {
   const [secret, setSecret] = useState("");
   const [saveSecret, setSaveSecret] = useState(!!p.session?.credentialRef);
   const [profile, setProfile] = useState<APIProfile>(
-    p.profiles[0] ? { ...p.profiles[0] } : { ...emptyProfile },
+    p.profiles[0]
+      ? { ...p.profiles[0] }
+      : { ...emptyProfile, name: t("settings:customApi") },
   );
   const [key, setKey] = useState("");
   const [memoryOnly, setMemoryOnly] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [error, setError] = useState<unknown>("");
+  const [success, setSuccess] = useState<DisplayText>("");
   const [busy, setBusy] = useState(false);
   const field = (name: keyof Session, value: string | number) =>
     setSession({ ...session, [name]: value });
-  const run = async (fn: () => Promise<void>, message = "") => {
+  const run = async (fn: () => Promise<void>, message: DisplayText = "") => {
     setBusy(true);
     setError("");
     setSuccess("");
@@ -96,7 +107,7 @@ export default function SettingsDialog(p: Props) {
       await fn();
       setSuccess(message);
     } catch (e) {
-      setError(errorText(e));
+      setError(e);
     } finally {
       setBusy(false);
     }
@@ -112,16 +123,18 @@ export default function SettingsDialog(p: Props) {
       <section role="dialog" aria-modal="true" className="settings-dialog">
         <header>
           <div>
-            <span className="eyebrow">WORKSPACE SETTINGS</span>
+            <span className="eyebrow">
+              {t("settings:workspaceSettingsLabel")}
+            </span>
             <h2>
               {p.kind === "session"
                 ? p.session
-                  ? "编辑会话"
-                  : "新建 SSH 会话"
-                : "工作空间设置"}
+                  ? t("common:editSession")
+                  : t("common:newSshSession")
+                : t("settings:workspaceSettings")}
             </h2>
           </div>
-          <button title="关闭" disabled={busy} onClick={p.onClose}>
+          <button title={t("common:close")} disabled={busy} onClick={p.onClose}>
             <X size={19} />
           </button>
         </header>
@@ -132,7 +145,7 @@ export default function SettingsDialog(p: Props) {
               onClick={() => setTab("appearance")}
             >
               <SlidersHorizontal size={15} />
-              外观
+              {t("settings:appearance")}
             </button>
             <button
               className={tab === "api" ? "active" : ""}
@@ -146,7 +159,7 @@ export default function SettingsDialog(p: Props) {
               onClick={() => setTab("automatic")}
             >
               <SlidersHorizontal size={15} />
-              自动执行
+              {t("ai:automatic")}
             </button>
           </nav>
         )}
@@ -155,28 +168,30 @@ export default function SettingsDialog(p: Props) {
             <>
               <div className="form-note">
                 <Server size={17} />
-                <span>保存连接信息，双击会话即可连接服务器。</span>
+                <span>
+                  {t("settings:saveConnectionDetailsThenDoubleClickASession")}
+                </span>
               </div>
               <label>
-                会话名称
+                {t("settings:sessionName")}
                 <input
                   value={session.name}
                   onChange={(e) => field("name", e.target.value)}
-                  placeholder="例如：香港服务器"
+                  placeholder={t("settings:eGHongKongServer")}
                 />
               </label>
               <div className="form-row">
                 <label className="flex-grow">
-                  主机地址
+                  {t("common:host")}
                   <input
                     autoFocus
                     value={session.host}
                     onChange={(e) => field("host", e.target.value)}
-                    placeholder="IP 地址或域名"
+                    placeholder={t("settings:ipAddressOrHostname")}
                   />
                 </label>
                 <label className="port-field">
-                  端口
+                  {t("common:port")}
                   <input
                     type="number"
                     min="1"
@@ -188,19 +203,19 @@ export default function SettingsDialog(p: Props) {
               </div>
               <div className="form-row">
                 <label>
-                  用户名
+                  {t("common:username")}
                   <input
                     value={session.username}
                     onChange={(e) => field("username", e.target.value)}
                   />
                 </label>
                 <label>
-                  分组
+                  {t("common:folder")}
                   <select
                     value={session.groupId}
                     onChange={(e) => field("groupId", e.target.value)}
                   >
-                    <option value="">默认分组</option>
+                    <option value="">{t("common:defaultFolder")}</option>
                     {p.groups.map((g) => (
                       <option key={g.id} value={g.id}>
                         {g.name}
@@ -210,7 +225,7 @@ export default function SettingsDialog(p: Props) {
                 </label>
               </div>
               <label>
-                认证方式
+                {t("common:authentication")}
                 <select
                   value={session.authType}
                   onChange={(e) => {
@@ -219,21 +234,21 @@ export default function SettingsDialog(p: Props) {
                     setSaveSecret(false);
                   }}
                 >
-                  <option value="password">密码</option>
-                  <option value="key">私钥</option>
+                  <option value="password">{t("common:password2")}</option>
+                  <option value="key">{t("settings:privateKey")}</option>
                 </select>
               </label>
               {session.authType === "key" && (
                 <label>
-                  私钥文件
+                  {t("settings:privateKeyFile")}
                   <div className="input-with-button">
                     <input
                       value={session.privateKeyPath}
                       onChange={(e) => field("privateKeyPath", e.target.value)}
-                      placeholder="选择本地私钥文件"
+                      placeholder={t("settings:chooseALocalPrivateKey")}
                     />
                     <button
-                      title="选择私钥文件"
+                      title={t("settings:choosePrivateKeyFile")}
                       onClick={() =>
                         run(async () => {
                           const path = await api.ChoosePrivateKey();
@@ -247,7 +262,9 @@ export default function SettingsDialog(p: Props) {
                 </label>
               )}
               <label>
-                {session.authType === "key" ? "私钥口令（可留空）" : "登录密码"}
+                {session.authType === "key"
+                  ? t("settings:keyPassphraseOptional")
+                  : t("common:password")}
                 <input
                   type="password"
                   autoComplete="new-password"
@@ -255,8 +272,8 @@ export default function SettingsDialog(p: Props) {
                   onChange={(e) => setSecret(e.target.value)}
                   placeholder={
                     session.credentialRef
-                      ? "已保存凭据，留空保持不变"
-                      : "不保存时可在连接时输入"
+                      ? t("settings:credentialsSavedLeaveEmptyToKeepThem")
+                      : t("settings:enterWhenConnectingIfNotSaved")
                   }
                 />
               </label>
@@ -266,10 +283,10 @@ export default function SettingsDialog(p: Props) {
                   checked={saveSecret}
                   onChange={(e) => setSaveSecret(e.target.checked)}
                 />
-                保存到 Windows 凭据管理器
+                {t("settings:saveToWindowsCredentialManager")}
               </label>
               <p className="muted small">
-                密码和私钥口令不会写入普通配置文件。
+                {t("settings:passwordsAndKeyPassphrasesAreNotStoredIn")}
               </p>
             </>
           )}
@@ -277,7 +294,7 @@ export default function SettingsDialog(p: Props) {
             <>
               <div className="api-presets">
                 <select
-                  aria-label="API 配置"
+                  aria-label={t("settings:apiProfile")}
                   value={profile.id}
                   onChange={(e) => {
                     setProfile({
@@ -288,7 +305,9 @@ export default function SettingsDialog(p: Props) {
                     setSuccess("");
                   }}
                 >
-                  {!profile.id && <option value="">新配置</option>}
+                  {!profile.id && (
+                    <option value="">{t("settings:newProfile")}</option>
+                  )}
                   {p.profiles.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name}
@@ -296,9 +315,12 @@ export default function SettingsDialog(p: Props) {
                   ))}
                 </select>
                 <button
-                  title="新建 API 配置"
+                  title={t("settings:newApiProfile")}
                   onClick={() => {
-                    setProfile({ ...emptyProfile });
+                    setProfile({
+                      ...emptyProfile,
+                      name: t("settings:customApi"),
+                    });
                     setKey("");
                     setSuccess("");
                   }}
@@ -307,18 +329,26 @@ export default function SettingsDialog(p: Props) {
                 </button>
                 {profile.id && (
                   <button
-                    title="删除 API 配置"
+                    title={t("settings:deleteApiProfile")}
                     onClick={async () => {
-                      if (!(await dialogs.confirm({
-                        title: "删除 AI API 配置",
-                        description: "确定删除此 API 配置及保存的密钥？此操作无法撤销。",
-                        tone: "danger",
-                        confirmLabel: "删除配置",
-                      }))) return;
+                      if (
+                        !(await dialogs.confirm({
+                          title: message("settings:deleteAiApiProfile"),
+                          description: message(
+                            "settings:deleteThisApiProfileAndItsSavedKey",
+                          ),
+                          tone: "danger",
+                          confirmLabel: message("settings:deleteProfile"),
+                        }))
+                      )
+                        return;
                       await run(async () => {
                         await api.DeleteAPI(profile.id);
                         await p.onRefresh();
-                        setProfile({ ...emptyProfile });
+                        setProfile({
+                          ...emptyProfile,
+                          name: t("settings:customApi"),
+                        });
                         setKey("");
                       });
                     }}
@@ -329,10 +359,10 @@ export default function SettingsDialog(p: Props) {
               </div>
               <div className="form-note">
                 <KeyRound size={17} />
-                <span>OpenAI 兼容接口</span>
+                <span>{t("settings:openaiCompatibleApi")}</span>
               </div>
               <label>
-                配置名称
+                {t("settings:profileName")}
                 <input
                   value={profile.name}
                   onChange={(e) =>
@@ -359,19 +389,21 @@ export default function SettingsDialog(p: Props) {
                   onChange={(e) => setKey(e.target.value)}
                   placeholder={
                     profile.secretRef
-                      ? "已保存密钥，留空保持不变"
-                      : "sk-…（本地无鉴权服务可留空）"
+                      ? t("settings:keySavedLeaveEmptyToKeepIt")
+                      : t(
+                          "settings:skOptionalForLocalServicesWithoutAuthentication",
+                        )
                   }
                 />
               </label>
               <label>
-                模型名称
+                {t("settings:modelName")}
                 <input
                   value={profile.model}
                   onChange={(e) =>
                     setProfile({ ...profile, model: e.target.value })
                   }
-                  placeholder="填写接口提供的模型 ID"
+                  placeholder={t("settings:modelIdFromYourApiProvider")}
                 />
               </label>
               <label className="checkbox">
@@ -382,7 +414,7 @@ export default function SettingsDialog(p: Props) {
                     setProfile({ ...profile, toolsEnabled: e.target.checked })
                   }
                 />
-                启用工具调用（AI 操作服务器）
+                {t("settings:enableToolCallsAiServerOperations")}
               </label>
               <label className="checkbox">
                 <input
@@ -390,21 +422,22 @@ export default function SettingsDialog(p: Props) {
                   checked={memoryOnly}
                   onChange={(e) => setMemoryOnly(e.target.checked)}
                 />
-                密钥仅本次使用
+                {t("settings:useKeyForThisSessionOnly")}
               </label>
               <p className="muted small">
-                不支持工具调用的接口可关闭此项，使用普通对话。远程地址使用
-                HTTPS，本机服务可使用 HTTP。
+                {t("settings:disableToolCallsForApisThatOnlySupport")}
               </p>
             </>
           )}
           {tab === "automatic" && (
             <>
               <div className="form-note">
-                自动执行会连续检查并根据命令结果处理任务；每次任务固定使用启动时的服务器、模型和执行范围。
+                {t(
+                  "settings:automaticModeProcessesTasksUsingCommandResultsEach",
+                )}
               </div>
               <label>
-                每轮命令上限
+                {t("settings:commandsPerRound")}
                 <input
                   type="number"
                   min="1"
@@ -414,58 +447,86 @@ export default function SettingsDialog(p: Props) {
                 />
               </label>
               <label>
-                自动执行范围
+                {t("settings:automaticExecutionScope")}
                 <select
-                  aria-label="自动执行范围"
+                  aria-label={t("settings:automaticExecutionScope")}
                   value={allowChanges ? "all" : "inspection"}
                   onChange={(e) => setAllowChanges(e.target.value === "all")}
                 >
-                  <option value="inspection">仅检查操作，修改需确认</option>
-                  <option value="all">允许修改操作</option>
+                  <option value="inspection">
+                    {t("settings:inspectOnlyConfirmChanges")}
+                  </option>
+                  <option value="all">{t("ai:changesAllowed")}</option>
                 </select>
               </label>
               <p className="muted small">
-                默认每轮 10
-                条，达到上限后点击继续下一轮。不能明确识别的检查命令与重复命令仍会等待确认。
+                {t("settings:default10CommandsPerRoundContinueAfterReaching")}
               </p>
               {allowChanges && (
                 <p className="small danger-text">
-                  允许自动修改配置、安装、删除和重启。此设置只应用到之后启动的自动任务。
+                  {t(
+                    "settings:allowsAutomaticConfigurationChangesInstallsDeletionsAndRestarts",
+                  )}
                 </p>
               )}
             </>
           )}
           {tab === "appearance" && (
             <>
+              <label>
+                Language / 语言
+                <select
+                  value={p.language ?? "en"}
+                  disabled={p.languageSaving}
+                  onChange={(e) => {
+                    setError("");
+                    p.onLanguage?.(e.target.value as Language).catch((error) =>
+                      setError(error),
+                    );
+                  }}
+                >
+                  {languages.map((language) => (
+                    <option key={language.value} value={language.value}>
+                      {language.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="form-note">
                 <SlidersHorizontal size={17} />
-                <span>主题与终端设置会应用到整个工作空间。</span>
+                <span>
+                  {t("settings:themeAndTerminalSettingsApplyToTheWhole")}
+                </span>
               </div>
               <label>
-                主题
+                {t("settings:theme")}
                 <select
                   value={p.theme}
                   onChange={(e) => p.onTheme(e.target.value as Theme)}
                 >
-                  <option value="dark">深色</option>
-                  <option value="light">浅色</option>
+                  <option value="dark">{t("settings:dark")}</option>
+                  <option value="light">{t("settings:light")}</option>
                 </select>
               </label>
               <label>
-                快速命令栏布局
+                {t("settings:quickCommandLayout")}
                 <select
-                  aria-label="快速命令栏布局"
+                  aria-label={t("settings:quickCommandLayout")}
                   value={p.quickCommandLayout}
                   onChange={(e) =>
                     p.onQuickCommandLayout(e.target.value as QuickCommandLayout)
                   }
                 >
-                  <option value="single">单行横向滚动（默认）</option>
-                  <option value="multi">多行自动换行</option>
+                  <option value="single">
+                    {t("settings:singleRowWithHorizontalScrollingDefault")}
+                  </option>
+                  <option value="multi">
+                    {t("settings:multipleRowsWithWrapping")}
+                  </option>
                 </select>
               </label>
               <label>
-                字体大小
+                {t("settings:fontSize")}
                 <div className="font-control">
                   <input
                     type="range"
@@ -480,19 +541,19 @@ export default function SettingsDialog(p: Props) {
               <div
                 className="terminal-mouse-settings"
                 role="group"
-                aria-label="终端鼠标操作"
+                aria-label={t("settings:terminalMouseActions")}
               >
-                <strong>终端鼠标操作</strong>
+                <strong>{t("settings:terminalMouseActions")}</strong>
                 <label className="checkbox">
                   <input
                     type="checkbox"
                     checked={p.autoCopySelection}
                     onChange={(e) => p.onAutoCopySelection(e.target.checked)}
                   />
-                  选中自动复制
+                  {t("settings:copySelectionAutomatically")}
                 </label>
                 <p className="muted small">
-                  鼠标选中文字后，自动复制到系统剪贴板。
+                  {t("settings:copyTextToTheClipboardAfterSelectingIt")}
                 </p>
                 <label className="checkbox">
                   <input
@@ -500,10 +561,10 @@ export default function SettingsDialog(p: Props) {
                     checked={p.rightClickPaste}
                     onChange={(e) => p.onRightClickPaste(e.target.checked)}
                   />
-                  鼠标右键粘贴
+                  {t("settings:rightClickToPaste")}
                 </label>
                 <p className="muted small">
-                  在 SSH 终端内单击右键，直接粘贴剪贴板文本。
+                  {t("settings:rightClickInTheSshTerminalToPaste")}
                 </p>
                 {p.rightClickPaste && (
                   <label className="checkbox nested-option">
@@ -514,7 +575,7 @@ export default function SettingsDialog(p: Props) {
                         p.onConfirmMultilinePaste(e.target.checked)
                       }
                     />
-                    多行粘贴前确认
+                    {t("settings:confirmMultilinePaste")}
                   </label>
                 )}
               </div>
@@ -523,28 +584,28 @@ export default function SettingsDialog(p: Props) {
                 <br />
                 <i>● redis.service — Ready to accept connections</i>
                 <br />
-                OpenShell · 中文终端预览
+                {t("settings:openshellTerminalPreview")}
               </div>
               <p className="muted small">
-                终端采用系统等宽字体，支持 UTF-8、256 色和 10,000 行滚动历史。
+                {t("settings:systemMonospaceFontUtf8256ColorsAnd")}
               </p>
             </>
           )}
-          {error && (
+          {!!error && (
             <div className="form-error" role="alert">
-              {error}
+              {errorText(error)}
             </div>
           )}
           {success && (
             <div className="form-success">
               <Check size={15} />
-              {success}
+              {renderMessage(success)}
             </div>
           )}
         </div>
         <footer>
           <button className="secondary" disabled={busy} onClick={p.onClose}>
-            关闭
+            {t("common:close")}
           </button>
           <div>
             {tab === "api" && (
@@ -552,10 +613,13 @@ export default function SettingsDialog(p: Props) {
                 className="secondary"
                 disabled={busy}
                 onClick={() =>
-                  run(() => api.TestAPI(apiRequest()), "连接成功，模型已响应")
+                  run(
+                    () => api.TestAPI(apiRequest()),
+                    message("settings:connectedModelRespondedSuccessfully"),
+                  )
                 }
               >
-                测试连接
+                {t("settings:testConnection")}
               </button>
             )}
             {tab === "session" && (
@@ -564,15 +628,15 @@ export default function SettingsDialog(p: Props) {
                 disabled={busy}
                 onClick={() => {
                   if (!session.host.trim() || !session.username.trim()) {
-                    setError("请填写主机地址和用户名");
+                    setError(message("settings:enterAHostAndUsername"));
                     return;
                   }
                   if (session.port < 1 || session.port > 65535) {
-                    setError("端口必须在 1–65535 之间");
+                    setError(message("settings:portMustBeBetween1And65535"));
                     return;
                   }
                   if (session.authType === "key" && !session.privateKeyPath) {
-                    setError("请选择私钥文件");
+                    setError(message("settings:chooseAPrivateKeyFile"));
                     return;
                   }
                   run(async () => {
@@ -582,7 +646,7 @@ export default function SettingsDialog(p: Props) {
                 }}
               >
                 {busy ? <LoaderCircle size={15} className="spin" /> : null}
-                保存会话
+                {t("settings:saveSession")}
               </button>
             )}
             {tab === "api" && (
@@ -595,11 +659,11 @@ export default function SettingsDialog(p: Props) {
                     setProfile(saved);
                     setKey("");
                     await p.onRefresh();
-                  }, "配置已保存")
+                  }, message("settings:profileSaved"))
                 }
               >
                 {busy ? <LoaderCircle size={15} className="spin" /> : null}
-                保存配置
+                {t("settings:saveProfile")}
               </button>
             )}
             {tab === "automatic" && (
@@ -613,7 +677,9 @@ export default function SettingsDialog(p: Props) {
                       autoLimit < 1 ||
                       autoLimit > 100
                     )
-                      throw new Error("每轮命令上限必须为 1–100");
+                      throw new Error(
+                        t("settings:commandLimitMustBeBetween1And100"),
+                      );
                     await api.SavePreference(
                       "autoCommandLimit",
                       String(autoLimit),
@@ -623,10 +689,10 @@ export default function SettingsDialog(p: Props) {
                       String(allowChanges),
                     );
                     await p.onRefresh();
-                  }, "自动执行设置已保存")
+                  }, message("settings:automaticSettingsSaved"))
                 }
               >
-                保存自动执行设置
+                {t("settings:saveAutomaticSettings")}
               </button>
             )}
             {tab === "appearance" && (
@@ -653,10 +719,10 @@ export default function SettingsDialog(p: Props) {
                       "confirmMultilinePaste",
                       String(p.confirmMultilinePaste),
                     );
-                  }, "外观已保存")
+                  }, message("settings:appearanceSaved"))
                 }
               >
-                保存外观
+                {t("settings:saveAppearance")}
               </button>
             )}
           </div>

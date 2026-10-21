@@ -117,7 +117,7 @@ func TestToolDescribesAlreadyConnectedRemoteExecution(t *testing.T) {
 		if e := json.NewDecoder(r.Body).Decode(&req); e != nil {
 			t.Error(e)
 		}
-		if len(req.Tools) != 1 || !strings.Contains(req.Tools[0].Function.Description, "已经通过 SSH 登录") || !strings.Contains(req.Tools[0].Function.Parameters.Properties["command"].Description, "不要添加 ssh") {
+		if len(req.Tools) != 1 || !strings.Contains(req.Tools[0].Function.Description, "already connected via SSH") || !strings.Contains(req.Tools[0].Function.Parameters.Properties["command"].Description, "without ssh login prefixes") {
 			t.Error("tool does not explain execution location")
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -131,14 +131,14 @@ func TestToolDescribesAlreadyConnectedRemoteExecution(t *testing.T) {
 }
 func TestSystemMessageExplainsAvailableRemoteTool(t *testing.T) {
 	s := domain.Session{Host: "192.0.2.10", Port: 22, Username: "root"}
-	enabled := SystemMessage(s, true)
-	for _, text := range []string{"已经通过 SSH 登录", "propose_command", "直接在远程服务器执行", "不要再次运行 ssh", "不要声称没有 SSH 执行工具"} {
+	enabled := SystemMessage(s, true, "en")
+	for _, text := range []string{"already connected over SSH", "propose_command", "directly on this remote server", "Do not reconnect", "tool is available"} {
 		if !strings.Contains(enabled.Content, text) {
 			t.Fatalf("missing %q", text)
 		}
 	}
-	disabled := SystemMessage(s, false)
-	if !strings.Contains(disabled.Content, "普通对话模式") || !strings.Contains(disabled.Content, "操作模式") {
+	disabled := SystemMessage(s, false, "en")
+	if !strings.Contains(disabled.Content, "Chat mode") || !strings.Contains(disabled.Content, "operation mode") {
 		t.Fatal(disabled.Content)
 	}
 }

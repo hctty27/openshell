@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import * as bindings from "../wailsjs/go/main/App";
 import type {
   AppState,
@@ -75,7 +76,9 @@ export const api = new Proxy({} as Backend, {
     (...args: unknown[]) => {
       const backend = window.go?.main?.App;
       if (!backend)
-        return Promise.reject(new Error("请在 Windows 桌面应用中使用此功能"));
+        return Promise.reject(
+          new Error(t("common:useThisFeatureInTheWindowsDesktopApp")),
+        );
       return (
         bindings[name as keyof typeof bindings] as (
           ...args: unknown[]
@@ -89,5 +92,4 @@ export function listen(
 ): () => void {
   return window.runtime?.EventsOn(name, callback) ?? (() => {});
 }
-export const errorText = (e: unknown) =>
-  e instanceof Error ? e.message : String(e);
+export { errorText } from "./i18n/errors";
