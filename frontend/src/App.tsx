@@ -40,7 +40,7 @@ const initial: AppState = {
   profiles: [],
   fontSize: "14",
   activeProfile: "",
-  version: "0.1.5",
+  version: "0.1.6",
 };
 const id = () => crypto.randomUUID();
 export default function App() {
@@ -665,7 +665,7 @@ export default function App() {
           </span>
           <span>
             OpenShell <span className="status-sep" />
-            v0.1.5
+            v0.1.6
           </span>
         </footer>
       </main>
