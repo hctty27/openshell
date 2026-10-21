@@ -63,6 +63,12 @@ jobs:
           npm run build
           npm test -- --run
 
+      - name: Verify 30px layout in Chromium
+        working-directory: frontend
+        run: |
+          npx playwright install chromium
+          npx playwright test --grep "compact sidebar removes detail actions"
+
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
 
