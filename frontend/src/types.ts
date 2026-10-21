@@ -66,11 +66,13 @@ export interface Tab {
   executing: boolean;
   error: string;
 }
+export type Theme = "dark" | "light";
 export interface AppState {
   sessions: Session[];
   groups: Group[];
   profiles: APIProfile[];
   fontSize: string;
+  theme?: Theme;
   activeProfile: string;
   version: string;
 }

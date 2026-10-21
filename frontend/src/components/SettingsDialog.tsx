@@ -17,6 +17,7 @@ import type {
   APIProfile,
   SessionRequest,
   APIRequest,
+  Theme,
 } from "../types";
 interface Props {
   kind: "session" | "settings";
@@ -24,6 +25,8 @@ interface Props {
   groups: Group[];
   profiles: APIProfile[];
   fontSize: number;
+  theme: Theme;
+  onTheme(theme: Theme): void;
   onClose(): void;
   onSession(req: SessionRequest): Promise<void>;
   onRefresh(): Promise<void>;
@@ -109,7 +112,7 @@ export default function SettingsDialog(p: Props) {
               onClick={() => setTab("appearance")}
             >
               <SlidersHorizontal size={15} />
-              终端外观
+              外观
             </button>
             <button
               className={tab === "api" ? "active" : ""}
@@ -367,8 +370,18 @@ export default function SettingsDialog(p: Props) {
             <>
               <div className="form-note">
                 <SlidersHorizontal size={17} />
-                <span>终端设置会应用到全部标签。</span>
+                <span>主题与终端设置会应用到整个工作空间。</span>
               </div>
+              <label>
+                主题
+                <select
+                  value={p.theme}
+                  onChange={(e) => p.onTheme(e.target.value as Theme)}
+                >
+                  <option value="dark">深色</option>
+                  <option value="light">浅色</option>
+                </select>
+              </label>
               <label>
                 字体大小
                 <div className="font-control">
@@ -471,10 +484,10 @@ export default function SettingsDialog(p: Props) {
                 className="primary"
                 disabled={busy}
                 onClick={() =>
-                  run(
-                    () => api.SavePreference("fontSize", String(p.fontSize)),
-                    "外观已保存",
-                  )
+                  run(async () => {
+                    await api.SavePreference("fontSize", String(p.fontSize));
+                    await api.SavePreference("theme", p.theme);
+                  }, "外观已保存")
                 }
               >
                 保存外观

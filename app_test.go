@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/hctty27/openshell/internal/ai"
 	"github.com/hctty27/openshell/internal/domain"
@@ -10,6 +11,36 @@ import (
 	"testing"
 	"time"
 )
+
+func TestThemePreferencePersistsAcrossRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	a, err := newApp(path, &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = a.SavePreference("theme", "light"); err != nil {
+		t.Fatal(err)
+	}
+	a.shutdown(context.Background())
+	b, err := newApp(path, &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.shutdown(context.Background())
+	state, err := b.State()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(state)
+	var decoded map[string]any
+	json.Unmarshal(data, &decoded)
+	if decoded["theme"] != "light" {
+		t.Fatalf("theme not restored: %s", data)
+	}
+	if err = b.SavePreference("theme", "invalid"); err == nil {
+		t.Fatal("invalid theme accepted")
+	}
+}
 
 type vault struct {
 	m          map[string]string

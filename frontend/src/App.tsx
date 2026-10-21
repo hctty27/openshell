@@ -28,6 +28,7 @@ import type {
   ChatMessage,
   SessionRequest,
   ChatRequest,
+  Theme,
 } from "./types";
 import SessionTree from "./components/SessionTree";
 import SettingsDialog from "./components/SettingsDialog";
@@ -39,7 +40,7 @@ const initial: AppState = {
   profiles: [],
   fontSize: "14",
   activeProfile: "",
-  version: "0.1.3",
+  version: "0.1.4",
 };
 const id = () => crypto.randomUUID();
 export default function App() {
@@ -49,6 +50,7 @@ export default function App() {
     [showAI, setShowAI] = useState(true),
     [showSessions, setShowSessions] = useState(true),
     [fontSize, setFontSize] = useState(14),
+    [theme, setTheme] = useState<Theme>("dark"),
     [profileID, setProfileID] = useState(""),
     [dialog, setDialog] = useState<{
       kind: "session" | "settings";
@@ -81,6 +83,7 @@ export default function App() {
     try {
       const data = await api.State();
       setState(data);
+      setTheme(data.theme === "light" ? "light" : "dark");
       if (data.fontSize)
         setFontSize(Math.max(11, Math.min(24, Number(data.fontSize) || 14)));
       setProfileID((old) =>
@@ -94,6 +97,9 @@ export default function App() {
       if (desktop) notify(e);
     }
   };
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
   useEffect(() => {
     refresh();
     const off = listen("ssh:disconnected", (ref: Ref) =>
@@ -604,6 +610,7 @@ export default function App() {
                   tab={tab}
                   active={tab.id === activeID}
                   fontSize={fontSize}
+                  theme={theme}
                   onError={(text) => {
                     update(tab.id, (t) => ({
                       ...t,
@@ -658,7 +665,7 @@ export default function App() {
           </span>
           <span>
             OpenShell <span className="status-sep" />
-            v0.1.3
+            v0.1.4
           </span>
         </footer>
       </main>
@@ -711,6 +718,8 @@ export default function App() {
           groups={state.groups}
           profiles={state.profiles}
           fontSize={fontSize}
+          theme={theme}
+          onTheme={setTheme}
           onClose={() => setDialog(null)}
           onSession={saveSession}
           onRefresh={refresh}

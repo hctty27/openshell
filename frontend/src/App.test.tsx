@@ -8,17 +8,19 @@ import {
 } from "@testing-library/react";
 import { expect, test, vi, afterEach } from "vitest";
 import App from "./App";
+import { api } from "./bridge";
 vi.mock("./components/TerminalPane", () => ({ default: () => null }));
 vi.mock("./bridge", () => ({
   desktop: false,
   api: {
+    SavePreference: vi.fn(async () => {}),
     State: vi.fn(async () => ({
       sessions: [],
       groups: [],
       profiles: [],
       fontSize: "14",
       activeProfile: "",
-      version: "0.1.3",
+      version: "0.1.4",
     })),
   },
   listen: () => () => {},
@@ -33,6 +35,24 @@ test("shows workspace and collapsible AI sidebar", async () => {
   expect(screen.getByText("AI 助手")).toBeTruthy();
   fireEvent.click(screen.getByTitle("收起 AI"));
   expect(screen.queryByText("AI 助手")).toBeNull();
+});
+test("theme previews immediately and is saved in appearance settings", async () => {
+  await act(async () => {
+    render(<App />);
+  });
+  fireEvent.click(screen.getByTitle("设置"));
+  fireEvent.change(screen.getByLabelText("主题"), {
+    target: { value: "light" },
+  });
+  expect(document.documentElement.dataset.theme).toBe("light");
+  fireEvent.click(screen.getByRole("button", { name: "保存外观" }));
+  await waitFor(() =>
+    expect(api.SavePreference).toHaveBeenCalledWith("theme", "light"),
+  );
+  fireEvent.change(screen.getByLabelText("主题"), {
+    target: { value: "dark" },
+  });
+  expect(document.documentElement.dataset.theme).toBe("dark");
 });
 test("opens session editor without connecting and rejects missing host", async () => {
   await act(async () => {

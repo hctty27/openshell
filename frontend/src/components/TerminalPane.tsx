@@ -3,11 +3,13 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { api, listen, errorText } from "../bridge";
-import type { Tab, Ref } from "../types";
+import type { Tab, Ref, Theme } from "../types";
+import { terminalThemes } from "../terminalThemes";
 interface Props {
   tab: Tab;
   active: boolean;
   fontSize: number;
+  theme: Theme;
   onError(text: string): void;
   onSelection(text: string): void;
 }
@@ -26,20 +28,9 @@ export default function TerminalPane(p: Props) {
     const term = new Terminal({
       fontFamily: 'Cascadia Mono,Consolas,"Microsoft YaHei",monospace',
       fontSize: p.fontSize,
-      theme: {
-        background: "#0b1017",
-        foreground: "#d0d9e5",
-        cursor: "#67d8b6",
-        selectionBackground: "#2d5a6b99",
-        black: "#15202b",
-        red: "#f0828a",
-        green: "#79d9af",
-        yellow: "#e6ca89",
-        blue: "#79b5ef",
-        magenta: "#bb9ae5",
-        cyan: "#74d4d5",
-        white: "#dce5ed",
-      },
+      theme: terminalThemes[callbacks.current.theme],
+      overviewRuler: { width: 6 },
+      minimumContrastRatio: 4.5,
       cursorBlink: true,
       scrollback: 10000,
       allowProposedApi: false,
@@ -119,6 +110,10 @@ export default function TerminalPane(p: Props) {
       fit.current?.fit();
     }
   }, [p.fontSize]);
+  useEffect(() => {
+    if (terminal.current)
+      terminal.current.options.theme = terminalThemes[p.theme];
+  }, [p.theme]);
   useEffect(() => {
     if (p.active) {
       requestAnimationFrame(() => {

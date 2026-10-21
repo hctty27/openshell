@@ -181,6 +181,7 @@ export namespace main {
 	    groups: domain.Group[];
 	    profiles: domain.APIProfile[];
 	    fontSize: string;
+	    theme: string;
 	    activeProfile: string;
 	    version: string;
 	
@@ -194,6 +195,7 @@ export namespace main {
 	        this.groups = this.convertValues(source["groups"], domain.Group);
 	        this.profiles = this.convertValues(source["profiles"], domain.APIProfile);
 	        this.fontSize = source["fontSize"];
+	        this.theme = source["theme"];
 	        this.activeProfile = source["activeProfile"];
 	        this.version = source["version"];
 	    }

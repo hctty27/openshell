@@ -9,8 +9,9 @@ test.beforeEach(async ({ page }) => {
       groups: [],
       profiles: [],
       fontSize: "14",
+      theme: localStorage.getItem("fixture-theme") || "dark",
       activeProfile: "",
-      version: "0.1.3",
+      version: "0.1.4",
     };
     const emit = (name: string, value: any) =>
       (listeners[name] ?? []).forEach((fn) => fn(value));
@@ -40,7 +41,10 @@ test.beforeEach(async ({ page }) => {
             return s;
           },
           SaveGroup: async (g: any) => g,
-          SavePreference: async () => {},
+          SavePreference: async (key: string, value: string) => {
+            state[key] = value;
+            if (key === "theme") localStorage.setItem("fixture-theme", value);
+          },
           SaveAPI: async (req: any) => {
             const p = { ...req.profile, id: "api-1" };
             state.profiles = [p];
@@ -65,6 +69,8 @@ test.beforeEach(async ({ page }) => {
             trusted = true;
           },
           OpenTerminal: async (ref: any) => {
+            (window as any).__terminalOutput = (text: string) =>
+              emit("ssh:output", { ref, data: btoa(text) });
             if ((window as any).__rejectPTY) throw new Error("PTY 拒绝");
             setTimeout(
               () =>
@@ -81,6 +87,7 @@ test.beforeEach(async ({ page }) => {
             (window as any).__resizes.push({ cols, rows });
           },
           CloseTab: async () => {},
+          Disconnect: async () => {},
           Chat: async (req: any) => {
             emit("ai:delta", { ref: req.ref, text: "正在检查服务器。" });
             return {
@@ -184,7 +191,92 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
     (window as any).__rejectPTY = true;
   });
   await page.getByTitle("重新连接", { exact: true }).click();
-  await expect(page.getByText("PTY 拒绝", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("main").getByText("PTY 拒绝", { exact: true }),
+  ).toBeVisible();
   await page.getByTitle("收起 AI").click();
   await expect(page.getByText("AI 助手", { exact: true })).toHaveCount(0);
+});
+
+test("terminal stays within its viewport with stable scrollbar and both themes", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1200, height: 700 });
+  await page.goto("/");
+  await page.getByTitle("新建会话", { exact: true }).first().click();
+  await page.getByLabel("会话名称", { exact: true }).fill("布局测试");
+  await page.getByLabel("主机地址").fill("127.0.0.1");
+  await page.getByLabel("登录密码").fill("fixture-password");
+  await page.getByText("保存到 Windows 凭据管理器").click();
+  await page.getByRole("button", { name: "保存会话", exact: true }).click();
+  await page.getByText("布局测试", { exact: true }).dblclick();
+  await page.getByRole("button", { name: "信任并连接" }).click();
+  await expect(
+    page.locator(".terminal-pane.active .xterm-screen"),
+  ).toBeVisible();
+  const geometry = () =>
+    page.evaluate(() => {
+      const pane = document.querySelector(".terminal-pane.active")!;
+      const box = pane.getBoundingClientRect();
+      const screen = pane
+        .querySelector(".xterm-screen")!
+        .getBoundingClientRect();
+      const bar = pane.querySelector(".scrollbar.vertical")!;
+      return {
+        bottom: screen.bottom,
+        right: screen.right,
+        hostBottom: box.bottom,
+        hostRight: box.right,
+        width: screen.width,
+        scrollbarWidth: bar.getBoundingClientRect().width,
+        opacity: getComputedStyle(bar).opacity,
+      };
+    });
+  await expect
+    .poll(
+      async () => (await geometry()).bottom <= (await geometry()).hostBottom,
+    )
+    .toBe(true);
+  const before = await geometry();
+  await page.evaluate(() =>
+    (window as any).__terminalOutput("row\r\n".repeat(200) + "last-line> "),
+  );
+  await expect.poll(async () => (await geometry()).width).toBe(before.width);
+  expect((await geometry()).scrollbarWidth).toBe(6);
+  expect((await geometry()).opacity).toBe("1");
+  await page.getByTitle("设置", { exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "主题", exact: true })
+    .selectOption("light");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.getByRole("button", { name: "保存外观" }).click();
+  await expect(page.getByText("外观已保存")).toBeVisible();
+  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await page.screenshot({ path: "../tmp/theme-light.png" });
+  for (const size of [
+    { width: 1000, height: 640 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(size);
+    await expect
+      .poll(async () => {
+        const g = await geometry();
+        return g.bottom <= g.hostBottom && g.right <= g.hostRight;
+      })
+      .toBe(true);
+  }
+  await page.getByTitle("收起 AI").click();
+  await expect
+    .poll(async () => {
+      const g = await geometry();
+      return g.bottom <= g.hostBottom && g.right <= g.hostRight;
+    })
+    .toBe(true);
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await page.getByTitle("设置", { exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "主题", exact: true })
+    .selectOption("dark");
+  await page.screenshot({ path: "../tmp/theme-dark.png" });
 });

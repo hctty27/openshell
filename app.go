@@ -39,6 +39,7 @@ type AppState struct {
 	Groups        []domain.Group      `json:"groups"`
 	Profiles      []domain.APIProfile `json:"profiles"`
 	FontSize      string              `json:"fontSize"`
+	Theme         string              `json:"theme"`
 	ActiveProfile string              `json:"activeProfile"`
 	Version       string              `json:"version"`
 }
@@ -139,7 +140,14 @@ func (a *App) State() (AppState, error) {
 		return AppState{}, e
 	}
 	active, e := a.store.GetPreference(a.ctx, "activeProfile")
-	return AppState{sessions, groups, profiles, font, active, branding.Version}, e
+	if e != nil {
+		return AppState{}, e
+	}
+	theme, e := a.store.GetPreference(a.ctx, "theme")
+	if theme != "light" {
+		theme = "dark"
+	}
+	return AppState{Sessions: sessions, Groups: groups, Profiles: profiles, FontSize: font, Theme: theme, ActiveProfile: active, Version: branding.Version}, e
 }
 func (a *App) SaveSession(req SaveSessionRequest) (domain.Session, error) {
 	a.mu.Lock()
@@ -203,8 +211,11 @@ func (a *App) SaveGroup(g domain.Group) (domain.Group, error) {
 }
 func (a *App) DeleteGroup(id string) error { return a.store.DeleteGroup(a.ctx, id) }
 func (a *App) SavePreference(key, value string) error {
-	if key != "fontSize" && key != "activeProfile" {
+	if key != "fontSize" && key != "activeProfile" && key != "theme" {
 		return errors.New("不支持的设置")
+	}
+	if key == "theme" && value != "dark" && value != "light" {
+		return errors.New("不支持的主题")
 	}
 	return a.store.SetPreference(a.ctx, key, value)
 }
