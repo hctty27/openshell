@@ -2317,26 +2317,26 @@ select.mode-select {
 .session-context-menu {
   position: fixed;
   z-index: 95;
-  width: 192px;
+  width: 132px;
   max-width: calc(100vw - 16px);
   max-height: calc(100vh - 16px);
   overflow-y: auto;
-  padding: 5px;
+  padding: 3px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 7px;
   background: var(--raised);
-  box-shadow: 0 12px 38px #0005;
+  box-shadow: 0 8px 24px #0004;
 }
 .session-context-menu [role="menuitem"] {
   width: 100%;
-  min-height: 34px;
-  padding: 7px 10px;
+  min-height: 25px;
+  padding: 4px 7px;
   justify-content: flex-start;
-  gap: 11px;
+  gap: 6px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 11px;
   text-align: left;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 .session-context-menu [role="menuitem"]:hover,
 .session-context-menu [role="menuitem"]:focus-visible {
@@ -2350,8 +2350,8 @@ select.mode-select {
 }
 .session-context-menu .session-context-menu__separated {
   border-top: 1px solid var(--border);
-  padding-top: 4px;
-  margin-top: 4px;
+  padding-top: 1px;
+  margin-top: 1px;
 }
 .session-context-menu [role="menuitem"].session-context-menu__danger,
 .session-context-menu [role="menuitem"].session-context-menu__danger > svg {

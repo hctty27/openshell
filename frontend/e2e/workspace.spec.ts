@@ -423,6 +423,16 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   await expect(contextMenu.getByRole("menuitem", { name: "编辑会话" })).toBeVisible();
   await expect(contextMenu).toHaveCSS("position", "fixed");
   expect(await contextMenu.evaluate((element) => element.parentElement === document.body)).toBe(true);
+  const compactMenu = await contextMenu.evaluate((element) => {
+    const menu = element.getBoundingClientRect();
+    const firstItem = element.querySelector('[role="menuitem"]')!.getBoundingClientRect();
+    const icon = element.querySelector("svg")!.getBoundingClientRect();
+    return { width: menu.width, height: menu.height, rowHeight: firstItem.height, iconWidth: icon.width };
+  });
+  expect(compactMenu.width).toBe(132);
+  expect(compactMenu.height).toBeLessThanOrEqual(92);
+  expect(compactMenu.rowHeight).toBe(25);
+  expect(compactMenu.iconWidth).toBe(12);
   await page.keyboard.press("Escape");
   await expect(contextMenu).toHaveCount(0);
 
