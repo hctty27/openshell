@@ -20,7 +20,7 @@ vi.mock("./bridge", () => ({
       profiles: [],
       fontSize: "14",
       activeProfile: "",
-      version: "0.1.9",
+      version: "0.1.11",
     })),
   },
   listen: () => () => {},
@@ -82,4 +82,15 @@ test("shows the OpenShell product name", async () => {
   });
   expect(screen.getAllByText("OpenShell").length).toBeGreaterThan(0);
   expect(screen.queryByText("轻量 SSH")).toBeNull();
+});
+
+test("renders application version on the left and SSH connection status on the right", async () => {
+  await act(async () => {
+    render(<App />);
+  });
+  const footer = document.querySelector(".workspace-status");
+  expect(footer?.firstElementChild?.classList.contains("workspace-version")).toBe(true);
+  expect(footer?.lastElementChild?.classList.contains("workspace-connection")).toBe(true);
+  expect(footer?.textContent).toContain("v0.1.11");
+  expect(footer?.textContent).toContain("未连接");
 });

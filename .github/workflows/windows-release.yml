@@ -43,7 +43,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 50
     env:
-      APP_VERSION: "0.1.10"
+      APP_VERSION: "0.1.11"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -120,7 +120,7 @@ jobs:
       - name: Publish build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: OpenShell-v0.1.10-windows-x64
+          name: OpenShell-v0.1.11-windows-x64
           path: |
             dist/*.zip
             dist/*.exe
@@ -139,5 +139,5 @@ jobs:
             Write-Host "Release $tag already exists; not replacing published binaries."
             exit 0
           }
-          gh release create $tag "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe" "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "OpenShell $tag" --notes "v0.1.10：启用 OpenShell AI 星环图标；修复 NSIS 安装包和卸载程序沿用默认图标的问题；桌面 EXE、安装包、网页图标与侧栏 Logo 统一，新增 PE 资源校验。Windows x64；未经代码签名。"
+          gh release create $tag "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe" "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "OpenShell $tag" --notes "v0.1.11：顶部标题栏、SSH 标签栏、连接信息栏、详情标题及底部状态栏统一为 30px；右下显示 SSH 连接状态、UTF-8 与终端类型；保留多行快速命令模式。Windows x64；未经代码签名。"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

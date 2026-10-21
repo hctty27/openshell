@@ -44,7 +44,7 @@ const initial: AppState = {
   profiles: [],
   fontSize: "14",
   activeProfile: "",
-  version: "0.1.10",
+  version: "0.1.11",
 };
 const id = () => crypto.randomUUID();
 export default function App() {
@@ -686,7 +686,11 @@ export default function App() {
           </>
         )}
         <footer className="workspace-status">
-          <span>
+          <span className="workspace-version">
+            OpenShell <span className="status-sep" />
+            v0.1.11
+          </span>
+          <span className="workspace-connection">
             <i
               className={`status-dot ${active?.status === "connected" ? "" : "offline"}`}
             />
@@ -703,10 +707,6 @@ export default function App() {
                 xterm-256color
               </>
             )}
-          </span>
-          <span>
-            OpenShell <span className="status-sep" />
-            v0.1.10
           </span>
         </footer>
       </main>
