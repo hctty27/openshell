@@ -8,14 +8,14 @@
 
 **项目地址：** https://github.com/hctty27/openshell
 
-**当前版本：** 0.1.12（测试版）
+**当前版本：** 0.1.13（测试版）
 
 支持浅色/深色主题：设置 → 外观 → 主题，点击“保存外观”后重启保留。终端采用固定 6px 细滚动条，并修复末行裁切。
 
 ## 功能
 
 - **会话管理**：Xshell 风格的紧凑树形分组、搜索、下方只读会话详情（管理菜单仍可编辑）、密码和本地私钥认证。
-- **SSH 终端**：多标签、UTF-8、256 色、窗口尺寸同步、字体调整，支持 vim/top 和交互式 sudo。
+- **SSH 终端**：多标签、UTF-8、256 色、窗口尺寸同步、字体调整，支持 vim/top 和交互式 sudo。支持在设置中开启选中自动复制、右键粘贴和多行粘贴确认。
 - **快速命令栏**：终端下方固定「管理」按钮，后接自定义命令；单行模式高度为 30px，横向滚动；多行模式按内容扩展。支持分类、排序、全局/分组/会话作用范围及执行前确认。
 - **AI 助手**：流式对话、终端日志预览、每标签独立上下文。
 - **自定义 API**：Base URL、API Key、模型 ID、多配置，兼容 OpenAI Chat Completions。
@@ -24,7 +24,7 @@
 
 ## 使用
 
-1. 从 [Releases](https://github.com/hctty27/openshell/releases) 下载 Windows x64 的安装版（Setup.exe）或便携版（ZIP）。便携版解压后运行 **OpenShell-v0.1.12.exe**（文件名包含版本号，减少 Windows Explorer 旧图标缓存的影响）。
+1. 从 [Releases](https://github.com/hctty27/openshell/releases) 下载 Windows x64 的安装版（Setup.exe）或便携版（ZIP）。便携版解压后运行 **OpenShell-v0.1.13.exe**（文件名包含版本号，减少 Windows Explorer 旧图标缓存的影响）。
 2. 新建会话，填写主机、端口、用户名和认证信息；单击会话在左下方查看详情，双击连接。
 3. 首次连接时核对服务器指纹，确认后继续。
 4. 设置 → AI API：填写接口地址、密钥和准确的模型 ID，测试连接后保存。
