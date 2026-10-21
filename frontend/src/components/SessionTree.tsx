@@ -28,12 +28,58 @@ export default function SessionTree(p: Props) {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [menu, setMenu] = useState("");
+  const [selected, setSelected] = useState<{ kind: "root" | "group" | "session"; id: string }>({
+    kind: "root",
+    id: "",
+  });
+  const [rootCollapsed, setRootCollapsed] = useState(false);
+  const [detailsHeight, setDetailsHeight] = useState(244);
   const visible = p.sessions.filter((s) =>
     [s.name, s.host, s.username].some((v) =>
       v.toLowerCase().includes(query.toLowerCase()),
     ),
   );
   const groups = [{ id: "", name: "默认分组" }, ...p.groups];
+  const selectedSession = selected.kind === "session"
+    ? p.sessions.find((session) => session.id === selected.id)
+    : undefined;
+  const selectedGroup = selected.kind === "group"
+    ? groups.find((group) => group.id === selected.id)
+    : undefined;
+  const detailsName = selectedSession?.name ?? selectedGroup?.name ?? "所有会话";
+  const detailsRows: [string, string][] = selectedSession
+    ? [
+        ["名称", selectedSession.name],
+        ["类型", "SSH 会话"],
+        ["主机", selectedSession.host],
+        ["端口", String(selectedSession.port)],
+        ["协议", "SSH"],
+        ["用户名", selectedSession.username],
+        ["认证方式", selectedSession.authType === "key" ? "密钥" : "密码"],
+        ["所属分组", groups.find((g) => g.id === selectedSession.groupId)?.name ?? "默认分组"],
+      ]
+    : [
+        ["名称", detailsName],
+        ["类型", selectedGroup ? "文件夹" : "会话目录"],
+        ["子会话", String(selectedGroup
+          ? p.sessions.filter((s) => s.groupId === selectedGroup.id).length
+          : p.sessions.length)],
+      ];
+  const resizeDetails = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const start = event.clientY;
+    const height = detailsHeight;
+    const move = (e: PointerEvent) =>
+      setDetailsHeight(Math.max(170, Math.min(440, height + start - e.clientY)));
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
   return (
     <aside className="session-sidebar">
       <div className="brand">
@@ -66,13 +112,36 @@ export default function SessionTree(p: Props) {
         <kbd>/</kbd>
       </div>
       <div className="session-list">
-        {groups.map((g) => (
+        <div className={"tree-root" + (selected.kind === "root" ? " selected" : "")}>
+          <button
+            className="tree-toggle"
+            title={rootCollapsed ? "展开所有会话" : "折叠所有会话"}
+            onClick={() => setRootCollapsed((value) => !value)}
+          >
+            <ChevronDown size={14} className={rootCollapsed ? "rotated" : ""} />
+          </button>
+          <button
+            className="tree-root-label"
+            aria-pressed={selected.kind === "root"}
+            onClick={() => { setSelected({ kind: "root", id: "" }); setMenu(""); }}
+          >
+            <Folder size={15} />
+            <span>所有会话</span>
+          </button>
+          <small>{visible.length}</small>
+        </div>
+        {(!rootCollapsed || !!query) && (
+          <div className="tree-groups">
+        {groups.filter((g) => !query || visible.some((s) => s.groupId === g.id)).map((g) => (
           <div key={g.id} className="group">
-            <div className="group-heading">
+            <div className={"group-heading" + (selected.kind === "group" && selected.id === g.id ? " selected" : "")}>
               <button
-                onClick={() =>
-                  setCollapsed({ ...collapsed, [g.id]: !collapsed[g.id] })
-                }
+                aria-pressed={selected.kind === "group" && selected.id === g.id}
+                onClick={() => {
+                  setSelected({ kind: "group", id: g.id });
+                  setCollapsed((old) => ({ ...old, [g.id]: !old[g.id] }));
+                  setMenu("");
+                }}
               >
                 <ChevronDown
                   size={13}
@@ -113,21 +182,26 @@ export default function SessionTree(p: Props) {
                 </button>
               </div>
             )}
-            {!collapsed[g.id] &&
+            {(!collapsed[g.id] || !!query) &&
               visible
                 .filter((s) => s.groupId === g.id)
                 .map((s) => (
                   <div
                     key={s.id}
-                    className={`session-row ${p.active === s.id ? "selected" : ""}`}
+                    className={"session-row" + (selected.kind === "session" && selected.id === s.id ? " selected" : "") + (p.active === s.id ? " active" : "")}
                   >
                     <button
                       className="session-open"
-                      title="双击连接服务器"
+                      title={"双击连接 " + s.name}
+                      aria-label={"选中会话 " + s.name}
+                      aria-pressed={selected.kind === "session" && selected.id === s.id}
                       onDoubleClick={() => p.onOpen(s)}
-                      onClick={() => setMenu("")}
+                      onClick={() => {
+                        setSelected({ kind: "session", id: s.id });
+                        setMenu("");
+                      }}
                     >
-                      <Server size={17} />
+                      <Server size={15} />
                       <span>
                         <strong>{s.name}</strong>
                         <small>
@@ -183,7 +257,45 @@ export default function SessionTree(p: Props) {
             </button>
           </div>
         )}
+        {!!query && !visible.length && p.sessions.length > 0 && (
+          <div className="sidebar-empty">没有匹配的会话</div>
+        )}
+          </div>
+        )}
       </div>
+      <div
+        className="details-resizer"
+        role="separator"
+        aria-label="调整会话详情高度"
+        aria-orientation="horizontal"
+        onPointerDown={resizeDetails}
+      />
+      <section className="session-details" style={{ height: detailsHeight }} data-testid="session-details">
+        <div className="details-heading">
+          <span>详细信息</span>
+          <small>{selectedSession ? "SSH" : "文件夹"}</small>
+        </div>
+        <div className="details-body">
+          <div className="details-identity">
+            {selectedSession ? <Server size={17} /> : <Folder size={17} />}
+            <strong title={detailsName}>{detailsName}</strong>
+          </div>
+          <dl className="details-properties">
+            {detailsRows.map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd title={value}>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+        {selectedSession && (
+          <div className="details-actions">
+            <button onClick={() => p.onOpen(selectedSession)}>连接</button>
+            <button onClick={() => p.onEdit(selectedSession)}>编辑</button>
+          </div>
+        )}
+      </section>
       <div className="sidebar-footer">
         <span>
           <i className="status-dot" />
