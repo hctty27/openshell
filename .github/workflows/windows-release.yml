@@ -24,7 +24,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  go-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run SSH integration tests on POSIX
+        run: go test ./...
+
   windows-x64:
+    needs: go-tests
     runs-on: windows-latest
     timeout-minutes: 50
     env:
@@ -47,9 +60,6 @@ jobs:
           npm ci
           npm run build
           npm test -- --run
-
-      - name: Verify Go backend
-        run: go test ./...
 
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
