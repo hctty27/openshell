@@ -133,3 +133,33 @@ func TestAuthenticationChangeClearsTransientSecret(t *testing.T) {
 		t.Fatal("cached password applied to new key")
 	}
 }
+
+func TestTerminalClipboardPreferencesPersistAcrossRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	a, err := newApp(path, &vault{m: map[string]string{}}, nil)
+	if err != nil { t.Fatal(err) }
+	initial, err := a.State()
+	if err != nil { t.Fatal(err) }
+	if initial.AutoCopySelection || initial.RightClickPaste || !initial.ConfirmMultilinePaste {
+		t.Fatalf("unexpected clipboard defaults: %+v", initial)
+	}
+	for key, value := range map[string]string{
+		"autoCopySelection": "true",
+		"rightClickPaste": "true",
+		"confirmMultilinePaste": "false",
+	} {
+		if err := a.SavePreference(key, value); err != nil { t.Fatal(err) }
+	}
+	a.shutdown(context.Background())
+	b, err := newApp(path, &vault{m: map[string]string{}}, nil)
+	if err != nil { t.Fatal(err) }
+	defer b.shutdown(context.Background())
+	state, err := b.State()
+	if err != nil { t.Fatal(err) }
+	if !state.AutoCopySelection || !state.RightClickPaste || state.ConfirmMultilinePaste {
+		t.Fatalf("clipboard settings not restored: %+v", state)
+	}
+	if err := b.SavePreference("rightClickPaste", "invalid"); err == nil {
+		t.Fatal("invalid boolean preference accepted")
+	}
+}

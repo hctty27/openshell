@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { api, listen, errorText } from "../bridge";
+import { ClipboardGetText, ClipboardSetText } from "../../wailsjs/runtime/runtime";
 import type { Tab, Ref, Theme } from "../types";
 import { terminalThemes } from "../terminalThemes";
 interface Props {
@@ -10,6 +11,10 @@ interface Props {
   active: boolean;
   fontSize: number;
   theme: Theme;
+  autoCopySelection: boolean;
+  rightClickPaste: boolean;
+  confirmMultilinePaste: boolean;
+  onNotice(text: string): void;
   commandFocusVersion?: number;
   onError(text: string): void;
   onSelection(text: string): void;
@@ -73,6 +78,48 @@ export default function TerminalPane(p: Props) {
     const selection = term.onSelectionChange(() =>
       callbacks.current.onSelection(term.getSelection()),
     );
+    let selectingWithMouse = false;
+    const paneElement = container.current;
+    const onMouseDown = (event: MouseEvent) => {
+      selectingWithMouse = event.button === 0 && callbacks.current.active &&
+        (term.modes.mouseTrackingMode === "none" || event.shiftKey);
+    };
+    const onMouseUp = (event: MouseEvent) => {
+      if (event.button !== 0 || !selectingWithMouse) return;
+      selectingWithMouse = false;
+      setTimeout(() => {
+        if (disposed || !callbacks.current.active || !callbacks.current.autoCopySelection) return;
+        const text = term.getSelection();
+        if (!text) return;
+        void ClipboardSetText(text)
+          .then((success) => {
+            if (!success) callbacks.current.onNotice("选中内容复制失败");
+          })
+          .catch((error) => callbacks.current.onNotice(errorText(error)));
+      }, 0);
+    };
+    const onContextMenu = (event: MouseEvent) => {
+      if (!callbacks.current.active || !callbacks.current.rightClickPaste) return;
+      if (term.modes.mouseTrackingMode !== "none") return;
+      event.preventDefault();
+      event.stopPropagation();
+      void (async () => {
+        try {
+          const text = await ClipboardGetText();
+          if (disposed || !callbacks.current.active || !callbacks.current.rightClickPaste || !text) return;
+          if (callbacks.current.confirmMultilinePaste && /[\r\n]/.test(text) &&
+              !window.confirm("剪贴板包含多行内容，粘贴到远程终端可能立即执行命令。确定粘贴吗？")) return;
+          if (disposed || !callbacks.current.active || !callbacks.current.rightClickPaste) return;
+          term.focus();
+          term.paste(text);
+        } catch (error) {
+          callbacks.current.onNotice(errorText(error));
+        }
+      })();
+    };
+    paneElement.addEventListener("mousedown", onMouseDown, true);
+    document.addEventListener("mouseup", onMouseUp, true);
+    paneElement.addEventListener("contextmenu", onContextMenu, true);
     let resizeTimer: ReturnType<typeof setTimeout>;
     const resize = () => {
       clearTimeout(resizeTimer);
@@ -97,6 +144,9 @@ export default function TerminalPane(p: Props) {
       clearTimeout(resizeTimer);
       observer.disconnect();
       off();
+      paneElement.removeEventListener("mousedown", onMouseDown, true);
+      document.removeEventListener("mouseup", onMouseUp, true);
+      paneElement.removeEventListener("contextmenu", onContextMenu, true);
       input.dispose();
       resizeSubscription.dispose();
       selection.dispose();

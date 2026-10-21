@@ -52,6 +52,9 @@ type AppState struct {
 	Profiles           []domain.APIProfile `json:"profiles"`
 	QuickCommands      []QuickCommand      `json:"quickCommands"`
 	QuickCommandLayout string              `json:"quickCommandLayout"`
+	AutoCopySelection     bool               `json:"autoCopySelection"`
+	RightClickPaste       bool               `json:"rightClickPaste"`
+	ConfirmMultilinePaste bool               `json:"confirmMultilinePaste"`
 	FontSize           string              `json:"fontSize"`
 	Theme              string              `json:"theme"`
 	ActiveProfile      string              `json:"activeProfile"`
@@ -172,6 +175,12 @@ func (a *App) State() (AppState, error) {
 	if layout != "multi" {
 		layout = "single"
 	}
+	autoCopySelection, e := a.store.GetPreference(a.ctx, "autoCopySelection")
+	if e != nil { return AppState{}, e }
+	rightClickPaste, e := a.store.GetPreference(a.ctx, "rightClickPaste")
+	if e != nil { return AppState{}, e }
+	confirmMultilinePaste, e := a.store.GetPreference(a.ctx, "confirmMultilinePaste")
+	if e != nil { return AppState{}, e }
 	raw, e := a.store.GetPreference(a.ctx, "quickCommands")
 	if e != nil {
 		return AppState{}, e
@@ -186,6 +195,8 @@ func (a *App) State() (AppState, error) {
 		Sessions: sessions, Groups: groups, Profiles: profiles,
 		FontSize: font, Theme: theme, ActiveProfile: active,
 		QuickCommands: commands, QuickCommandLayout: layout,
+		AutoCopySelection: autoCopySelection == "true", RightClickPaste: rightClickPaste == "true",
+		ConfirmMultilinePaste: confirmMultilinePaste != "false",
 		Version: branding.Version,
 	}, nil
 }
@@ -261,6 +272,10 @@ func (a *App) SavePreference(key, value string) error {
 	case "quickCommandLayout":
 		if value != "single" && value != "multi" {
 			return errors.New("不支持的命令栏布局")
+		}
+	case "autoCopySelection", "rightClickPaste", "confirmMultilinePaste":
+		if value != "true" && value != "false" {
+			return errors.New("布尔设置必须为 true 或 false")
 		}
 	case "quickCommands":
 		if err := validateQuickCommands(value); err != nil {

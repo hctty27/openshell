@@ -94,3 +94,25 @@ test("renders application version on the left and SSH connection status on the r
   expect(footer?.textContent).toContain("v0.1.12");
   expect(footer?.textContent).toContain("未连接");
 });
+
+test("terminal mouse settings are opt-in and saved independently", async () => {
+  await act(async () => {
+    render(<App />);
+  });
+  fireEvent.click(screen.getByTitle("设置"));
+  const copy = screen.getByLabelText("选中自动复制") as HTMLInputElement;
+  const paste = screen.getByLabelText("鼠标右键粘贴") as HTMLInputElement;
+  expect(copy.checked).toBe(false);
+  expect(paste.checked).toBe(false);
+  fireEvent.click(copy);
+  fireEvent.click(paste);
+  const confirm = screen.getByLabelText("多行粘贴前确认") as HTMLInputElement;
+  expect(confirm.checked).toBe(true);
+  fireEvent.click(confirm);
+  fireEvent.click(screen.getByRole("button", { name: "保存外观" }));
+  await waitFor(() => {
+    expect(api.SavePreference).toHaveBeenCalledWith("autoCopySelection", "true");
+    expect(api.SavePreference).toHaveBeenCalledWith("rightClickPaste", "true");
+    expect(api.SavePreference).toHaveBeenCalledWith("confirmMultilinePaste", "false");
+  });
+});
