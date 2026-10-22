@@ -267,3 +267,32 @@ func replyConversationID(a *App, ref domain.ConnectionRef) string {
 	id, _ := a.memory.Selected(ref)
 	return id
 }
+
+func TestRouteEditClearsAllInMemorySessionCredentials(t *testing.T) {
+ a, err := newApp(filepath.Join(t.TempDir(),"state.db"), &vault{m:map[string]string{}}, nil)
+ if err != nil { t.Fatal(err) }
+ defer a.shutdown(context.Background())
+ session, err := a.SaveSession(SaveSessionRequest{
+  Session:domain.Session{Host:"target.example",Port:22,Username:"root",AuthType:"password"},
+  Secret:"first-password",SaveSecret:false,
+ })
+ if err != nil { t.Fatal(err) }
+ if a.transient["session:"+session.ID] != "first-password" { t.Fatal("session secret not initially cached") }
+ a.transient["connection:tab-one:"+session.ID] = "old-tab-one"
+ a.transient["connection:tab-two:"+session.ID] = "old-tab-two"
+
+ session.ProxyJump = "root@bastion.example"
+ edited, err := a.SaveSession(SaveSessionRequest{Session:session})
+ if err != nil { t.Fatal(err) }
+ if edited.ProxyJump != "root@bastion.example" { t.Fatal("jump route not persisted") }
+ for _, key := range []string{"session:"+session.ID,"connection:tab-one:"+session.ID,"connection:tab-two:"+session.ID} {
+  if _, exists := a.transient[key]; exists { t.Fatalf("outdated credential %s retained after jump route edit",key) }
+ }
+
+ a.transient["connection:tab-three:"+session.ID] = "stale"
+ edited.UseSSHConfig = true
+ _, err = a.SaveSession(SaveSessionRequest{Session:edited,Secret:"new-password",SaveSecret:false})
+ if err != nil { t.Fatal(err) }
+ if _, exists := a.transient["connection:tab-three:"+session.ID]; exists { t.Fatal("cached tab credential survived config-mode change") }
+ if a.transient["session:"+session.ID] != "new-password" { t.Fatal("newly supplied credential was not cached") }
+}
