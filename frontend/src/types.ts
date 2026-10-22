@@ -7,6 +7,8 @@ export interface Session {
   username: string;
   authType: string;
   privateKeyPath: string;
+  useSSHConfig?: boolean;
+  proxyJump?: string;
   credentialRef: string;
   terminalTheme?: TerminalTheme;
   createdAt?: string;
