@@ -742,6 +742,18 @@ func (a *App) Reconnect(tabID, sessionID string) (ConnectResult, error) {
 	return a.Connect(tabID, sessionID, secret)
 }
 
+// CancelConnecting cancels an in-flight connection or automatic retry for one tab.
+func (a *App) CancelConnecting(tabID string) {
+	a.mu.Lock()
+	a.connectEpoch[tabID]++
+	ref := a.tabRefs[tabID]
+	delete(a.transient, "connection:"+tabID+":"+ref.SessionID)
+	a.mu.Unlock()
+	a.sftp.CancelTab(tabID)
+	a.cancelExecution(ref, true)
+	a.ssh.CancelTab(tabID)
+}
+
 func (a *App) Disconnect(ref domain.ConnectionRef) error {
 	a.mu.Lock()
 	if current, ok := a.tabRefs[ref.TabID]; ok && current != ref {
