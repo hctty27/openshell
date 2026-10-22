@@ -31,6 +31,8 @@ type App struct {
 	conversations *ai.ConversationStore
 	emit          sshclient.EmitFunc
 	pickKey       func() (string, error)
+	pickImport    func() (string, error)
+	xshellPreview *XshellImportPreview
 	mu            sync.Mutex
 	transient     map[string]string
 	challenges    map[string]*sshclient.HostKeyError
@@ -286,10 +288,21 @@ func (a *App) DeleteSession(id string) error {
 	return nil
 }
 func (a *App) SaveGroup(g domain.Group) (domain.Group, error) {
-	if g.ID == "" {
-		g.ID = domain.NewID()
-	}
 	g.Name = strings.TrimSpace(g.Name)
+	if g.Name == "" || g.ParentID == g.ID && g.ID != "" {
+		return g, errors.New("invalid folder name or parent")
+	}
+	if g.ID == "" { g.ID = domain.NewID() }
+	groups, err := a.store.ListGroups(a.ctx)
+	if err != nil { return g, err }
+	parents := make(map[string]string, len(groups))
+	for _, item := range groups { parents[item.ID] = item.ParentID }
+	seen := map[string]bool{g.ID:true}
+	for id := g.ParentID; id != ""; id = parents[id] {
+		if seen[id] { return g, errors.New("folder cycle is not allowed") }
+		if _, ok := parents[id]; !ok { return g, errors.New("parent folder does not exist") }
+		seen[id] = true
+	}
 	return g, a.store.SaveGroup(a.ctx, g)
 }
 func (a *App) DeleteGroup(id string) error { return a.store.DeleteGroup(a.ctx, id) }

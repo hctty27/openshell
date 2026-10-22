@@ -101,15 +101,21 @@ func (s *Store) SaveGroup(ctx context.Context, v domain.Group) error {
 	return s.save(ctx, "INSERT INTO groups(id,data)VALUES(?,?) ON CONFLICT(id)DO UPDATE SET data=excluded.data", v.ID, v)
 }
 func (s *Store) DeleteGroup(ctx context.Context, id string) error {
+	groups, e := s.ListGroups(ctx)
+	if e != nil { return e }
+	parent := ""
+	for _, g := range groups { if g.ID == id { parent=g.ParentID; break } }
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return e
 	}
 	defer tx.Rollback()
-	_, e = tx.ExecContext(ctx, "UPDATE sessions SET data=json_set(data,'$.groupId','') WHERE json_extract(data,'$.groupId')=?", id)
+	_, e = tx.ExecContext(ctx, "UPDATE sessions SET data=json_set(data,'$.groupId',?) WHERE json_extract(data,'$.groupId')=?", parent, id)
 	if e != nil {
 		return e
 	}
+	_, e = tx.ExecContext(ctx, "UPDATE groups SET data=json_set(data,'$.parentId',?) WHERE json_extract(data,'$.parentId')=?", parent, id)
+	if e != nil { return e }
 	_, e = tx.ExecContext(ctx, "DELETE FROM groups WHERE id=?", id)
 	if e != nil {
 		return e

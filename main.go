@@ -21,6 +21,16 @@ func main() {
 		log.Fatal("无法初始化应用：", e)
 	}
 	app.emit = func(name string, payload any) { runtime.EventsEmit(app.ctx, name, payload) }
+	app.pickImport = func() (string, error) {
+		language, err := app.language()
+		if err != nil { return "", err }
+		title := "Import Xshell sessions"
+		if language == "zh-CN" { title = "导入 Xshell 会话" }
+		return runtime.OpenFileDialog(app.ctx, runtime.OpenDialogOptions{
+			Title: title,
+			Filters: []runtime.FileFilter{{DisplayName: "Xshell sessions (*.xts;*.xsh)", Pattern: "*.xts;*.xsh"}},
+		})
+	}
 	app.pickKey = func() (string, error) {
 		language, err := app.language()
 		if err != nil {
