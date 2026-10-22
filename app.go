@@ -311,6 +311,49 @@ func (a *App) SaveSession(req SaveSessionRequest) (domain.Session, error) {
 	}
 	return row, e
 }
+// DuplicateSession copies a saved SSH configuration without opening a connection.
+func (a *App) DuplicateSession(id string) (domain.Session, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	source, err := a.store.GetSession(a.ctx, id)
+	if err != nil {
+		return domain.Session{}, err
+	}
+	sessions, err := a.store.ListSessions(a.ctx)
+	if err != nil {
+		return domain.Session{}, err
+	}
+
+	base := source.Name + " - " + a.dialogTitle("Copy", "副本")
+	used := make(map[string]bool, len(sessions))
+	for _, session := range sessions {
+		if session.GroupID == source.GroupID {
+			used[session.Name] = true
+		}
+	}
+	name := base
+	for index := 2; used[name]; index++ {
+		name = base + " (" + strconv.Itoa(index) + ")"
+	}
+
+	copy := source
+	copy.ID = domain.NewID()
+	copy.Name = name
+	copy.CredentialRef = ""
+	copy.CreatedAt = ""
+	copy.UpdatedAt = ""
+
+	var credential string
+	if source.CredentialRef != "" {
+		credential, err = a.secrets.Get(a.ctx, source.CredentialRef)
+		if err != nil || credential == "" {
+			return domain.Session{}, apperror.New("couldNotReadLoginCredentialsEnterThemAgain", nil)
+		}
+	}
+	return a.store.SaveSessionWithSecret(a.ctx, copy, credential, source.CredentialRef != "", a.secrets)
+}
+
 func (a *App) DeleteSession(id string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()

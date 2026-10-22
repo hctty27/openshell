@@ -7,6 +7,7 @@ import {
   render,
   screen,
   within,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import SessionTree from "./SessionTree";
@@ -40,28 +41,35 @@ const groups: Group[] = [{ id: "g1", name: "测试环境" }];
 const renderTree = () => {
   const onOpen = vi.fn();
   const onEdit = vi.fn();
+  const duplicated = { ...sessions[0], id: "ssh-copy", name: "生产服务器 - 副本" };
+  const onDuplicate = vi.fn(async () => duplicated);
   const onCreateInGroup = vi.fn();
   const onDelete = vi.fn();
   const onGroup = vi.fn();
   const onRenameGroup = vi.fn();
   const onDeleteGroup = vi.fn();
-  render(
+  const tree = (currentSessions: Session[]) => (
     <SessionTree
-      sessions={sessions}
+      sessions={currentSessions}
       groups={groups}
       active=""
       onOpen={onOpen}
       onEdit={onEdit}
+      onDuplicate={onDuplicate}
       onDelete={onDelete}
       onGroup={onGroup}
       onCreateInGroup={onCreateInGroup}
       onRenameGroup={onRenameGroup}
       onDeleteGroup={onDeleteGroup}
       onSettings={vi.fn()}
-    />,
+    />
   );
+  const { rerender } = render(tree(sessions));
   return {
     onOpen,
+    onDuplicate,
+    duplicated,
+    updateSessions: (next: Session[]) => rerender(tree(next)),
     onEdit,
     onCreateInGroup,
     onDelete,
@@ -185,6 +193,22 @@ test("default group cannot be deleted and session menu preserves actions", () =>
   fireEvent.contextMenu(item);
   fireEvent.click(screen.getByRole("menuitem", { name: "删除会话" }));
   expect(onDelete).toHaveBeenCalledWith(sessions[0]);
+});
+
+test("session context menu duplicates without connecting and selects the new session", async () => {
+  const { onDuplicate, onOpen, duplicated, updateSessions } = renderTree();
+  const item = screen.getByRole("button", { name: "选中会话 生产服务器" });
+  fireEvent.contextMenu(item);
+  expect(screen.getByRole("menuitem", { name: "复制会话" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("menuitem", { name: "复制会话" }));
+  expect(onDuplicate).toHaveBeenCalledOnce();
+  expect(onDuplicate).toHaveBeenCalledWith(sessions[0]);
+  expect(onOpen).not.toHaveBeenCalled();
+  await waitFor(() => {
+    updateSessions([...sessions, duplicated]);
+    expect(screen.getByRole("button", { name: "选中会话 生产服务器 - 副本" }).getAttribute("aria-pressed")).toBe("true");
+  });
+  expect(within(screen.getByTestId("session-details")).getAllByText(duplicated.name).length).toBeGreaterThan(0);
 });
 
 test("Shift+F10 opens a floating menu and Escape returns focus to the folder", () => {

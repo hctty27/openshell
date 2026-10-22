@@ -63,6 +63,7 @@ type Backend = {
   ExportSessionBackup(): Promise<string>;
   ImportXshell(token: string, ids: string[], conflict: "skip" | "rename"): Promise<XshellImportResult>;
   SaveSession(req: SessionRequest): Promise<Session>;
+  DuplicateSession(id: string): Promise<Session>;
   DeleteSession(id: string): Promise<void>;
   SaveGroup(group: Group): Promise<Group>;
   DeleteGroup(id: string): Promise<void>;
