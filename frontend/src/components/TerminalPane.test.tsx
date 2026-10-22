@@ -20,6 +20,7 @@ import {
 import type { Tab } from "../types";
 
 const refs = vi.hoisted(() => ({ terms: [] as any[], webgl: [] as any[], searches: [] as any[] }));
+const events = vi.hoisted(() => ({ listeners: new Map<string, (payload: any) => void>() }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     options = { fontSize: 14, theme: {} };
@@ -95,7 +96,10 @@ vi.mock("../bridge", () => ({
     Disconnect: vi.fn(async () => {}),
     CancelZmodem: vi.fn(async () => {}),
   },
-  listen: () => () => {},
+  listen: (name: string, callback: (payload: any) => void) => {
+    events.listeners.set(name, callback);
+    return () => { events.listeners.delete(name); };
+  },
   errorText: (value: unknown) => String(value),
 }));
 vi.mock("../../wailsjs/runtime/runtime", () => ({
@@ -152,6 +156,7 @@ beforeEach(() => {
   refs.terms.length = 0;
   refs.webgl.length = 0;
   refs.searches.length = 0;
+  events.listeners.clear();
   vi.clearAllMocks();
   vi.stubGlobal(
     "ResizeObserver",
@@ -459,4 +464,22 @@ test("middle click pastes only when enabled and no TUI mouse tracking", async ()
   refs.terms[0].modes.mouseTrackingMode = "vt200";
   fireEvent.mouseDown(container.querySelector(".terminal-pane")!, { button: 1 });
   expect(ClipboardGetText).not.toHaveBeenCalled();
+});
+
+test("shows approximate ZMODEM progress and can cancel active transfer", async () => {
+  renderTerminal();
+  act(() => {
+    events.listeners.get("ssh:transfer-state")?.({ ref: tab.ref, active: true });
+    events.listeners.get("ssh:transfer-progress")?.({
+      ref: tab.ref, transferred: "2.3 MB", speed: "1.2 MB/s",
+    });
+  });
+  expect(screen.getByText("2.3 MB · 1.2 MB/s")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
+  await waitFor(() => expect(api.CancelZmodem).toHaveBeenCalledWith(tab.ref));
+  expect(screen.getByRole("button", { name: "正在取消…" })).toHaveProperty("disabled", true);
+  act(() => {
+    events.listeners.get("ssh:transfer-state")?.({ ref: tab.ref, active: false });
+  });
+  expect(screen.queryByRole("button", { name: "取消传输" })).toBeNull();
 });
