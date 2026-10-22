@@ -40,7 +40,7 @@
 - ConversationCursor：UpdatedAt, ID string；ConversationList：Items []Conversation, NextCursor *ConversationCursor。
 - ConversationPage：Conversation Conversation, Messages []ConversationMessage, BeforeSeq int64, HasMore bool, Run *ConversationRun。
 - ConversationRun：ID, ConversationID, Kind, Status string；OwnerRef ConnectionRef。
-- ConversationEvent：EventID, ServerKey, ConversationID, Kind string；Revision int64；Run *ConversationRun；Message *ConversationMessage；Delta string；SelectedByTab map[string]string。
+- ConversationEvent：EventID, ServerKey, ConversationID, Kind string；Revision int64；EventSeq uint64；Run *ConversationRun；Message *ConversationMessage；Delta string；SelectedByTab map[string]string。
 - ConversationMutation：Kind string；Message *ConversationMessage；Summary string；SummaryThroughSeq int64。
 
 存储不理解 AI 协议；internal/ai/history.go 显式转换持久化消息与现有 ai.Message。事件中的 OwnerRef 来自 Run；历史事件不能使用观看标签页的 generation 做过滤。
@@ -63,7 +63,7 @@
 
 - [ ] **Step 1: 写失败测试。** TestConversationMigrationPreservesV1、TestConversationPersistenceAcrossRestart、TestConversationStablePagination、TestConversationRevisionRejectsStaleWrite、TestConversationIDIsIdempotent、TestConversationClosedDatabaseReturnsError、TestConversationTitleUsesRunes。复用现有临时 SQLite；构造同 updated_at 的 51 条记录验证第二页无丢失/重复；查询迁移版本必须等于 2；重复打开仍为 2；关闭再打开消息数和摘要完全相同。
 - [ ] **Step 2: 运行红灯。** go test ./internal/store -run Conversation -count=1；确认失败来自缺少 DTO/存储 API，而非外部依赖。
-- [ ] **Step 3: 实现上述接口。** 独立迁移函数取代每次写 user_version=1；事务新增设计中的三表与索引。MutateConversation 仅接受 append/clear/summary；append 以消息 ID 幂等、分配单调 seq；clear 清消息和摘要、revision 增加；summary 比较 revision 且不删除原消息。标题输入去首尾空白，空值代表自动标题；首条用户消息自动标题最多 40 rune，手动标题不被后续追加覆盖（增加 title_manual 字段记录来源）。
+- [ ] **Step 3: 实现上述接口。** 独立迁移函数取代每次写 user_version=1；事务新增设计中的三表与索引。MutateConversation 仅接受 append/clear/summary；append 以 (conversation_id, id) 唯一索引实现消息 ID 幂等、分配单调 seq；clear 清消息和摘要、revision 增加；summary 比较 revision 且不删除原消息。标题输入去首尾空白，空值代表自动标题；首条用户消息自动标题最多 40 rune，手动标题不被后续追加覆盖（增加 title_manual 字段记录来源）。
 - [ ] **Step 4: 运行绿灯。** go test ./internal/store ./internal/domain -count=1。检查故障路径事务回滚后消息和 revision 均不变。
 - [ ] **Step 5: 提交。** git add internal/domain/conversation.go internal/store；git commit -m "feat(memory): persist conversations and migrate SQLite safely"。
 
@@ -107,7 +107,8 @@
 - App.DeleteConversation(ref domain.ConnectionRef, id string) error
 - ConnectResult 增加 ConversationID string；ChatRequest 增加 RequestID string（稳定去重），conversationID 从服务绑定获取。
 - ai.ReplayHistory(messages []domain.ConversationMessage) ([]ai.Message, error)：缺结果工具调用生成明确“结果未知，禁止自动重跑”的配对 tool 消息；incomplete assistant 不作为完整回复重放。
-- ChatRequest/回复/命令事件关联运行 ID；现有 tabID ConversationStore 由服务替代，测试断言迁移到 ReadConversation。
+- 所有执行控制入口显式传入调用标签的 Ref 并校验运行所有者：App.ConfirmCommand(ref domain.ConnectionRef, id string) (domain.CommandResult, error)、App.ReviseProposal(ref domain.ConnectionRef, id, command, cwd string, seconds int) (domain.Proposal, error)、App.CancelCommand(ref domain.ConnectionRef, id string) error、App.CancelChat(ref domain.ConnectionRef) error、App.ResumeAutomatic(ref domain.ConnectionRef, taskID, approvedProposalID string, extend bool) (tasks.AutoSnapshot, error)、App.StopAutomatic(ref domain.ConnectionRef, taskID string) error。连接失效清理使用独立的私有取消方法，不能绕用需要活跃 Ref 的公开入口；自动 runner 的内部取消同样固定原 ownerRef。
+- ChatRequest/回复/命令事件关联运行 ID；现有 tabID ConversationStore 由服务替代，测试断言迁移到 ReadConversation。更新所有 Go 调用方、桥接与测试替身以匹配新控制签名。
 
 - [ ] **Step 1: 写失败测试。** 复用 testssh.Start 与 httptest SSE：TestSharedConversationSurvivesAppRestart、TestEditingLiveSessionKeepsHistoryTarget、TestObserverCannotControlProposal、TestClosingOwnerStopsSharedRun、TestClearRejectsWhileAwaitingConfirmation、TestRestorePendingToolDoesNotExecute、TestPersistFailurePreventsCommandExecution。断言 SSH 命令计数和实际结果，而不是只断言 mock 被调用；历史显示 incomplete/unknown，恢复时命令计数不增加。
 - [ ] **Step 2: 运行红灯。** go test ./... -run 'SharedConversation|HistoryTarget|Observer|SharedRun|ClearRejects|RestorePending|PersistFailure' -count=1。
