@@ -187,7 +187,8 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	connection.filter = filter
 	m.mu.Unlock()
 	go func() {
-		_ = session.Wait()
+		err := session.Wait()
+		_ = err
 		filter.Close()
 		_ = filterInput.Close()
 		_ = remoteOutput.Close()
@@ -198,6 +199,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 		}
 		m.emit("ssh:transfer-state", map[string]any{"ref": ref, "active": false})
 		m.emit("ssh:terminal-ended", ref)
+		_ = m.Disconnect(ref)
 	}()
 	return nil
 }
