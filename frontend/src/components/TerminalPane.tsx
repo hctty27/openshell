@@ -26,6 +26,8 @@ interface Props {
   theme: Theme;
   autoCopySelection: boolean;
   rightClickPaste: boolean;
+  middleClickPaste?: boolean;
+  logHighlights?: boolean;
   confirmMultilinePaste: boolean;
   onNotice(text: unknown): void;
   commandFocusVersion?: number;
@@ -42,6 +44,7 @@ export default function TerminalPane(p: Props) {
   const terminal = useRef<Terminal | null>(null);
   const fit = useRef<FitAddon | null>(null);
   const searchAddon = useRef<SearchAddon | null>(null);
+  const logAddons = useRef<SearchAddon[]>([]);
   const webglAddon = useRef<WebglAddon | null>(null);
   const webglFailed = useRef(false);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -155,6 +158,14 @@ export default function TerminalPane(p: Props) {
     const onMouseDown = (event: MouseEvent) => {
       if ((event.target as HTMLElement).closest(".terminal-find")) return;
       if (callbacks.current.visible ?? callbacks.current.active) callbacks.current.onActivate?.();
+      if (
+        event.button === 1 && callbacks.current.middleClickPaste &&
+        callbacks.current.active && term.modes.mouseTrackingMode === "none"
+      ) {
+        event.preventDefault();
+        void pasteFromClipboard();
+        return;
+      }
       selectingWithMouse =
         event.button === 0 &&
         callbacks.current.active &&
@@ -250,7 +261,15 @@ export default function TerminalPane(p: Props) {
       event.stopPropagation();
       void pasteFromClipboard();
     };
+    const onAuxClick = (event: MouseEvent) => {
+      if (
+        event.button === 1 && callbacks.current.middleClickPaste &&
+        callbacks.current.active && term.modes.mouseTrackingMode === "none" &&
+        !(event.target as HTMLElement).closest(".terminal-find")
+      ) event.preventDefault();
+    };
     paneElement.addEventListener("mousedown", onMouseDown, true);
+    paneElement.addEventListener("auxclick", onAuxClick, true);
     document.addEventListener("mouseup", onMouseUp, true);
     paneElement.addEventListener("contextmenu", onContextMenu, true);
     let resizeTimer: ReturnType<typeof setTimeout>;
@@ -286,12 +305,14 @@ export default function TerminalPane(p: Props) {
       observer.disconnect();
       off();
       paneElement.removeEventListener("mousedown", onMouseDown, true);
+      paneElement.removeEventListener("auxclick", onAuxClick, true);
       document.removeEventListener("mouseup", onMouseUp, true);
       paneElement.removeEventListener("contextmenu", onContextMenu, true);
       input.dispose();
       resizeSubscription.dispose();
       selection.dispose();
       term.dispose();
+      logAddons.current = [];
       webglAddon.current = null;
       webglFailed.current = false;
       searchAddon.current = null;
@@ -299,6 +320,40 @@ export default function TerminalPane(p: Props) {
       fit.current = null;
     };
   }, [p.tab.ref?.generation, p.tab.id]);
+  useEffect(() => {
+    const term = terminal.current;
+    if (!term) return;
+    for (const addon of logAddons.current) addon.dispose();
+    logAddons.current = [];
+    if (!p.logHighlights) return;
+    const viewportY = term.buffer.active.viewportY;
+    const severityRules = [
+      { expression: "\\b(?:ERROR|FATAL|FAILED|FAIL)\\b", foreground: "#ad2935", background: "#973344", ruler: "#e75d67" },
+      { expression: "\\bWARN(?:ING)?\\b", foreground: "#855d18", background: "#8c671f", ruler: "#e4ac47" },
+    ];
+    for (const rule of severityRules) {
+      const addon = new SearchAddon({ highlightLimit: 250 });
+      term.loadAddon(addon);
+      logAddons.current.push(addon);
+      addon.findNext(rule.expression, {
+        regex: true,
+        caseSensitive: false,
+        decorations: {
+          matchBackground: rule.background,
+          matchOverviewRuler: rule.ruler,
+          activeMatchBackground: rule.background,
+          activeMatchColorOverviewRuler: rule.ruler,
+        },
+      });
+      addon.clearActiveDecoration();
+    }
+    term.clearSelection();
+    term.scrollToLine(viewportY);
+    return () => {
+      for (const addon of logAddons.current) addon.dispose();
+      logAddons.current = [];
+    };
+  }, [p.logHighlights, p.tab.ref?.generation]);
   useEffect(() => {
     const term = terminal.current;
     if (!term) return;
