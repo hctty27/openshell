@@ -3,8 +3,9 @@
 package main
 
 import (
-    "sync"
+    "io"
     "testing"
+    "time"
 )
 
 func TestWindowsConPTYSurvivesRepeatedDisconnectAndReconnect(t *testing.T) {
@@ -13,17 +14,26 @@ func TestWindowsConPTYSurvivesRepeatedDisconnectAndReconnect(t *testing.T) {
         if err != nil {
             t.Fatalf("start Windows local terminal %d: %v", i, err)
         }
+        drained := make(chan struct{})
+        go func() {
+            _, _ = io.Copy(io.Discard, pty)
+            close(drained)
+        }()
         session := &localTerminalSession{id: "local", pty: pty}
-        var wg sync.WaitGroup
         for n := 0; n < 8; n++ {
-            wg.Add(1)
-            go func() {
-                defer wg.Done()
-                if err := session.close(); err != nil {
-                    t.Errorf("closing ConPTY: %v", err)
-                }
-            }()
+            results := make(chan error, 1)
+            go func() { results <- session.close() }()
+            select {
+            case err := <-results:
+                if err != nil { t.Fatalf("closing ConPTY: %v", err) }
+            case <-time.After(12 * time.Second):
+                t.Fatal("ConPTY close blocked while output was being drained")
+            }
         }
-        wg.Wait()
+        select {
+        case <-drained:
+        case <-time.After(12 * time.Second):
+            t.Fatal("ConPTY output reader remained blocked after closing")
+        }
     }
 }
