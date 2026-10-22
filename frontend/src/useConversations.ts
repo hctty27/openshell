@@ -104,17 +104,18 @@ export function useConversations() {
       }),
     [setSelection],
   );
-  const accept = useCallback(
-    (p: ConversationPage) =>
-      setCache((old) => ({
-        ...old,
-        [p.conversation.id]: mergeConversationPage(
-          old[p.conversation.id] ?? emptyConversationCache(),
-          p,
-        ),
-      })),
-    [],
-  );
+  const accept = useCallback((p: ConversationPage) => {
+    if (!p?.conversation) {
+      throw new Error("Conversation history response is unavailable");
+    }
+    setCache((old) => ({
+      ...old,
+      [p.conversation.id]: mergeConversationPage(
+        old[p.conversation.id] ?? emptyConversationCache(),
+        p,
+      ),
+    }));
+  }, []);
   const list = useCallback(async (ref: Ref, key: string, more = false) => {
     const cursor: ConversationCursor | null = more
       ? (listsRef.current[key]?.nextCursor ?? null)
