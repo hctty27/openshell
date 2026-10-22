@@ -219,5 +219,6 @@
   "memoryMessageIdRequired": "Message ID is required",
   "memoryUnsupportedMutation": "Unsupported conversation change",
   "backupInvalidConnection": "Invalid connection settings",
-  "memoryHistoryUnavailable": "Conversation history response is unavailable"
+  "memoryHistoryUnavailable": "Conversation history response is unavailable",
+  "noActiveFileTransfer": "No active ZMODEM transfer to cancel"
 }
