@@ -27,6 +27,7 @@ interface Props {
   confirmMultilinePaste: boolean;
   onNotice(text: unknown): void;
   commandFocusVersion?: number;
+  searchFocusVersion?: number;
   onError(text: unknown): void;
   onSelection(text: string): void;
 }
@@ -154,6 +155,7 @@ export default function TerminalPane(p: Props) {
     let selectingWithMouse = false;
     const paneElement = container.current.parentElement ?? container.current;
     const onMouseDown = (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest(".terminal-find")) return;
       selectingWithMouse =
         event.button === 0 &&
         callbacks.current.active &&
@@ -309,8 +311,11 @@ export default function TerminalPane(p: Props) {
     }
   }, [p.active, searchOpen]);
   useEffect(() => {
-    if (p.active && p.commandFocusVersion) terminal.current?.focus();
+    if (p.active && p.commandFocusVersion && !searchOpen) terminal.current?.focus();
   }, [p.commandFocusVersion]);
+  useEffect(() => {
+    if (p.active && p.searchFocusVersion) setSearchOpen(true);
+  }, [p.searchFocusVersion]);
   const closeSearch = () => {
     searchAddon.current?.clearDecorations();
     setSearchOpen(false);
@@ -330,8 +335,8 @@ export default function TerminalPane(p: Props) {
           <input
             ref={searchInput}
             value={searchText}
-            aria-label="Search terminal output"
-            placeholder="Find in terminal"
+            aria-label={t("terminal:findInTerminal")}
+            placeholder={t("terminal:findInTerminal")}
             onChange={(event) => {
               const next = event.target.value;
               setSearchText(next);
@@ -346,11 +351,11 @@ export default function TerminalPane(p: Props) {
               }
             }}
           />
-          <button type="button" title="Previous match" aria-label="Previous match"
+          <button type="button" title={t("terminal:previousMatch")} aria-label={t("terminal:previousMatch")}
             onClick={() => find(false)}>↑</button>
-          <button type="button" title="Next match" aria-label="Next match"
+          <button type="button" title={t("terminal:nextMatch")} aria-label={t("terminal:nextMatch")}
             onClick={() => find(true)}>↓</button>
-          <button type="button" title="Close search" aria-label="Close search"
+          <button type="button" title={t("terminal:closeSearch")} aria-label={t("terminal:closeSearch")}
             onClick={closeSearch}>×</button>
         </div>
       )}
