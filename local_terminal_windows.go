@@ -30,5 +30,9 @@ func newLocalPTY(shell string, cols, rows int) (localPTY, error) {
         return nil, errors.New("unsupported local shell")
     }
     command := `"` + strings.ReplaceAll(path, `"`, "") + `"`
-    return conpty.Start(command, conpty.ConPtyDimensions(cols, rows))
+    options := []conpty.ConPtyOption{conpty.ConPtyDimensions(cols, rows)}
+    if home, err := os.UserHomeDir(); err == nil && home != "" {
+        options = append(options, conpty.ConPtyWorkDir(home))
+    }
+    return conpty.Start(command, options...)
 }

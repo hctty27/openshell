@@ -450,12 +450,13 @@ function Workspace({ initialState }: { initialState: AppState }) {
         };
       }),
     );
-    const end = listen("ssh:terminal-ended", (ref: Ref) =>
+    const end = listen("ssh:terminal-ended", (ref: Ref) => {
       update(ref.tabId, t => t.ref?.generation === ref.generation && !t.manualDisconnected
         ? { ...t, status: "disconnected", manualDisconnected: true,
             error: message("common:terminalProcessEndedReconnectToContinue") }
-        : t),
-    );
+        : t);
+      void api.Disconnect(ref).catch(notify);
+    });
     const autoEvent = listen("auto:event", (event: AutoEvent) => {
       const s = event.state;
       update(s.ref.tabId, (t) => {
