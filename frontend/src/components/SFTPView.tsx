@@ -143,7 +143,16 @@ export default function SFTPView({refID,onNotice}:Props) {
     const destSide = side==="local" ? "remote" : "local";
     try {
       for(const file of paths) {
-        await api.SFTPTransfer(refID,direction,file,join(destSide,dstDir,basename(file)));
+        const existing = (destSide==="remote" ? remoteFiles : localFiles).some(item=>item.name===basename(file));
+        let overwrite = false;
+        if (existing) {
+          overwrite = await dialogs.confirm({
+            title:t("sftp:overwriteTitle"), description:t("sftp:overwriteDescription",{name:basename(file)}),
+            tone:"warning",confirmLabel:t("sftp:overwrite")
+          });
+          if (!overwrite) continue;
+        }
+        await api.SFTPTransfer(refID,direction,file,join(destSide,dstDir,basename(file)),overwrite);
       }
     }catch(error){onNotice(error);}
   };

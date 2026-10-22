@@ -183,6 +183,7 @@ export interface SFTPTask {
   bytes: number;
   total: number;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  overwrite: boolean;
   error: string;
   created: number;
 }

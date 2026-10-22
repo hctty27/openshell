@@ -123,8 +123,8 @@ export function SFTPList(arg1, arg2, arg3) {
 export function SFTPOperate(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['SFTPOperate'](arg1, arg2, arg3, arg4, arg5);
 }
-export function SFTPTransfer(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['SFTPTransfer'](arg1, arg2, arg3, arg4);
+export function SFTPTransfer(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SFTPTransfer'](arg1, arg2, arg3, arg4, arg5);
 }
 export function SFTPTransfers(arg1) {
   return window['go']['main']['App']['SFTPTransfers'](arg1);

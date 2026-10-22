@@ -788,8 +788,8 @@ func (a *App) SFTPList(ref domain.ConnectionRef, side, directory string) ([]file
 func (a *App) SFTPOperate(ref domain.ConnectionRef, side, operation, source, argument string) error {
  return a.sftp.Operate(ref, side, operation, source, argument)
 }
-func (a *App) SFTPTransfer(ref domain.ConnectionRef, direction, source, destination string) (files.Task, error) {
- return a.sftp.Start(ref, direction, source, destination)
+func (a *App) SFTPTransfer(ref domain.ConnectionRef, direction, source, destination string, overwrite bool) (files.Task, error) {
+ return a.sftp.Start(ref, direction, source, destination, overwrite)
 }
 func (a *App) SFTPTransfers(ref domain.ConnectionRef) []files.Task {
  return a.sftp.Transfers(ref)

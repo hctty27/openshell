@@ -24,6 +24,7 @@ type Task struct {
     Bytes int64 `json:"bytes"`
     Total int64 `json:"total"`
     Status string `json:"status"`
+    Overwrite bool `json:"overwrite"`
     Error string `json:"error"`
     Created int64 `json:"created"`
 }
@@ -36,7 +37,7 @@ type job struct {
 }
 var errSymlink = errors.New("symbolic links are not included in transfers")
 
-func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination string) (Task, error) {
+func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination string, overwrite bool) (Task, error) {
     if direction != "upload" && direction != "download" { return Task{}, errors.New("invalid transfer direction") }
     src, dst := "local", "remote"
     if direction == "download" { src, dst = "remote", "local" }
@@ -45,7 +46,7 @@ func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination
     if _, err := m.lookup(ref); err != nil { return Task{}, err }
     ctx, cancel := context.WithCancel(context.Background())
     task := Task{ID:domain.NewID(), Ref:ref, Direction:direction, Source:source,
-        Destination:destination, Name:filepath.Base(source), Status:"queued", Created:time.Now().UnixMilli()}
+        Destination:destination, Name:filepath.Base(source), Overwrite:overwrite, Status:"queued", Created:time.Now().UnixMilli()}
     if direction == "download" { task.Name = path.Base(source) }
     m.mu.Lock()
     if m.closed { m.mu.Unlock(); cancel(); return Task{}, errors.New("file manager closed") }
@@ -210,7 +211,7 @@ func (m *Manager) upload(j *job,c *pkg.Client,src,dst string) error {
         }
         return nil
     }
-    if err:=checkNotExists(c.Lstat,dst);err!=nil{return err}
+    if _,err:=checkTarget(c.Lstat,dst,j.task.Overwrite);err!=nil{return err}
     reader,err:=os.Open(src)
     if err!=nil{return err}
     defer reader.Close()
@@ -222,8 +223,10 @@ func (m *Manager) upload(j *job,c *pkg.Client,src,dst string) error {
     closeErr:=writer.Close()
     if err!=nil{return err}
     if closeErr!=nil{return closeErr}
-    if err=checkNotExists(c.Lstat,dst);err!=nil{return err}
-    if err=c.Rename(tmp,dst);err!=nil{return err}
+    exists,err:=checkTarget(c.Lstat,dst,j.task.Overwrite)
+    if err!=nil{return err}
+    if exists { err=c.PosixRename(tmp,dst) } else { err=c.Rename(tmp,dst) }
+    if err!=nil{return err}
     return c.Chmod(dst,info.Mode().Perm())
 }
 func (m *Manager) download(j *job,c *pkg.Client,src,dst string) error {
@@ -243,7 +246,7 @@ func (m *Manager) download(j *job,c *pkg.Client,src,dst string) error {
         }
         return nil
     }
-    if err:=checkNotExists(os.Lstat,dst);err!=nil{return err}
+    if _,err:=checkTarget(os.Lstat,dst,j.task.Overwrite);err!=nil{return err}
     reader,err:=c.Open(src)
     if err!=nil{return err}
     defer reader.Close()
@@ -255,7 +258,7 @@ func (m *Manager) download(j *job,c *pkg.Client,src,dst string) error {
     closeErr:=writer.Close()
     if err!=nil{return err}
     if closeErr!=nil{return closeErr}
-    if err=checkNotExists(os.Lstat,dst);err!=nil{return err}
+    if _,err=checkTarget(os.Lstat,dst,j.task.Overwrite);err!=nil{return err}
     if err=os.Rename(tmp,dst);err!=nil{return err}
     return os.Chmod(dst,info.Mode().Perm())
 }
@@ -285,4 +288,13 @@ func (m *Manager) CancelTab(tabID string) {
     }
     m.mu.Unlock()
     for _, cancel := range cancels { cancel() }
+}
+
+func checkTarget(check func(string)(os.FileInfo,error), destination string, overwrite bool)(bool,error){
+    info,err:=check(destination)
+    if errors.Is(err,os.ErrNotExist){return false,nil}
+    if err!=nil{return false,err}
+    if info.IsDir(){return true,fmt.Errorf("destination is a directory: %s",destination)}
+    if !overwrite{return true,os.ErrExist}
+    return true,nil
 }

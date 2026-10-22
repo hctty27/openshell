@@ -23,7 +23,7 @@ type Backend = {
   SFTPChooseDirectory(): Promise<string>;
   SFTPList(ref: Ref, side: string, directory: string): Promise<SFTPEntry[]>;
   SFTPOperate(ref: Ref, side: string, operation: string, source: string, argument: string): Promise<void>;
-  SFTPTransfer(ref: Ref, direction: string, source: string, destination: string): Promise<SFTPTask>;
+  SFTPTransfer(ref: Ref, direction: string, source: string, destination: string, overwrite: boolean): Promise<SFTPTask>;
   SFTPTransfers(ref: Ref): Promise<SFTPTask[]>;
   SFTPCancel(taskID: string): Promise<void>;
   StartAutomatic(req: ChatRequest, taskID: string): Promise<AutoSnapshot>;
