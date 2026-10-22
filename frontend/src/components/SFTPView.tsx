@@ -7,7 +7,7 @@ import type { Ref, SFTPEntry, SFTPTask, SFTPDocument } from "../types";
 import { useDialogs } from "./DialogProvider";
 import SFTPAIAssistant from "./SFTPAIAssistant";
 import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMenu";
-import { t } from "../i18n";
+import { i18n, t } from "../i18n";
 
 type Side = "local" | "remote";
 type Operation = "rename" | "delete" | "chmod" | "mkdir";
@@ -32,7 +32,7 @@ const niceSize = (value: number) => {
 };
 interface Props { refID: Ref; profileID: string; onNotice(error: unknown): void; }
 interface PanelProps {
-  side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: string; showHidden: boolean;
+  side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: unknown; showHidden: boolean;
   onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void; onSelect(item: SFTPEntry, multi: boolean): void;
   onOpenFile?(entry:SFTPEntry): void; onTransfer(): void; onOperate(operation: Operation, entry?: SFTPEntry): void;
   onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLElement>): void;
@@ -63,7 +63,7 @@ function FilePanel(p: PanelProps) {
       <div className="sftp-file-table" role="list">
         <div className="sftp-column-head"><span>{t("sftp:name")}</span><span>{t("sftp:size")}</span><span>{t("sftp:modified")}</span><span>{t("sftp:mode")}</span></div>
         {p.loading ? <div className="sftp-placeholder"><LoaderCircle className="spin" size={17}/>{t("sftp:loading")}</div>
-        : p.error ? <div className="sftp-placeholder sftp-error">{p.error}</div>
+        : p.error ? <div className="sftp-placeholder sftp-error">{errorText(p.error)}</div>
         : visible.length === 0 ? <div className="sftp-placeholder">{t("sftp:emptyFolder")}</div>
         : visible.map(entry => (
           <button type="button" role="listitem" key={entry.path}
@@ -75,12 +75,12 @@ function FilePanel(p: PanelProps) {
             onContextMenu={event=>p.onContext(event,entry)}>
             <span className="sftp-file-name">{entry.isDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className="sftp-link-badge">↗</span>}</span>
             <span>{entry.isDir ? "—" : niceSize(entry.size)}</span>
-            <span>{new Date(entry.modified).toLocaleDateString()}</span><span>{entry.mode}</span>
+            <span>{new Date(entry.modified).toLocaleDateString(i18n.language === "zh-CN" ? "zh-CN" : "en-US")}</span><span>{entry.mode}</span>
           </button>
         ))}
       </div>
       <div className="sftp-panel-footer">
-        <span>{visible.length} {t("sftp:name").toLowerCase()}</span>
+        <span>{t("sftp:fileCount", { count: visible.length })}</span>
         <button className="sftp-primary" disabled={!p.selected.length} onClick={p.onTransfer}>
           {remote ? <ArrowDownToLine size={13}/> : <ArrowUpFromLine size={13}/>}
           {t(remote ? "sftp:download" : "sftp:upload")}
@@ -98,8 +98,8 @@ export default function SFTPView({refID,profileID,onNotice}:Props) {
   const [remoteFiles,setRemoteFiles] = useState<SFTPEntry[]>([]);
   const [localBusy,setLocalBusy] = useState(false);
   const [remoteBusy,setRemoteBusy] = useState(false);
-  const [localError,setLocalError] = useState("");
-  const [remoteError,setRemoteError] = useState("");
+  const [localError,setLocalError] = useState<unknown>("");
+  const [remoteError,setRemoteError] = useState<unknown>("");
   const [selection,setSelection] = useState<Record<Side,string[]>>({local:[],remote:[]});
   const [hidden,setHidden] = useState(false);
   const [version,setVersion] = useState(0);
@@ -123,7 +123,7 @@ export default function SFTPView({refID,profileID,onNotice}:Props) {
     if(!localDir)return;
     let alive=true;setLocalBusy(true);setLocalError("");
     api.SFTPList(refID,"local",localDir).then(items=>{if(alive)setLocalFiles(items??[]);})
-      .catch(error=>{if(alive){setLocalFiles([]);setLocalError(String(errorText(error)));}})
+      .catch(error=>{if(alive){setLocalFiles([]);setLocalError(error);}})
       .finally(()=>{if(alive)setLocalBusy(false);});
     return ()=>{alive=false;};
   },[refID.tabId,refID.generation,localDir,version]);
@@ -131,7 +131,7 @@ export default function SFTPView({refID,profileID,onNotice}:Props) {
     if(!remoteDir)return;
     let alive=true;setRemoteBusy(true);setRemoteError("");
     api.SFTPList(refID,"remote",remoteDir).then(items=>{if(alive)setRemoteFiles(items??[]);})
-      .catch(error=>{if(alive){setRemoteFiles([]);setRemoteError(String(errorText(error)));}})
+      .catch(error=>{if(alive){setRemoteFiles([]);setRemoteError(error);}})
       .finally(()=>{if(alive)setRemoteBusy(false);});
     return ()=>{alive=false;};
   },[refID.tabId,refID.generation,remoteDir,version]);
@@ -194,7 +194,7 @@ export default function SFTPView({refID,profileID,onNotice}:Props) {
         if(!validName(name)){onNotice(t("sftp:invalidName"));return;}
         await api.SFTPOperate(refID,side,"mkdir",join(side,dir,name),"");
       } else if(operation==="delete") {
-        const accepted=await dialogs.confirm({title:t("sftp:deleteTitle"),description:t("sftp:deleteWarning",{name:selected.length===1?selected[0].name:`${selected.length} items`}),tone:"danger",confirmLabel:t("sftp:delete")});
+        const accepted=await dialogs.confirm({title:t("sftp:deleteTitle"),description:t("sftp:deleteWarning",{name:selected.length===1?selected[0].name:t("sftp:itemCount", { count: selected.length })}),tone:"danger",confirmLabel:t("sftp:delete")});
         if(!accepted)return;
         for(const file of selected)await api.SFTPOperate(refID,side,"delete",file.path,"");
       } else if(operation==="rename") {
@@ -344,7 +344,7 @@ export default function SFTPView({refID,profileID,onNotice}:Props) {
             <div className="sftp-task" key={task.id}>
               {task.status==="completed"? <CheckCircle2 size={14}/> : task.status==="failed"? <CircleAlert size={14}/> : task.direction==="upload"?<ArrowUpFromLine size={14}/>:<ArrowDownToLine size={14}/>}
               <span className="sftp-task-name" title={task.source}>{task.name}</span>
-              <span className="sftp-task-state" title={task.error||undefined}>{task.error ? task.error : t(`sftp:${task.status}` as "sftp:queued")}</span>
+              <span className="sftp-task-state" title={task.error ? errorText(task.error) : undefined}>{task.error ? errorText(task.error) : t(`sftp:${task.status}` as "sftp:queued")}</span>
               <span className="sftp-task-size">{niceSize(task.bytes)} / {niceSize(task.total)}</span>
               <div className="sftp-progress"><span style={{width:`${task.total ? Math.min(100,task.bytes/task.total*100) : (task.status==="completed"?100:0)}%`}}/></div>
               {(task.status==="running"||task.status==="queued")&&<button title={t("sftp:cancelTransfer")} onClick={()=>void api.SFTPCancel(task.id).catch(onNotice)}><X size={13}/></button>}
