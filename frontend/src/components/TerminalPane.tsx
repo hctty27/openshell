@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { message, type DisplayText } from "../i18n/message";
 import { t } from "../i18n";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -466,7 +466,7 @@ export default function TerminalPane(p: Props) {
   return (
     <div data-tab-id={p.tab.id} className={`terminal-pane ${(p.visible ?? p.active) ? "visible" : ""} ${p.active ? "active" : ""}`}
       aria-label={t("terminal:terminal", { name: p.tab.session.name })}
-      style={{ backgroundColor: resolvedTheme.background }}>
+      style={{ "--terminal-background": resolvedTheme.background } as CSSProperties}>
       <div className="terminal-surface" ref={container} />
       {p.active && searchOpen && (
         <div className="terminal-find">
