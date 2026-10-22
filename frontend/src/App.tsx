@@ -1,4 +1,4 @@
-import { reasonText } from "./i18n/errors";
+import { reasonText, decodeAppError } from "./i18n/errors";
 import { message, renderMessage, type DisplayText } from "./i18n/message";
 import { t as tr } from "./i18n";
 import { useTranslation } from "react-i18next";
@@ -433,7 +433,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       }),
     );
     const end = listen("ssh:terminal-ended", (ref: Ref) =>
-      update(ref.tabId, t => t.ref?.generation === ref.generation
+      update(ref.tabId, t => t.ref?.generation === ref.generation && !t.manualDisconnected
         ? { ...t, status: "disconnected", manualDisconnected: true,
             error: message("common:terminalProcessEndedReconnectToContinue") }
         : t),
@@ -667,7 +667,12 @@ function Workspace({ initialState }: { initialState: AppState }) {
   useEffect(() => {
     const enabled = state.autoReconnect !== false;
     for (const tab of tabs) {
-      if (tab.status !== "reconnecting" || tab.manualDisconnected || !enabled) {
+      if (tab.status === "reconnecting" && !enabled) {
+        stopRetryTimer(tab.id);
+        update(tab.id, t => ({ ...t, status: "disconnected", error: message("common:reconnectStopped") }));
+        continue;
+      }
+      if (tab.status !== "reconnecting" || tab.manualDisconnected) {
         stopRetryTimer(tab.id);
         continue;
       }
@@ -705,8 +710,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
           }));
           if (result.conversationId) await memory.restore(result.ref, result.conversationId);
         } catch (error) {
-          const description = String(error).toLowerCase();
-          const requiresAuthentication = /authenticat|credential|password|passphrase|fingerprint|private.key/i.test(description);
+          const code = decodeAppError(error)?.code;
+          const authenticationErrors = new Set([
+            "sshAuthentication", "couldNotReadLoginCredentialsEnterThemAgain",
+            "fingerprintChanged", "fingerprintFirst",
+            "privateKeyInvalid", "privateKeyRead",
+          ]);
+          const requiresAuthentication = (code !== undefined && authenticationErrors.has(code)) ||
+            /authenticat|credential|password|passphrase|fingerprint|private.key/i.test(String(error));
           update(tab.id, t => t.status !== "reconnecting" || t.manualDisconnected ? t : ({
             ...t, status: requiresAuthentication ? "disconnected" : "reconnecting",
             retryCount: nextAttempt, error,
