@@ -140,5 +140,20 @@
   "sftpAiAIOutputExceededTheSafetyLimit": "AI 输出超过安全大小限制",
   "sftpAiAIProposedTextIsTooLargeOrInvalidUTF8": "AI 提议的内容过大或不是有效的 UTF-8",
   "sftpAiUnsafeUploadDestination": "上传目标路径不安全",
-  "sftpAiInvalidProposal": "AI 未返回有效的操作提议"
+  "sftpAiInvalidProposal": "AI 未返回有效的操作提议",
+  "sftpFileInvalidFilePath": "文件路径无效",
+  "sftpFileLocalPathMustBeAbsolute": "本地文件路径必须为绝对路径",
+  "sftpFileRemotePathMustBeAbsolute": "远程文件路径必须为绝对路径",
+  "sftpFileInvalidFileLocation": "文件位置无效",
+  "sftpFileRootDirectoryCannotBeModified": "不能修改根目录",
+  "sftpFileVolumeRootCannotBeModified": "不能修改磁盘根目录",
+  "sftpFileSourceAndTargetAreIdentical": "源文件与目标文件相同",
+  "sftpFileInvalidOctalFilePermission": "八进制文件权限无效",
+  "sftpFileUnsupportedFileOperation": "不支持的文件操作",
+  "sftpAiFileCredentialAndPrivateKeyFilesCannotBeSentToAI": "禁止将凭据或私钥文件发送给 AI",
+  "sftpAiFileAICanOnlyReadRegularFiles": "AI 只能读取普通文件",
+  "sftpAiFileBinaryOrInvalidUTF8FileCannotBeSentToAI": "二进制或无效 UTF-8 文件不能发送给 AI",
+  "sftpAiFileRefusingToProposeEditsForTruncatedFiles": "不允许对已截断的文件生成修改提议",
+  "sftpAiFileAIUploadPlanningRequiresOneRegularLocalFile": "AI 上传规划需要一个普通的本地文件",
+  "sftpAiEditsFileSizeLimit": "AI 提议修改仅支持小于 {{limitKiB}} KiB 的文件"
 }
