@@ -84,7 +84,7 @@ export default function TerminalPane(p: Props) {
         callbacks.current.terminalTheme,
         callbacks.current.tab.session.terminalTheme,
       ),
-      overviewRuler: { width: 6 },
+      overviewRuler: { width: 14 },
       minimumContrastRatio: 4.5,
       cursorBlink: true,
       scrollback: 10000,
@@ -321,19 +321,31 @@ export default function TerminalPane(p: Props) {
     paneElement.addEventListener("auxclick", onAuxClick, true);
     document.addEventListener("mouseup", onMouseUp, true);
     paneElement.addEventListener("contextmenu", onContextMenu, true);
-    let resizeTimer: ReturnType<typeof setTimeout>;
+    let resizeScheduled = false;
+    let measuredWidth = 0;
+    let measuredHeight = 0;
     const resize = () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        if (disposed || !(callbacks.current.visible ?? callbacks.current.active) || !container.current?.offsetWidth) return;
+      if (resizeScheduled) return;
+      resizeScheduled = true;
+      requestAnimationFrame(() => {
+        resizeScheduled = false;
+        const element = container.current;
+        if (disposed || !(callbacks.current.visible ?? callbacks.current.active) || !element) return;
+        const { clientWidth, clientHeight } = element;
+        if (!clientWidth || !clientHeight ||
+            (clientWidth === measuredWidth && clientHeight === measuredHeight)) return;
+        measuredWidth = clientWidth;
+        measuredHeight = clientHeight;
         addon.fit();
-      }, 80);
+      });
     };
     const observer = new ResizeObserver(resize);
     observer.observe(container.current);
     requestAnimationFrame(() => {
       if (disposed) return;
       addon.fit();
+      measuredWidth = container.current?.clientWidth ?? 0;
+      measuredHeight = container.current?.clientHeight ?? 0;
       const cols = Math.max(term.cols, 20);
       const rows = Math.max(term.rows, 5);
       if (terminalMode === "offline") return;
@@ -356,7 +368,6 @@ export default function TerminalPane(p: Props) {
     return () => {
       disposed = true;
       inputQueue.length = 0;
-      clearTimeout(resizeTimer);
       observer.disconnect();
       off();
       if (local) void api.CloseLocalTerminal(p.tab.id, localID).catch(() => {});
@@ -423,7 +434,7 @@ export default function TerminalPane(p: Props) {
   useEffect(() => {
     const term = terminal.current;
     if (!term) return;
-    if (!p.active) {
+    if (!(p.visible ?? p.active)) {
       webglAddon.current?.dispose();
       webglAddon.current = null;
       return;
@@ -444,7 +455,7 @@ export default function TerminalPane(p: Props) {
       addon?.dispose();
       webglFailed.current = true;
     }
-  }, [p.active, p.tab.ref?.generation]);
+  }, [p.visible ?? p.active, p.tab.ref?.generation, terminalMode]);
   useEffect(() => {
     if (terminal.current) {
       terminal.current.options.fontSize = p.fontSize;
@@ -455,14 +466,15 @@ export default function TerminalPane(p: Props) {
     if (terminal.current) terminal.current.options.theme = resolvedTheme;
   }, [resolvedTheme]);
   useEffect(() => {
-    if (p.visible && !p.active) {
-      requestAnimationFrame(() => fit.current?.fit());
+    if (p.visible ?? p.active) {
+      requestAnimationFrame(() => {
+        if (callbacks.current.visible ?? callbacks.current.active) fit.current?.fit();
+      });
     }
-  }, [p.visible, p.active]);
+  }, [p.visible ?? p.active]);
   useEffect(() => {
     if (p.active) {
       requestAnimationFrame(() => {
-        fit.current?.fit();
         if (searchOpen) searchInput.current?.focus();
         else terminal.current?.focus();
       });
