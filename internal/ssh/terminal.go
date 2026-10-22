@@ -5,6 +5,7 @@ import (
 	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
+	"github.com/trzsz/trzsz-go/trzsz"
 	"io"
 	"strings"
 	"sync"
@@ -114,41 +115,99 @@ func (w *terminalWriter) Close() {
 	w.flushLocked()
 }
 
+// OpenTerminal connects the existing SSH PTY to an isolated binary-safe transfer
+// filter. Only filtered, printable output reaches history and the renderer.
 func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	if cols < 1 || rows < 1 {
 		return apperror.New("invalidTerminalDimensions", nil)
 	}
-	s, e := m.OpenSession(ref)
-	if e != nil {
-		return e
-	}
+	session, err := m.OpenSession(ref)
+	if err != nil { return err }
 	m.mu.Lock()
-	c := m.connections[ref.TabID]
-	if c == nil || c.ref != ref || c.terminal != nil {
+	connection := m.connections[ref.TabID]
+	if connection == nil || connection.ref != ref || connection.terminal != nil {
 		m.mu.Unlock()
-		s.Close()
+		_ = session.Close()
 		return apperror.New("terminalMissingOrAlreadyOpen", nil)
 	}
-	c.terminal = s
+	connection.terminal = session
 	m.mu.Unlock()
-	fail := func(e error) error { s.Close(); return e }
-	stdin, e := s.StdinPipe()
-	if e != nil {
-		return fail(e)
+	rollback := func(err error) error {
+		_ = session.Close()
+		m.mu.Lock()
+		if current := m.connections[ref.TabID]; current == connection {
+			current.terminal = nil
+			current.stdin = nil
+			current.filter = nil
+		}
+		m.mu.Unlock()
+		return err
+	}
+	remoteInput, err := session.StdinPipe()
+	if err != nil { return rollback(err) }
+	if err = session.RequestPty("xterm-256color", rows, cols,
+		ssh.TerminalModes{ssh.ECHO: 1, ssh.TTY_OP_ISPEED: 14400, ssh.TTY_OP_OSPEED: 14400}); err != nil {
+		return rollback(err)
+	}
+
+	userInput, filterInput := io.Pipe()
+	filterOutput, remoteOutput := io.Pipe()
+	outputDone := make(chan struct{})
+	writer := &terminalWriter{m: m, c: connection}
+	clientOutput := &terminalOutputCloser{writer: writer, done: outputDone}
+	filter := trzsz.NewTrzszFilter(userInput, clientOutput, remoteInput, filterOutput,
+		trzsz.TrzszOptions{TerminalColumns: int32(cols), EnableZmodem: true})
+	filter.SetTransferStateCallback(func(transferring bool) {
+		if !m.Valid(ref) { return }
+		m.emit("ssh:transfer-state", map[string]any{"ref": ref, "active": transferring})
+	})
+	session.Stdout, session.Stderr = remoteOutput, remoteOutput
+	if err = session.Shell(); err != nil {
+		filter.Close()
+		_ = filterInput.Close()
+		_ = remoteOutput.Close()
+		_ = filterOutput.Close()
+		return rollback(err)
 	}
 	m.mu.Lock()
-	c.stdin = stdin
+	if current := m.connections[ref.TabID]; current != connection || current.ref != ref {
+		m.mu.Unlock()
+		filter.Close()
+		_ = filterInput.Close()
+		_ = remoteOutput.Close()
+		_ = session.Close()
+		return io.ErrClosedPipe
+	}
+	connection.stdin = filterInput
+	connection.filter = filter
 	m.mu.Unlock()
-	w := &terminalWriter{m: m, c: c}
-	s.Stdout = w
-	s.Stderr = w
-	if e = s.RequestPty("xterm-256color", rows, cols, ssh.TerminalModes{ssh.ECHO: 1, ssh.TTY_OP_ISPEED: 14400, ssh.TTY_OP_OSPEED: 14400}); e != nil {
-		return fail(e)
-	}
-	if e = s.Shell(); e != nil {
-		return fail(e)
-	}
-	go func() { s.Wait(); w.Close(); m.emit("ssh:terminal-ended", ref) }()
+	go func() {
+		_ = session.Wait()
+		filter.Close()
+		_ = filterInput.Close()
+		_ = remoteOutput.Close()
+		select {
+		case <-outputDone:
+		case <-time.After(2 * time.Second):
+			clientOutput.Close()
+		}
+		m.emit("ssh:transfer-state", map[string]any{"ref": ref, "active": false})
+		m.emit("ssh:terminal-ended", ref)
+	}()
+	return nil
+}
+
+// terminalOutputCloser signals when the filtered output has been fully drained.
+type terminalOutputCloser struct {
+	writer *terminalWriter
+	done chan struct{}
+	once sync.Once
+}
+func (o *terminalOutputCloser) Write(p []byte) (int, error) {
+	return o.writer.Write(p)
+}
+func (o *terminalOutputCloser) Close() error {
+	o.once.Do(func() { o.writer.Close(); close(o.done) })
 	return nil
 }
 func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
@@ -179,7 +238,11 @@ func (m *Manager) Resize(ref domain.ConnectionRef, cols, rows int) error {
 	}
 	s := c.terminal
 	m.mu.Unlock()
-	return s.WindowChange(rows, cols)
+	if err := s.WindowChange(rows, cols); err != nil { return err }
+	m.mu.Lock()
+	if current := m.connections[ref.TabID]; current != nil && current.ref == ref && current.filter != nil { current.filter.SetTerminalColumns(int32(cols)) }
+	m.mu.Unlock()
+	return nil
 }
 func (m *Manager) History(ref domain.ConnectionRef) string {
 	m.mu.Lock()
