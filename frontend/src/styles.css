@@ -725,6 +725,20 @@ kbd {
   width: 100%;
   height: 100%;
 }
+.terminal-transfer-indicator {
+  position: absolute;
+  z-index: 6;
+  left: 18px;
+  bottom: 12px;
+  max-width: calc(100% - 36px);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text-primary);
+  font-size: 11px;
+  pointer-events: none;
+}
 .terminal-find {
   position: absolute;
   top: 8px;

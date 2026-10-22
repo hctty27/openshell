@@ -51,6 +51,7 @@ export default function TerminalPane(p: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [regexMode, setRegexMode] = useState(false);
+  const [transferActive, setTransferActive] = useState(false);
   const callbacks = useRef(p);
   callbacks.current = p;
   useEffect(() => {
@@ -102,6 +103,10 @@ export default function TerminalPane(p: Props) {
       term.write(bytes, () => {
         pending -= bytes.length;
       });
+    });
+    const offTransfer = listen("ssh:transfer-state", (payload) => {
+      if (disposed || !payload?.ref || !same(payload.ref)) return;
+      setTransferActive(payload.active === true);
     });
     const encoder = new TextEncoder();
     const inputQueue: string[] = [];
@@ -304,6 +309,8 @@ export default function TerminalPane(p: Props) {
       clearTimeout(resizeTimer);
       observer.disconnect();
       off();
+      offTransfer();
+      setTransferActive(false);
       paneElement.removeEventListener("mousedown", onMouseDown, true);
       paneElement.removeEventListener("auxclick", onAuxClick, true);
       document.removeEventListener("mouseup", onMouseUp, true);
@@ -442,6 +449,9 @@ export default function TerminalPane(p: Props) {
     <div className={`terminal-pane ${(p.visible ?? p.active) ? "visible" : ""} ${p.active ? "active" : ""}`}
       aria-label={t("terminal:terminal", { name: p.tab.session.name })}>
       <div className="terminal-surface" ref={container} />
+      {p.active && transferActive && (
+        <div className="terminal-transfer-indicator" role="status">{t("terminal:zmodemTransferring")}</div>
+      )}
       {p.active && searchOpen && (
         <div className="terminal-find">
           <input

@@ -60,5 +60,6 @@
   "highlightLogLevels": "高亮日志级别关键词",
   "logs": "日志",
   "resetSplitRatio": "重置分屏为 50/50",
-  "resizeSplit": "调整终端分屏比例"
+  "resizeSplit": "调整终端分屏比例",
+  "zmodemTransferring": "ZMODEM 文件传输中 · 等待传输完成"
 }
