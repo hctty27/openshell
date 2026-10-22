@@ -417,6 +417,7 @@ test("terminal backdrop fills its pane across mixed application and terminal pal
   await page.getByLabel("会话名称", { exact: true }).fill("无露边测试");
   await page.getByLabel("主机地址").fill("127.0.0.1");
   await page.getByLabel("登录密码").fill("fixture-password");
+  await page.getByText("保存到 Windows 凭据管理器").click();
   await page.getByRole("button", { name: "保存会话", exact: true }).click();
   await page.getByText("无露边测试", { exact: true }).dblclick();
   await page.getByRole("button", { name: "信任并连接" }).click();
