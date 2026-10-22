@@ -117,6 +117,116 @@ func TestExecFailureStillCompletesToolHistory(t *testing.T) {
 		t.Fatal("unmatched tool call after exec failure", page, err)
 	}
 }
+func TestDuplicateSessionCreatesIndependentCredentialsAndNames(t *testing.T) {
+	credentials := &vault{m: map[string]string{}}
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), credentials, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+	if err := a.SavePreference("language", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+
+	original, err := a.SaveSession(SaveSessionRequest{
+		Session: domain.Session{GroupID: "test", Name: "生产服务器", Host: "127.0.0.1", Port: 2222, Username: "root", AuthType: "password"},
+		Secret: "saved-password", SaveSecret: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := a.DuplicateSession(original.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := a.DuplicateSession(original.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Name != "生产服务器 - 副本" || second.Name != "生产服务器 - 副本 (2)" {
+		t.Fatalf("unexpected duplicate names: %q, %q", first.Name, second.Name)
+	}
+	if first.ID == original.ID || second.ID == first.ID || first.GroupID != original.GroupID ||
+		first.Host != original.Host || first.Port != original.Port ||
+		first.Username != original.Username || first.AuthType != original.AuthType {
+		t.Fatalf("duplicated session config mismatch: original=%+v first=%+v second=%+v", original, first, second)
+	}
+	if first.CredentialRef == "" || first.CredentialRef == original.CredentialRef ||
+		second.CredentialRef == first.CredentialRef {
+		t.Fatal("duplicated session reused saved credential reference")
+	}
+	if credentials.m[first.CredentialRef] != "saved-password" ||
+		credentials.m[second.CredentialRef] != "saved-password" {
+		t.Fatal("duplicated session did not copy credentials into separate vault entries")
+	}
+	if len(a.tabRefs) != 0 {
+		t.Fatal("duplicate unexpectedly created an SSH tab")
+	}
+	if err := a.DeleteSession(first.ID); err != nil {
+		t.Fatal(err)
+	}
+	if credentials.m[original.CredentialRef] != "saved-password" || credentials.m[second.CredentialRef] != "saved-password" {
+		t.Fatal("deleting a duplicate changed a different session's credentials")
+	}
+	if _, err := a.store.GetSession(context.Background(), original.ID); err != nil {
+		t.Fatalf("original session was removed: %v", err)
+	}
+}
+
+func TestDuplicateSessionCopiesKeyConfigButNotTemporarySecret(t *testing.T) {
+	credentials := &vault{m: map[string]string{}}
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), credentials, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+
+	source, err := a.SaveSession(SaveSessionRequest{
+		Session: domain.Session{Name: "Key server", Host: "example.org", Port: 22, Username: "deploy", AuthType: "key", PrivateKeyPath: "/test/key"},
+		Secret: "temporary-passphrase", SaveSecret: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	copy, err := a.DuplicateSession(source.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copy.Name != "Key server - Copy" || copy.PrivateKeyPath != source.PrivateKeyPath || copy.CredentialRef != "" {
+		t.Fatalf("key session config was not copied correctly: %+v", copy)
+	}
+	if a.transient["session:"+copy.ID] != "" || a.transient["session:"+source.ID] != "temporary-passphrase" {
+		t.Fatal("duplicating a key session improperly copied or cleared a transient credential")
+	}
+	if len(credentials.m) != 0 {
+		t.Fatal("duplicate saved a previously temporary credential")
+	}
+}
+
+func TestDuplicateSessionFailsIfSavedSecretCannotBeRead(t *testing.T) {
+	credentials := &vault{m: map[string]string{}}
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), credentials, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+	source, err := a.SaveSession(SaveSessionRequest{
+		Session: domain.Session{Name: "Protected", Host: "example.org", Port: 22, Username: "root", AuthType: "password"},
+		Secret: "password", SaveSecret: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(credentials.m, source.CredentialRef)
+	if _, err := a.DuplicateSession(source.ID); err == nil {
+		t.Fatal("duplicated session without a readable saved credential")
+	}
+	rows, err := a.store.ListSessions(context.Background())
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("failed duplication left an incomplete session: rows=%+v err=%v", rows, err)
+	}
+}
+
 func TestAuthenticationChangeClearsTransientSecret(t *testing.T) {
 	a, _ := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
 	defer a.shutdown(context.Background())
