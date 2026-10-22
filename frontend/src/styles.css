@@ -1,58 +1,60 @@
 :root {
   --chrome-bar-height: 30px;
-  --surface: #0b1017;
-  --panel: #101720;
-  --raised: #121c28;
-  --field-bg: #0b121b;
-  --border: #293749;
-  --text-primary: #dce5ee;
-  --text-secondary: #9eb1c8;
-  --text-muted: #74869c;
-  --accent: #88d0b0;
-  --accent-fill: #80cdb3;
-  --on-accent: #16372e;
-  --accent-soft: #70caaa14;
-  --accent-border: #52786a77;
-  --info: #91b7e0;
-  --info-soft: #91b7e010;
-  --info-border: #91b7e03b;
-  --warning: #d6bd7d;
-  --danger: #e5a1a2;
-  --danger-soft: #914b4d14;
-  --danger-border: #954a4c66;
-  --hover: #ffffff09;
-  --overlay: #04090fa6;
-  --terminal-overlay: #0b1017df;
-  --scrollbar: #53657b;
-  --terminal-scroll-track: #8194aa12;
+  --surface: #272B32;
+  --panel: #30353D;
+  --raised: #363B44;
+  --field-bg: #252A31;
+  --border: #464D58;
+  --text-primary: #E2E6ED;
+  --text-secondary: #B9C3D0;
+  --text-muted: #96A4B7;
+  --accent: #83B6EE;
+  --accent-fill: #548FD5;
+  --on-accent: #FFFFFF;
+  --accent-soft: #548FD525;
+  --accent-border: #548FD58A;
+  --info: #9CC5F3;
+  --info-soft: #548FD51A;
+  --info-border: #548FD566;
+  --warning: #E5BF72;
+  --danger: #F4A0A6;
+  --danger-soft: #C5545C20;
+  --danger-border: #C5545C88;
+  --hover: #FFFFFF11;
+  --overlay: #0D1015B5;
+  --terminal-overlay: #171A1FEB;
+  --scrollbar: #7A8799;
+  --terminal-scroll-track: #7A879918;
+  --terminal-workspace: #171A1F;
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --surface: #fafbfd;
-  --panel: #f0f3f7;
-  --raised: #ffffff;
-  --field-bg: #f7f9fc;
-  --border: #d6dfe9;
-  --text-primary: #263445;
-  --text-secondary: #47596f;
-  --text-muted: #62748b;
-  --accent: #187359;
-  --accent-fill: #18795f;
-  --on-accent: #ffffff;
-  --accent-soft: #18795f0c;
-  --accent-border: #18795f40;
-  --info: #305f96;
-  --info-soft: #305f960c;
-  --info-border: #305f963b;
-  --warning: #8a610d;
-  --danger: #ab3447;
-  --danger-soft: #ab34470c;
-  --danger-border: #ab344740;
-  --hover: #1c344609;
-  --overlay: #e3e9f080;
-  --terminal-overlay: #fafbfde8;
-  --scrollbar: #8795a7;
-  --terminal-scroll-track: #52647e12;
+  --surface: #F2F3F5;
+  --panel: #E7EAEE;
+  --raised: #FFFFFF;
+  --field-bg: #FFFFFF;
+  --border: #CED4DD;
+  --text-primary: #252A32;
+  --text-secondary: #4E5A6B;
+  --text-muted: #647183;
+  --accent: #2878D0;
+  --accent-fill: #2878D0;
+  --on-accent: #FFFFFF;
+  --accent-soft: #2878D018;
+  --accent-border: #2878D063;
+  --info: #2468B4;
+  --info-soft: #2878D014;
+  --info-border: #2878D04F;
+  --warning: #845A0B;
+  --danger: #AC3445;
+  --danger-soft: #B63D4D14;
+  --danger-border: #B63D4D55;
+  --hover: #1729400C;
+  --overlay: #DDE2E9A3;
+  --terminal-overlay: #FFFFFFEB;
+  --scrollbar: #8591A0;
+  --terminal-scroll-track: #52647E14;
+  --terminal-workspace: #FFFFFF;
 }
 :root {
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
@@ -654,6 +656,7 @@ kbd {
 }
 .terminal-container {
   position: relative;
+  background: var(--terminal-workspace);
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -2781,11 +2784,11 @@ select.mode-select {
 }
 
 .settings-theme-preview--light {
-  background: #e9edf4;
+  background: #E1E5EB;
 }
 
 .settings-theme-preview--dark {
-  background: #1b2533;
+  background: #363B44;
 }
 
 .settings-theme-preview-sidebar {
@@ -2794,11 +2797,11 @@ select.mode-select {
 }
 
 .settings-theme-preview--light .settings-theme-preview-sidebar {
-  background: #c9d4e1;
+  background: #CED4DD;
 }
 
 .settings-theme-preview--dark .settings-theme-preview-sidebar {
-  background: #36465c;
+  background: #515B6B;
 }
 
 .settings-theme-preview-main {
@@ -2823,7 +2826,25 @@ select.mode-select {
 }
 
 .settings-theme-preview--dark .settings-theme-preview-main span {
-  background: #35465b;
+  background: #171A1F;
+}
+
+.settings-theme-preview--dark .settings-theme-preview-main span:first-child {
+  background: #515B6B;
+}
+
+.settings-theme-preview--light .settings-theme-preview-main span:first-child {
+  background: #CED4DD;
+}
+
+.terminal-palette-preview {
+  max-width: 460px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: 12px/1.65 Consolas, "Cascadia Mono", "Courier New", monospace;
+  white-space: pre-wrap;
 }
 
 .settings-theme-option-label {
