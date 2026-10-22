@@ -142,13 +142,16 @@ func TestTerminalClipboardPreferencesPersistAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if initial.AutoCopySelection || initial.RightClickPaste || !initial.ConfirmMultilinePaste {
+	if initial.AutoCopySelection || initial.RightClickPaste || initial.MiddleClickPaste || initial.LogHighlights || initial.SplitRatio != 50 || !initial.ConfirmMultilinePaste {
 		t.Fatalf("unexpected clipboard defaults: %+v", initial)
 	}
 	for key, value := range map[string]string{
 		"autoCopySelection":     "true",
 		"rightClickPaste":       "true",
 		"confirmMultilinePaste": "false",
+		"middleClickPaste":       "true",
+		"logHighlights":          "true",
+		"splitRatio":             "70",
 	} {
 		if err := a.SavePreference(key, value); err != nil {
 			t.Fatal(err)
@@ -164,12 +167,17 @@ func TestTerminalClipboardPreferencesPersistAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !state.AutoCopySelection || !state.RightClickPaste || state.ConfirmMultilinePaste {
+	if !state.AutoCopySelection || !state.RightClickPaste || !state.MiddleClickPaste || !state.LogHighlights || state.SplitRatio != 70 || state.ConfirmMultilinePaste {
 		t.Fatalf("clipboard settings not restored: %+v", state)
 	}
 	if err := b.SavePreference("rightClickPaste", "invalid"); err == nil {
-		t.Fatal("invalid boolean preference accepted")
-	}
+        t.Fatal("invalid boolean preference accepted")
+    }
+    for _, invalid := range []string{"19", "81", "invalid"} {
+        if err := b.SavePreference("splitRatio", invalid); err == nil {
+            t.Fatalf("invalid split ratio %q accepted", invalid)
+        }
+    }
 }
 
 func TestAutomaticSettingsValidationAndRestore(t *testing.T) {
