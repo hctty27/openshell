@@ -57,6 +57,22 @@
 
 在「设置 → 通用 → 会话备份」可以导出、恢复 OpenShell 原生 JSON 会话备份，保留多级文件夹路径。**这仅包含 SSH 会话和文件夹，暂不备份 AI API 配置、偏好设置、私钥文件或 Windows 凭据**。迁移后需重新配置认证信息。恢复可选择跳过同名会话或为导入会话重命名，默认不会覆盖现有会话。
 
+### ZMODEM 文件传输（rz/sz）
+
+在已连接的 SSH 终端执行 `rz` 可选择本地文件上传，执行 `sz /path/to/file` 可选择本地目录接收。
+OpenShell 在 Go 层过滤协议帧，不会将传输主体写入终端历史或发送给 AI。
+文件选择使用本地系统对话框，传输提示在当前终端内展示。
+
+**当前必要条件：** 服务端安装 `lrzsz`，并且运行 OpenShell 的 Windows 本机也需安装可执行的
+`sz.exe` 和 `rz.exe`，且二者位于 `PATH`。可参考
+[trzsz-ssh 官方 Windows 安装说明](https://github.com/trzsz/trzsz-ssh/blob/main/README.en.md)
+（例如通过 scoop/choco/winget 安装 lrzsz）。
+安装后应重启 OpenShell 使其继承新 `PATH`。若本机缺少辅助程序，传输无法完成，终端会显示相应错误。
+本阶段未在安装包中捆绑 lrzsz，也没有完成真实 Windows 大文件传输的人工验证。
+
+ZMODEM 和 SFTP 相互独立：交互终端的 `rz/sz` 使用 ZMODEM；普通文件浏览、目录同步与断点续传仍使用 SFTP。
+ZMODEM 在 tmux/screen 中可能不稳定；目录传输请继续使用 SFTP。取消、覆盖冲突和统一传输管理将在后续阶段增强。
+
 ## 执行方式
 
 AI 命令通过当前已认证的 SSH 连接直接在远程服务器执行，不需要再次运行 `ssh user@host`。
