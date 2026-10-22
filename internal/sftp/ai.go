@@ -3,14 +3,13 @@ package sftp
 import (
     "crypto/sha256"
     "encoding/hex"
-    "errors"
-    "fmt"
     "io"
     "os"
     "path"
     "strings"
     "unicode/utf8"
 
+    "github.com/hctty27/openshell/internal/apperror"
     "github.com/hctty27/openshell/internal/domain"
 )
 
@@ -40,15 +39,15 @@ func safeForAI(name string) bool {
 // are sent; proposals require the entire file to fit in the limit.
 func (m *Manager) ReadAIExcerpt(ref domain.ConnectionRef, name string, tail, complete bool) (AIExcerpt,error) {
     if err:=validate("remote",name);err!=nil {return AIExcerpt{},err}
-    if !safeForAI(name) {return AIExcerpt{},errors.New("credential and private-key files cannot be sent to AI")}
+    if !safeForAI(name) {return AIExcerpt{},apperror.New("sftpAiFileCredentialAndPrivateKeyFilesCannotBeSentToAI",nil)}
     c,err:=m.remote(ref)
     if err!=nil {return AIExcerpt{},err}
     defer c.Close()
     info,err:=c.Lstat(name)
     if err!=nil {return AIExcerpt{},err}
-    if !info.Mode().IsRegular() {return AIExcerpt{},errors.New("AI can only read regular files")}
+    if !info.Mode().IsRegular() {return AIExcerpt{},apperror.New("sftpAiFileAICanOnlyReadRegularFiles",nil)}
     if complete && info.Size()>aiReadLimit {
-        return AIExcerpt{},fmt.Errorf("AI proposed edits require files under %d KiB",aiReadLimit/1024)
+        return AIExcerpt{},apperror.New("sftpAiEditsFileSizeLimit",map[string]any{"limitKiB":aiReadLimit/1024})
     }
     file,err:=c.Open(name)
     if err!=nil{return AIExcerpt{},err}
@@ -66,9 +65,9 @@ func (m *Manager) ReadAIExcerpt(ref domain.ConnectionRef, name string, tail, com
         if at:=strings.IndexByte(string(data),'\n');at>=0{data=data[at+1:]}
     }
     if !utf8.Valid(data) || strings.IndexByte(string(data),0)>=0 {
-        return AIExcerpt{},errors.New("binary or invalid UTF-8 file cannot be sent to AI")
+        return AIExcerpt{},apperror.New("sftpAiFileBinaryOrInvalidUTF8FileCannotBeSentToAI",nil)
     }
-    if complete && truncated{return AIExcerpt{},errors.New("refusing to propose edits for truncated files")}
+    if complete && truncated{return AIExcerpt{},apperror.New("sftpAiFileRefusingToProposeEditsForTruncatedFiles",nil)}
     digest:=sha256.Sum256(data)
     return AIExcerpt{Path:name,Content:string(data),Revision:hex.EncodeToString(digest[:]),Truncated:truncated},nil
 }
@@ -78,7 +77,7 @@ func (m *Manager) AILocalFileName(ref domain.ConnectionRef, file string) (string
     if _,err:=m.lookup(ref);err!=nil{return "",err}
     info,err:=os.Lstat(file)
     if err!=nil{return "",err}
-    if !info.Mode().IsRegular(){return "",errors.New("AI upload planning requires one regular local file")}
-    if !safeForAI(info.Name()){return "",errors.New("credential and private-key files cannot be sent to AI")}
+    if !info.Mode().IsRegular(){return "",apperror.New("sftpAiFileAIUploadPlanningRequiresOneRegularLocalFile",nil)}
+    if !safeForAI(info.Name()){return "",apperror.New("sftpAiFileCredentialAndPrivateKeyFilesCannotBeSentToAI",nil)}
     return info.Name(),nil
 }

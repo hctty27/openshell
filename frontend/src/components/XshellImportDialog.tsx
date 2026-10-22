@@ -3,6 +3,7 @@ import { FileArchive, X, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { t } from "../i18n";
 import { errorText } from "../bridge";
+import { importIssueText } from "../i18n/errors";
 import type { XshellImportPreview } from "../types";
 
 interface Props {
@@ -16,7 +17,7 @@ export default function XshellImportDialog({ preview, onClose, onImport }: Props
   const [selected, setSelected] = useState<string[]>(() => preview.entries.map((entry) => entry.id));
   const [conflict, setConflict] = useState<"skip" | "rename">("skip");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<unknown>("");
   const native = preview.source === "openshell";
   const title = t(native ? "sessions:importBackupTitle" : "sessions:importXshellTitle");
   const all = selected.length === preview.entries.length && selected.length > 0;
@@ -58,7 +59,7 @@ export default function XshellImportDialog({ preview, onClose, onImport }: Props
           {preview.skipped.length > 0 && (
             <details className="xshell-import-skipped">
               <summary><AlertTriangle size={14} /> {t("sessions:xshellSkipped")} ({preview.skipped.length})</summary>
-              <ul>{preview.skipped.map((entry, index) => <li key={index}>{entry}</li>)}</ul>
+              <ul>{preview.skipped.map((entry, index) => <li key={index}>{importIssueText(entry)}</li>)}</ul>
             </details>
           )}
           <div className="xshell-import-conflict">
@@ -68,14 +69,14 @@ export default function XshellImportDialog({ preview, onClose, onImport }: Props
               <option value="rename">{t("sessions:renameDuplicates")}</option>
             </select>
           </div>
-          {error && <p role="alert" className="danger-text">{error}</p>}
+          {!!error && <p role="alert" className="danger-text">{errorText(error)}</p>}
         </div>
         <footer className="xshell-import-footer">
           <button type="button" disabled={busy} onClick={onClose}>{t("common:cancel")}</button>
           <button type="button" className="primary" disabled={busy || selected.length === 0}
             onClick={async () => {
               setBusy(true); setError("");
-              try { await onImport(selected, conflict); } catch (e) { setError(errorText(e)); }
+              try { await onImport(selected, conflict); } catch (e) { setError(e); }
               finally { setBusy(false); }
             }}>
             {busy ? t("sessions:importingXshell") : t("sessions:importSelectedXshell")}

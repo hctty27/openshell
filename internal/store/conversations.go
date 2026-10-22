@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"strings"
 	"time"
@@ -148,7 +149,7 @@ func (s *Store) SelectConversation(ctx context.Context, key, id string) error {
 		return err
 	}
 	if c.ServerKey != key {
-		return errors.New("conversation belongs to another server")
+		return apperror.New("memoryWrongServer",nil)
 	}
 	_, err = s.db.ExecContext(ctx, "INSERT INTO conversation_selections VALUES(?,?) ON CONFLICT(server_key) DO UPDATE SET last_conversation_id=excluded.last_conversation_id", key, id)
 	return err
@@ -188,7 +189,7 @@ func (s *Store) MutateConversation(ctx context.Context, id string, expected int6
 	switch change.Kind {
 	case "append":
 		if change.Message == nil || change.Message.ID == "" {
-			return c, errors.New("message ID required")
+			return c, apperror.New("memoryMessageIdRequired",nil)
 		}
 		m := *change.Message
 		var exists int
@@ -229,7 +230,7 @@ func (s *Store) MutateConversation(ctx context.Context, id string, expected int6
 		c.Summary = change.Summary
 		c.SummaryThroughSeq = change.SummaryThroughSeq
 	default:
-		return c, errors.New("unsupported conversation mutation")
+		return c, apperror.New("memoryUnsupportedMutation",nil)
 	}
 	c.Revision++
 	c.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)

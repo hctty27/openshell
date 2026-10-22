@@ -23,36 +23,26 @@ func main() {
 	app.emit = func(name string, payload any) { runtime.EventsEmit(app.ctx, name, payload) }
 	app.pickBackupRead = func() (string, error) {
 		return runtime.OpenFileDialog(app.ctx, runtime.OpenDialogOptions{
-			Title: "OpenShell session backup / 会话备份",
-			Filters: []runtime.FileFilter{{DisplayName: "OpenShell session backup (*.json)", Pattern: "*.json"}},
+			Title: app.dialogTitle("Import OpenShell session backup", "导入 OpenShell 会话备份"),
+			Filters: []runtime.FileFilter{{DisplayName: app.dialogTitle("OpenShell backup (*.json)", "OpenShell 备份文件 (*.json)"), Pattern: "*.json"}},
 		})
 	}
 	app.pickBackupWrite = func() (string, error) {
 		return runtime.SaveFileDialog(app.ctx, runtime.SaveDialogOptions{
-			Title: "Backup OpenShell sessions / 备份会话",
+			Title: app.dialogTitle("Back up OpenShell sessions", "备份 OpenShell 会话"),
 			DefaultFilename: "openshell-sessions.json",
 			Filters: []runtime.FileFilter{{DisplayName: "OpenShell session backup (*.json)", Pattern: "*.json"}},
 		})
 	}
 	app.pickImport = func() (string, error) {
-		language, err := app.language()
-		if err != nil { return "", err }
-		title := "Import Xshell sessions"
-		if language == "zh-CN" { title = "导入 Xshell 会话" }
+		title := app.dialogTitle("Import Xshell sessions", "导入 Xshell 会话")
 		return runtime.OpenFileDialog(app.ctx, runtime.OpenDialogOptions{
 			Title: title,
-			Filters: []runtime.FileFilter{{DisplayName: "Xshell sessions (*.xts;*.xsh)", Pattern: "*.xts;*.xsh"}},
+			Filters: []runtime.FileFilter{{DisplayName: app.dialogTitle("Xshell sessions (*.xts;*.xsh)", "Xshell 会话文件 (*.xts;*.xsh)"), Pattern: "*.xts;*.xsh"}},
 		})
 	}
 	app.pickKey = func() (string, error) {
-		language, err := app.language()
-		if err != nil {
-			return "", err
-		}
-		title := "Choose SSH private key"
-		if language == "zh-CN" {
-			title = "选择 SSH 私钥"
-		}
+		title := app.dialogTitle("Choose SSH private key", "选择 SSH 私钥")
 		return runtime.OpenFileDialog(app.ctx, runtime.OpenDialogOptions{Title: title})
 	}
 	e = wails.Run(&options.App{Title: branding.Name, Width: 1440, Height: 900, MinWidth: 1000, MinHeight: 640, AssetServer: &assetserver.Options{Assets: assets}, BackgroundColour: &options.RGBA{R: 11, G: 16, B: 23, A: 255}, DragAndDrop: &options.DragAndDrop{EnableFileDrop: true, DisableWebViewDrop: true}, OnStartup: app.startup, OnShutdown: app.shutdown, Bind: []interface{}{app}})

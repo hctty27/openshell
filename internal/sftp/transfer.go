@@ -6,7 +6,6 @@ import (
     "encoding/hex"
     "bytes"
     "errors"
-    "fmt"
     "io"
     "os"
     "path"
@@ -14,6 +13,7 @@ import (
     "sort"
     "time"
 
+    "github.com/hctty27/openshell/internal/apperror"
     "github.com/hctty27/openshell/internal/domain"
     pkg "github.com/pkg/sftp"
 )
@@ -40,10 +40,10 @@ type job struct {
     reservation string
     last time.Time
 }
-var errSymlink = errors.New("symbolic links are not included in transfers")
+var errSymlink = apperror.New("sftpTransferSymbolicLinksAreNotIncludedInTransfers",nil)
 
 func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination string, overwrite bool, resumeChoice ...bool) (Task, error) {
-    if direction != "upload" && direction != "download" { return Task{}, errors.New("invalid transfer direction") }
+    if direction != "upload" && direction != "download" { return Task{}, apperror.New("sftpTransferInvalidTransferDirection",nil) }
     src, dst := "local", "remote"
     if direction == "download" { src, dst = "remote", "local" }
     if err := validate(src, source); err != nil { return Task{}, err }
@@ -56,14 +56,14 @@ func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination
         Destination:destination, Name:filepath.Base(source), Overwrite:overwrite, Resume:resume, Status:"queued", Created:time.Now().UnixMilli()}
     if direction == "download" { task.Name = path.Base(source) }
     m.mu.Lock()
-    if m.closed { m.mu.Unlock(); cancel(); return Task{}, errors.New("file manager closed") }
+    if m.closed { m.mu.Unlock(); cancel(); return Task{}, apperror.New("sftpTransferFileManagerClosed",nil) }
     canonical := path.Clean(destination)
     if dst == "local" { canonical = filepath.Clean(destination) }
     reservation := ref.SessionID + "|" + direction + "|" + canonical
     if _, busy := m.reserved[reservation]; busy {
         m.mu.Unlock()
         cancel()
-        return Task{}, errors.New("another transfer already targets this path")
+        return Task{}, apperror.New("sftpTransferAnotherTransferAlreadyTargetsThisPath",nil)
     }
     m.reserved[reservation] = struct{}{}
     slot := m.slots[ref.SessionID]
@@ -236,7 +236,7 @@ func (m *Manager) upload(j *job,c *pkg.Client,src,dst string) error {
         remote,err:=c.Lstat(dst)
         if errors.Is(err,os.ErrNotExist){
             if err=c.Mkdir(dst);err!=nil{return err}
-        }else if err!=nil{return err}else if !remote.IsDir(){return fmt.Errorf("target is not a directory: %s",dst)}
+        }else if err!=nil{return err}else if !remote.IsDir(){return apperror.New("sftpTargetNotDirectory",map[string]any{"path":dst})}
         entries,err:=os.ReadDir(src)
         if err!=nil{return err}
         for _,ent:=range entries {
@@ -255,20 +255,20 @@ func (m *Manager) upload(j *job,c *pkg.Client,src,dst string) error {
     if err!=nil && !errors.Is(err,os.ErrNotExist){return err}
     if err==nil {
         existed=true
-        if !part.Mode().IsRegular(){return errors.New("partial upload target is not a regular file")}
+        if !part.Mode().IsRegular(){return apperror.New("sftpTransferPartialUploadTargetIsNotARegularFile",nil)}
         if !j.task.Resume {
             if err=c.Remove(temp);err!=nil{return err}
             existed=false
         }else{
             offset=part.Size()
-            if offset>info.Size(){return errors.New("partial upload is larger than the source; restart transfer")}
+            if offset>info.Size(){return apperror.New("sftpTransferPartialUploadIsLargerThanTheSourceRestartTransfer",nil)}
             prefix,err:=c.Open(temp)
             if err!=nil{return err}
             match,checkErr:=prefixMatches(reader,prefix,offset)
             closeErr:=prefix.Close()
             if checkErr!=nil{return checkErr}
             if closeErr!=nil{return closeErr}
-            if !match{return errors.New("partial upload differs from source; restart transfer")}
+            if !match{return apperror.New("sftpTransferPartialUploadDiffersFromSourceRestartTransfer",nil)}
         }
     }
     if _,err=reader.Seek(offset,io.SeekStart);err!=nil{return err}
@@ -286,7 +286,7 @@ func (m *Manager) upload(j *job,c *pkg.Client,src,dst string) error {
     if closeErr!=nil{return closeErr}
     after,err:=os.Stat(src)
     if err!=nil{return err}
-    if after.Size()!=info.Size() || !after.ModTime().Equal(info.ModTime()) {return errors.New("source file changed during upload")}
+    if after.Size()!=info.Size() || !after.ModTime().Equal(info.ModTime()) {return apperror.New("sftpTransferSourceFileChangedDuringUpload",nil)}
     exists,err:=checkTarget(c.Lstat,dst,j.task.Overwrite)
     if err!=nil{return err}
     if exists{err=c.PosixRename(temp,dst)}else{err=c.Rename(temp,dst)}
@@ -302,7 +302,7 @@ func (m *Manager) download(j *job,c *pkg.Client,src,dst string) error {
         local,err:=os.Lstat(dst)
         if errors.Is(err,os.ErrNotExist){
             if err=os.Mkdir(dst,0755);err!=nil{return err}
-        }else if err!=nil{return err}else if !local.IsDir(){return fmt.Errorf("target is not a directory: %s",dst)}
+        }else if err!=nil{return err}else if !local.IsDir(){return apperror.New("sftpTargetNotDirectory",map[string]any{"path":dst})}
         entries,err:=c.ReadDir(src)
         if err!=nil{return err}
         for _,ent:=range entries {
@@ -321,20 +321,20 @@ func (m *Manager) download(j *job,c *pkg.Client,src,dst string) error {
     if err!=nil && !errors.Is(err,os.ErrNotExist){return err}
     if err==nil{
         existed=true
-        if !part.Mode().IsRegular(){return errors.New("partial download target is not a regular file")}
+        if !part.Mode().IsRegular(){return apperror.New("sftpTransferPartialDownloadTargetIsNotARegularFile",nil)}
         if !j.task.Resume{
             if err=os.Remove(temp);err!=nil{return err}
             existed=false
         }else{
             offset=part.Size()
-            if offset>info.Size(){return errors.New("partial download is larger than source; restart transfer")}
+            if offset>info.Size(){return apperror.New("sftpTransferPartialDownloadIsLargerThanSourceRestartTransfer",nil)}
             existing,err:=os.Open(temp)
             if err!=nil{return err}
             match,checkErr:=prefixMatches(reader,existing,offset)
             closeErr:=existing.Close()
             if checkErr!=nil{return checkErr}
             if closeErr!=nil{return closeErr}
-            if !match{return errors.New("partial download differs from source; restart transfer")}
+            if !match{return apperror.New("sftpTransferPartialDownloadDiffersFromSourceRestartTransfer",nil)}
         }
     }
     if _,err=reader.Seek(offset,io.SeekStart);err!=nil{return err}
@@ -352,7 +352,7 @@ func (m *Manager) download(j *job,c *pkg.Client,src,dst string) error {
     if closeErr!=nil{return closeErr}
     after,err:=c.Lstat(src)
     if err!=nil{return err}
-    if info.Size()!=after.Size() || !info.ModTime().Equal(after.ModTime()) {return errors.New("source file changed during download")}
+    if info.Size()!=after.Size() || !info.ModTime().Equal(after.ModTime()) {return apperror.New("sftpTransferSourceFileChangedDuringDownload",nil)}
     if _,err=checkTarget(os.Lstat,dst,j.task.Overwrite);err!=nil{return err}
     if err=os.Rename(temp,dst);err!=nil{return err}
     return os.Chmod(dst,info.Mode().Perm())
@@ -389,7 +389,7 @@ func checkTarget(check func(string)(os.FileInfo,error), destination string, over
     info,err:=check(destination)
     if errors.Is(err,os.ErrNotExist){return false,nil}
     if err!=nil{return false,err}
-    if info.IsDir(){return true,fmt.Errorf("destination is a directory: %s",destination)}
+    if info.IsDir(){return true,apperror.New("sftpDestinationIsDirectory",map[string]any{"path":destination})}
     if !overwrite{return true,os.ErrExist}
     return true,nil
 }

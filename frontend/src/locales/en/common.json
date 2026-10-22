@@ -127,5 +127,8 @@
   "lineCount_one": "{{count}} line",
   "lineCount_other": "{{count}} lines",
   "sessionSaved": "Session settings saved",
-  "sessionConnectionChangesOnNextReconnect": "Connection settings updated. The current SSH connection stays active; new settings apply on the next connection."
+  "sessionConnectionChangesOnNextReconnect": "Connection settings updated. The current SSH connection stays active; new settings apply on the next connection.",
+  "unableToLoadWorkspace": "Unable to load workspace.",
+  "retry": "Retry",
+  "loadingOpenShell": "Loading OpenShell…"
 }

@@ -3,8 +3,6 @@ package sftp
 import (
     "crypto/sha256"
     "encoding/hex"
-    "errors"
-    "fmt"
     "io"
     "os"
     "path"
@@ -14,6 +12,7 @@ import (
     "time"
     "unicode/utf8"
 
+    "github.com/hctty27/openshell/internal/apperror"
     "github.com/hctty27/openshell/internal/domain"
     pkg "github.com/pkg/sftp"
 )
@@ -32,15 +31,15 @@ type RemoteDocument struct {
 func loadDocument(c *pkg.Client, name string) (RemoteDocument, error) {
     info, err := c.Lstat(name)
     if err != nil { return RemoteDocument{}, err }
-    if !info.Mode().IsRegular() { return RemoteDocument{}, errors.New("only regular text files can be edited") }
-    if info.Size() > maxEditSize { return RemoteDocument{}, fmt.Errorf("text editor limit is %d bytes", maxEditSize) }
+    if !info.Mode().IsRegular() { return RemoteDocument{}, apperror.New("sftpAdvancedOnlyRegularTextFilesCanBeEdited",nil) }
+    if info.Size() > maxEditSize { return RemoteDocument{}, apperror.New("sftpTextEditorLimit",map[string]any{"limit":maxEditSize}) }
     f, err := c.Open(name)
     if err != nil { return RemoteDocument{}, err }
     defer f.Close()
     content, err := io.ReadAll(io.LimitReader(f,maxEditSize+1))
     if err != nil { return RemoteDocument{}, err }
-    if int64(len(content)) > maxEditSize { return RemoteDocument{}, errors.New("file exceeds text editor limit") }
-    if !utf8.Valid(content) || strings.IndexByte(string(content),0) >= 0 { return RemoteDocument{}, errors.New("not a UTF-8 text file") }
+    if int64(len(content)) > maxEditSize { return RemoteDocument{}, apperror.New("sftpAdvancedFileExceedsTextEditorLimit",nil) }
+    if !utf8.Valid(content) || strings.IndexByte(string(content),0) >= 0 { return RemoteDocument{}, apperror.New("sftpAdvancedNotAUTF8TextFile",nil) }
     digest := sha256.Sum256(content)
     return RemoteDocument{Path:name,Content:string(content),Revision:hex.EncodeToString(digest[:]),Size:int64(len(content))},nil
 }
@@ -56,15 +55,15 @@ func (m *Manager) ReadRemoteText(ref domain.ConnectionRef, name string) (RemoteD
 func (m *Manager) SaveRemoteText(ref domain.ConnectionRef, name, expectedRevision, content string) (RemoteDocument,error) {
     if err:=protectRoot("remote",name);err!=nil {return RemoteDocument{},err}
     if !utf8.ValidString(content) || strings.ContainsRune(content,0) || int64(len(content))>maxEditSize {
-        return RemoteDocument{},errors.New("invalid UTF-8 text or file size exceeds 1 MiB")
+        return RemoteDocument{},apperror.New("sftpAdvancedInvalidUTF8TextOrFileSizeExceeds1MiB",nil)
     }
-    if len(expectedRevision)!=64 {return RemoteDocument{},errors.New("missing valid file revision")}
+    if len(expectedRevision)!=64 {return RemoteDocument{},apperror.New("sftpAdvancedMissingValidFileRevision",nil)}
     c,err:=m.remote(ref)
     if err!=nil{return RemoteDocument{},err}
     defer c.Close()
     original,err:=loadDocument(c,name)
     if err!=nil{return RemoteDocument{},err}
-    if original.Revision!=expectedRevision {return RemoteDocument{},errors.New("remote file changed since it was opened; reload before saving")}
+    if original.Revision!=expectedRevision {return RemoteDocument{},apperror.New("sftpAdvancedRemoteFileChangedSinceItWasOpenedReloadBeforeSaving",nil)}
     info,err:=c.Stat(name)
     if err!=nil{return RemoteDocument{},err}
     suffix := domain.NewID()
@@ -81,8 +80,8 @@ func (m *Manager) SaveRemoteText(ref domain.ConnectionRef, name, expectedRevisio
     // are serialized by the caller; unrelated writers may still race the rename.
     current,err:=loadDocument(c,name)
     if err!=nil{return RemoteDocument{},err}
-    if current.Revision!=expectedRevision {return RemoteDocument{},errors.New("remote file changed during save")}
-    if err=c.PosixRename(temp,name);err!=nil{return RemoteDocument{},fmt.Errorf("atomic replace unsupported or failed: %w",err)}
+    if current.Revision!=expectedRevision {return RemoteDocument{},apperror.New("sftpAdvancedRemoteFileChangedDuringSave",nil)}
+    if err=c.PosixRename(temp,name);err!=nil{return RemoteDocument{},apperror.Wrap("sftpAtomicReplaceFailed",err,nil)}
     digest:=sha256.Sum256([]byte(content))
     return RemoteDocument{Path:name,Content:content,Revision:hex.EncodeToString(digest[:]),Size:int64(len(content))},nil
 }
@@ -111,7 +110,7 @@ type syncInfo struct {
 
 // SyncPreview is deliberately non-destructive. It never proposes deletions.
 func (m *Manager) PreviewSync(ref domain.ConnectionRef, direction, localDir, remoteDir string) (SyncPreview,error) {
-    if direction!="upload" && direction!="download" {return SyncPreview{},errors.New("unsupported synchronization direction")}
+    if direction!="upload" && direction!="download" {return SyncPreview{},apperror.New("sftpAdvancedUnsupportedSynchronizationDirection",nil)}
     if err:=validate("local",localDir);err!=nil{return SyncPreview{},err}
     if err:=validate("remote",remoteDir);err!=nil{return SyncPreview{},err}
     c,err:=m.remote(ref)
@@ -158,7 +157,7 @@ func walkLocal(root string)(map[string]syncInfo,error){
     err:=filepath.WalkDir(root,func(name string,ent os.DirEntry,walkErr error)error{
         if walkErr!=nil{return walkErr}
         if name==root{return nil}
-        if len(result)>=maxSyncEntries{return errors.New("directory sync exceeds 4000 entries")}
+        if len(result)>=maxSyncEntries{return apperror.New("sftpAdvancedDirectorySyncExceeds4000Entries",nil)}
         info,err:=ent.Info()
         if err!=nil{return err}
         if info.Mode()&os.ModeSymlink!=0{return nil}
@@ -172,14 +171,14 @@ func walkLocal(root string)(map[string]syncInfo,error){
 func walkRemote(c *pkg.Client,root string)(map[string]syncInfo,error){
     info,err:=c.Lstat(root)
     if err!=nil{return nil,err}
-    if !info.IsDir(){return nil,errors.New("remote synchronization root is not a directory")}
+    if !info.IsDir(){return nil,apperror.New("sftpAdvancedRemoteSynchronizationRootIsNotADirectory",nil)}
     result:=map[string]syncInfo{}
     var walk func(string,string)error
     walk=func(folder,prefix string)error{
         entries,err:=c.ReadDir(folder)
         if err!=nil{return err}
         for _,entry:=range entries {
-            if len(result)>=maxSyncEntries{return errors.New("directory sync exceeds 4000 entries")}
+            if len(result)>=maxSyncEntries{return apperror.New("sftpAdvancedDirectorySyncExceeds4000Entries",nil)}
             if entry.Mode()&os.ModeSymlink!=0 {continue}
             rel:=path.Join(prefix,entry.Name())
             result[rel]=syncInfo{isDir:entry.IsDir(),size:entry.Size(),modified:entry.ModTime()}
@@ -192,12 +191,12 @@ func walkRemote(c *pkg.Client,root string)(map[string]syncInfo,error){
 }
 
 func (m *Manager) BatchChmod(ref domain.ConnectionRef, side string, targets []string, mode string) (int,error) {
-    if len(targets)==0 || len(targets)>200 {return 0,errors.New("select 1 to 200 files")}
+    if len(targets)==0 || len(targets)>200 {return 0,apperror.New("sftpAdvancedSelect1To200Files",nil)}
     for _,name:=range targets {if err:=protectRoot(side,name);err!=nil{return 0,err}}
     count:=0
     for _,name:=range targets {
         if err:=m.Operate(ref,side,"chmod",name,mode);err!=nil {
-            return count,fmt.Errorf("changed %d files; %s: %w",count,name,err)
+            return count,apperror.Wrap("sftpPartialPermissionsChanged",err,map[string]any{"count":count,"file":name})
         }
         count++
     }

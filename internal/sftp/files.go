@@ -11,6 +11,7 @@ import (
     "strings"
     "sync"
 
+    "github.com/hctty27/openshell/internal/apperror"
     "github.com/hctty27/openshell/internal/domain"
     pkg "github.com/pkg/sftp"
     "golang.org/x/crypto/ssh"
@@ -52,22 +53,22 @@ func (m *Manager) remote(ref domain.ConnectionRef) (*pkg.Client, error) {
 }
 
 func validate(side, name string) error {
-    if strings.IndexByte(name, 0) >= 0 { return errors.New("invalid file path") }
+    if strings.IndexByte(name, 0) >= 0 { return apperror.New("sftpFileInvalidFilePath",nil) }
     switch side {
     case "local":
-        if !filepath.IsAbs(name) { return errors.New("local path must be absolute") }
+        if !filepath.IsAbs(name) { return apperror.New("sftpFileLocalPathMustBeAbsolute",nil) }
     case "remote":
-        if !path.IsAbs(name) { return errors.New("remote path must be absolute") }
+        if !path.IsAbs(name) { return apperror.New("sftpFileRemotePathMustBeAbsolute",nil) }
     default:
-        return errors.New("invalid file location")
+        return apperror.New("sftpFileInvalidFileLocation",nil)
     }
     return nil
 }
 func protectRoot(side, name string) error {
     if err := validate(side, name); err != nil { return err }
-    if side == "remote" && path.Clean(name) == "/" { return errors.New("root directory cannot be modified") }
+    if side == "remote" && path.Clean(name) == "/" { return apperror.New("sftpFileRootDirectoryCannotBeModified",nil) }
     if side == "local" && filepath.Dir(filepath.Clean(name)) == filepath.Clean(name) {
-        return errors.New("volume root cannot be modified")
+        return apperror.New("sftpFileVolumeRootCannotBeModified",nil)
     }
     return nil
 }
@@ -134,12 +135,12 @@ func (m *Manager) Operate(ref domain.ConnectionRef, side, operation, source, arg
     }
     if operation == "rename" {
         if err := protectRoot(side, argument); err != nil { return err }
-        if source == argument { return errors.New("source and target are identical") }
+        if source == argument { return apperror.New("sftpFileSourceAndTargetAreIdentical",nil) }
     }
     var perms os.FileMode
     if operation == "chmod" {
         n, err := strconv.ParseUint(argument, 8, 16)
-        if err != nil || n > 0777 { return errors.New("invalid octal file permission") }
+        if err != nil || n > 0777 { return apperror.New("sftpFileInvalidOctalFilePermission",nil) }
         perms = os.FileMode(n)
     }
     if side == "local" {
@@ -150,7 +151,7 @@ func (m *Manager) Operate(ref domain.ConnectionRef, side, operation, source, arg
             return os.Rename(source, argument)
         case "delete": return os.RemoveAll(source)
         case "chmod": return os.Chmod(source, perms)
-        default: return errors.New("unsupported file operation")
+        default: return apperror.New("sftpFileUnsupportedFileOperation",nil)
         }
     }
     c, err := m.remote(ref)
@@ -163,6 +164,6 @@ func (m *Manager) Operate(ref domain.ConnectionRef, side, operation, source, arg
         return c.Rename(source, argument)
     case "delete": return c.RemoveAll(source)
     case "chmod": return c.Chmod(source, perms)
-    default: return errors.New("unsupported file operation")
+    default: return apperror.New("sftpFileUnsupportedFileOperation",nil)
     }
 }
