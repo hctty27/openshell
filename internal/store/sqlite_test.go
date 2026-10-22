@@ -102,3 +102,33 @@ func TestAuthenticationChangeClearsOldSecret(t *testing.T) {
 		t.Fatal("old password retained for new key", next, e)
 	}
 }
+
+func TestJumpRouteAndConfigChangeInvalidateSavedSSHCredential(t *testing.T) {
+ db, err := Open(filepath.Join(t.TempDir(), "state.db"))
+ if err != nil { t.Fatal(err) }
+ defer db.Close()
+ vault := &testSecrets{values: map[string]string{}}
+ original, err := db.SaveSessionWithSecret(context.Background(), domain.Session{
+  ID:"route", Host:"target.example", Port:22, Username:"root", AuthType:"password",
+ }, "old-password", true, vault)
+ if err != nil { t.Fatal(err) }
+ if original.CredentialRef == "" { t.Fatal("expected initial saved credential") }
+
+ changed := original
+ changed.ProxyJump = "jump.example"
+ updated, err := db.SaveSessionWithSecret(context.Background(),changed,"",true,vault)
+ if err != nil { t.Fatal(err) }
+ if updated.CredentialRef != "" || len(vault.values) != 0 {
+  t.Fatalf("cached password kept for new SSH hop: %+v, vault=%d",updated,len(vault.values))
+ }
+
+ saved, err := db.SaveSessionWithSecret(context.Background(),updated,"another-password",true,vault)
+ if err != nil { t.Fatal(err) }
+ if saved.CredentialRef == "" { t.Fatal("replacement credential was not saved") }
+ saved.UseSSHConfig = true
+ changed, err = db.SaveSessionWithSecret(context.Background(),saved,"",true,vault)
+ if err != nil { t.Fatal(err) }
+ if changed.CredentialRef != "" || len(vault.values) != 0 {
+  t.Fatalf("cached password kept after enabling OpenSSH config: %+v, vault=%d",changed,len(vault.values))
+ }
+}
