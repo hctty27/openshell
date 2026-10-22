@@ -122,7 +122,7 @@ AI 命令通过当前已认证的 SSH 连接直接在远程服务器执行，不
 | 会话、分组、API 配置、偏好和主机指纹 | `%APPDATA%\OpenShell\state.db` |
 | 密码、API Key、私钥口令 | Windows 凭据管理器中的 `OpenShell` 项 |
 | 私钥 | 保留用户选择的原文件，配置仅保存路径 |
-| AI 对话 | 仅内存保存，关闭标签或退出应用后清除 |
+| AI 对话与摘要 | 默认保存在 `%APPDATA%\\OpenShell\\state.db`；可在设置中关闭历史保存 |
 
 本项目使用独立的 OpenShell 配置和凭据命名空间。首次运行需要添加会话与 API 设置。
 
@@ -148,10 +148,11 @@ wails dev
 wails build -platform windows/amd64 -clean
 ```
 
-产物：`build/bin/OpenShell.exe`。仓库现在使用两条 Actions 工作流：
+产物：`build/bin/OpenShell.exe`。仓库使用三条 Actions 工作流：
 
-- [CI](.github/workflows/ci.yml)：PR 与 `main` 推送均执行 Go、前端单元测试与 Chromium 回归；当且仅当 `main` 的版本标记变更且本次 CI 全部通过，才调用 Windows 正式发布。
-- [Build and release Windows](.github/workflows/windows-release.yml)：复用 CI 结果，Windows 只构建前端及 Wails EXE、制作和校验安装包/便携包，自动发布到 GitHub Releases 并只保留最新 3 个 Release（保留旧 Git Tag）。构建产物作为 Actions Artifacts 保留 7 天。
+- [CI](.github/workflows/ci.yml)：PR 与 `main` 推送执行 Go race 检测、`go vet`、前端单元测试与 Chromium 回归；当且仅当 `main` 的版本标记变更且本次 CI 全部通过，才调用 Windows 正式发布。
+- [Windows terminal smoke](.github/workflows/windows-terminal-smoke.yml)：涉及终端、SSH、SFTP 和本地 ConPTY 的 PR 运行 Windows 编译与冒烟构建，不直接发布。
+- [Build and release Windows](.github/workflows/windows-release.yml)：复用 CI 结果，Windows 构建 Wails EXE、制作和校验安装包/便携包，自动发布到 GitHub Releases 并只保留最新 3 个 Release（保留旧 Git Tag）。构建产物作为 Actions Artifacts 保留 7 天。
 
 发布新版本（例如 `v0.1.20`）：
 
@@ -178,11 +179,11 @@ npx playwright test
 
 后端测试使用可控 SSH 服务与模拟 API，不需要真实服务器和付费密钥。浏览器端到端测试使用模拟 Wails 桥接；它验证界面流程，不替代 Windows 原生运行验证。
 
-Windows 实测范围和操作步骤见 [验证记录](docs/windows-acceptance.md)，版本变化见 [CHANGELOG](CHANGELOG.md)。
+Windows 实测范围和操作步骤见 [早期验证记录](docs/windows-acceptance.md) 与 [稳定性专项验收清单](docs/stability-acceptance.md)，版本变化见 [CHANGELOG](CHANGELOG.md)。
 
 ## 当前边界
 
-- 暂无 SFTP、跳板机、SSH agent、云同步；会话导入当前支持 Xshell `.xts`/`.xsh` 和 OpenShell 原生 JSON 备份，不支持直接导入 Xshell 保存的密码；快速命令是本地保存的模板，支持多行及末尾换行控制执行，不支持参数占位符。
+- 已支持 SFTP、远程文件编辑与目录同步；暂不支持跳板机/ProxyJump、SSH agent 和云同步。会话导入支持 Xshell `.xts`/`.xsh` 和 OpenShell 原生 JSON 备份，无法解密 Xshell 保存的密码。快速命令支持多行及末尾换行控制执行，不支持参数占位符。
 - 指纹变化时阻止连接；第一版不提供直接覆盖已信任指纹的按钮。
 - 已知小问题：近期终端历史已按上限裁剪时，预览可能遗漏截断提示；发送文本仍受 200 行/32 KiB 限制。
 - Windows 原生输入法、剪贴板、凭据存储与性能仍需实机验证；真实模型与自定义接口的工具调用支持情况需分别验证。
@@ -215,7 +216,7 @@ included only when explicitly attached or returned by an AI-executed command.
 
 Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
 
-Windows release binaries (`OpenShell.exe`, the portable ZIP and the `Setup.exe` installer) are built from this repository by GitHub Actions (`.github/workflows/windows-release.yml`) and signed through SignPath. Only artifacts built from this repository's source code are signed.
+Windows release binaries (`OpenShell.exe`, the portable ZIP and the `Setup.exe` installer) are built from this repository by GitHub Actions (`.github/workflows/windows-release.yml`). SignPath signing is conditional on the required GitHub secrets and configuration being present; otherwise release binaries are unsigned. Check the release notes for each build's actual signing status. Only artifacts built from this repository's source code are signed.
 
 **Team roles**
 
