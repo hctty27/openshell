@@ -17,6 +17,8 @@ export default function XshellImportDialog({ preview, onClose, onImport }: Props
   const [conflict, setConflict] = useState<"skip" | "rename">("skip");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const native = preview.source === "openshell";
+  const title = t(native ? "sessions:importBackupTitle" : "sessions:importXshellTitle");
   const all = selected.length === preview.entries.length && selected.length > 0;
   const toggle = (id: string) => setSelected((prev) =>
     prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
@@ -26,10 +28,10 @@ export default function XshellImportDialog({ preview, onClose, onImport }: Props
     <div className="modal-backdrop" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !busy) onClose();
     }}>
-      <section className="xshell-import-dialog" role="dialog" aria-modal="true" aria-label={t("sessions:importXshellTitle")}>
+      <section className="xshell-import-dialog" role="dialog" aria-modal="true" aria-label={title}>
         <header className="xshell-import-header">
-          <div><h2><FileArchive size={19} /> {t("sessions:importXshellTitle")}</h2>
-            <p>{t("sessions:importXshellDescription")}</p>
+          <div><h2><FileArchive size={19} /> {title}</h2>
+            <p>{t(native ? "sessions:importBackupDescription" : "sessions:importXshellDescription")}</p>
           </div>
           <button type="button" title={t("common:close")} disabled={busy} onClick={onClose}><X size={18} /></button>
         </header>

@@ -56,6 +56,8 @@ interface Props {
   onConfirmMultilinePaste(enabled: boolean): void;
   onClose(): void;
   onSession(req: SessionRequest): Promise<void>;
+  onExportSessionBackup?(): Promise<void>;
+  onImportSessionBackup?(): Promise<void>;
   onRefresh(): Promise<void>;
   onFont(n: number): void;
 }
@@ -512,6 +514,16 @@ export default function SettingsDialog(p: Props) {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="settings-control-row">
+                <div className="settings-control-copy">
+                  <label>{t("sessions:sessionBackupTitle")}</label>
+                  <p>{t("sessions:sessionBackupDescription")}</p>
+                </div>
+                <div style={{ display:"flex", gap: 8 }}>
+                  <button type="button" onClick={() => p.onExportSessionBackup?.()}>{t("sessions:exportSessionBackup")}</button>
+                  <button type="button" onClick={() => p.onImportSessionBackup?.()}>{t("sessions:restoreSessionBackup")}</button>
+                </div>
               </div>
               <div className="settings-theme-group">
                 <h4>{t("settings:theme")}</h4>

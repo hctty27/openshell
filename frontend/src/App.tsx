@@ -583,6 +583,18 @@ function Workspace({ initialState }: { initialState: AppState }) {
       if (preview.token) setXshellPreview(preview);
     } catch (error) { notify(error); }
   };
+  const previewBackup = async () => {
+    try {
+      const preview = await api.PreviewSessionBackup();
+      if (preview.token) setXshellPreview(preview);
+    } catch (error) { notify(error); }
+  };
+  const exportBackup = async () => {
+    try {
+      const path = await api.ExportSessionBackup();
+      if (path) setNotice(tr("sessions:backupSaved"));
+    } catch (error) { notify(error); }
+  };
   const importXshell = async (ids: string[], conflict: "skip" | "rename") => {
     if (!xshellPreview) return;
     const result = await api.ImportXshell(xshellPreview.token, ids, conflict);
@@ -1249,6 +1261,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onConfirmMultilinePaste={setConfirmMultilinePaste}
           onClose={() => setDialog(null)}
           onSession={saveSession}
+          onExportSessionBackup={exportBackup}
+          onImportSessionBackup={previewBackup}
           onRefresh={refresh}
           onFont={setFontSize}
         />

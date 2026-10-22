@@ -40,5 +40,12 @@
   "importingXshell": "正在导入…",
   "importSelectedXshell": "导入选中会话",
   "xshellImportResult": "已导入 {{imported}} 个会话，跳过 {{skipped}} 个重复项",
-  "newSubfolder": "新建子文件夹"
+  "newSubfolder": "新建子文件夹",
+  "importBackupTitle": "恢复 OpenShell 会话",
+  "importBackupDescription": "预览备份中的会话，密码等凭据不会恢复。",
+  "sessionBackupTitle": "会话备份",
+  "sessionBackupDescription": "导出或恢复 SSH 连接配置及文件夹（不包含密码、私钥文件或 AI API 密钥）。",
+  "exportSessionBackup": "导出备份",
+  "restoreSessionBackup": "恢复备份",
+  "backupSaved": "OpenShell 会话备份已保存"
 }

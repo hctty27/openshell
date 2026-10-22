@@ -40,5 +40,12 @@
   "importingXshell": "Importing…",
   "importSelectedXshell": "Import selected sessions",
   "xshellImportResult": "Imported {{imported}} sessions; skipped {{skipped}} duplicates",
-  "newSubfolder": "New subfolder"
+  "newSubfolder": "New subfolder",
+  "importBackupTitle": "Restore OpenShell sessions",
+  "importBackupDescription": "Preview sessions from an OpenShell backup. Credentials are not restored.",
+  "sessionBackupTitle": "Session backup",
+  "sessionBackupDescription": "Export or restore SSH connection settings and folders (excluding passwords, private key files, and AI API keys).",
+  "exportSessionBackup": "Export backup",
+  "restoreSessionBackup": "Restore backup",
+  "backupSaved": "OpenShell session backup saved"
 }
