@@ -15,14 +15,6 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-func (a *App) dialogTitle(english, chinese string) string {
- language, err := a.language()
- if err == nil && language == "zh-CN" {
-  return chinese
- }
- return english
-}
-
 func main() {
 	app, e := NewApp()
 	if e != nil {
