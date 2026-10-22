@@ -17,6 +17,8 @@ type Session struct {
 	Username       string `json:"username"`
 	AuthType       string `json:"authType"`
 	PrivateKeyPath string `json:"privateKeyPath"`
+	UseSSHConfig   bool   `json:"useSSHConfig,omitempty"`
+	ProxyJump      string `json:"proxyJump,omitempty"`
 	CredentialRef  string `json:"credentialRef"`
 	TerminalTheme  string `json:"terminalTheme,omitempty"`
 	CreatedAt      string `json:"createdAt"`
@@ -85,8 +87,11 @@ func ValidateSession(s Session) error {
 	if s.TerminalTheme != "" && s.TerminalTheme != "follow" && s.TerminalTheme != "classic" && s.TerminalTheme != "dark" && s.TerminalTheme != "light" {
 		return apperror.New("unsupportedTheme", nil)
 	}
-	if s.AuthType != "" && s.AuthType != "password" && s.AuthType != "key" {
+	if s.AuthType != "" && s.AuthType != "password" && s.AuthType != "key" && s.AuthType != "agent" {
 		return apperror.New("unsupportedAuthenticationMethod", nil)
+	}
+	if strings.ContainsAny(s.ProxyJump, "\\x00\\r\\n\\t ") || len(s.ProxyJump) > 512 {
+		return apperror.New("unsupportedPreference", nil)
 	}
 	return nil
 }
