@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,6 +15,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 )
 
@@ -49,7 +49,7 @@ func parseXshellImport(filePath string) (XshellImportPreview, error) {
 		return result, err
 	}
 	if !stat.Mode().IsRegular() || stat.Size() > maxXshellArchiveSize {
-		return result, errors.New("Xshell import file is too large or not a regular file")
+		return result, apperror.New("xshellImportXshellImportFileIsTooLargeOrNotARegularFile",nil)
 	}
 	ext := strings.ToLower(filepath.Ext(filePath))
 	add := func(name string, data []byte) {
@@ -74,7 +74,7 @@ func parseXshellImport(filePath string) (XshellImportPreview, error) {
 		if err != nil { return result, err }
 		defer reader.Close()
 		if len(reader.File) > maxXshellEntries {
-			return result, errors.New("Xshell archive contains too many entries")
+			return result, apperror.New("xshellImportXshellArchiveContainsTooManyEntries",nil)
 		}
 		var total uint64
 		for _, file := range reader.File {
@@ -100,10 +100,10 @@ func parseXshellImport(filePath string) (XshellImportPreview, error) {
 			add(clean, data)
 		}
 	default:
-		return result, errors.New("select an Xshell .xts or .xsh file")
+		return result, apperror.New("xshellImportSelectAnXshellXtsOrXshFile",nil)
 	}
 	if len(result.Entries) == 0 && len(result.Skipped) == 0 {
-		return result, errors.New("no Xshell SSH sessions found")
+		return result, apperror.New("xshellImportNoXshellSSHSessionsFound",nil)
 	}
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil { return result, err }
@@ -113,7 +113,7 @@ func parseXshellImport(filePath string) (XshellImportPreview, error) {
 
 func decodeXshell(data []byte) (string, error) {
 	if len(data) >= 2 && ((data[0] == 0xff && data[1] == 0xfe) || (data[0] == 0xfe && data[1] == 0xff)) {
-		if len(data)%2 != 0 { return "", errors.New("invalid UTF-16 length") }
+		if len(data)%2 != 0 { return "", apperror.New("xshellImportInvalidUTF16Length",nil) }
 		little := data[0] == 0xff
 		words := make([]uint16, 0, len(data)/2)
 		for i := 2; i < len(data); i += 2 {
@@ -124,7 +124,7 @@ func decodeXshell(data []byte) (string, error) {
 		return string(utf16.Decode(words)), nil
 	}
 	data = bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})
-	if !utf8.Valid(data) { return "", errors.New("unsupported session encoding") }
+	if !utf8.Valid(data) { return "", apperror.New("xshellImportUnsupportedSessionEncoding",nil) }
 	return string(data), nil
 }
 
@@ -132,7 +132,7 @@ func parseXshellSession(filename string, data []byte) (XshellImportEntry, error)
 	entry := XshellImportEntry{}
 	clean := path.Clean(strings.ReplaceAll(filename, "\\", "/"))
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) || strings.Contains(clean, ":") {
-		return entry, errors.New("unsafe session path")
+		return entry, apperror.New("xshellImportUnsafeSessionPath",nil)
 	}
 	text, err := decodeXshell(data)
 	if err != nil { return entry, err }
@@ -151,22 +151,22 @@ func parseXshellSession(filename string, data []byte) (XshellImportEntry, error)
 		}
 	}
 	conn := ini["CONNECTION"]
-	if conn == nil { return entry, errors.New("not an Xshell connection") }
+	if conn == nil { return entry, apperror.New("xshellImportNotAnXshellConnection",nil) }
 	protocol := strings.ToUpper(conn["PROTOCOL"])
 	if protocol != "" && protocol != "SSH" && protocol != "SSH2" {
-		return entry, errors.New("unsupported protocol: "+protocol)
+		return entry, apperror.New("xshellImportUnsupportedProtocol",map[string]any{"protocol":protocol})
 	}
 	host := strings.TrimSpace(conn["HOST"])
-	if host == "" { return entry, errors.New("missing host") }
+	if host == "" { return entry, apperror.New("xshellImportMissingHost",nil) }
 	port := 22
 	if conn["PORT"] != "" {
 		port, err = strconv.Atoi(conn["PORT"])
-		if err != nil { return entry, errors.New("invalid port") }
+		if err != nil { return entry, apperror.New("xshellImportInvalidPort",nil) }
 	}
 	auth := ini["CONNECTION:AUTHENTICATION"]
 	username := strings.TrimSpace(auth["USERNAME"])
 	if username == "" { username = strings.TrimSpace(conn["USERNAME"]) }
-	if username == "" { return entry, errors.New("missing username; configure it in Xshell first") }
+	if username == "" { return entry, apperror.New("xshellImportMissingUsernameConfigureItInXshellFirst",nil) }
 	folder := path.Dir(clean)
 	if folder == "." { folder = "" }
 	parts := strings.Split(folder, "/")
@@ -174,7 +174,7 @@ func parseXshellSession(filename string, data []byte) (XshellImportEntry, error)
 		if strings.EqualFold(part, "Sessions") { folder = strings.Join(parts[i+1:], "/"); break }
 	}
 	s := domain.Session{Name:strings.TrimSuffix(path.Base(clean), path.Ext(clean)), Host:host, Port:port, Username:username, AuthType:"password"}
-	if err := domain.ValidateSession(s); err != nil { return entry, fmt.Errorf("invalid SSH connection: %w", err) }
+	if err := domain.ValidateSession(s); err != nil { return entry, apperror.Wrap("xshellImportInvalidSshConnection",err,nil) }
 	if auth["USERKEY"] != "" || auth["METHOD"] == "3" {
 		entry.Warning = "Xshell public key reference is not portable; choose an OpenSSH key after import"
 	} else {
@@ -188,7 +188,7 @@ func parseXshellSession(filename string, data []byte) (XshellImportEntry, error)
 
 func (a *App) PreviewXshellImport() (XshellImportPreview, error) {
 	empty := XshellImportPreview{Entries: []XshellImportEntry{}, Skipped: []string{}}
-	if a.pickImport == nil { return empty, errors.New("file picker is unavailable") }
+	if a.pickImport == nil { return empty, apperror.New("xshellImportFilePickerIsUnavailable",nil) }
 	filename, err := a.pickImport()
 	if err != nil || filename == "" { return empty, err }
 	preview, err := parseXshellImport(filename)
@@ -201,18 +201,18 @@ func (a *App) PreviewXshellImport() (XshellImportPreview, error) {
 
 func (a *App) ImportXshell(token string, selected []string, conflict string) (XshellImportResult, error) {
 	result := XshellImportResult{}
-	if conflict != "skip" && conflict != "rename" { return result, errors.New("invalid conflict handling") }
+	if conflict != "skip" && conflict != "rename" { return result, apperror.New("xshellImportInvalidConflictHandling",nil) }
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	preview := a.xshellPreview
-	if preview == nil || token == "" || preview.Token != token { return result, errors.New("import preview has expired") }
-	if len(selected) == 0 { return result, errors.New("select at least one session") }
+	if preview == nil || token == "" || preview.Token != token { return result, apperror.New("xshellImportImportPreviewHasExpired",nil) }
+	if len(selected) == 0 { return result, apperror.New("xshellImportSelectAtLeastOneSession",nil) }
 	chosen := make(map[string]bool, len(selected))
 	for _, id := range selected {
-		if chosen[id] { return result, errors.New("duplicate selection") }
+		if chosen[id] { return result, apperror.New("xshellImportDuplicateSelection",nil) }
 		chosen[id] = true
 	}
-	if len(chosen) > len(preview.Entries) { return result, errors.New("invalid selection") }
+	if len(chosen) > len(preview.Entries) { return result, apperror.New("xshellImportInvalidSelection",nil) }
 	existingGroups, err := a.store.ListGroups(a.ctx)
 	if err != nil { return result, err }
 	existingSessions, err := a.store.ListSessions(a.ctx)
@@ -255,7 +255,7 @@ func (a *App) ImportXshell(token string, selected []string, conflict string) (Xs
 	for id := range chosen {
 		found := false
 		for _, entry := range preview.Entries { if entry.ID == id { found=true; break } }
-		if !found { return XshellImportResult{}, errors.New("invalid selection") }
+		if !found { return XshellImportResult{}, apperror.New("xshellImportInvalidSelection",nil) }
 	}
 	if err := a.store.ImportSessions(a.ctx, newGroups, newSessions); err != nil { return XshellImportResult{}, err }
 	result.Imported = len(newSessions)
