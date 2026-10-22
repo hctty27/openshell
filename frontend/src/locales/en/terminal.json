@@ -38,7 +38,7 @@
   "confirmBeforeEachRun": "Confirm before sending",
   "commandsGoToTheActiveSshTerminalExit": "Commands go to the active SSH terminal. Exit interactive programs such as vim or top first. Enable confirmation for dangerous commands.",
   "saveCommand": "Save command",
-  "terminalOutputExceededTheProcessingLimitDisconnectedLimit": "Terminal output exceeded the processing limit. Disconnected. Limit log output before reconnecting.",
+  "terminalOutputExceededTheProcessingLimitDisconnectedLimit": "Terminal output is arriving too quickly. Some output was skipped; SSH remains connected.",
   "failedToCopySelection": "Failed to copy selection",
   "confirmMultilinePaste": "Confirm multiline paste",
   "targetTheClipboardContainsMultipleLinesPastingMay": "Target: {{name}}. The clipboard contains multiple lines. Pasting may run commands immediately.",
