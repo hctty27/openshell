@@ -110,7 +110,7 @@ func defaultProxyJumpUser(fallback string) string {
  if err != nil || current.Username == "" { return fallback }
  login := current.Username
  if runtime.GOOS == "windows" {
-  if index := strings.LastIndex(login, "\\\\"); index >= 0 { login = login[index+1:] }
+  if index := strings.LastIndex(login, string(os.PathSeparator)); index >= 0 { login = login[index+1:] }
  }
  if login == "" { return fallback }
  return login
