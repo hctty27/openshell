@@ -4,7 +4,7 @@ import { t as tr } from "./i18n";
 import { useTranslation } from "react-i18next";
 import { initializeI18n, i18n } from "./i18n";
 import { normalizeLanguage, type Language } from "./i18n/languages";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import {
   Terminal,
   Plus,
@@ -168,6 +168,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
     [terminalSearchFocus, setTerminalSearchFocus] = useState(0),
     [splitPair, setSplitPair] = useState<[string, string] | null>(null),
     [splitDirection, setSplitDirection] = useState<"columns" | "rows">("columns"),
+    [splitRatio, setSplitRatio] = useState(Math.min(80, Math.max(20, initialState.splitRatio ?? 50))),
+    [middleClickPaste, setMiddleClickPaste] = useState(initialState.middleClickPaste === true),
+    [logHighlights, setLogHighlights] = useState(initialState.logHighlights === true),
     [profileID, setProfileID] = useState(
       initialState.profiles.find((p) => p.id === initialState.activeProfile)
         ?.id ??
@@ -196,6 +199,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
     } | null>(null),
     [attachments, setAttachments] = useState<Record<string, string>>({});
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const splitDragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => splitDragCleanup.current?.(), []);
   const tabsRef = useRef(tabs),
     streamIDs = useRef<Record<string, string>>({}),
     selections = useRef<Record<string, string>>({});
@@ -240,6 +246,54 @@ function Workspace({ initialState }: { initialState: AppState }) {
   );
   const splitPartnerID = splitReady ? (splitPair?.find((id) => id !== activeID) ?? "") : "";
   const splitChoices = tabs.filter((tab) => tab.id !== activeID && tab.status === "connected");
+  const setSplitRatioAndSave = (next: number) => {
+    const ratio = Math.round(Math.max(20, Math.min(80, next)));
+    setSplitRatio(ratio);
+    void api.SavePreference("splitRatio", String(ratio)).catch(notify);
+  };
+  const startSplitResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !splitReady) return;
+    const element = splitContainerRef.current;
+    if (!element) return;
+    event.preventDefault();
+    splitDragCleanup.current?.();
+    const pointerId = event.pointerId;
+    const ratioFromEvent = (e: PointerEvent) => {
+      const rect = element.getBoundingClientRect();
+      const length = splitDirection === "columns" ? rect.width : rect.height;
+      if (length <= 0) return null;
+      const position = splitDirection === "columns" ? e.clientX - rect.left : e.clientY - rect.top;
+      return Math.round(Math.max(20, Math.min(80, position * 100 / length)));
+    };
+    let latest = splitRatio;
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      const next = ratioFromEvent(e);
+      if (next === null) return;
+      latest = next;
+      setSplitRatio(next);
+    };
+    const cleanup = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", stop);
+      document.removeEventListener("pointercancel", cancel);
+      splitDragCleanup.current = null;
+    };
+    const stop = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      cleanup();
+      setSplitRatioAndSave(latest);
+    };
+    const cancel = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      cleanup();
+      setSplitRatio(splitRatio);
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", stop);
+    document.addEventListener("pointercancel", cancel);
+    splitDragCleanup.current = cleanup;
+  };
   const update = (tabID: string, fn: (tab: Tab) => Tab) =>
     setTabs((old) => old.map((t) => (t.id === tabID ? fn(t) : t)));
   const notify = (error: unknown) => setToast(error);
@@ -254,6 +308,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
       setAutoCopySelection(data.autoCopySelection === true);
       setRightClickPaste(data.rightClickPaste === true);
       setConfirmMultilinePaste(data.confirmMultilinePaste !== false);
+      setMiddleClickPaste(data.middleClickPaste === true);
+      setLogHighlights(data.logHighlights === true);
+      setSplitRatio(Math.min(80, Math.max(20, data.splitRatio ?? 50)));
       if (data.fontSize)
         setFontSize(Math.max(11, Math.min(24, Number(data.fontSize) || 14)));
       setProfileID((old) =>
@@ -1187,8 +1244,12 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </button>
               </div>
             </div>
-            <div className={`terminal-container ${splitReady ? `terminal-split terminal-split-${splitDirection}` : ""}`}
-              style={showSFTP ? { display: "none" } : undefined}>
+            <div ref={splitContainerRef}
+              className={`terminal-container ${splitReady ? `terminal-split terminal-split-${splitDirection}` : ""}`}
+              style={{
+                ...(showSFTP ? { display: "none" } : {}),
+                "--split-ratio": `${splitRatio}%`,
+              } as CSSProperties}>
               {tabs.map((tab) => (
                 <TerminalPane
                   key={tab.id}
@@ -1200,6 +1261,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   theme={theme}
                   autoCopySelection={autoCopySelection}
                   rightClickPaste={rightClickPaste}
+                  middleClickPaste={middleClickPaste}
+                  logHighlights={logHighlights}
                   confirmMultilinePaste={confirmMultilinePaste}
                   onNotice={notify}
                   commandFocusVersion={quickCommandFocus}
@@ -1218,6 +1281,31 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   }}
                 />
               ))}
+              {splitReady && (
+                <div className="terminal-split-handle"
+                  role="separator"
+                  tabIndex={0}
+                  aria-label={tr("terminal:resizeSplit")}
+                  aria-orientation={splitDirection === "columns" ? "vertical" : "horizontal"}
+                  aria-valuemin={20} aria-valuemax={80} aria-valuenow={splitRatio}
+                  title={tr("terminal:resetSplitRatio")}
+                  onPointerDown={startSplitResize}
+                  onDoubleClick={() => setSplitRatioAndSave(50)}
+                  onKeyDown={(event) => {
+                    const increment = event.shiftKey ? 10 : 5;
+                    if (event.key === "Home" || event.key === "End") {
+                      event.preventDefault();
+                      setSplitRatioAndSave(event.key === "Home" ? 20 : 80);
+                    } else if (
+                      (splitDirection === "columns" && ["ArrowLeft", "ArrowRight"].includes(event.key)) ||
+                      (splitDirection === "rows" && ["ArrowUp", "ArrowDown"].includes(event.key))
+                    ) {
+                      event.preventDefault();
+                      setSplitRatioAndSave(splitRatio + (["ArrowRight", "ArrowDown"].includes(event.key) ? increment : -increment));
+                    }
+                  }}
+                />
+              )}
               {active?.status === "connecting" && (
                 <div className="terminal-overlay">
                   <LoaderCircle size={23} className="spin" />
@@ -1465,6 +1553,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onAutoCopySelection={setAutoCopySelection}
           rightClickPaste={rightClickPaste}
           onRightClickPaste={setRightClickPaste}
+          middleClickPaste={middleClickPaste}
+          onMiddleClickPaste={setMiddleClickPaste}
+          logHighlights={logHighlights}
+          onLogHighlights={setLogHighlights}
           confirmMultilinePaste={confirmMultilinePaste}
           onConfirmMultilinePaste={setConfirmMultilinePaste}
           onClose={() => setDialog(null)}
