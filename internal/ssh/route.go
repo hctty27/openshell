@@ -27,7 +27,15 @@ func authenticationMethods(ctx context.Context, authType, keyPath string, auth A
   signers, err := loadAgentSigners(ctx, conn)
   if err != nil { conn.Close(); return nil, nil, fmt.Errorf("SSH agent keys: %w", err) }
   if len(signers) == 0 { conn.Close(); return nil, nil, errors.New("SSH agent has no loaded keys") }
-  return []ssh.AuthMethod{ssh.PublicKeys(signers...)}, func(){ _ = conn.Close() }, nil
+  watchDone := make(chan struct{})
+  go func() {
+   select {
+   case <-ctx.Done():
+    _ = conn.Close()
+   case <-watchDone:
+   }
+  }()
+  return []ssh.AuthMethod{ssh.PublicKeys(signers...)}, func(){ close(watchDone); _ = conn.Close() }, nil
  case "key":
   data, err := os.ReadFile(expandUserPath(keyPath))
   if err != nil { return nil, nil, fmt.Errorf("SSH private key read: %w", err) }
