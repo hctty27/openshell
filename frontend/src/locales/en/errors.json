@@ -113,5 +113,14 @@
   "fingerprintChanged": "Server fingerprint changed. Connection blocked.",
   "fingerprintFirst": "First connection. Verify the server fingerprint.",
   "taskStarting": "Starting automatic task",
+  "memoryBusy": "This conversation or tab is busy. Stop the running task first.",
+  "memoryConnectionChanged": "The connection changed. Reconnect and reload the conversation.",
+  "memoryWrongServer": "This conversation belongs to another server.",
+  "memoryNoRun": "This task has ended. Start a new request.",
+  "memoryNotOwner": "Control this task from the tab where it was started.",
+  "memoryContextTooLarge": "The current message or tool chain is too large. Shorten the message or attachment.",
+  "memoryInvalidRequest": "Invalid conversation request.",
+  "memoryDuplicateRequest": "This message was already saved. Start a new message to retry.",
+  "historicalResultUnknown": "The execution result was not saved. This command will not be retried automatically.",
   "commandMustBeNonemptyUpTo16384Bytes": "Command cannot be empty; up to 16384 bytes. Line breaks and Tab are allowed, other control characters are not."
 }

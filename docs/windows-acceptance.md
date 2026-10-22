@@ -29,3 +29,20 @@
 9. 断网、重连、关闭连接中的标签，确认无自动重跑和跨标签输出。
 
 已知小问题：近期历史输出在预览前已按上限裁剪，截断标记可能缺失；未突破发送内容大小限制。
+
+## Shared conversation memory
+
+- Upgrade a v0.1.26 state.db; existing servers, credentials and preferences remain available.
+- Connect two SSH tabs to the same saved server. They share the conversation list, including the latest selection on initial open, and synchronize messages when viewing one conversation.
+- Create a new conversation in one tab. The other tab keeps its own selection and can independently select the new conversation.
+- During generation, confirmation and an automatic task's round-limit pause, the same conversation accepts one task only. Other viewers can jump to the owner tab but cannot execute, revise, cancel or take over its commands.
+- Close/disconnect the owner during streaming or execution. Other viewers see the partial reply or actual/unknown result; no command restarts automatically.
+- Close tabs/restart the app and reconnect. History returns; pending commands and automatic task controls do not.
+- Clear/delete a shared conversation and verify all viewers update. Other conversations remain intact; deleting the last creates one shared replacement.
+- Verify rename, pagination (50 conversations / 100 messages), Chinese/English, light/dark themes and narrow AI sidebar layout.
+- Toggle history saving only after stopping tasks. Temporary messages never appear when saved history is restored.
+- Exceed 20 complete turns and check summary status. Disconnect the model during summarization: history remains, cancellation stops the request and no follow-up main request is sent.
+
+Automated coverage includes real local SSH + SSE integration tests, full Go race
+checks, Vitest, frontend build, and browser UI fixtures. Run this native Windows
+checklist on the packaged desktop application before publishing a release.

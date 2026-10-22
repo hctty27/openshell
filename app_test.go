@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/hctty27/openshell/internal/ai"
 	"github.com/hctty27/openshell/internal/domain"
 	"github.com/hctty27/openshell/internal/tasks"
 	"path/filepath"
@@ -104,20 +103,18 @@ func TestEditingOpenSessionIsAllowed(t *testing.T) {
 	}
 }
 func TestExecFailureStillCompletesToolHistory(t *testing.T) {
-	a, _ := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
-	defer a.shutdown(context.Background())
-	ref := domain.ConnectionRef{TabID: "tab", SessionID: "s", Generation: 1}
-	a.tabRefs["tab"] = ref
+	a, _, connected, _, profile, _ := memoryFixture(t, true)
 	a.coordinator = tasks.NewCoordinator(func(context.Context, domain.ConnectionRef, string, string, time.Duration) (domain.CommandResult, error) {
 		return domain.CommandResult{Status: "unknown", Reason: "start_failed"}, errors.New("channel rejected")
 	}, func(domain.ConnectionRef) bool { return true })
-	p, _ := a.coordinator.Propose(ref, "pwd", "check", "/tmp", 60)
-	a.pending[p.ID] = "call1"
-	a.conversations.Append("tab", ai.Message{Role: "assistant", ToolCalls: []ai.ToolCall{{ID: "call1", Type: "function", Function: ai.Function{Name: "propose_command", Arguments: `{"command":"pwd","purpose":"check","cwd":"/tmp"}`}}}})
-	a.ConfirmCommand(p.ID)
-	messages := a.conversations.Messages("tab")
-	if len(messages) != 2 || messages[1].Role != "tool" || messages[1].ToolCallID != "call1" {
-		t.Fatal("unmatched tool call after exec failure", messages)
+	reply, err := a.Chat(ChatRequest{Ref: connected.Ref, ProfileID: profile.ID, Text: "check", Operate: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.ConfirmCommand(connected.Ref, reply.Proposal.ID)
+	page, err := a.ReadConversation(connected.Ref, connected.ConversationID, 0, 100)
+	if err != nil || len(page.Messages) != 3 || page.Messages[2].Role != "tool" || page.Messages[2].ToolCallID != "tool-1" {
+		t.Fatal("unmatched tool call after exec failure", page, err)
 	}
 }
 func TestAuthenticationChangeClearsTransientSecret(t *testing.T) {

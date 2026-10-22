@@ -328,3 +328,11 @@ var automaticReasons = map[string]string{
 	"repeatedCommand":        "Repeated command. Confirmation required.",
 	"remoteResultUnknown":    "Remote result unconfirmed. Automatic task stopped.",
 }
+
+func (r *AutomaticRunner) CheckOwner(id string, ref domain.ConnectionRef) error {
+	t := r.get(id)
+	if t == nil || t.snapshot().Ref != ref {
+		return apperror.New("memoryNotOwner", nil)
+	}
+	return nil
+}

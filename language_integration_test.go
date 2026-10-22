@@ -87,7 +87,7 @@ func TestAIRequestLanguageAndAutomaticFreeze(t *testing.T) {
 	if err = a.SavePreference("language", "en"); err != nil {
 		t.Fatal(err)
 	}
-	task, err = a.ResumeAutomatic("language-auto", task.Proposal.ID, false)
+	task, err = a.ResumeAutomatic(connected.Ref, "language-auto", task.Proposal.ID, false)
 	if err != nil || task.Status != "completed" {
 		t.Fatal(task, err)
 	}
