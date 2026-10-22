@@ -19,11 +19,23 @@ import {
 } from "lucide-react";
 import type { Tab, APIProfile, Proposal, ChatMode } from "../types";
 import CommandProposal from "./CommandProposal";
+import ConversationPicker from "./ConversationPicker";
+import { errorText } from "../bridge";
 interface Props {
   tab: Tab | undefined;
   profiles: APIProfile[];
   profileID: string;
   onProfile(id: string): void;
+  conversationItems?: import("../types").Conversation[];
+  conversationHasMore?: boolean;
+  onConversationSelect?(id: string): void;
+  onConversationCreate?(): void;
+  onConversationRename?(id: string): void;
+  onConversationDelete?(id: string): void;
+  onConversationMore?(): void;
+  onLoadEarlier?(): void;
+  onRetryHistory?(): void;
+  onFocusOwner?(tabID: string): void;
   onHide(): void;
   onSettings(): void;
   onSend(text: string, mode: ChatMode, context: string): void;
@@ -44,6 +56,9 @@ export default function AISidebar(p: Props) {
   const selectedMode = modes[p.tab?.id ?? ""] ?? "confirm";
   const end = useRef<HTMLDivElement>(null);
   const profile = p.profiles.find((v) => v.id === p.profileID);
+  const run = p.tab?.memoryRun;
+  const observer = !!run && run.ownerRef.tabId !== p.tab?.id;
+  const ownerBusy = !!run && !observer;
   const automatic = p.tab?.autoRun;
   const automaticActive =
     !!automatic &&
@@ -61,11 +76,11 @@ export default function AISidebar(p: Props) {
     p.tab.status !== "connected" ||
     !profile ||
     busy ||
-    !!p.tab.proposal;
+    !!p.tab.proposal || !!run || !!p.tab.memoryLoading || !!p.tab.memoryError;
   useEffect(() => {
     end.current?.scrollIntoView?.({ behavior: "smooth" });
   }, [p.tab?.messages, p.tab?.proposal]);
-  useEffect(() => setInput(""), [p.tab?.id]);
+  useEffect(() => setInput(""), [p.tab?.id, p.tab?.conversationID]);
   const send = (text = input) => {
     if (blocked || !text.trim()) return;
     p.onSend(text, mode, p.context);
@@ -82,7 +97,13 @@ export default function AISidebar(p: Props) {
         <div>
           <button
             title={t("ai:clearChat")}
-            disabled={busy || automaticActive || !!p.tab?.proposal}
+            disabled={
+              busy ||
+              automaticActive ||
+              !!p.tab?.proposal ||
+              !!run ||
+              p.tab?.memoryLoading
+            }
             onClick={p.onClear}
           >
             <Trash2 size={15} />
@@ -92,7 +113,60 @@ export default function AISidebar(p: Props) {
           </button>
         </div>
       </header>
+      {p.tab?.conversationID && (
+        <ConversationPicker
+          items={p.conversationItems ?? []}
+          selectedID={p.tab.conversationID}
+          busy={ownerBusy || !!p.tab.memoryLoading}
+          locked={!!run}
+          hasMore={!!p.conversationHasMore}
+          onSelect={(id) => p.onConversationSelect?.(id)}
+          onCreate={() => p.onConversationCreate?.()}
+          onRename={(id) => p.onConversationRename?.(id)}
+          onDelete={(id) => p.onConversationDelete?.(id)}
+          onLoadMore={() => p.onConversationMore?.()}
+        />
+      )}
+      {p.tab?.conversationID && (
+        <div
+          className="conversation-status"
+          role="status"
+          title={t("ai:contextBudgetHint")}
+        >
+          {p.tab.memoryLoading ? (
+            t("ai:historyLoading")
+          ) : observer ? (
+            <>
+              {t("ai:runningInAnotherTab")}{" "}
+              <button onClick={() => p.onFocusOwner?.(run!.ownerRef.tabId)}>
+                {t("ai:goToRunningTab")}
+              </button>
+            </>
+          ) : p.tab.memoryStatus === "summarizing" ? (
+            t("ai:organizingHistory")
+          ) : p.tab.memoryStatus === "summary" ? (
+            t("ai:usingSummary")
+          ) : p.tab.memoryStatus === "recent" ? (
+            t("ai:usingRecent")
+          ) : p.tab.memoryStatus === "restored" ? (
+            t("ai:restoredHistory")
+          ) : (
+            ""
+          )}
+          {!!p.tab.memoryError && (
+            <>
+              <span>{errorText(p.tab.memoryError)}</span>
+              <button onClick={p.onRetryHistory}>{t("ai:retryHistory")}</button>
+            </>
+          )}
+        </div>
+      )}
       <div className="ai-conversation">
+        {p.tab?.hasEarlier && (
+          <button className="load-history" onClick={p.onLoadEarlier}>
+            {t("ai:loadEarlierMessages")}
+          </button>
+        )}
         {!p.tab?.messages.length && (
           <div className="ai-welcome">
             <div className="ai-welcome-icon">
@@ -105,20 +179,19 @@ export default function AISidebar(p: Props) {
               {t("ai:proposeCommandsAndHandleServerTasks")}
             </p>
             <div className="suggestions">
-              {[
-                t("ai:checkServerHealth"),
-                t("ai:checkDiskUsage"),
-              ].map((text) => (
-                <button
-                  key={text}
-                  disabled={blocked}
-                  onClick={() => send(text)}
-                >
-                  <Terminal size={14} />
-                  {text}
-                  <ArrowUpRight size={13} />
-                </button>
-              ))}
+              {[t("ai:checkServerHealth"), t("ai:checkDiskUsage")].map(
+                (text) => (
+                  <button
+                    key={text}
+                    disabled={blocked}
+                    onClick={() => send(text)}
+                  >
+                    <Terminal size={14} />
+                    {text}
+                    <ArrowUpRight size={13} />
+                  </button>
+                ),
+              )}
             </div>
             <div className="ai-explainer">
               <Check size={13} />
@@ -194,7 +267,7 @@ export default function AISidebar(p: Props) {
             )}
           </div>
         ))}
-        {p.tab?.proposal && (
+        {!observer && p.tab?.proposal && (
           <CommandProposal
             key={p.tab.proposal.id}
             proposal={p.tab.proposal}
@@ -301,7 +374,13 @@ export default function AISidebar(p: Props) {
               className="mode-select"
               aria-label={t("ai:aiMode")}
               value={mode}
-              disabled={busy || automaticActive || !!p.tab?.proposal}
+              disabled={
+                busy ||
+                automaticActive ||
+                !!p.tab?.proposal ||
+                !!run ||
+                p.tab?.memoryLoading
+              }
               onChange={(e) =>
                 p.tab &&
                 setModes({ ...modes, [p.tab.id]: e.target.value as ChatMode })

@@ -6,8 +6,8 @@ export function CancelChat(arg1) {
   return window['go']['main']['App']['CancelChat'](arg1);
 }
 
-export function CancelCommand(arg1) {
-  return window['go']['main']['App']['CancelCommand'](arg1);
+export function CancelCommand(arg1, arg2) {
+  return window['go']['main']['App']['CancelCommand'](arg1, arg2);
 }
 
 export function Chat(arg1) {
@@ -26,8 +26,8 @@ export function CloseTab(arg1) {
   return window['go']['main']['App']['CloseTab'](arg1);
 }
 
-export function ConfirmCommand(arg1) {
-  return window['go']['main']['App']['ConfirmCommand'](arg1);
+export function ConfirmCommand(arg1, arg2) {
+  return window['go']['main']['App']['ConfirmCommand'](arg1, arg2);
 }
 
 export function Connect(arg1, arg2, arg3) {
@@ -38,8 +38,16 @@ export function Continue(arg1) {
   return window['go']['main']['App']['Continue'](arg1);
 }
 
+export function CreateConversation(arg1) {
+  return window['go']['main']['App']['CreateConversation'](arg1);
+}
+
 export function DeleteAPI(arg1) {
   return window['go']['main']['App']['DeleteAPI'](arg1);
+}
+
+export function DeleteConversation(arg1, arg2) {
+  return window['go']['main']['App']['DeleteConversation'](arg1, arg2);
 }
 
 export function DeleteGroup(arg1) {
@@ -54,6 +62,10 @@ export function Disconnect(arg1) {
   return window['go']['main']['App']['Disconnect'](arg1);
 }
 
+export function ListConversations(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ListConversations'](arg1, arg2, arg3);
+}
+
 export function OpenTerminal(arg1, arg2, arg3) {
   return window['go']['main']['App']['OpenTerminal'](arg1, arg2, arg3);
 }
@@ -62,16 +74,24 @@ export function PreviewContext(arg1, arg2) {
   return window['go']['main']['App']['PreviewContext'](arg1, arg2);
 }
 
+export function ReadConversation(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ReadConversation'](arg1, arg2, arg3, arg4);
+}
+
+export function RenameConversation(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RenameConversation'](arg1, arg2, arg3);
+}
+
 export function ResizeTerminal(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeTerminal'](arg1, arg2, arg3);
 }
 
-export function ResumeAutomatic(arg1, arg2, arg3) {
-  return window['go']['main']['App']['ResumeAutomatic'](arg1, arg2, arg3);
+export function ResumeAutomatic(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ResumeAutomatic'](arg1, arg2, arg3, arg4);
 }
 
-export function ReviseProposal(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['ReviseProposal'](arg1, arg2, arg3, arg4);
+export function ReviseProposal(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['ReviseProposal'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function SaveAPI(arg1) {
@@ -90,6 +110,10 @@ export function SaveSession(arg1) {
   return window['go']['main']['App']['SaveSession'](arg1);
 }
 
+export function SelectConversation(arg1, arg2) {
+  return window['go']['main']['App']['SelectConversation'](arg1, arg2);
+}
+
 export function StartAutomatic(arg1, arg2) {
   return window['go']['main']['App']['StartAutomatic'](arg1, arg2);
 }
@@ -98,8 +122,8 @@ export function State() {
   return window['go']['main']['App']['State']();
 }
 
-export function StopAutomatic(arg1) {
-  return window['go']['main']['App']['StopAutomatic'](arg1);
+export function StopAutomatic(arg1, arg2) {
+  return window['go']['main']['App']['StopAutomatic'](arg1, arg2);
 }
 
 export function TestAPI(arg1) {

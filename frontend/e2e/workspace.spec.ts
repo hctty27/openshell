@@ -109,7 +109,7 @@ test.beforeEach(async ({ page }) => {
               },
             };
           },
-          ConfirmCommand: async (id: string) => {
+          ConfirmCommand: async (_ref: any,id: string) => {
             (window as any).__executions.push(id);
             return {
               status: "completed",
@@ -153,7 +153,7 @@ test.beforeEach(async ({ page }) => {
             return snapshot;
           },
           ResumeAutomatic: async (
-            id: string,
+            _ref: any,id: string,
             approved: string,
             extend: boolean,
           ) => {
@@ -168,7 +168,7 @@ test.beforeEach(async ({ page }) => {
             emit("auto:event", { kind: "state", state: snapshot });
             return snapshot;
           },
-          StopAutomatic: async (id: string) => {
+          StopAutomatic: async (_ref: any,id: string) => {
             emit("auto:event", {
               kind: "state",
               state: {
@@ -219,7 +219,7 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   await page.getByLabel("API Key", { exact: true }).fill("fixture-key");
   await page.getByLabel("模型名称", { exact: true }).fill("test-model");
   await page.getByRole("button", { name: "保存配置", exact: true }).click();
-  await expect(page.getByText("配置已保存")).toBeVisible();
+  await expect(page.getByText("配置已保存",{exact:true})).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
   await page.getByLabel("发送给 AI").fill("检查服务器目录");
   await page.getByTitle("发送消息").click();
@@ -689,7 +689,7 @@ test("AI header aligns with SSH title bar and compact model leaves space for Sen
     .getByLabel("模型名称", { exact: true })
     .fill("grok-4.7(xhigh)-very-long-model-name");
   await page.getByRole("button", { name: "保存配置", exact: true }).click();
-  await expect(page.getByText("配置已保存")).toBeVisible();
+  await expect(page.getByText("配置已保存",{exact:true})).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
   await expect(page.getByLabel("当前模型")).toBeVisible();
 

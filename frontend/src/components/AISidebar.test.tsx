@@ -186,3 +186,29 @@ test("model switching is disabled while an automatic task is active", () => {
     (screen.getByLabelText("当前模型") as HTMLSelectElement).disabled,
   ).toBe(true);
 });
+
+test("a viewer sees shared run status without command controls and can focus its owner", () => {
+  const p = props();
+  p.tab!.id = "viewer";
+  p.tab!.conversationID = "shared";
+  p.tab!.memoryRun = {
+    id: "run",
+    conversationId: "shared",
+    kind: "chat",
+    status: "awaiting_confirmation",
+    ownerRef: { tabId: "owner", sessionId: "session", generation: 1 },
+  };
+  p.onFocusOwner = vi.fn();
+  p.profiles=[{id:"api",name:"test",baseUrl:"https://example.com",model:"test",secretRef:"",toolsEnabled:true}];p.profileID="api";
+  p.tab!.proposal={id:"proposal",ref:p.tab!.memoryRun!.ownerRef,command:"pwd",purpose:"check",cwd:"/tmp",timeoutSeconds:60,status:"awaiting_confirmation"};
+  const {rerender}=render(<AISidebar {...p} />);
+  expect(screen.getByText("正在另一标签页运行")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "前往运行标签页" }));
+  expect(p.onFocusOwner).toHaveBeenCalledWith("owner");
+  expect(screen.queryByRole("button",{name:"确认执行"})).toBeNull();
+  fireEvent.change(screen.getByLabelText("发送给 AI"),{target:{value:"competing request"}});
+  p.tab!.proposal=null;rerender(<AISidebar {...p}/>);
+  expect((screen.getByTitle("发送消息") as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+});

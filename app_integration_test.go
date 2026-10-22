@@ -62,17 +62,18 @@ func TestTwoServersEndToEnd(t *testing.T) {
 	if one.Count() != countA || two.Count() != countB {
 		t.Fatal("executed before confirmation")
 	}
-	result, e := a.ConfirmCommand(reply.Proposal.ID)
+	result, e := a.ConfirmCommand(refA, reply.Proposal.ID)
 	if e != nil || result.Stdout != "FIRST" || result.ExitCode == nil || *result.ExitCode != 0 {
 		t.Fatal(result, e)
 	}
 	if one.Count() != countA+1 || two.Count() != countB {
 		t.Fatal("wrong target")
 	}
-	if _, e = a.ConfirmCommand(reply.Proposal.ID); e == nil {
+	if _, e = a.ConfirmCommand(refA, reply.Proposal.ID); e == nil {
 		t.Fatal("duplicate confirmation accepted")
 	}
-	messages := a.conversations.Messages("a")
+	page, _ := a.ReadConversation(refA, replyConversationID(a, refA), 0, 100)
+	messages := page.Messages
 	last := messages[len(messages)-1]
 	if last.Role != "tool" || last.ToolCallID != "call-a" || !strings.Contains(last.Content, "FIRST") {
 		t.Fatal(last)
@@ -87,7 +88,7 @@ func TestEditingConnectedSessionKeepsLiveSshTarget(t *testing.T) {
 	server := testssh.Start(t)
 	row, err := a.SaveSession(SaveSessionRequest{
 		Session: domain.Session{Name: "Original", Host: server.Host, Port: server.Port, Username: "root", AuthType: "password"},
-		Secret: "test-password", SaveSecret: true,
+		Secret:  "test-password", SaveSecret: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -253,11 +254,16 @@ func TestAutomaticSSHLoopBudgetAndToolHistory(t *testing.T) {
 	}
 	// Settings changes during a paused task apply only to the next task.
 	a.SavePreference("autoCommandLimit", "5")
-	state, err = a.ResumeAutomatic("auto-task", "", true)
+	state, err = a.ResumeAutomatic(connected.Ref, "auto-task", "", true)
 	if err != nil || state.Status != "completed" || state.Steps != 2 || state.Limit != 1 || sshServer.Count() != count+2 {
 		t.Fatal(state, err, sshServer.Count())
 	}
 	if requests != 3 {
 		t.Fatal("unexpected model calls", requests)
 	}
+}
+
+func replyConversationID(a *App, ref domain.ConnectionRef) string {
+	id, _ := a.memory.Selected(ref)
+	return id
 }
