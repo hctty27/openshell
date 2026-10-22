@@ -41,6 +41,7 @@ type connection struct {
 	session  domain.Session
 	client   *ssh.Client
 	hops     []*ssh.Client
+	forwards []*localForward
 	terminal *ssh.Session
 	stdin    interface{ Write([]byte) (int, error) }
 	filter   interface { Close(); SetTerminalColumns(int32); IsTransferringFiles() bool; StopTransferringFiles(bool) }
@@ -123,19 +124,24 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 		if errors.As(err, &hostErr) { return ref, hostErr }
 		return ref, domain.Error("connect", apperror.Wrap("sshConnect", err, nil).Error())
 	}
+	c := &connection{ref: ref, session: s, client: client, hops: jumpClients, history: NewHistory(1024 * 1024)}
+	if err := m.prepareLocalForwards(c, s.LocalForwards); err != nil {
+		closeSSHConnection(c)
+		return ref, domain.Error("local_forward", err.Error())
+	}
 	m.mu.Lock()
 	if m.generations[tab] != ref.Generation || m.closed {
 		m.mu.Unlock()
-		closeSSHConnection(&connection{client: client, hops: jumpClients})
+		closeSSHConnection(c)
 		return ref, apperror.New("connectionCancelled", nil)
 	}
 	delete(m.connecting, tab)
-	c := &connection{ref: ref, session: s, client: client, hops: jumpClients, history: NewHistory(1024 * 1024)}
 	m.connections[tab] = c
 	m.startKeepaliveLocked(c)
 	m.mu.Unlock()
 	go func() {
 		err := client.Wait()
+		closeForwardListeners(c)
 		closeHopClients(c.hops)
 		m.mu.Lock()
 		if m.connections[tab] == c {
@@ -205,6 +211,7 @@ func (m *Manager) Disconnect(ref domain.ConnectionRef) error {
 	delete(m.connections, ref.TabID)
 	if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	m.mu.Unlock()
+	closeForwardListeners(c)
 	e := c.client.Close()
 	closeHopClients(c.hops)
 	m.emit("ssh:disconnected", ref)
