@@ -40,9 +40,11 @@ import type {
   Theme,
   QuickCommand,
   QuickCommandLayout,
+  XshellImportPreview,
 } from "./types";
 import SessionTree from "./components/SessionTree";
 import SessionPicker from "./components/SessionPicker";
+import XshellImportDialog from "./components/XshellImportDialog";
 import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
 import AISidebar from "./components/AISidebar";
@@ -136,6 +138,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     [showAI, setShowAI] = useState(true),
     [showSessions, setShowSessions] = useState(true),
     [showSessionPicker, setShowSessionPicker] = useState(false),
+    [xshellPreview, setXshellPreview] = useState<XshellImportPreview | null>(null),
     [fontSize, setFontSize] = useState(
       Math.max(11, Math.min(24, Number(initialState.fontSize) || 14)),
     ),
@@ -574,7 +577,20 @@ function Workspace({ initialState }: { initialState: AppState }) {
       await refresh();
     }
   };
-  const group = async (g?: Group) => {
+  const openXshellImport = async () => {
+    try {
+      const preview = await api.PreviewXshellImport();
+      if (preview.token) setXshellPreview(preview);
+    } catch (error) { notify(error); }
+  };
+  const importXshell = async (ids: string[], conflict: "skip" | "rename") => {
+    if (!xshellPreview) return;
+    const result = await api.ImportXshell(xshellPreview.token, ids, conflict);
+    await refresh();
+    setXshellPreview(null);
+    setNotice(tr("sessions:xshellImportResult", { imported: result.imported, skipped: result.skipped }));
+  };
+  const group = async (g?: Group, parentID = "") => {
     const name = await dialogs.input({
       icon: g ? "rename" : "create",
       title: g ? message("common:renameFolder") : message("common:newFolder"),
@@ -590,7 +606,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     });
     if (!name) return;
     try {
-      await api.SaveGroup({ id: g?.id ?? "", name: name.trim() });
+      await api.SaveGroup({ id: g?.id ?? "", name: name.trim(), parentId: g?.parentId ?? parentID });
       await refresh();
     } catch (e) {
       notify(e);
@@ -885,6 +901,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
               setDialog({ kind: "session", groupID })
             }
             onGroup={() => group()}
+            onCreateSubgroup={(parent) => group(undefined, parent.id)}
+            onImport={openXshellImport}
             onRenameGroup={group}
             onDeleteGroup={deleteGroup}
             onSettings={() => setDialog({ kind: "settings" })}
@@ -1190,6 +1208,13 @@ function Workspace({ initialState }: { initialState: AppState }) {
           }}
           onNewGroup={() => void group()}
           onClose={() => setShowSessionPicker(false)}
+        />
+      )}
+      {xshellPreview && (
+        <XshellImportDialog
+          preview={xshellPreview}
+          onClose={() => setXshellPreview(null)}
+          onImport={importXshell}
         />
       )}
       {dialog && (

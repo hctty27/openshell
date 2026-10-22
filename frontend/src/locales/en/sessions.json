@@ -27,5 +27,18 @@
   "addYourFirstServer": "Add your first server",
   "noMatchingSessions2": "No matching sessions",
   "resizeSessionDetails": "Resize session details",
-  "localWorkspace": "Local workspace"
+  "localWorkspace": "Local workspace",
+  "importXshellTitle": "Import Xshell sessions",
+  "importXshellDescription": "Select the SSH sessions to import. Passwords and private keys are not copied.",
+  "selectAllImport": "Select all",
+  "xshellKeyWarning": "Reconfigure the SSH private key after import",
+  "xshellPasswordWarning": "Saved Xshell passwords are not imported",
+  "xshellSkipped": "Skipped entries",
+  "duplicateSessions": "Existing session names",
+  "skipDuplicates": "Skip duplicates",
+  "renameDuplicates": "Rename imported duplicates",
+  "importingXshell": "Importing…",
+  "importSelectedXshell": "Import selected sessions",
+  "xshellImportResult": "Imported {{imported}} sessions; skipped {{skipped}} duplicates",
+  "newSubfolder": "New subfolder"
 }

@@ -14,6 +14,16 @@ export interface Session {
 export interface Group {
   id: string;
   name: string;
+  parentId?: string;
+}
+export interface XshellImportPreview {
+  token: string;
+  entries: { id: string; folder: string; session: Session; warning?: string }[];
+  skipped: string[];
+}
+export interface XshellImportResult {
+  imported: number;
+  skipped: number;
 }
 export interface APIProfile {
   id: string;
