@@ -100,6 +100,10 @@ vi.mock("../bridge", () => ({
     WriteTerminal: vi.fn(async () => {}),
     ResizeTerminal: vi.fn(async () => {}),
     OpenTerminal: vi.fn(async () => {}),
+    StartLocalTerminal: vi.fn(async () => {}),
+    WriteLocalTerminal: vi.fn(async () => {}),
+    ResizeLocalTerminal: vi.fn(async () => {}),
+    CloseLocalTerminal: vi.fn(async () => {}),
     Disconnect: vi.fn(async () => {}),
     CancelZmodem: vi.fn(async () => {}),
   },
@@ -490,4 +494,34 @@ test("OSC directory reports identify current SSH connection and update cwd", () 
   expect(onDirectoryChange).toHaveBeenCalledWith(tab.ref, "/root/logs");
   expect(term.parser.handlers.get(0)("vim")).toBe(false);
   expect(onDirectoryChange).toHaveBeenCalledTimes(4);
+});
+
+test("disconnected SSH session uses local ConPTY and does not route input to SSH", async () => {
+  const disconnected: Tab = { ...tab, status: "disconnected", everConnected: true };
+  const renderFallback = (current: Tab) => (
+    <DialogProvider>
+      <TerminalPane tab={current} active fontSize={14} theme="dark"
+        disconnectBehavior="local" localShell="powershell" preserveHistory
+        autoCopySelection={false} rightClickPaste={false} confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>
+  );
+  const { rerender, unmount } = render(renderFallback(tab));
+  await waitFor(() => expect(api.OpenTerminal).toHaveBeenCalled());
+  rerender(renderFallback(disconnected));
+  await waitFor(() => expect(api.StartLocalTerminal).toHaveBeenCalledWith(
+    "tab-1", expect.any(String), "powershell", 80, 24,
+  ));
+  vi.mocked(api.WriteTerminal).mockClear();
+  refs.terms.at(-1).onDataCallback("dir\\r");
+  await waitFor(() => expect(api.WriteLocalTerminal).toHaveBeenCalled());
+  expect(api.WriteTerminal).not.toHaveBeenCalled();
+  unmount();
+  expect(api.CloseLocalTerminal).toHaveBeenCalled();
+});
+
+test("disconnected SSH session in retain mode does not start local shell", async () => {
+  const disconnected: Tab = { ...tab, status: "disconnected", everConnected: true };
+  renderTerminal({ tab: disconnected, disconnectBehavior: "retain" });
+  expect(api.StartLocalTerminal).not.toHaveBeenCalled();
 });
