@@ -218,5 +218,6 @@
   "folderParentNotFound": "Parent folder does not exist",
   "memoryMessageIdRequired": "Message ID is required",
   "memoryUnsupportedMutation": "Unsupported conversation change",
-  "backupInvalidConnection": "Invalid connection settings"
+  "backupInvalidConnection": "Invalid connection settings",
+  "memoryHistoryUnavailable": "Conversation history response is unavailable"
 }
