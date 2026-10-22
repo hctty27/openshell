@@ -2,6 +2,9 @@ package sshclient
 
 import (
 	"encoding/base64"
+	"context"
+	"github.com/hctty27/openshell/internal/domain"
+	"github.com/hctty27/openshell/internal/testssh"
 	"errors"
 	"io"
 	"strings"
@@ -90,5 +93,40 @@ func TestTerminalWriterFlushesWithoutClose(t *testing.T) {
 		}
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("small output was not flushed promptly")
+	}
+}
+
+func TestTerminalFilterPreservesOrdinarySSHOutput(t *testing.T) {
+	srv := testssh.Start(t)
+	known := keys{}
+	output := make(chan string, 16)
+	manager := NewManager(known, func(name string, payload any) {
+		if name != "ssh:output" { return }
+		m := payload.(map[string]any)
+		bytes, err := base64.StdEncoding.DecodeString(m["data"].(string))
+		if err == nil { output <- string(bytes) }
+	})
+	defer manager.Close()
+	session := domain.Session{ID: "session", Host: srv.Host, Port: srv.Port, Username: "root", AuthType: "password"}
+	_, err := manager.Connect(context.Background(), "tab", session, AuthInput{Password: "test-password"})
+	var challenge *HostKeyError
+	if !errors.As(err, &challenge) { t.Fatalf("expected trust challenge, got %v", err) }
+	if err := known.Trust(challenge.Address, challenge.Key); err != nil { t.Fatal(err) }
+	ref, err := manager.Connect(context.Background(), "tab", session, AuthInput{Password: "test-password"})
+	if err != nil { t.Fatal(err) }
+	if err := manager.OpenTerminal(ref, 80, 24); err != nil { t.Fatal(err) }
+	if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte("plain terminal output\\n"))); err != nil { t.Fatal(err) }
+	deadline := time.After(3 * time.Second)
+	var got string
+	for !strings.Contains(got, "plain terminal output") {
+		select {
+		case chunk := <-output:
+			got += chunk
+		case <-deadline:
+			t.Fatalf("filtered terminal output timed out: %q", got)
+		}
+	}
+	if history := manager.History(ref); !strings.Contains(history, "plain terminal output") {
+		t.Fatalf("terminal history missing plain output: %q", history)
 	}
 }
