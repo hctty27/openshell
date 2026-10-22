@@ -2,13 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path"
 	"strings"
 	"time"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 )
 
@@ -24,7 +24,7 @@ type sessionBackup struct {
 
 // ExportSessionBackup saves portable connection settings, not Windows credentials.
 func (a *App) ExportSessionBackup() (string, error) {
-	if a.pickBackupWrite == nil { return "", errors.New("save dialog is unavailable") }
+	if a.pickBackupWrite == nil { return "", apperror.New("sessionBackupSaveDialogIsUnavailable",nil) }
 	name, err := a.pickBackupWrite()
 	if err != nil || name == "" { return "", err }
 	if !strings.EqualFold(path.Ext(name), ".json") { name += ".json" }
@@ -42,23 +42,23 @@ func (a *App) ExportSessionBackup() (string, error) {
 
 func parseSessionBackup(data []byte) (XshellImportPreview, error) {
 	preview := XshellImportPreview{Source:"openshell", Entries:[]XshellImportEntry{}, Skipped:[]string{}}
-	if len(data) > maxXshellArchiveSize { return preview, errors.New("backup exceeds size limit") }
+	if len(data) > maxXshellArchiveSize { return preview, apperror.New("sessionBackupBackupExceedsSizeLimit",nil) }
 	var backup sessionBackup
 	if err := json.Unmarshal(data, &backup); err != nil { return preview, err }
-	if backup.Format != sessionBackupFormat || backup.Version != 1 { return preview, errors.New("unsupported OpenShell backup format") }
-	if len(backup.Sessions) > maxXshellEntries || len(backup.Groups) > maxXshellEntries { return preview, errors.New("backup contains too many entries") }
+	if backup.Format != sessionBackupFormat || backup.Version != 1 { return preview, apperror.New("sessionBackupUnsupportedOpenShellBackupFormat",nil) }
+	if len(backup.Sessions) > maxXshellEntries || len(backup.Groups) > maxXshellEntries { return preview, apperror.New("sessionBackupBackupContainsTooManyEntries",nil) }
 	groups := make(map[string]domain.Group)
 	for _, g := range backup.Groups {
-		if g.ID == "" || g.Name == "" || strings.ContainsAny(g.Name, "/\\") { return preview, errors.New("invalid backup folder") }
-		if _, exists := groups[g.ID]; exists { return preview, errors.New("duplicate folder ID") }
+		if g.ID == "" || g.Name == "" || strings.ContainsAny(g.Name, "/\\") { return preview, apperror.New("sessionBackupInvalidBackupFolder",nil) }
+		if _, exists := groups[g.ID]; exists { return preview, apperror.New("sessionBackupDuplicateFolderID",nil) }
 		groups[g.ID] = g
 	}
 	var folderPath func(string, map[string]bool) (string, error)
 	folderPath = func(id string, seen map[string]bool) (string, error) {
 		if id == "" { return "", nil }
-		if seen[id] { return "", errors.New("folder cycle in backup") }
+		if seen[id] { return "", apperror.New("sessionBackupFolderCycleInBackup",nil) }
 		g, ok := groups[id]
-		if !ok { return "", errors.New("unknown parent folder in backup") }
+		if !ok { return "", apperror.New("sessionBackupUnknownParentFolderInBackup",nil) }
 		seen[id] = true
 		parent, err := folderPath(g.ParentID, seen)
 		delete(seen, id)
@@ -89,12 +89,12 @@ func parseSessionBackup(data []byte) (XshellImportPreview, error) {
 
 func (a *App) PreviewSessionBackup() (XshellImportPreview, error) {
 	empty := XshellImportPreview{Source:"openshell", Entries:[]XshellImportEntry{}, Skipped:[]string{}}
-	if a.pickBackupRead == nil { return empty, errors.New("file picker is unavailable") }
+	if a.pickBackupRead == nil { return empty, apperror.New("sessionBackupFilePickerIsUnavailable",nil) }
 	name, err := a.pickBackupRead()
 	if err != nil || name == "" { return empty, err }
 	info, err := os.Stat(name)
 	if err != nil { return empty, err }
-	if !info.Mode().IsRegular() || info.Size() > maxXshellArchiveSize { return empty, errors.New("backup file exceeds size limit") }
+	if !info.Mode().IsRegular() || info.Size() > maxXshellArchiveSize { return empty, apperror.New("sessionBackupBackupFileExceedsSizeLimit",nil) }
 	data, err := os.ReadFile(name)
 	if err != nil { return empty, err }
 	preview, err := parseSessionBackup(data)
