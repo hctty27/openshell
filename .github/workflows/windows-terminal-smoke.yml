@@ -59,6 +59,8 @@ jobs:
           npm run build
       - name: Test Go on Windows
         run: go test ./...
+      - name: Stress SSH command execution on Windows
+        run: go test ./internal/ssh -run "TestExec(ExitCode|RepeatedCommandRoundTrips|StdinClosed|TimeoutDoesNotDisconnectInteractiveSSH)" -count=3 -timeout=3m
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
       - name: Generate app icons
