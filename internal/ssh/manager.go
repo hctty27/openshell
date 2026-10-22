@@ -7,7 +7,6 @@ import (
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,6 +40,7 @@ type connection struct {
 	ref      domain.ConnectionRef
 	session  domain.Session
 	client   *ssh.Client
+	hops     []*ssh.Client
 	terminal *ssh.Session
 	stdin    interface{ Write([]byte) (int, error) }
 	filter   interface { Close(); SetTerminalColumns(int32); IsTransferringFiles() bool; StopTransferringFiles(bool) }
@@ -85,10 +85,10 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	if cancel := m.connecting[tab]; cancel != nil {
 		cancel()
 	}
-	var oldClient *ssh.Client
+	var oldClient *connection
 	if old := m.connections[tab]; old != nil {
 		if old.keepaliveCancel != nil { old.keepaliveCancel() }
-		oldClient = old.client
+		oldClient = old
 		delete(m.connections, tab)
 	}
 	m.generations[tab]++
@@ -96,7 +96,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	m.connecting[tab] = cancel
 	m.mu.Unlock()
-	if oldClient != nil { _ = oldClient.Close() }
+	if oldClient != nil { closeSSHConnection(oldClient) }
 	defer func() {
 		cancel()
 		m.mu.Lock()
@@ -105,75 +105,38 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 		}
 		m.mu.Unlock()
 	}()
+	if s.UseSSHConfig {
+		parsed, err := ReadOpenSSHConfig(s.Host)
+		if err != nil { return ref, domain.Error("ssh_config", err.Error()) }
+		s.Host, s.Username, s.Port, s.PrivateKeyPath, s.ProxyJump = ApplySSHConfig(s.Host, s.Username, s.Port, s.PrivateKeyPath, s.ProxyJump, parsed)
+	}
+	if err := domain.ValidateSession(s); err != nil { return ref, err }
 	address := Address(s.Host, s.Port)
-	var method ssh.AuthMethod
-	if s.AuthType == "key" {
-		key, e := os.ReadFile(s.PrivateKeyPath)
-		if e != nil {
-			return ref, domain.Error("private_key", apperror.New("privateKeyRead", nil).Error())
-		}
-		var signer ssh.Signer
-		if auth.Passphrase != "" {
-			signer, e = ssh.ParsePrivateKeyWithPassphrase(key, []byte(auth.Passphrase))
-		} else {
-			signer, e = ssh.ParsePrivateKey(key)
-		}
-		if e != nil {
-			return ref, domain.Error("private_key", apperror.New("privateKeyInvalid", nil).Error())
-		}
-		method = ssh.PublicKeys(signer)
-	} else {
-		method = ssh.Password(auth.Password)
+	methods, closeAuth, err := authenticationMethods(s.AuthType, s.PrivateKeyPath, auth)
+	if err != nil { return ref, domain.Error("authentication", err.Error()) }
+	defer closeAuth()
+	hops, err := parseProxyJump(s.ProxyJump, s.Username)
+	if err != nil { return ref, domain.Error("proxy_jump", err.Error()) }
+	client, jumpClients, err := m.dialRoute(ctx, address, s.Username, methods, hops)
+	if err != nil {
+		var hostErr *HostKeyError
+		if errors.As(err, &hostErr) { return ref, hostErr }
+		return ref, domain.Error("connect", apperror.Wrap("sshConnect", err, nil).Error())
 	}
-	var hostErr *HostKeyError
-	cfg := &ssh.ClientConfig{User: s.Username, Auth: []ssh.AuthMethod{method}, HostKeyCallback: func(host string, remote net.Addr, key ssh.PublicKey) error {
-		trusted, e := m.keys.Lookup(address)
-		if e != nil {
-			return e
-		}
-		if len(trusted) == 0 || string(trusted) != string(key.Marshal()) {
-			hostErr = &HostKeyError{address, ssh.FingerprintSHA256(key), key.Marshal(), len(trusted) > 0}
-			return hostErr
-		}
-		return nil
-	}}
-	raw, e := (&net.Dialer{}).DialContext(ctx, "tcp", address)
-	if e != nil {
-		return ref, domain.Error("connect", apperror.Wrap("sshConnect", e, nil).Error())
-	}
-	raw.SetDeadline(time.Now().Add(15 * time.Second))
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			raw.Close()
-		case <-done:
-		}
-	}()
-	cc, chans, reqs, e := ssh.NewClientConn(raw, address, cfg)
-	close(done)
-	if e != nil {
-		raw.Close()
-		if hostErr != nil {
-			return ref, hostErr
-		}
-		return ref, domain.Error("authentication", apperror.New("sshAuthentication", nil).Error())
-	}
-	raw.SetDeadline(time.Time{})
-	client := ssh.NewClient(cc, chans, reqs)
 	m.mu.Lock()
 	if m.generations[tab] != ref.Generation || m.closed {
 		m.mu.Unlock()
-		client.Close()
+		closeSSHConnection(&connection{client: client, hops: jumpClients})
 		return ref, apperror.New("connectionCancelled", nil)
 	}
 	delete(m.connecting, tab)
-	c := &connection{ref: ref, session: s, client: client, history: NewHistory(1024 * 1024)}
+	c := &connection{ref: ref, session: s, client: client, hops: jumpClients, history: NewHistory(1024 * 1024)}
 	m.connections[tab] = c
 	m.startKeepaliveLocked(c)
 	m.mu.Unlock()
 	go func() {
 		err := client.Wait()
+		closeHopClients(c.hops)
 		m.mu.Lock()
 		if m.connections[tab] == c {
 			delete(m.connections, tab)
@@ -243,6 +206,7 @@ func (m *Manager) Disconnect(ref domain.ConnectionRef) error {
 	if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	m.mu.Unlock()
 	e := c.client.Close()
+	closeHopClients(c.hops)
 	m.emit("ssh:disconnected", ref)
 	return e
 }
@@ -259,7 +223,7 @@ func (m *Manager) Close() {
 	m.mu.Unlock()
 
 	for _, cancel := range pending { cancel() }
-	for _, c := range live { _ = c.client.Close() }
+	for _, c := range live { closeSSHConnection(c) }
 }
 func (m *Manager) Home(ref domain.ConnectionRef) (string, error) {
 	s, e := m.OpenSession(ref)
@@ -293,7 +257,7 @@ func (m *Manager) CancelTab(tab string) {
 		if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	}
 	m.mu.Unlock()
-	if c != nil { _ = c.client.Close() }
+	if c != nil { closeSSHConnection(c) }
 }
 
 // Client returns the authenticated SSH transport for a live tab reference.
@@ -371,5 +335,5 @@ func (m *Manager) failKeepalive(c *connection, ctx context.Context, reason strin
 	active := ctx.Err() == nil && m.connections[c.ref.TabID] == c
 	if active { c.disconnectReason = reason }
 	m.mu.Unlock()
-	if active { _ = c.client.Close() }
+	if active { closeSSHConnection(c) }
 }
