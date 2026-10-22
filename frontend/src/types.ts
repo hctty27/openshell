@@ -79,7 +79,7 @@ export interface QuickCommand {
   category: string;
   scope: "global" | "group" | "session";
   scopeId: string;
-  mode: "run" | "insert";
+  mode?: "run" | "insert"; // Legacy persisted action.
   confirm: boolean;
 }
 export type ChatMode = "chat" | "confirm" | "auto";
@@ -158,4 +158,31 @@ export interface APIRequest {
   profile: APIProfile;
   key: string;
   memoryOnly: boolean;
+}
+
+export interface SFTPEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  isSymlink: boolean;
+  size: number;
+  modified: number;
+  mode: string;
+}
+export interface SFTPPaths {
+  local: string;
+  remote: string;
+}
+export interface SFTPTask {
+  id: string;
+  ref: Ref;
+  direction: "upload" | "download";
+  source: string;
+  destination: string;
+  name: string;
+  bytes: number;
+  total: number;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  error: string;
+  created: number;
 }

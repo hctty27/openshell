@@ -60,3 +60,10 @@ export function TestAPI(arg1:main.SaveAPIRequest):Promise<void>;
 export function TrustHost(arg1:string):Promise<void>;
 
 export function WriteTerminal(arg1:domain.ConnectionRef,arg2:string):Promise<void>;
+
+export function SFTPHome(arg1:domain.ConnectionRef):Promise<import('../../../src/types').SFTPPaths>;
+export function SFTPList(arg1:domain.ConnectionRef,arg2:string,arg3:string):Promise<import('../../../src/types').SFTPEntry[]>;
+export function SFTPOperate(arg1:domain.ConnectionRef,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
+export function SFTPTransfer(arg1:domain.ConnectionRef,arg2:string,arg3:string,arg4:string):Promise<import('../../../src/types').SFTPTask>;
+export function SFTPTransfers(arg1:domain.ConnectionRef):Promise<import('../../../src/types').SFTPTask[]>;
+export function SFTPCancel(arg1:string):Promise<void>;
