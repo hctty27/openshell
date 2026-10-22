@@ -56,7 +56,6 @@
   "splitNeedsTwo": "Connect another terminal to split",
   "rotateSplit": "Switch split direction",
   "closeSplit": "Close split view",
-  "preferMouseSelection": "Prefer text selection (hold Alt for TUI mouse actions)",
   "regexSearch": "Use regular expression",
   "highlightLogLevels": "Highlight log severity keywords",
   "logs": "Logs"
