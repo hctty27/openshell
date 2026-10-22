@@ -32,12 +32,13 @@ export default function TransferDock({ refID, onNotice }: Props) {
     setZmodemEnded(false);
     seenZmodem.current = false;
     if (!refID) return;
-    if (typeof api.SFTPTransfers === "function") {
+    // Browser fixtures can emulate SSH without exposing the SFTP backend.
+    // Check the actual Wails binding before calling through the API proxy.
+    if (typeof window.go?.main?.App?.SFTPTransfers === "function") {
       void api.SFTPTransfers(refID).then(list => {
         if (disposed) return;
         setTasks(current => {
           const byID = new Map((list ?? []).map(task => [task.id, task]));
-          // Events observed since the request started are newer than this snapshot.
           for (const task of current) byID.set(task.id, task);
           return [...byID.values()].sort((a, b) => a.created - b.created);
         });
