@@ -116,3 +116,53 @@ func TestLocalForwardDeliversBytes(t *testing.T) {
  if _,err:=io.ReadFull(local,buf);err!=nil { t.Fatal(err) }
  if string(buf)!="hello" { t.Fatalf("forward changed bytes: %q",buf) }
 }
+
+func TestTwoHopProxyJumpAuthenticatesEachTransport(t *testing.T) {
+ first := testssh.Start(t)
+ second := testssh.Start(t)
+ target := testssh.Start(t)
+ m := NewManager(keys{}, nil)
+ defer m.Close()
+ session := domain.Session{
+  ID: "two-hop", Host: target.Host, Port: target.Port,
+  Username: "root", AuthType: "password",
+  ProxyJump: fmt.Sprintf("root@%s:%d,root@%s:%d",first.Host,first.Port,second.Host,second.Port),
+ }
+ addresses := []string{
+  Address(first.Host, first.Port),
+  Address(second.Host, second.Port),
+  Address(target.Host, target.Port),
+ }
+ for _, expected := range addresses {
+  _, err := m.Connect(context.Background(), "two-hop-tab", session, AuthInput{Password:"test-password"})
+  var challenge *HostKeyError
+  if !errors.As(err,&challenge) { t.Fatalf("%s: expected trust challenge, got %v",expected,err) }
+  if challenge.Address != expected { t.Fatalf("trusted wrong jump: got %q want %q",challenge.Address,expected) }
+  if err := m.keys.Trust(challenge.Address,challenge.Key);err!=nil { t.Fatal(err) }
+ }
+ ref, err := m.Connect(context.Background(), "two-hop-tab",session,AuthInput{Password:"test-password"})
+ if err != nil { t.Fatal(err) }
+ if !m.Valid(ref) { t.Fatal("two-hop SSH reference not valid") }
+ if err := m.Disconnect(ref);err!=nil { t.Fatal(err) }
+}
+
+func TestLocalForwardReconnectRebindsSamePort(t *testing.T) {
+ m, session := trustedTestManager(t)
+ port := freePort(t)
+ session.LocalForwards = []domain.LocalForward{{
+  BindHost: "127.0.0.1", BindPort: port,
+  TargetHost: "127.0.0.1", TargetPort: 80,
+ }}
+ a, err := m.Connect(context.Background(),"reconnect-tab",session,AuthInput{Password:"test-password"})
+ if err != nil { t.Fatal(err) }
+ b, err := m.Connect(context.Background(),"reconnect-tab",session,AuthInput{Password:"test-password"})
+ if err != nil { t.Fatalf("reconnect could not rebind released local port: %v",err) }
+ if b.Generation <= a.Generation || m.Valid(a) || !m.Valid(b) {
+  t.Fatalf("reconnect generation mismatch: before %+v after %+v", a,b)
+ }
+ if err := m.Disconnect(a);err!=nil { t.Fatal(err) }
+ conn, err := net.DialTimeout("tcp", Address("127.0.0.1",port),time.Second)
+ if err != nil { t.Fatalf("stale disconnect removed new forward: %v",err) }
+ _ = conn.Close()
+ if err := m.Disconnect(b);err!=nil { t.Fatal(err) }
+}
