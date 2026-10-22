@@ -116,7 +116,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	methods, closeAuth, err := authenticationMethods(ctx, s.AuthType, s.PrivateKeyPath, auth)
 	if err != nil { return ref, domain.Error("authentication", err.Error()) }
 	defer closeAuth()
-	hops, err := parseProxyJump(s.ProxyJump, s.Username)
+	hops, err := parseProxyJump(s.ProxyJump, defaultProxyJumpUser(s.Username))
 	if err != nil { return ref, domain.Error("proxy_jump", err.Error()) }
 	if s.UseSSHConfig {
 		for i := range hops {
