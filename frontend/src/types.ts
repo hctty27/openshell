@@ -8,6 +8,7 @@ export interface Session {
   authType: string;
   privateKeyPath: string;
   credentialRef: string;
+  terminalTheme?: TerminalTheme;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -90,6 +91,7 @@ export interface Tab {
   error: unknown;
 }
 export type Theme = "dark" | "light";
+export type TerminalTheme = "follow" | "classic" | "dark" | "light";
 export type QuickCommandLayout = "single" | "multi";
 export interface QuickCommand {
   id: string;
@@ -148,6 +150,7 @@ export interface AppState {
   profiles: APIProfile[];
   fontSize: string;
   theme?: Theme;
+  terminalTheme?: TerminalTheme;
   activeProfile: string;
   version: string;
 }
