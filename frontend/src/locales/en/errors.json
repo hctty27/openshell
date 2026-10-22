@@ -217,5 +217,6 @@
   "folderCycleNotAllowed": "Folder nesting cannot form a cycle",
   "folderParentNotFound": "Parent folder does not exist",
   "memoryMessageIdRequired": "Message ID is required",
-  "memoryUnsupportedMutation": "Unsupported conversation change"
+  "memoryUnsupportedMutation": "Unsupported conversation change",
+  "backupInvalidConnection": "Invalid connection settings"
 }
