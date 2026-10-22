@@ -132,5 +132,21 @@
   "sessionConnectionChangesOnNextReconnect": "Connection settings updated. The current SSH connection stays active; new settings apply on the next connection.",
   "unableToLoadWorkspace": "Unable to load workspace.",
   "retry": "Retry",
-  "loadingOpenShell": "Loading OpenShell…"
+  "loadingOpenShell": "Loading OpenShell…",
+  "disconnect": "Disconnect",
+  "cancelConnecting": "Cancel connection",
+  "stopReconnecting": "Stop reconnecting",
+  "reconnecting": "Reconnecting",
+  "reconnectAttempt": "Retry {{count}}",
+  "connectionInterrupted": "Connection interrupted. Retrying…",
+  "reconnectStopped": "Automatic reconnect stopped. Connect manually.",
+  "disconnectRunningTitle": "Disconnect active SSH session?",
+  "disconnectRunningDescription": "Running AI tasks or file transfers may be interrupted.",
+  "disconnectAnyway": "Disconnect",
+  "connectionReason": "Disconnect reason: {{reason}}",
+  "connectionLostReasonKeepaliveTimeout": "SSH keepalive timed out",
+  "connectionLostReasonKeepaliveFailed": "SSH keepalive failed",
+  "connectionLostReasonNetworkTimeout": "Network timeout",
+  "connectionLostReasonRemoteClosed": "Remote server closed the connection",
+  "connectionLostReasonConnectionLost": "Network connection lost"
 }
