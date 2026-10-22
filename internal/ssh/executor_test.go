@@ -5,7 +5,7 @@ import (
 	"errors"
 	"github.com/hctty27/openshell/internal/domain"
 	"github.com/hctty27/openshell/internal/testssh"
-	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -55,11 +55,13 @@ func TestExecStdinClosed(t *testing.T) {
 	}
 }
 func TestShellQuotedWorkingDirectory(t *testing.T) {
-	dir := t.TempDir() + "/quote' space; echo wrong"
-	if e := os.MkdirAll(dir, 0700); e != nil {
-		t.Fatal(e)
-	}
 	m, r := connected(t)
+	dir := "/tmp/openshell-quote' space; echo wrong-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	setup, e := m.Run(context.Background(), r, "mkdir -p -- "+QuoteShell(dir), "/tmp", 5*time.Second)
+	if e != nil || setup.Status != "completed" {
+		t.Fatalf("remote test directory setup failed: %+v %v", setup, e)
+	}
+	defer m.Run(context.Background(), r, "rm -rf -- "+QuoteShell(dir), "/tmp", 5*time.Second)
 	v, e := m.Run(context.Background(), r, "pwd", dir, time.Second)
 	if e != nil || strings.TrimSpace(v.Stdout) != dir {
 		t.Fatalf("%+v %v", v, e)
