@@ -47,5 +47,9 @@
   "quickCommandsLabel": "快速命令",
   "commandListTitle": "命令列表 ({{count}})",
   "commandMustBeNonemptyUpTo16384Bytes": "命令不能为空，最多 16384 字节，支持换行和 Tab，不允许其他控制字符",
-  "quickCommandNewlineHint": "换行表示按下 Enter；末尾不换行则只输入最后一行，不执行。"
+  "quickCommandNewlineHint": "换行表示按下 Enter；末尾不换行则只输入最后一行，不执行。",
+  "findInTerminal": "搜索终端内容",
+  "previousMatch": "上一个匹配项",
+  "nextMatch": "下一个匹配项",
+  "closeSearch": "关闭搜索"
 }

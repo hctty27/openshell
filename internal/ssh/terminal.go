@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 )
 
@@ -49,20 +50,70 @@ func (h *History) Text(lines, bytes int) string {
 	return text
 }
 
+const terminalOutputChunkSize = 32 * 1024
+const terminalOutputFlushDelay = 8 * time.Millisecond
+
 type terminalWriter struct {
-	m  *Manager
-	c  *connection
-	mu sync.Mutex
+	m      *Manager
+	c      *connection
+	mu     sync.Mutex
+	buffer []byte
+	timer  *time.Timer
+	closed bool
+}
+
+func (w *terminalWriter) emitLocked(p []byte) {
+	w.c.sequence++
+	w.m.emit("ssh:output", map[string]any{
+		"ref": w.c.ref, "sequence": w.c.sequence,
+		"data": base64.StdEncoding.EncodeToString(p),
+	})
+}
+
+func (w *terminalWriter) flushLocked() {
+	if len(w.buffer) == 0 {
+		return
+	}
+	w.emitLocked(w.buffer)
+	w.buffer = w.buffer[:0]
 }
 
 func (w *terminalWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.closed {
+		return 0, io.ErrClosedPipe
+	}
 	w.c.history.Write(p)
-	w.c.sequence++
-	w.m.emit("ssh:output", map[string]any{"ref": w.c.ref, "sequence": w.c.sequence, "data": base64.StdEncoding.EncodeToString(p)})
+	w.buffer = append(w.buffer, p...)
+	for len(w.buffer) >= terminalOutputChunkSize {
+		w.emitLocked(w.buffer[:terminalOutputChunkSize])
+		w.buffer = w.buffer[terminalOutputChunkSize:]
+	}
+	if len(w.buffer) > 0 && w.timer == nil {
+		w.timer = time.AfterFunc(terminalOutputFlushDelay, func() {
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			w.timer = nil
+			if !w.closed {
+				w.flushLocked()
+			}
+		})
+	}
 	return len(p), nil
 }
+
+func (w *terminalWriter) Close() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.closed = true
+	if w.timer != nil {
+		w.timer.Stop()
+		w.timer = nil
+	}
+	w.flushLocked()
+}
+
 func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	if cols < 1 || rows < 1 {
 		return apperror.New("invalidTerminalDimensions", nil)
@@ -97,7 +148,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	if e = s.Shell(); e != nil {
 		return fail(e)
 	}
-	go func() { s.Wait(); m.emit("ssh:terminal-ended", ref) }()
+	go func() { s.Wait(); w.Close(); m.emit("ssh:terminal-ended", ref) }()
 	return nil
 }
 func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
