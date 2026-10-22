@@ -65,6 +65,10 @@ func (p pipeAddr) String() string { return string(p) }
 type jumpHost struct {
  address string
  user string
+ alias string
+ port int
+ explicitUser bool
+ explicitPort bool
 }
 
 // parseProxyJump deliberately supports SSH jump endpoints only, never arbitrary
@@ -77,8 +81,11 @@ func parseProxyJump(spec, defaultUser string) ([]jumpHost, error) {
  for _, item := range parts {
   if strings.ContainsAny(item, " \t\r\n;|&$\"'\\") { return nil, fmt.Errorf("invalid ProxyJump host %q", item) }
   user := defaultUser
+  userExplicit := false
+  portExplicit := false
   if pos := strings.LastIndex(item, "@"); pos >= 0 {
    user, item = item[:pos], item[pos+1:]
+   userExplicit = true
   }
   host := item
   port := 22
@@ -91,6 +98,7 @@ func parseProxyJump(spec, defaultUser string) ([]jumpHost, error) {
     n, err := strconv.Atoi(item[end+2:])
     if err != nil || n < 1 || n > 65535 { return nil, fmt.Errorf("invalid ProxyJump port %q", item) }
     port = n
+    portExplicit = true
    }
   } else if strings.Count(item, ":") == 1 {
    var p string
@@ -98,11 +106,12 @@ func parseProxyJump(spec, defaultUser string) ([]jumpHost, error) {
    n, err := strconv.Atoi(p)
    if err != nil || n < 1 || n > 65535 { return nil, fmt.Errorf("invalid ProxyJump port %q", item) }
    port = n
+   portExplicit = true
   } else if strings.Contains(item, ":") {
    return nil, fmt.Errorf("bracket IPv6 ProxyJump hosts: %q", item)
   }
   if host == "" || user == "" || strings.ContainsAny(host, "/@") { return nil, fmt.Errorf("invalid ProxyJump host %q", item) }
-  hops = append(hops, jumpHost{address: Address(host, port), user: user})
+  hops = append(hops, jumpHost{address: Address(host, port), user: user, alias: host, port: port, explicitUser: userExplicit, explicitPort: portExplicit})
  }
  return hops, nil
 }
