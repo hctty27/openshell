@@ -57,15 +57,7 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
       - name: Run Go tests
-        run: |
-          go mod tidy
-          echo START_GO_MOD_DIFF
-          git diff -- go.mod
-          echo END_GO_MOD_DIFF
-          echo START_GO_SUM_DIFF
-          git diff -- go.sum
-          echo END_GO_SUM_DIFF
-          go test ./...
+        run: go test ./...
 
   frontend-tests:
     runs-on: ubuntu-24.04
