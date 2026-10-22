@@ -23,6 +23,9 @@ import {
   Check,
   FolderOpen,
   Search,
+  Columns2,
+  Rows2,
+  MousePointer2,
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
 import type {
@@ -164,6 +167,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
     [showQuickCommandManager, setShowQuickCommandManager] = useState(false),
     [quickCommandFocus, setQuickCommandFocus] = useState(0),
     [terminalSearchFocus, setTerminalSearchFocus] = useState(0),
+    [splitPair, setSplitPair] = useState<[string, string] | null>(null),
+    [splitDirection, setSplitDirection] = useState<"columns" | "rows">("columns"),
+    [mouseSelectionFirst, setMouseSelectionFirst] = useState(false),
     [profileID, setProfileID] = useState(
       initialState.profiles.find((p) => p.id === initialState.activeProfile)
         ?.id ??
@@ -230,6 +236,12 @@ function Workspace({ initialState }: { initialState: AppState }) {
       }
     : undefined;
   const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
+  const splitReady = Boolean(
+    !showSFTP && splitPair?.includes(activeID) &&
+    splitPair.every((id) => tabs.some((tab) => tab.id === id && tab.status === "connected")),
+  );
+  const splitPartnerID = splitReady ? (splitPair?.find((id) => id !== activeID) ?? "") : "";
+  const splitChoices = tabs.filter((tab) => tab.id !== activeID && tab.status === "connected");
   const update = (tabID: string, fn: (tab: Tab) => Tab) =>
     setTabs((old) => old.map((t) => (t.id === tabID ? fn(t) : t)));
   const notify = (error: unknown) => setToast(error);
@@ -1109,6 +1121,40 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 {active?.session.port}
               </span>
               <div>
+                <select
+                  className="terminal-split-select"
+                  aria-label={tr("terminal:splitWith")}
+                  title={splitChoices.length ? tr("terminal:splitWith") : tr("terminal:splitNeedsTwo")}
+                  disabled={active?.status !== "connected" || showSFTP || !splitChoices.length}
+                  value={splitPartnerID}
+                  onChange={(event) => {
+                    const other = event.target.value;
+                    setSplitPair(other ? [activeID, other] : null);
+                  }}
+                >
+                  <option value="">{tr("terminal:splitWith")}</option>
+                  {splitChoices.map((tab) => (
+                    <option key={tab.id} value={tab.id}>{tab.session.name}</option>
+                  ))}
+                </select>
+                {splitReady && (
+                  <>
+                    <button title={tr("terminal:rotateSplit")} aria-label={tr("terminal:rotateSplit")}
+                      onClick={() => setSplitDirection((value) => value === "columns" ? "rows" : "columns")}>
+                      {splitDirection === "columns" ? <Rows2 size={14} /> : <Columns2 size={14} />}
+                    </button>
+                    <button title={tr("terminal:closeSplit")} aria-label={tr("terminal:closeSplit")}
+                      onClick={() => setSplitPair(null)}><X size={14} /></button>
+                  </>
+                )}
+                <button
+                  title={tr("terminal:preferMouseSelection")}
+                  aria-label={tr("terminal:preferMouseSelection")}
+                  aria-pressed={mouseSelectionFirst}
+                  className={mouseSelectionFirst ? "terminal-toggle-on" : ""}
+                  disabled={showSFTP}
+                  onClick={() => setMouseSelectionFirst((value) => !value)}
+                ><MousePointer2 size={14} /></button>
                 <button
                   title={tr("terminal:findInTerminal")}
                   disabled={active?.status !== "connected" || showSFTP}
@@ -1151,12 +1197,16 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </button>
               </div>
             </div>
-            <div className="terminal-container" style={showSFTP ? { display: "none" } : undefined}>
+            <div className={`terminal-container ${splitReady ? `terminal-split terminal-split-${splitDirection}` : ""}`}
+              style={showSFTP ? { display: "none" } : undefined}>
               {tabs.map((tab) => (
                 <TerminalPane
                   key={tab.id}
                   tab={tab}
                   active={tab.id === activeID}
+                  visible={tab.id === activeID || Boolean(splitReady && splitPair?.includes(tab.id))}
+                  onActivate={() => setActiveID(tab.id)}
+                  mouseSelectionFirst={mouseSelectionFirst}
                   fontSize={fontSize}
                   theme={theme}
                   autoCopySelection={autoCopySelection}
