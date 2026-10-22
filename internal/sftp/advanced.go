@@ -203,3 +203,13 @@ func (m *Manager) BatchChmod(ref domain.ConnectionRef, side string, targets []st
     }
     return count,nil
 }
+
+func (m *Manager) EnsureDirectory(ref domain.ConnectionRef, side, directory string) error {
+    if err:=validate(side,directory);err!=nil{return err}
+    if _,err:=m.lookup(ref);err!=nil{return err}
+    if side=="local"{return os.MkdirAll(directory,0755)}
+    c,err:=m.remote(ref)
+    if err!=nil{return err}
+    defer c.Close()
+    return c.MkdirAll(directory)
+}

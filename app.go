@@ -714,3 +714,7 @@ func (a *App) SFTPPreviewSync(ref domain.ConnectionRef, direction,localDir,remot
 func (a *App) SFTPBatchChmod(ref domain.ConnectionRef, side string, paths []string, mode string) (int,error) {
  return a.sftp.BatchChmod(ref,side,paths,mode)
 }
+
+func (a *App) SFTPEnsureDirectory(ref domain.ConnectionRef, side,directory string) error {
+ return a.sftp.EnsureDirectory(ref,side,directory)
+}

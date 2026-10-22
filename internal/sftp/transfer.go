@@ -42,13 +42,15 @@ type job struct {
 }
 var errSymlink = errors.New("symbolic links are not included in transfers")
 
-func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination string, overwrite, resume bool) (Task, error) {
+func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination string, overwrite bool, resumeChoice ...bool) (Task, error) {
     if direction != "upload" && direction != "download" { return Task{}, errors.New("invalid transfer direction") }
     src, dst := "local", "remote"
     if direction == "download" { src, dst = "remote", "local" }
     if err := validate(src, source); err != nil { return Task{}, err }
     if err := protectRoot(dst, destination); err != nil { return Task{}, err }
     if _, err := m.lookup(ref); err != nil { return Task{}, err }
+    resume := true
+    if len(resumeChoice)>0 {resume=resumeChoice[0]}
     ctx, cancel := context.WithCancel(context.Background())
     task := Task{ID:domain.NewID(), Ref:ref, Direction:direction, Source:source,
         Destination:destination, Name:filepath.Base(source), Overwrite:overwrite, Resume:resume, Status:"queued", Created:time.Now().UnixMilli()}
@@ -248,12 +250,15 @@ func (m *Manager) upload(j *job,c *pkg.Client,src,dst string) error {
     defer reader.Close()
     temp:=partialName(src,dst)
     var offset int64
+    existed:=false
     part,err:=c.Lstat(temp)
     if err!=nil && !errors.Is(err,os.ErrNotExist){return err}
     if err==nil {
+        existed=true
         if !part.Mode().IsRegular(){return errors.New("partial upload target is not a regular file")}
         if !j.task.Resume {
             if err=c.Remove(temp);err!=nil{return err}
+            existed=false
         }else{
             offset=part.Size()
             if offset>info.Size(){return errors.New("partial upload is larger than the source; restart transfer")}
@@ -268,7 +273,7 @@ func (m *Manager) upload(j *job,c *pkg.Client,src,dst string) error {
     }
     if _,err=reader.Seek(offset,io.SeekStart);err!=nil{return err}
     flags:=os.O_WRONLY
-    if offset==0 {flags=os.O_WRONLY|os.O_CREATE|os.O_EXCL}
+    if !existed {flags=os.O_WRONLY|os.O_CREATE|os.O_EXCL}
     writer,err:=c.OpenFile(temp,flags)
     if err!=nil{return err}
     if offset>0 {
@@ -311,12 +316,15 @@ func (m *Manager) download(j *job,c *pkg.Client,src,dst string) error {
     defer reader.Close()
     temp:=partialName(src,dst)
     var offset int64
+    existed:=false
     part,err:=os.Lstat(temp)
     if err!=nil && !errors.Is(err,os.ErrNotExist){return err}
     if err==nil{
+        existed=true
         if !part.Mode().IsRegular(){return errors.New("partial download target is not a regular file")}
         if !j.task.Resume{
             if err=os.Remove(temp);err!=nil{return err}
+            existed=false
         }else{
             offset=part.Size()
             if offset>info.Size(){return errors.New("partial download is larger than source; restart transfer")}
@@ -331,7 +339,7 @@ func (m *Manager) download(j *job,c *pkg.Client,src,dst string) error {
     }
     if _,err=reader.Seek(offset,io.SeekStart);err!=nil{return err}
     flags:=os.O_WRONLY
-    if offset==0{flags=os.O_WRONLY|os.O_CREATE|os.O_EXCL}
+    if !existed{flags=os.O_WRONLY|os.O_CREATE|os.O_EXCL}
     writer,err:=os.OpenFile(temp,flags,0600)
     if err!=nil{return err}
     if offset>0{
