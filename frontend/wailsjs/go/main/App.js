@@ -139,8 +139,8 @@ export function SFTPList(arg1, arg2, arg3) {
 export function SFTPOperate(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['SFTPOperate'](arg1, arg2, arg3, arg4, arg5);
 }
-export function SFTPTransfer(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['main']['App']['SFTPTransfer'](arg1, arg2, arg3, arg4, arg5);
+export function SFTPTransfer(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['SFTPTransfer'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 export function SFTPTransfers(arg1) {
   return window['go']['main']['App']['SFTPTransfers'](arg1);
@@ -179,4 +179,24 @@ export function RenameConversation(arg1, arg2, arg3) {
 
 export function DeleteConversation(arg1, arg2) {
   return window['go']['main']['App']['DeleteConversation'](arg1, arg2);
+}
+
+export function SFTPReadRemoteText(arg1, arg2) {
+  return window['go']['main']['App']['SFTPReadRemoteText'](arg1, arg2);
+}
+
+export function SFTPSaveRemoteText(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SFTPSaveRemoteText'](arg1, arg2, arg3, arg4);
+}
+
+export function SFTPPreviewSync(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SFTPPreviewSync'](arg1, arg2, arg3, arg4);
+}
+
+export function SFTPBatchChmod(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SFTPBatchChmod'](arg1, arg2, arg3, arg4);
+}
+
+export function SFTPEnsureDirectory(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SFTPEnsureDirectory'](arg1, arg2, arg3);
 }

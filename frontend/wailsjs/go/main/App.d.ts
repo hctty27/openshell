@@ -72,7 +72,7 @@ export function WriteTerminal(arg1:domain.ConnectionRef,arg2:string):Promise<voi
 export function SFTPHome(arg1:domain.ConnectionRef):Promise<import('../../../src/types').SFTPPaths>;
 export function SFTPList(arg1:domain.ConnectionRef,arg2:string,arg3:string):Promise<import('../../../src/types').SFTPEntry[]>;
 export function SFTPOperate(arg1:domain.ConnectionRef,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
-export function SFTPTransfer(arg1:domain.ConnectionRef,arg2:string,arg3:string,arg4:string,arg5:boolean):Promise<import('../../../src/types').SFTPTask>;
+export function SFTPTransfer(arg1:domain.ConnectionRef,arg2:string,arg3:string,arg4:string,arg5:boolean,arg6:boolean):Promise<import('../../../src/types').SFTPTask>;
 export function SFTPTransfers(arg1:domain.ConnectionRef):Promise<import('../../../src/types').SFTPTask[]>;
 export function SFTPCancel(arg1:string):Promise<void>;
 
@@ -85,3 +85,8 @@ export function CreateConversation(arg1:domain.ConnectionRef):Promise<domain.Con
 export function StartConversationDraft(arg1:domain.ConnectionRef):Promise<void>;
 export function RenameConversation(arg1:domain.ConnectionRef,arg2:string,arg3:string):Promise<domain.Conversation>;
 export function DeleteConversation(arg1:domain.ConnectionRef,arg2:string):Promise<void>;
+export function SFTPReadRemoteText(arg1:domain.ConnectionRef,arg2:string):Promise<import('../../../src/types').SFTPDocument>;
+export function SFTPSaveRemoteText(arg1:domain.ConnectionRef,arg2:string,arg3:string,arg4:string):Promise<import('../../../src/types').SFTPDocument>;
+export function SFTPPreviewSync(arg1:domain.ConnectionRef,arg2:string,arg3:string,arg4:string):Promise<import('../../../src/types').SFTPSyncPreview>;
+export function SFTPBatchChmod(arg1:domain.ConnectionRef,arg2:string,arg3:string[],arg4:string):Promise<number>;
+export function SFTPEnsureDirectory(arg1:domain.ConnectionRef,arg2:string,arg3:string):Promise<void>;

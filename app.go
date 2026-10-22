@@ -688,8 +688,8 @@ func (a *App) SFTPList(ref domain.ConnectionRef, side, directory string) ([]file
 func (a *App) SFTPOperate(ref domain.ConnectionRef, side, operation, source, argument string) error {
  return a.sftp.Operate(ref, side, operation, source, argument)
 }
-func (a *App) SFTPTransfer(ref domain.ConnectionRef, direction, source, destination string, overwrite bool) (files.Task, error) {
- return a.sftp.Start(ref, direction, source, destination, overwrite)
+func (a *App) SFTPTransfer(ref domain.ConnectionRef, direction, source, destination string, overwrite, resume bool) (files.Task, error) {
+ return a.sftp.Start(ref, direction, source, destination, overwrite, resume)
 }
 func (a *App) SFTPTransfers(ref domain.ConnectionRef) []files.Task {
  return a.sftp.Transfers(ref)
@@ -700,4 +700,21 @@ func (a *App) SFTPCancel(taskID string) error {
 
 func (a *App) SFTPChooseDirectory() (string, error) {
  return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title:"Select local folder"})
+}
+
+func (a *App) SFTPReadRemoteText(ref domain.ConnectionRef, name string) (files.RemoteDocument,error) {
+ return a.sftp.ReadRemoteText(ref,name)
+}
+func (a *App) SFTPSaveRemoteText(ref domain.ConnectionRef, name,revision,content string) (files.RemoteDocument,error) {
+ return a.sftp.SaveRemoteText(ref,name,revision,content)
+}
+func (a *App) SFTPPreviewSync(ref domain.ConnectionRef, direction,localDir,remoteDir string) (files.SyncPreview,error) {
+ return a.sftp.PreviewSync(ref,direction,localDir,remoteDir)
+}
+func (a *App) SFTPBatchChmod(ref domain.ConnectionRef, side string, paths []string, mode string) (int,error) {
+ return a.sftp.BatchChmod(ref,side,paths,mode)
+}
+
+func (a *App) SFTPEnsureDirectory(ref domain.ConnectionRef, side,directory string) error {
+ return a.sftp.EnsureDirectory(ref,side,directory)
 }

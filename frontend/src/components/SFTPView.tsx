@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type MouseEvent, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, Save, ArrowLeftRight } from "lucide-react";
 import { OnFileDrop, OnFileDropOff } from "../../wailsjs/runtime/runtime";
 import { api, listen, errorText } from "../bridge";
-import type { Ref, SFTPEntry, SFTPTask } from "../types";
+import type { Ref, SFTPEntry, SFTPTask, SFTPDocument } from "../types";
 import { useDialogs } from "./DialogProvider";
 import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMenu";
 import { t } from "../i18n";
@@ -33,8 +33,8 @@ interface Props { refID: Ref; onNotice(error: unknown): void; }
 interface PanelProps {
   side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: string; showHidden: boolean;
   onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void; onSelect(item: SFTPEntry, multi: boolean): void;
-  onTransfer(): void; onOperate(operation: Operation, entry?: SFTPEntry): void;
-  onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLDivElement>): void;
+  onOpenFile?(entry:SFTPEntry): void; onTransfer(): void; onOperate(operation: Operation, entry?: SFTPEntry): void;
+  onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLElement>): void;
 }
 function FilePanel(p: PanelProps) {
   const visible = useMemo(() => p.showHidden ? p.entries : p.entries.filter(e => !e.name.startsWith(".")), [p.entries,p.showHidden]);
@@ -49,6 +49,7 @@ function FilePanel(p: PanelProps) {
         <strong><span className="sftp-panel-dot" />{t(remote ? "sftp:remote" : "sftp:local")}</strong>
         <div className="sftp-actions">
           {p.onChooseDirectory && <button title={t("sftp:chooseFolder")} onClick={p.onChooseDirectory}><FolderOpen size={14}/></button>}
+          <button title={t("sftp:chmod")} disabled={p.selected.length===0} onClick={()=>p.onOperate("chmod")}><Shield size={14}/></button>
           <button title={t("sftp:newFolder")} onClick={() => p.onOperate("mkdir")}><FolderPlus size={14}/></button>
           <button title={t(p.showHidden ? "sftp:hideHidden" : "sftp:showHidden")} onClick={p.onToggleHidden}>{p.showHidden ? <EyeOff size={14}/> : <Eye size={14}/>}</button>
           <button title={t("sftp:refresh")} onClick={p.onReload}><RefreshCw size={14}/></button>
@@ -69,7 +70,7 @@ function FilePanel(p: PanelProps) {
             draggable={!entry.isSymlink}
             onDragStart={event => event.dataTransfer.setData("application/x-openshell-entry",JSON.stringify({side:p.side,path:entry.path}))}
             onClick={event=>p.onSelect(entry,event.ctrlKey||event.metaKey)}
-            onDoubleClick={()=>{if(entry.isDir && !entry.isSymlink)p.onDir(entry.path);}}
+            onDoubleClick={()=>{if(entry.isSymlink)return;if(entry.isDir)p.onDir(entry.path);else p.onOpenFile?.(entry);}}
             onContextMenu={event=>p.onContext(event,entry)}>
             <span className="sftp-file-name">{entry.isDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className="sftp-link-badge">↗</span>}</span>
             <span>{entry.isDir ? "—" : niceSize(entry.size)}</span>
@@ -103,6 +104,10 @@ export default function SFTPView({refID,onNotice}:Props) {
   const [version,setVersion] = useState(0);
   const [tasks,setTasks] = useState<SFTPTask[]>([]);
   const [queueOpen,setQueueOpen] = useState(true);
+  const [editor,setEditor] = useState<SFTPDocument|null>(null);
+  const [draftText,setDraftText] = useState("");
+  const [editorSaving,setEditorSaving] = useState(false);
+  const [syncBusy,setSyncBusy] = useState(false);
   const [menu,setMenu] = useState<{x:number;y:number;anchor:HTMLElement;items:ContextMenuAction[]}|null>(null);
 
   useEffect(() => {
@@ -152,7 +157,7 @@ export default function SFTPView({refID,onNotice}:Props) {
           });
           if (!overwrite) continue;
         }
-        await api.SFTPTransfer(refID,direction,file,join(destSide,dstDir,basename(file)),overwrite);
+        await api.SFTPTransfer(refID,direction,file,join(destSide,dstDir,basename(file)),overwrite,true);
       }
     }catch(error){onNotice(error);}
   };
@@ -198,12 +203,11 @@ export default function SFTPView({refID,onNotice}:Props) {
         if(!validName(name)){onNotice(t("sftp:invalidName"));return;}
         await api.SFTPOperate(refID,side,"rename",file.path,join(side,dir,name));
       } else {
-        if(selected.length!==1)return;
-        const file=selected[0];
-        const mode=await dialogs.input({title:t("sftp:chmodTitle"),label:t("sftp:permissions"),description:t("sftp:chmodDescription"),defaultValue:file.mode});
+        const mode=await dialogs.input({title:t("sftp:chmodTitle"),label:t("sftp:permissions"),description:t("sftp:chmodDescription"),defaultValue:selected.length===1?selected[0].mode:"0644"});
         if(mode===null)return;
         if(!/^[0-7]{3,4}$/.test(mode)){onNotice(t("sftp:chmodDescription"));return;}
-        await api.SFTPOperate(refID,side,"chmod",file.path,mode);
+        if(selected.length>1 && !(await dialogs.confirm({title:t("sftp:batchPermissionsTitle"),description:t("sftp:batchPermissionsDescription",{count:selected.length}),confirmLabel:t("common:confirm")})))return;
+        await api.SFTPBatchChmod(refID,side,selected.map(file=>file.path),mode);
       }
       setVersion(v=>v+1);
       setSelection(s=>({...s,[side]:[]}));
@@ -214,6 +218,7 @@ export default function SFTPView({refID,onNotice}:Props) {
     const other = side==="local" ? remoteDir : localDir;
     const items:ContextMenuAction[] = [
       {label:t(side==="local"?"sftp:upload":"sftp:download"),icon:side==="local"?ArrowUpFromLine:ArrowDownToLine,onSelect:()=>void transfer(side,[item.path],other)},
+      ...(side==="remote" && !item.isDir && !item.isSymlink ? [{label:t("sftp:editText"),icon:FileText,onSelect:()=>void openEditor(item)}] : []),
       {label:t("sftp:rename"),icon:Pencil,onSelect:()=>void operate(side,"rename",item)},
       {label:t("sftp:chmod"),icon:Shield,onSelect:()=>void operate(side,"chmod",item)},
       {label:t("sftp:copyPath"),icon:ClipboardCopy,onSelect:()=>void navigator.clipboard.writeText(item.path)},
@@ -222,7 +227,7 @@ export default function SFTPView({refID,onNotice}:Props) {
     setSelection(s=>({...s,[side]:[item.path]}));
     setMenu({x:event.clientX,y:event.clientY,anchor:event.currentTarget,items});
   };
-  const drop = (target:Side,event:DragEvent<HTMLDivElement>) => {
+  const drop = (target:Side,event:DragEvent<HTMLElement>) => {
     const raw=event.dataTransfer.getData("application/x-openshell-entry");
     if(!raw)return;
     event.preventDefault();
@@ -230,6 +235,58 @@ export default function SFTPView({refID,onNotice}:Props) {
       const source=JSON.parse(raw) as {side:Side;path:string};
       if(source.side!==target && source.path)void transfer(source.side,[source.path],target==="remote"?remoteDir:localDir);
     }catch{ /* ignore unrelated drags */ }
+  };
+  const openEditor = async (entry:SFTPEntry) => {
+    try {
+      const doc=await api.SFTPReadRemoteText(refID,entry.path);
+      setEditor(doc); setDraftText(doc.content);
+    }catch(error){onNotice(error);}
+  };
+  const closeEditor = async () => {
+    if(editor && draftText!==editor.content){
+      const ok=await dialogs.confirm({title:t("sftp:discardEditorTitle"),description:t("sftp:discardEditorDescription"),tone:"warning",confirmLabel:t("sftp:discard")});
+      if(!ok)return;
+    }
+    setEditor(null);
+  };
+  const saveEditor = async () => {
+    if(!editor||editorSaving)return;
+    setEditorSaving(true);
+    try {
+      const next=await api.SFTPSaveRemoteText(refID,editor.path,editor.revision,draftText);
+      setEditor(next);setDraftText(next.content);setVersion(v=>v+1);
+    }catch(error){onNotice(error);}
+    finally{setEditorSaving(false);}
+  };
+  const sync = async (direction:"upload"|"download") => {
+    if(syncBusy || !localDir || !remoteDir)return;
+    setSyncBusy(true);
+    try {
+      const preview=await api.SFTPPreviewSync(refID,direction,localDir,remoteDir);
+      const selected=preview.actions.filter(action=>action.operation==="copy");
+      const conflicts=preview.actions.filter(action=>action.operation==="conflict");
+      const lines=selected.slice(0,35).map(a=>`${a.reason==="missing"?"+":"~"} ${a.relative} (${niceSize(a.size)})`);
+      if(conflicts.length)lines.push(String(conflicts.length)+" "+t("sftp:syncConflictsSkipped"));
+      if(selected.length>35)lines.push("… "+String(selected.length-35)+" "+t("sftp:moreItems"));
+      if(selected.length===0){onNotice(t("sftp:syncNoChanges"));return;}
+      const ok=await dialogs.confirm({
+        title:t(direction==="upload"?"sftp:syncUpload":"sftp:syncDownload"),
+        description:t("sftp:syncPreviewDescription",{count:selected.length,skipped:preview.skipped+conflicts.length,size:niceSize(preview.bytes)}),
+        preview:lines.join("\n"),tone:"warning",confirmLabel:t("sftp:syncApply")
+      });
+      if(!ok)return;
+      for(const item of selected){
+        const destSide=direction==="upload"?"remote":"local";
+        await api.SFTPEnsureDirectory(refID,destSide,parent(destSide,item.destination));
+        await api.SFTPTransfer(refID,direction,item.source,item.destination,item.reason==="changed",true);
+      }
+      setVersion(v=>v+1);
+    }catch(error){onNotice(error);}
+    finally{setSyncBusy(false);}
+  };
+  const retry = async (task:SFTPTask, resume:boolean) => {
+    try {await api.SFTPTransfer(refID,task.direction,task.source,task.destination,task.overwrite,resume);}
+    catch(error){onNotice(error);}
   };
   return (
     <div className="sftp-view">
@@ -241,9 +298,14 @@ export default function SFTPView({refID,onNotice}:Props) {
           onFileDrop={event=>drop("local",event)}/>
         <FilePanel side="remote" directory={remoteDir} entries={remoteFiles} selected={selection.remote} loading={remoteBusy} error={remoteError} showHidden={hidden}
           onToggleHidden={()=>setHidden(s=>!s)} onDir={dir=>changeDir("remote",dir)} onReload={()=>setVersion(v=>v+1)}
-          onSelect={(item,multi)=>choose("remote",item,multi)} onTransfer={()=>void transfer("remote",selection.remote,localDir)}
+          onOpenFile={item=>void openEditor(item)} onSelect={(item,multi)=>choose("remote",item,multi)} onTransfer={()=>void transfer("remote",selection.remote,localDir)}
           onOperate={(action,entry)=>void operate("remote",action,entry)} onContext={(event,item)=>context(event,"remote",item)}
           onFileDrop={event=>drop("remote",event)}/>
+      </div>
+      <div className="sftp-sync-controls">
+        <span><ArrowLeftRight size={13}/>{t("sftp:syncFolders")}</span>
+        <button disabled={syncBusy} onClick={()=>void sync("upload")}><ArrowUpFromLine size={13}/>{t("sftp:syncUpload")}</button>
+        <button disabled={syncBusy} onClick={()=>void sync("download")}><ArrowDownToLine size={13}/>{t("sftp:syncDownload")}</button>
       </div>
       <div className={`sftp-queue ${queueOpen?"expanded":""}`}>
         <button className="sftp-queue-heading" onClick={()=>setQueueOpen(v=>!v)}>
@@ -259,10 +321,25 @@ export default function SFTPView({refID,onNotice}:Props) {
               <span className="sftp-task-size">{niceSize(task.bytes)} / {niceSize(task.total)}</span>
               <div className="sftp-progress"><span style={{width:`${task.total ? Math.min(100,task.bytes/task.total*100) : (task.status==="completed"?100:0)}%`}}/></div>
               {(task.status==="running"||task.status==="queued")&&<button title={t("sftp:cancelTransfer")} onClick={()=>void api.SFTPCancel(task.id).catch(onNotice)}><X size={13}/></button>}
+              {(task.status==="failed"||task.status==="cancelled")&&<span className="sftp-retry-actions">
+                <button title={t("sftp:resumeTransfer")} onClick={()=>void retry(task,true)}><RotateCcw size={13}/></button>
+                <button title={t("sftp:restartTransfer")} onClick={()=>void retry(task,false)}><RefreshCw size={13}/></button>
+              </span>}
             </div>
           ))}
         </div>}
       </div>
+      {editor && (
+        <div className="sftp-editor-backdrop">
+          <section className="sftp-editor" role="dialog" aria-modal="true" aria-label={t("sftp:editText")}>
+            <header><strong><FileText size={15}/>{editor.path}</strong><button title={t("common:close")} onClick={()=>void closeEditor()}><X size={17}/></button></header>
+            <textarea aria-label={t("sftp:editText")} value={draftText} spellCheck={false} onChange={event=>setDraftText(event.target.value)}/>
+            <footer><small>{t("sftp:utf8EditorLimit")}</small><button onClick={()=>void closeEditor()}>{t("common:cancel")}</button>
+              <button disabled={editorSaving||draftText===editor.content} className="sftp-editor-save" onClick={()=>void saveEditor()}><Save size={14}/>{t("sftp:saveFile")}</button>
+            </footer>
+          </section>
+        </div>
+      )}
       {menu && <FloatingContextMenu {...menu} onClose={()=>setMenu(null)}/>}
     </div>
   );

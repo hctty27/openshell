@@ -19,6 +19,8 @@ import type {
   SFTPEntry,
   SFTPPaths,
   SFTPTask,
+  SFTPDocument,
+  SFTPSyncPreview,
   ConversationCursor,
   ConversationList,
   ConversationPage,
@@ -29,9 +31,14 @@ type Backend = {
   SFTPChooseDirectory(): Promise<string>;
   SFTPList(ref: Ref, side: string, directory: string): Promise<SFTPEntry[]>;
   SFTPOperate(ref: Ref, side: string, operation: string, source: string, argument: string): Promise<void>;
-  SFTPTransfer(ref: Ref, direction: string, source: string, destination: string, overwrite: boolean): Promise<SFTPTask>;
+  SFTPTransfer(ref: Ref, direction: string, source: string, destination: string, overwrite: boolean, resume: boolean): Promise<SFTPTask>;
   SFTPTransfers(ref: Ref): Promise<SFTPTask[]>;
   SFTPCancel(taskID: string): Promise<void>;
+  SFTPReadRemoteText(ref: Ref, path: string): Promise<SFTPDocument>;
+  SFTPSaveRemoteText(ref: Ref, path: string, revision: string, content: string): Promise<SFTPDocument>;
+  SFTPPreviewSync(ref: Ref, direction: string, localDir: string, remoteDir: string): Promise<SFTPSyncPreview>;
+  SFTPBatchChmod(ref: Ref, side: string, paths: string[], mode: string): Promise<number>;
+  SFTPEnsureDirectory(ref: Ref, side: string, directory: string): Promise<void>;
   StartAutomatic(req: ChatRequest, taskID: string): Promise<AutoSnapshot>;
   ListConversations(ref: Ref, cursor: ConversationCursor | null, limit: number): Promise<ConversationList>;
   ReadConversation(ref: Ref, id: string, before: number, limit: number): Promise<ConversationPage>;
