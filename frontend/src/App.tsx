@@ -47,6 +47,7 @@ import type {
   QuickCommand,
   QuickCommandLayout,
   XshellImportPreview,
+  SFTPTask,
 } from "./types";
 import SessionTree from "./components/SessionTree";
 import SessionPicker from "./components/SessionPicker";
@@ -214,6 +215,22 @@ function Workspace({ initialState }: { initialState: AppState }) {
     streamIDs = useRef<Record<string, string>>({}),
     selections = useRef<Record<string, string>>({});
   tabsRef.current = tabs;
+  const activeTransferIds = useRef(new Map<string, Set<string>>());
+  const activeZmodemTabs = useRef(new Set<string>());
+  useEffect(() => {
+    const sftp = listen("sftp:transfer", (task: SFTPTask) => {
+      const set = activeTransferIds.current.get(task.ref.tabId) ?? new Set<string>();
+      if (task.status === "queued" || task.status === "running") set.add(task.id);
+      else set.delete(task.id);
+      if (set.size) activeTransferIds.current.set(task.ref.tabId, set);
+      else activeTransferIds.current.delete(task.ref.tabId);
+    });
+    const zmodem = listen("ssh:transfer-state", (payload: { ref: Ref; active: boolean }) => {
+      if (payload.active) activeZmodemTabs.current.add(payload.ref.tabId);
+      else activeZmodemTabs.current.delete(payload.ref.tabId);
+    });
+    return () => { sftp(); zmodem(); };
+  }, []);
   const reconnectTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const reconnectInFlight = useRef(new Set<string>());
   const autoReconnectRef = useRef(state.autoReconnect !== false);
@@ -758,7 +775,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
   };
   const disconnectTab = async (tab: Tab) => {
     if (!tab.ref && tab.status !== "connecting") return;
-    if (state.confirmActiveDisconnect !== false && (tab.chatBusy || tab.executing)) {
+    const hasTransfers = Boolean(activeTransferIds.current.get(tab.id)?.size) ||
+      activeZmodemTabs.current.has(tab.id);
+    if (state.confirmActiveDisconnect !== false && (tab.chatBusy || tab.executing || hasTransfers)) {
       if (!(await dialogs.confirm({
         title: message("common:disconnectRunningTitle"),
         description: message("common:disconnectRunningDescription"),
