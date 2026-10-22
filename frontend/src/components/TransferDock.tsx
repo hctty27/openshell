@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, ChevronDown, ChevronUp, X, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { t } from "../i18n";
 import { api, errorText, listen } from "../bridge";
 import type { Ref, SFTPTask } from "../types";
 
@@ -14,7 +15,7 @@ const sameRef = (a: Ref | undefined, b: Ref | undefined) =>
 const size = (bytes: number) => bytes < 1024 ? `${bytes} B` : `${(bytes / 1048576).toFixed(1)} MB`;
 
 export default function TransferDock({ refID, onNotice }: Props) {
-  const { t } = useTranslation();
+  useTranslation();
   const [tasks, setTasks] = useState<SFTPTask[]>([]);
   const [expanded, setExpanded] = useState(true);
   const [zmodemActive, setZmodemActive] = useState(false);

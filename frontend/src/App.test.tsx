@@ -34,6 +34,7 @@ vi.mock("./bridge", async () => ({
   desktop: false,
   api: {
     SavePreference: vi.fn(async () => {}),
+    SFTPTransfers: vi.fn(async () => []),
     Connect: vi.fn(async (tabId: string, sessionId: string) => ({
       ref: { tabId, sessionId, generation: 1 },
       home: "/root",

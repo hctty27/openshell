@@ -1337,7 +1337,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
               </aside>
             )}
             </div>
-            <TransferDock refID={active?.status === "connected" ? active.ref : undefined} onNotice={notify} />
+            <TransferDock refID={active?.status === "connected" ? (active.ref ?? undefined) : undefined} onNotice={notify} />
             {(
               <QuickCommandBar
                 tab={active}

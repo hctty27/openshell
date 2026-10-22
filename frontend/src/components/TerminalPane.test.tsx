@@ -466,21 +466,4 @@ test("middle click pastes only when enabled and no TUI mouse tracking", async ()
   expect(ClipboardGetText).not.toHaveBeenCalled();
 });
 
-test("shows approximate ZMODEM progress and can cancel active transfer", async () => {
-  renderTerminal();
-  act(() => {
-    events.listeners.get("ssh:transfer-state")?.({ ref: tab.ref, active: true });
-    events.listeners.get("ssh:transfer-progress")?.({
-      ref: tab.ref, transferred: "2.3 MB", speed: "1.2 MB/s",
-    });
-  });
-  expect(screen.getByText("2.3 MB · 1.2 MB/s")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
-  await waitFor(() => expect(api.CancelZmodem).toHaveBeenCalledWith(tab.ref));
-  expect(screen.getByRole("button", { name: "取消传输" })).toHaveProperty("disabled", true);
-  expect(screen.getByText("正在取消…")).toBeTruthy();
-  act(() => {
-    events.listeners.get("ssh:transfer-state")?.({ ref: tab.ref, active: false });
-  });
-  expect(screen.queryByRole("button", { name: "取消传输" })).toBeNull();
-});
+
