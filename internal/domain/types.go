@@ -99,7 +99,7 @@ func ValidateSession(s Session) error {
 	if s.AuthType != "" && s.AuthType != "password" && s.AuthType != "key" && s.AuthType != "agent" {
 		return apperror.New("unsupportedAuthenticationMethod", nil)
 	}
-	if strings.ContainsAny(s.ProxyJump, "\\x00\\r\\n\\t ") || len(s.ProxyJump) > 512 {
+	if strings.ContainsAny(s.ProxyJump, "\x00\r\n\t ") || len(s.ProxyJump) > 512 {
 		return apperror.New("unsupportedPreference", nil)
 	}
 	if len(s.LocalForwards) > 8 { return apperror.New("unsupportedPreference", nil) }
@@ -108,7 +108,7 @@ func ValidateSession(s Session) error {
 		bind := f.BindHost
 		if bind == "" { bind = "127.0.0.1" }
 		if bind != "127.0.0.1" && bind != "::1" && bind != "localhost" { return apperror.New("unsupportedPreference", nil) }
-		if f.BindPort < 1 || f.BindPort > 65535 || f.TargetPort < 1 || f.TargetPort > 65535 || strings.TrimSpace(f.TargetHost) == "" || strings.ContainsAny(f.TargetHost, "\\x00\\r\\n\\t /@") { return apperror.New("unsupportedPreference", nil) }
+		if f.BindPort < 1 || f.BindPort > 65535 || f.TargetPort < 1 || f.TargetPort > 65535 || strings.TrimSpace(f.TargetHost) == "" || strings.ContainsAny(f.TargetHost, "\x00\r\n\t /@") { return apperror.New("unsupportedPreference", nil) }
 		key := bind + ":" + strconv.Itoa(f.BindPort)
 		if used[key] { return apperror.New("unsupportedPreference", nil) }
 		used[key] = true
