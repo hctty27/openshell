@@ -32,19 +32,38 @@ func (a *App) StartLocalTerminal(tabID, terminalID, shell string, cols, rows int
         return errors.New("invalid local terminal dimensions")
     }
     a.mu.Lock()
-    _, exists := a.tabRefs[tabID]
-    epoch := a.connectEpoch[tabID]
+    ref, exists := a.tabRefs[tabID]
+    if !exists {
+        a.mu.Unlock()
+        return errors.New("terminal tab no longer exists")
+    }
+    if a.localTerminalPending == nil {
+        a.localTerminalPending = make(map[string]string)
+    }
+    a.localTerminalPending[tabID] = terminalID
+    factory := a.localTerminalFactory
     a.mu.Unlock()
-    if !exists { return errors.New("terminal tab no longer exists") }
-    pty, err := newLocalPTY(shell, cols, rows)
-    if err != nil { return fmt.Errorf("start local shell: %w", err) }
+    if a.ssh != nil && a.ssh.Valid(ref) {
+        a.stopPendingLocalTerminal(tabID, terminalID)
+        return errors.New("SSH must disconnect before starting the local terminal")
+    }
+    if factory == nil {
+        factory = newLocalPTY
+    }
+    pty, err := factory(shell, cols, rows)
+    if err != nil {
+        a.stopPendingLocalTerminal(tabID, terminalID)
+        return fmt.Errorf("start local shell: %w", err)
+    }
     current := &localTerminalSession{id: terminalID, pty: pty}
     a.mu.Lock()
-    if _, valid := a.tabRefs[tabID]; !valid || a.connectEpoch[tabID] != epoch {
+    latestRef, valid := a.tabRefs[tabID]
+    if !valid || latestRef != ref || a.localTerminalPending[tabID] != terminalID {
         a.mu.Unlock()
         _ = pty.Close()
         return errors.New("terminal connection changed")
     }
+    delete(a.localTerminalPending, tabID)
     old := a.localTerminals[tabID]
     a.localTerminals[tabID] = current
     a.mu.Unlock()
@@ -94,8 +113,19 @@ func (a *App) CloseLocalTerminal(tabID, terminalID string) error {
     a.stopLocalTerminal(tabID, terminalID)
     return nil
 }
+func (a *App) stopPendingLocalTerminal(tabID, terminalID string) {
+    a.mu.Lock()
+    if a.localTerminalPending[tabID] == terminalID {
+        delete(a.localTerminalPending, tabID)
+    }
+    a.mu.Unlock()
+}
+
 func (a *App) stopLocalTerminal(tabID, terminalID string) {
     a.mu.Lock()
+    if terminalID == "" || a.localTerminalPending[tabID] == terminalID {
+        delete(a.localTerminalPending, tabID)
+    }
     session := a.localTerminals[tabID]
     if session != nil && (terminalID == "" || session.id == terminalID) {
         delete(a.localTerminals, tabID)
@@ -108,6 +138,7 @@ func (a *App) closeAllLocalTerminals() {
     sessions := make([]*localTerminalSession, 0, len(a.localTerminals))
     for _, session := range a.localTerminals { sessions = append(sessions, session) }
     a.localTerminals = map[string]*localTerminalSession{}
+    a.localTerminalPending = map[string]string{}
     a.mu.Unlock()
     for _, session := range sessions { _ = session.pty.Close() }
 }
