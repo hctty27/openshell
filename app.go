@@ -78,6 +78,7 @@ type AppState struct {
 	SplitRatio             int                 `json:"splitRatio"`
 	FontSize              string              `json:"fontSize"`
 	Theme                 string              `json:"theme"`
+	TerminalTheme         string              `json:"terminalTheme"`
 	ActiveProfile         string              `json:"activeProfile"`
 	AutoCommandLimit      int                 `json:"autoCommandLimit"`
 	AutoAllowChanges      bool                `json:"autoAllowChanges"`
@@ -212,6 +213,15 @@ func (a *App) State() (AppState, error) {
 	if theme != "light" {
 		theme = "dark"
 	}
+	terminalTheme, e := a.store.GetPreference(a.ctx, "terminalTheme")
+	if e != nil {
+		return AppState{}, e
+	}
+	switch terminalTheme {
+	case "classic", "dark", "light":
+	default:
+		terminalTheme = "follow"
+	}
 	layout, e := a.store.GetPreference(a.ctx, "quickCommandLayout")
 	if e != nil {
 		return AppState{}, e
@@ -277,7 +287,7 @@ func (a *App) State() (AppState, error) {
 		SaveChatHistory: saveChat != "false", AutoSummarize: autoSummary != "false",
 		Language: language, AutoCommandLimit: limit, AutoAllowChanges: allow,
 		Sessions: sessions, Groups: groups, Profiles: profiles,
-		FontSize: font, Theme: theme, ActiveProfile: active,
+		FontSize: font, Theme: theme, TerminalTheme: terminalTheme, ActiveProfile: active,
 		QuickCommands: commands, QuickCommandLayout: layout,
 		AutoCopySelection: autoCopySelection == "true", RightClickPaste: rightClickPaste == "true",
 		ConfirmMultilinePaste: confirmMultilinePaste != "false",
@@ -362,6 +372,10 @@ func (a *App) SavePreference(key, value string) error {
 		}
 	case "theme":
 		if value != "dark" && value != "light" {
+			return apperror.New("unsupportedTheme", nil)
+		}
+	case "terminalTheme":
+		if value != "follow" && value != "classic" && value != "dark" && value != "light" {
 			return apperror.New("unsupportedTheme", nil)
 		}
 	case "quickCommandLayout":
