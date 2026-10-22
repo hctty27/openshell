@@ -82,5 +82,6 @@ export function ListConversations(arg1:domain.ConnectionRef,arg2:domain.Conversa
 export function ReadConversation(arg1:domain.ConnectionRef,arg2:string,arg3:number,arg4:number):Promise<domain.ConversationPage>;
 export function SelectConversation(arg1:domain.ConnectionRef,arg2:string):Promise<domain.ConversationPage>;
 export function CreateConversation(arg1:domain.ConnectionRef):Promise<domain.Conversation>;
+export function StartConversationDraft(arg1:domain.ConnectionRef):Promise<void>;
 export function RenameConversation(arg1:domain.ConnectionRef,arg2:string,arg3:string):Promise<domain.Conversation>;
 export function DeleteConversation(arg1:domain.ConnectionRef,arg2:string):Promise<void>;

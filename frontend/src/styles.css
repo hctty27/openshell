@@ -2888,3 +2888,125 @@ select.mode-select {
 .xshell-import-footer button { padding: 8px 13px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; color: var(--text-primary); background: var(--raised); }
 .xshell-import-footer button.primary { color: var(--on-accent); background: var(--accent-fill); border-color: transparent; }
 .xshell-import-footer button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Compact server-aligned AI conversation toolbar */
+.conversation-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--chrome-bar-height);
+  min-height: var(--chrome-bar-height);
+  flex-shrink: 0;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.conversation-picker .conversation-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  height: 25px;
+  padding: 0 7px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-size: 11px;
+  text-align: left;
+}
+.conversation-trigger > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conversation-trigger > svg:first-child { flex-shrink: 0; color: var(--text-muted); }
+.conversation-trigger > svg:last-child { flex-shrink: 0; color: var(--text-muted); }
+.conversation-trigger:hover, .conversation-trigger[aria-expanded="true"] {
+  background: var(--hover);
+  border-color: var(--border);
+}
+.conversation-picker .conversation-add {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  color: var(--text-secondary);
+  border-radius: 5px;
+}
+.conversation-add:hover { background: var(--hover); color: var(--text-primary); }
+.conversation-picker button:disabled { opacity: .45; cursor: default; }
+.conversation-menu {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 3px);
+  left: 10px;
+  right: 10px;
+  max-height: min(320px, 55vh);
+  overflow-y: auto;
+  padding: 5px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 10px 32px #0003;
+  scrollbar-width: thin;
+}
+.conversation-entry, .conversation-draft-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  position: relative;
+  border-radius: 5px;
+}
+.conversation-entry:hover, .conversation-entry.menu-open, .conversation-draft-row {
+  background: var(--hover);
+}
+.conversation-entry-title {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  text-align: left;
+  color: var(--text-primary);
+}
+.conversation-entry-title > svg:first-child { color: var(--text-muted); flex-shrink: 0; }
+.conversation-entry-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.conversation-entry-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.conversation-entry-text small { color: var(--text-muted); font-size: 10px; }
+.conversation-selected-icon { flex-shrink: 0; color: var(--accent); }
+.conversation-actions {
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+.conversation-entry:hover .conversation-actions,
+.conversation-entry:focus-within .conversation-actions,
+.conversation-entry.menu-open .conversation-actions { opacity: 1; pointer-events: auto; }
+.conversation-actions button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--text-muted);
+  border-radius: 4px;
+}
+.conversation-actions button:hover { background: var(--raised); color: var(--text-primary); }
+.conversation-actions button:last-child:hover { color: var(--danger); }
+.conversation-draft-row { height: 33px; gap: 8px; padding: 0 8px; color: var(--text-secondary); font-size: 11px; }
+.conversation-draft-row span { flex: 1; }
+.conversation-draft-row > svg:last-child { color: var(--accent); }
+.conversation-more { display: block; width: 100%; padding: 9px; text-align: center; color: var(--text-secondary); font-size: 11px; }
+.conversation-more:hover { background: var(--hover); }
+.conversation-status { flex-shrink: 0; min-height: 26px; padding: 4px 14px; font-size: 10px; color: var(--text-muted); }
+.conversation-status[role="alert"] { color: var(--danger); }

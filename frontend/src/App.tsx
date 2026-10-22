@@ -213,9 +213,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
     ? {
         ...rawActive,
         conversationID: activeConversationID,
-        messages: activeCache
-          ? toChatMessages(activeCache)
-          : rawActive.messages,
+        messages: activeConversationID === ""
+          ? []
+          : activeCache
+            ? toChatMessages(activeCache)
+            : rawActive.messages,
         memoryRun: activeCache?.run,
         memoryLoading:
           memory.loadingByTab[rawActive.id] ||
@@ -1234,22 +1236,34 @@ function Workspace({ initialState }: { initialState: AppState }) {
             tab={active}
             profiles={state.profiles}
             conversationItems={
-              activeCache?.conversation
-                ? memory.lists[activeCache.conversation.serverKey]?.items
-                : []
+              memory.lists[
+                activeCache?.conversation?.serverKey ??
+                  (active ? memory.serverKeysByTab[active.id] : "")
+              ]?.items ?? []
             }
             conversationHasMore={
-              !!(
-                activeCache?.conversation &&
-                memory.lists[activeCache.conversation.serverKey]?.nextCursor
-              )
+              !!memory.lists[
+                activeCache?.conversation?.serverKey ??
+                  (active ? memory.serverKeysByTab[active.id] : "")
+              ]?.nextCursor
             }
             onConversationSelect={(id) =>
               active?.ref && memory.select(active.ref, id).catch(notify)
             }
-            onConversationCreate={() =>
-              active?.ref && memory.create(active.ref).catch(notify)
-            }
+            onConversationCreate={async () => {
+              if (!active?.ref || !active.conversationID) return;
+              const ref = active.ref;
+              try {
+                await memory.draft(ref);
+                update(active.id, (t) =>
+                  t.ref?.generation === ref.generation
+                    ? { ...t, conversationID: "", messages: [], proposal: null }
+                    : t,
+                );
+              } catch (e) {
+                notify(e);
+              }
+            }}
             onConversationRename={async (id) => {
               if (!active?.ref) return;
               const ref = active.ref;
@@ -1257,7 +1271,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 title: message("ai:renameConversation"),
                 description: message("ai:renameConversationDescription"),
                 label: message("ai:conversationTitle"),
-                defaultValue: activeCache?.conversation?.title ?? "",
+                defaultValue:
+                  memory.lists[
+                    activeCache?.conversation?.serverKey ??
+                      (active ? memory.serverKeysByTab[active.id] : "")
+                  ]?.items.find((item) => item.id === id)?.title ?? "",
                 confirmLabel: message("common:saveChanges"),
               });
               if (title !== null)
@@ -1278,9 +1296,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
             }}
             onConversationMore={() =>
               active?.ref &&
-              activeCache?.conversation &&
+              (activeCache?.conversation?.serverKey ||
+                memory.serverKeysByTab[active.id]) &&
               memory
-                .list(active.ref, activeCache.conversation.serverKey, true)
+                .list(
+                  active.ref,
+                  activeCache?.conversation?.serverKey ??
+                    memory.serverKeysByTab[active.id],
+                  true,
+                )
                 .catch(notify)
             }
             onLoadEarlier={() =>

@@ -271,19 +271,18 @@ func (s *Store) DeleteAndSelectConversation(ctx context.Context, id string) (dom
 	}
 	next, err := scanConversation(tx.QueryRowContext(ctx, "SELECT "+conversationColumns+" FROM conversations WHERE server_key=? AND id<>? ORDER BY updated_at DESC,id DESC LIMIT 1", old.ServerKey, id))
 	if errors.Is(err, sql.ErrNoRows) {
-		now := time.Now().UTC().Format(time.RFC3339Nano)
-		next = domain.Conversation{ID: domain.NewID(), ServerKey: old.ServerKey, SessionID: old.SessionID, CreatedAt: now, UpdatedAt: now}
-		_, err = tx.ExecContext(ctx, "INSERT INTO conversations(id,server_key,session_id,created_at,updated_at) VALUES(?,?,?,?,?)", next.ID, next.ServerKey, next.SessionID, now, now)
-	}
-	if err != nil {
+		next = domain.Conversation{}
+	} else if err != nil {
 		return next, err
 	}
 	if err = deleteConversationTx(ctx, tx, id); err != nil {
 		return next, err
 	}
-	_, err = tx.ExecContext(ctx, "INSERT INTO conversation_selections VALUES(?,?) ON CONFLICT(server_key) DO UPDATE SET last_conversation_id=excluded.last_conversation_id", old.ServerKey, next.ID)
-	if err != nil {
-		return next, err
+	if next.ID != "" {
+		_, err = tx.ExecContext(ctx, "INSERT INTO conversation_selections VALUES(?,?) ON CONFLICT(server_key) DO UPDATE SET last_conversation_id=excluded.last_conversation_id", old.ServerKey, next.ID)
+		if err != nil {
+			return next, err
+		}
 	}
 	return next, tx.Commit()
 }

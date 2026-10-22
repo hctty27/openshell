@@ -113,7 +113,7 @@ export default function AISidebar(p: Props) {
           </button>
         </div>
       </header>
-      {p.tab?.conversationID && (
+      {p.tab?.ref && p.tab.status === "connected" && (
         <ConversationPicker
           items={p.conversationItems ?? []}
           selectedID={p.tab.conversationID}
@@ -127,11 +127,14 @@ export default function AISidebar(p: Props) {
           onLoadMore={() => p.onConversationMore?.()}
         />
       )}
-      {p.tab?.conversationID && (
+      {p.tab?.ref &&
+        (!!p.tab.memoryLoading ||
+          observer ||
+          p.tab.memoryStatus === "summarizing" ||
+          !!p.tab.memoryError) && (
         <div
           className="conversation-status"
-          role="status"
-          title={t("ai:contextBudgetHint")}
+          role={p.tab.memoryError ? "alert" : "status"}
         >
           {p.tab.memoryLoading ? (
             t("ai:historyLoading")
@@ -144,12 +147,6 @@ export default function AISidebar(p: Props) {
             </>
           ) : p.tab.memoryStatus === "summarizing" ? (
             t("ai:organizingHistory")
-          ) : p.tab.memoryStatus === "summary" ? (
-            t("ai:usingSummary")
-          ) : p.tab.memoryStatus === "recent" ? (
-            t("ai:usingRecent")
-          ) : p.tab.memoryStatus === "restored" ? (
-            t("ai:restoredHistory")
           ) : (
             ""
           )}

@@ -37,6 +37,7 @@ type Backend = {
   ReadConversation(ref: Ref, id: string, before: number, limit: number): Promise<ConversationPage>;
   SelectConversation(ref: Ref, id: string): Promise<ConversationPage>;
   CreateConversation(ref: Ref): Promise<Conversation>;
+  StartConversationDraft(ref: Ref): Promise<void>;
   RenameConversation(ref: Ref, id: string, title: string): Promise<Conversation>;
   DeleteConversation(ref: Ref, id: string): Promise<void>;
   ResumeAutomatic(

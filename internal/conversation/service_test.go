@@ -21,13 +21,22 @@ func fixture(t *testing.T) (*Service, *store.Store, context.Context, domain.Sess
 	session := domain.Session{ID: "server", Host: "Example.COM", Port: 22, Username: "root"}
 	return s, db, context.Background(), session, domain.ConnectionRef{TabID: "a", SessionID: "server", Generation: 1}, domain.ConnectionRef{TabID: "b", SessionID: "server", Generation: 2}
 }
+// Existing-history fixtures explicitly create their first saved conversation.
+func bindWithPersist(s *Service, ctx context.Context, ref domain.ConnectionRef, row domain.Session) (domain.Conversation, error) {
+	c, err := s.Bind(ctx, ref, row)
+	if err != nil || c.ID != "" {
+		return c, err
+	}
+	return s.Create(ctx, ref)
+}
+
 func TestTabsShareListsAndChooseIndependently(t *testing.T) {
 	s, _, ctx, row, a, b := fixture(t)
-	one, e := s.Bind(ctx, a, row)
+	one, e := bindWithPersist(s, ctx, a, row)
 	if e != nil {
 		t.Fatal(e)
 	}
-	two, e := s.Bind(ctx, b, row)
+	two, e := bindWithPersist(s, ctx, b, row)
 	if e != nil || one.ID != two.ID {
 		t.Fatal(one, two, e)
 	}
@@ -60,8 +69,8 @@ func TestTabsShareListsAndChooseIndependently(t *testing.T) {
 }
 func TestRunLeaseSerializesConversation(t *testing.T) {
 	s, _, ctx, row, a, b := fixture(t)
-	s.Bind(ctx, a, row)
-	s.Bind(ctx, b, row)
+	bindWithPersist(s, ctx, a, row)
+	bindWithPersist(s, ctx, b, row)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var winners []domain.ConversationRun
@@ -105,8 +114,8 @@ func TestRunLeaseSerializesConversation(t *testing.T) {
 }
 func TestSharedClearAndDeleteFallback(t *testing.T) {
 	s, _, ctx, row, a, b := fixture(t)
-	c, _ := s.Bind(ctx, a, row)
-	s.Bind(ctx, b, row)
+	c, _ := bindWithPersist(s, ctx, a, row)
+	bindWithPersist(s, ctx, b, row)
 	r, _ := s.Begin(a, "chat")
 	s.Append(ctx, r.ID, domain.ConversationMessage{ID: "u", Role: "user", Content: "old"})
 	s.End(r.ID)
@@ -144,8 +153,8 @@ func TestServerKeyUsesActualIdentity(t *testing.T) {
 }
 func TestEphemeralModeNeverWritesStoredHistory(t *testing.T) {
 	s, db, ctx, row, a, b := fixture(t)
-	original, _ := s.Bind(ctx, a, row)
-	s.Bind(ctx, b, row)
+	original, _ := bindWithPersist(s, ctx, a, row)
+	bindWithPersist(s, ctx, b, row)
 	if e := s.Configure(ctx, false); e != nil {
 		t.Fatal(e)
 	}
@@ -170,7 +179,7 @@ func TestEphemeralModeNeverWritesStoredHistory(t *testing.T) {
 }
 func TestStaleSummaryCannotResurrectClearedHistory(t *testing.T) {
 	s, _, ctx, row, a, _ := fixture(t)
-	c, _ := s.Bind(ctx, a, row)
+	c, _ := bindWithPersist(s, ctx, a, row)
 	r, _ := s.Begin(a, "chat")
 	s.End(r.ID)
 	if e := s.Clear(ctx, a); e != nil {
@@ -187,12 +196,102 @@ func TestStaleSummaryCannotResurrectClearedHistory(t *testing.T) {
 }
 func TestNewViewerSnapshotIncludesCurrentStream(t *testing.T) {
 	s, _, ctx, row, a, b := fixture(t)
-	c, _ := s.Bind(ctx, a, row)
+	c, _ := bindWithPersist(s, ctx, a, row)
 	run, _ := s.Begin(a, "chat")
 	s.EmitDelta(run.ID, "reply", "already streamed")
-	s.Bind(ctx, b, row)
+	bindWithPersist(s, ctx, b, row)
 	p, e := s.Read(ctx, b, c.ID, 0, 100)
 	if e != nil || len(p.Messages) != 1 || p.Messages[0].Content != "already streamed" {
 		t.Fatal(p, e)
+	}
+}
+
+func TestDraftDoesNotCreateEmptyConversation(t *testing.T) {
+	s, db, ctx, row, a, b := fixture(t)
+	first, err := s.Bind(ctx, a, row)
+	if err != nil || first.ID != "" {
+		t.Fatal("first connection should have no saved history", first, err)
+	}
+	other, err := s.Bind(ctx, b, row)
+	if err != nil || other.ID != "" {
+		t.Fatal("second connection should also start empty", other, err)
+	}
+	list, err := db.ListConversations(ctx, ServerKey(row), nil, 50)
+	if err != nil || len(list.Items) != 0 {
+		t.Fatal("connect created a row", list, err)
+	}
+	run, err := s.Begin(a, "chat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.End(run.ID)
+	list, err = db.ListConversations(ctx, ServerKey(row), nil, 50)
+	if err != nil || len(list.Items) != 0 {
+		t.Fatal("failed unsent request left a row", list, err)
+	}
+	run, err = s.Begin(a, "chat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Append(ctx, run.ID, domain.ConversationMessage{ID: "user-first", Role: "user", Content: "status"}); err != nil {
+		t.Fatal(err)
+	}
+	s.End(run.ID)
+	list, err = db.ListConversations(ctx, ServerKey(row), nil, 50)
+	if err != nil || len(list.Items) != 1 {
+		t.Fatal("first message not persisted", list, err)
+	}
+	original := list.Items[0].ID
+	if err = s.StartDraft(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.StartDraft(ctx, a); err != nil {
+		t.Fatal("repeated plus must be idempotent", err)
+	}
+	selected, _ := s.Selected(a)
+	if selected != "" {
+		t.Fatal("draft selected a stored conversation", selected)
+	}
+	list, _ = db.ListConversations(ctx, ServerKey(row), nil, 50)
+	if len(list.Items) != 1 {
+		t.Fatal("new blank draft created a row")
+	}
+	if _, err = s.Select(ctx, b, original); err != nil {
+		t.Fatal(err)
+	}
+	run, err = s.Begin(a, "chat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Append(ctx, run.ID, domain.ConversationMessage{ID: "user-second", Role: "user", Content: "status again"}); err != nil {
+		t.Fatal(err)
+	}
+	s.End(run.ID)
+	list, err = db.ListConversations(ctx, ServerKey(row), nil, 50)
+	if err != nil || len(list.Items) != 2 {
+		t.Fatal("second draft was not saved on send", list, err)
+	}
+	selectedB, _ := s.Selected(b)
+	if selectedB != original {
+		t.Fatal("draft changed peer's selection", selectedB, original)
+	}
+}
+
+func TestDeletingFinalConversationDoesNotInsertPlaceholder(t *testing.T) {
+	s, db, ctx, row, a, _ := fixture(t)
+	c, err := bindWithPersist(s, ctx, a, row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Delete(ctx, a, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	items, err := db.ListConversations(ctx, ServerKey(row), nil, 50)
+	if err != nil || len(items.Items) != 0 {
+		t.Fatal("deleting last history left a placeholder", items, err)
+	}
+	selected, err := s.Selected(a)
+	if err != nil || selected != "" {
+		t.Fatal("last conversation should fall back to draft", selected, err)
 	}
 }

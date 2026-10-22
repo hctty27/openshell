@@ -24,6 +24,9 @@ func (a *App) ListConversations(ref domain.ConnectionRef, cursor *domain.Convers
 func (a *App) CreateConversation(ref domain.ConnectionRef) (domain.Conversation, error) {
 	return a.memory.Create(a.ctx, ref)
 }
+func (a *App) StartConversationDraft(ref domain.ConnectionRef) error {
+	return a.memory.StartDraft(a.ctx, ref)
+}
 func (a *App) SelectConversation(ref domain.ConnectionRef, id string) (domain.ConversationPage, error) {
 	return a.memory.Select(a.ctx, ref, id)
 }
