@@ -743,8 +743,7 @@ kbd {
   color: var(--accent);
   background: var(--accent-soft);
 }
-.terminal-find button[aria-label$="高亮"],
-.terminal-find button[aria-label="Highlight logs"] {
+.terminal-find .terminal-log-preset {
   width: auto;
   padding-inline: 6px;
   font-size: 11px;
