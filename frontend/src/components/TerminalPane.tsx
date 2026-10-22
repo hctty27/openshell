@@ -105,17 +105,18 @@ export default function TerminalPane(p: Props) {
     const same = (r: Ref) =>
       r.tabId === ref.tabId && r.generation === ref.generation;
     const off = listen("ssh:output", (payload) => {
-      if (disposed || !same(payload.ref) || overloaded) return;
+      if (disposed || !same(payload.ref)) return;
       const bytes = Uint8Array.from(atob(payload.data), (c) => c.charCodeAt(0));
       pending += bytes.length;
       if (pending > 2 * 1024 * 1024) {
-        overloaded = true;
-        callbacks.current.onError(
-          message(
-            "terminal:terminalOutputExceededTheProcessingLimitDisconnectedLimit",
-          ),
-        );
-        api.Disconnect(ref);
+        // Discard overloaded render output, never the SSH transport.
+        pending -= bytes.length;
+        if (!overloaded) {
+          overloaded = true;
+          callbacks.current.onNotice(
+            message("terminal:terminalOutputExceededTheProcessingLimitDisconnectedLimit"),
+          );
+        }
         return;
       }
       term.write(bytes, () => {
