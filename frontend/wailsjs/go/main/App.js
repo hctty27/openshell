@@ -132,3 +132,7 @@ export function SFTPTransfers(arg1) {
 export function SFTPCancel(arg1) {
   return window['go']['main']['App']['SFTPCancel'](arg1);
 }
+
+export function SFTPChooseDirectory() {
+  return window['go']['main']['App']['SFTPChooseDirectory']();
+}

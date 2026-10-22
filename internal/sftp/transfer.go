@@ -9,7 +9,6 @@ import (
     "path"
     "path/filepath"
     "sort"
-    "sync"
     "time"
 
     "github.com/hctty27/openshell/internal/domain"
@@ -274,4 +273,16 @@ func copyContext(ctx context.Context,dst io.Writer,src io.Reader,progress func(i
         if err==io.EOF{return nil}
         if err!=nil{return err}
     }
+}
+
+func (m *Manager) CancelTab(tabID string) {
+    m.mu.Lock()
+    var cancels []context.CancelFunc
+    for _, j := range m.tasks {
+        if j.task.Ref.TabID == tabID && (j.task.Status == "queued" || j.task.Status == "running") {
+            cancels = append(cancels, j.cancel)
+        }
+    }
+    m.mu.Unlock()
+    for _, cancel := range cancels { cancel() }
 }

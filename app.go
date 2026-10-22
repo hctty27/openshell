@@ -11,6 +11,7 @@ import (
 	sshclient "github.com/hctty27/openshell/internal/ssh"
 	"github.com/hctty27/openshell/internal/store"
 	files "github.com/hctty27/openshell/internal/sftp"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/hctty27/openshell/internal/tasks"
 	"os"
 	"path/filepath"
@@ -469,6 +470,7 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 	if exists {
 		a.automatic.Invalidate(old)
 		a.coordinator.Invalidate(old)
+		a.sftp.CancelConnection(old)
 		a.CancelChat(tabID)
 		a.conversations.Clear(tabID)
 	}
@@ -535,6 +537,7 @@ func (a *App) ResizeTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	return a.ssh.Resize(ref, cols, rows)
 }
 func (a *App) Disconnect(ref domain.ConnectionRef) error {
+	a.sftp.CancelConnection(ref)
 	a.automatic.Invalidate(ref)
 	a.CancelChat(ref.TabID)
 	a.coordinator.Invalidate(ref)
@@ -555,6 +558,7 @@ func (a *App) CloseTab(tabID string) error {
 		}
 	}
 	a.mu.Unlock()
+	a.sftp.CancelTab(tabID)
 	a.ssh.CancelTab(tabID)
 	return nil
 }
@@ -792,4 +796,8 @@ func (a *App) SFTPTransfers(ref domain.ConnectionRef) []files.Task {
 }
 func (a *App) SFTPCancel(taskID string) error {
  return a.sftp.Cancel(taskID)
+}
+
+func (a *App) SFTPChooseDirectory() (string, error) {
+ return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title:"Select local folder"})
 }

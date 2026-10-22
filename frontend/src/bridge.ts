@@ -20,6 +20,7 @@ import type {
 } from "./types";
 type Backend = {
   SFTPHome(ref: Ref): Promise<SFTPPaths>;
+  SFTPChooseDirectory(): Promise<string>;
   SFTPList(ref: Ref, side: string, directory: string): Promise<SFTPEntry[]>;
   SFTPOperate(ref: Ref, side: string, operation: string, source: string, argument: string): Promise<void>;
   SFTPTransfer(ref: Ref, direction: string, source: string, destination: string): Promise<SFTPTask>;

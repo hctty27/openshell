@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type MouseEvent, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDownToLine, ArrowUpFromLine, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react";
 import { OnFileDrop, OnFileDropOff } from "../../wailsjs/runtime/runtime";
 import { api, listen, errorText } from "../bridge";
 import type { Ref, SFTPEntry, SFTPTask } from "../types";
@@ -32,7 +32,7 @@ const niceSize = (value: number) => {
 interface Props { refID: Ref; onNotice(error: unknown): void; }
 interface PanelProps {
   side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: string; showHidden: boolean;
-  onToggleHidden(): void; onDir(directory: string): void; onReload(): void; onSelect(item: SFTPEntry, multi: boolean): void;
+  onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void; onSelect(item: SFTPEntry, multi: boolean): void;
   onTransfer(): void; onOperate(operation: Operation, entry?: SFTPEntry): void;
   onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLDivElement>): void;
 }
@@ -48,6 +48,7 @@ function FilePanel(p: PanelProps) {
       <div className="sftp-panel-header">
         <strong><span className="sftp-panel-dot" />{t(remote ? "sftp:remote" : "sftp:local")}</strong>
         <div className="sftp-actions">
+          {p.onChooseDirectory && <button title={t("sftp:chooseFolder")} onClick={p.onChooseDirectory}><FolderOpen size={14}/></button>}
           <button title={t("sftp:newFolder")} onClick={() => p.onOperate("mkdir")}><FolderPlus size={14}/></button>
           <button title={t(p.showHidden ? "sftp:hideHidden" : "sftp:showHidden")} onClick={p.onToggleHidden}>{p.showHidden ? <EyeOff size={14}/> : <Eye size={14}/>}</button>
           <button title={t("sftp:refresh")} onClick={p.onReload}><RefreshCw size={14}/></button>
@@ -225,7 +226,7 @@ export default function SFTPView({refID,onNotice}:Props) {
     <div className="sftp-view">
       <div className="sftp-panes">
         <FilePanel side="local" directory={localDir} entries={localFiles} selected={selection.local} loading={localBusy} error={localError} showHidden={hidden}
-          onToggleHidden={()=>setHidden(s=>!s)} onDir={dir=>changeDir("local",dir)} onReload={()=>setVersion(v=>v+1)}
+          onToggleHidden={()=>setHidden(s=>!s)} onChooseDirectory={()=>void api.SFTPChooseDirectory().then(dir=>{if(dir)changeDir("local",dir);}).catch(onNotice)} onDir={dir=>changeDir("local",dir)} onReload={()=>setVersion(v=>v+1)}
           onSelect={(item,multi)=>choose("local",item,multi)} onTransfer={()=>void transfer("local",selection.local,remoteDir)}
           onOperate={(action,entry)=>void operate("local",action,entry)} onContext={(event,item)=>context(event,"local",item)}
           onFileDrop={event=>drop("local",event)}/>
