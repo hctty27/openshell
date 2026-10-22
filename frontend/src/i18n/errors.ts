@@ -59,8 +59,14 @@ export function errorText(value: unknown): string {
   const summary = known
     ? t(`errors:${payload.code}` as MessageKey, payload.params)
     : t("errors:unknown");
-  return payload.detail
-    ? `${summary}: ${payload.detail}`
+  const nested = payload.detail ? decodeAppError(payload.detail) : null;
+  const nestedKnown = nested && i18n.exists(nested.code, { ns: "errors" });
+  const detail = nestedKnown
+    ? t(`errors:${nested.code}` as MessageKey, nested.params) +
+      (nested.detail ? `: ${nested.detail}` : "")
+    : payload.detail;
+  return detail
+    ? `${summary}: ${detail}`
     : known
       ? summary
       : `${summary}: ${payload.code}`;
