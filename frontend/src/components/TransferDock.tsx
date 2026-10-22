@@ -32,9 +32,11 @@ export default function TransferDock({ refID, onNotice }: Props) {
     setZmodemEnded(false);
     seenZmodem.current = false;
     if (!refID) return;
-    void api.SFTPTransfers(refID).then(list => {
-      if (!disposed) setTasks(list ?? []);
-    }).catch(() => {});
+    if (typeof api.SFTPTransfers === "function") {
+      void api.SFTPTransfers(refID).then(list => {
+        if (!disposed) setTasks(list ?? []);
+      }).catch(() => {});
+    }
     const offTasks = listen("sftp:transfer", (task: SFTPTask) => {
       if (!sameRef(task.ref, refID)) return;
       setTasks(old => [...old.filter(item => item.id !== task.id), task].sort((a, b) => a.created - b.created));
