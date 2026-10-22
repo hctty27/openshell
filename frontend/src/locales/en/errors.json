@@ -125,5 +125,20 @@
   "commandMustBeNonemptyUpTo16384Bytes": "Command cannot be empty; up to 16384 bytes. Line breaks and Tab are allowed, other control characters are not.",
   "xshellPreviewTooLarge": "File is too large",
   "xshellPreviewUnsafePath": "Unsafe file path",
-  "xshellPreviewSizeLimit": "File size exceeds the limit"
+  "xshellPreviewSizeLimit": "File size exceeds the limit",
+  "sftpAiAIReturnedTrailingData": "AI returned trailing data",
+  "sftpAiAISuggestedAnUnsafeFilename": "AI suggested an unsafe filename",
+  "sftpAiSSHConnectionIsNoLongerActive": "SSH connection is no longer active",
+  "sftpAiConfigureAnAIProfileBeforeUsingSFTPAI": "configure an AI profile before using SFTP AI",
+  "sftpAiAIInstructionExceeds1000Characters": "AI instruction exceeds 1000 characters",
+  "sftpAiUnsupportedSFTPAIOperation": "unsupported SFTP AI operation",
+  "sftpAiSelectTheRequiredNumberOfFiles": "select the required number of files",
+  "sftpAiChooseTwoDifferentFiles": "choose two different files",
+  "sftpAiSelectAnAbsoluteRemoteDirectory": "select an absolute remote directory",
+  "sftpAiFileContainsValuesThatWouldBeRedactedUseTheManualEditorToAvoidCorruptingSecrets": "file contains values that would be redacted; use the manual editor to avoid corrupting secrets",
+  "sftpAiSSHConnectionChangedDuringAIAnalysis": "SSH connection changed during AI analysis",
+  "sftpAiAIOutputExceededTheSafetyLimit": "AI output exceeded the safety limit",
+  "sftpAiAIProposedTextIsTooLargeOrInvalidUTF8": "AI proposed text is too large or invalid UTF-8",
+  "sftpAiUnsafeUploadDestination": "unsafe upload destination",
+  "sftpAiInvalidProposal": "AI did not return a valid proposal"
 }
