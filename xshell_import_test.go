@@ -2,6 +2,8 @@ package main
 
 import (
 	"archive/zip"
+	"errors"
+	"github.com/hctty27/openshell/internal/apperror"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,5 +52,8 @@ func TestParseXshellArchiveFiltersUnsupported(t *testing.T) {
 func TestParseXshellMissingUsername(t *testing.T) {
 	data := strings.Replace(xshellFixture, "UserName=deploy", "", 1)
 	_, err := parseXshellSession("test.xsh", []byte(data))
-	if err == nil || !strings.Contains(err.Error(), "username") { t.Fatalf("unexpected error: %v", err) }
+	var coded *apperror.Error
+	if !errors.As(err, &coded) || coded.Code != "xshellImportMissingUsernameConfigureItInXshellFirst" {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
