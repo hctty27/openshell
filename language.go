@@ -12,10 +12,10 @@ func (a *App) language() (string, error) {
 }
 
 func (a *App) dialogTitle(english, chinese string) string {
- language, err := a.language()
- if err == nil && language == "zh-CN" {
-  return chinese
- }
- return english
+	language, err := a.language()
+	if err == nil && language == "zh-CN" {
+		return chinese
+	}
+	return english
 }
 
