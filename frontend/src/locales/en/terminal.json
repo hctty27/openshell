@@ -3,9 +3,8 @@
   "manageQuickCommands": "Manage quick commands",
   "commandButtons": "Command buttons",
   "noQuickCommandsClickManageToAddOne": "No quick commands. Click Manage to add one.",
-  "message": "{{category}} · {{command}}{{suffix}}",
+  "message": "{{category}} · {{command}}",
   "nameMustBe140Characters": "Name must be 1–40 characters",
-  "commandMustBeANonemptySingleLineUp": "Command must be a nonempty single line, up to 4096 characters",
   "categoryMustBeAtMost40Characters": "Category must be at most 40 characters",
   "selectATargetSessionOrFolder": "Select a target session or folder",
   "saveUpTo200Commands": "Save up to 200 commands",
@@ -36,10 +35,7 @@
   "selectAFolder": "Select a folder",
   "targetSession": "Target session",
   "selectASession": "Select a session",
-  "onClick": "On click",
-  "sendAndRun": "Send and run",
-  "insertWithoutRunning": "Insert without running",
-  "confirmBeforeEachRun": "Confirm before each run",
+  "confirmBeforeEachRun": "Confirm before sending",
   "commandsGoToTheActiveSshTerminalExit": "Commands go to the active SSH terminal. Exit interactive programs such as vim or top first. Enable confirmation for dangerous commands.",
   "saveCommand": "Save command",
   "terminalOutputExceededTheProcessingLimitDisconnectedLimit": "Terminal output exceeded the processing limit. Disconnected. Limit log output before reconnecting.",
@@ -48,7 +44,8 @@
   "targetTheClipboardContainsMultipleLinesPastingMay": "Target: {{name}}. The clipboard contains multiple lines. Pasting may run commands immediately.",
   "paste": "Paste",
   "terminal": "Terminal {{name}}",
-  "insertOnlySuffix": " (insert only)",
   "quickCommandsLabel": "QUICK COMMANDS",
-  "commandListTitle": "Commands ({{count}})"
+  "commandListTitle": "Commands ({{count}})",
+  "commandMustBeNonemptyUpTo16384Bytes": "Command cannot be empty; up to 16384 bytes. Line breaks and Tab are allowed, other control characters are not.",
+  "quickCommandNewlineHint": "A line break presses Enter. Without a trailing line break, the last line is inserted but not executed."
 }

@@ -1,13 +1,13 @@
 export namespace ai {
-	
+
 	export class Preview {
 	    text: string;
 	    truncated: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Preview(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.text = source["text"];
@@ -18,7 +18,7 @@ export namespace ai {
 }
 
 export namespace domain {
-	
+
 	export class APIProfile {
 	    id: string;
 	    name: string;
@@ -26,11 +26,11 @@ export namespace domain {
 	    model: string;
 	    secretRef: string;
 	    toolsEnabled: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new APIProfile(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -51,11 +51,11 @@ export namespace domain {
 	    durationMillis: number;
 	    truncated: boolean;
 	    reason: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CommandResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.reasonCode = source["reasonCode"];
@@ -73,11 +73,11 @@ export namespace domain {
 	    tabId: string;
 	    sessionId: string;
 	    generation: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ConnectionRef(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.tabId = source["tabId"];
@@ -85,14 +85,199 @@ export namespace domain {
 	        this.generation = source["generation"];
 	    }
 	}
+	export class Conversation {
+	    id: string;
+	    serverKey: string;
+	    sessionId: string;
+	    title: string;
+	    titleManual: boolean;
+	    summary: string;
+	    summaryThroughSeq: number;
+	    revision: number;
+	    createdAt: string;
+	    updatedAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Conversation(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.serverKey = source["serverKey"];
+	        this.sessionId = source["sessionId"];
+	        this.title = source["title"];
+	        this.titleManual = source["titleManual"];
+	        this.summary = source["summary"];
+	        this.summaryThroughSeq = source["summaryThroughSeq"];
+	        this.revision = source["revision"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class ConversationCursor {
+	    updatedAt: string;
+	    id: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ConversationCursor(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.updatedAt = source["updatedAt"];
+	        this.id = source["id"];
+	    }
+	}
+	export class ConversationList {
+	    items: Conversation[];
+	    nextCursor?: ConversationCursor;
+
+	    static createFrom(source: any = {}) {
+	        return new ConversationList(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], Conversation);
+	        this.nextCursor = this.convertValues(source["nextCursor"], ConversationCursor);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ConversationMessage {
+	    id: string;
+	    conversationId: string;
+	    seq: number;
+	    role: string;
+	    content: string;
+	    toolCalls?: number[];
+	    toolCallId?: string;
+	    display?: number[];
+	    status: string;
+	    createdAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ConversationMessage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.conversationId = source["conversationId"];
+	        this.seq = source["seq"];
+	        this.role = source["role"];
+	        this.content = source["content"];
+	        this.toolCalls = source["toolCalls"];
+	        this.toolCallId = source["toolCallId"];
+	        this.display = source["display"];
+	        this.status = source["status"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class ConversationRun {
+	    id: string;
+	    conversationId: string;
+	    kind: string;
+	    status: string;
+	    ownerRef: ConnectionRef;
+
+	    static createFrom(source: any = {}) {
+	        return new ConversationRun(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.conversationId = source["conversationId"];
+	        this.kind = source["kind"];
+	        this.status = source["status"];
+	        this.ownerRef = this.convertValues(source["ownerRef"], ConnectionRef);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ConversationPage {
+	    conversation: Conversation;
+	    messages: ConversationMessage[];
+	    beforeSeq: number;
+	    hasMore: boolean;
+	    run?: ConversationRun;
+	    eventSeq: number;
+
+	    static createFrom(source: any = {}) {
+	        return new ConversationPage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.conversation = this.convertValues(source["conversation"], Conversation);
+	        this.messages = this.convertValues(source["messages"], ConversationMessage);
+	        this.beforeSeq = source["beforeSeq"];
+	        this.hasMore = source["hasMore"];
+	        this.run = this.convertValues(source["run"], ConversationRun);
+	        this.eventSeq = source["eventSeq"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
 	export class Group {
 	    id: string;
 	    name: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Group(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -108,11 +293,11 @@ export namespace domain {
 	    timeoutSeconds: number;
 	    status: string;
 	    toolCallId: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Proposal(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -124,7 +309,7 @@ export namespace domain {
 	        this.status = source["status"];
 	        this.toolCallId = source["toolCallId"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -155,11 +340,11 @@ export namespace domain {
 	    credentialRef: string;
 	    createdAt: string;
 	    updatedAt: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Session(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -179,7 +364,7 @@ export namespace domain {
 }
 
 export namespace main {
-	
+
 	export class QuickCommand {
 	    id: string;
 	    name: string;
@@ -189,11 +374,11 @@ export namespace main {
 	    scopeId: string;
 	    mode: string;
 	    confirm: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new QuickCommand(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -207,6 +392,8 @@ export namespace main {
 	    }
 	}
 	export class AppState {
+	    saveChatHistory: boolean;
+	    autoSummarize: boolean;
 	    language: string;
 	    sessions: domain.Session[];
 	    groups: domain.Group[];
@@ -222,13 +409,15 @@ export namespace main {
 	    autoCommandLimit: number;
 	    autoAllowChanges: boolean;
 	    version: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AppState(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.saveChatHistory = source["saveChatHistory"];
+	        this.autoSummarize = source["autoSummarize"];
 	        this.language = source["language"];
 	        this.sessions = this.convertValues(source["sessions"], domain.Session);
 	        this.groups = this.convertValues(source["groups"], domain.Group);
@@ -245,7 +434,7 @@ export namespace main {
 	        this.autoAllowChanges = source["autoAllowChanges"];
 	        this.version = source["version"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -265,25 +454,27 @@ export namespace main {
 		}
 	}
 	export class ChatRequest {
+	    requestId: string;
 	    ref: domain.ConnectionRef;
 	    profileId: string;
 	    text: string;
 	    context: string;
 	    operate: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ChatRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.requestId = source["requestId"];
 	        this.ref = this.convertValues(source["ref"], domain.ConnectionRef);
 	        this.profileId = source["profileId"];
 	        this.text = source["text"];
 	        this.context = source["context"];
 	        this.operate = source["operate"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -305,17 +496,17 @@ export namespace main {
 	export class ChatResponse {
 	    text: string;
 	    proposal?: domain.Proposal;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ChatResponse(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.text = source["text"];
 	        this.proposal = this.convertValues(source["proposal"], domain.Proposal);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -339,11 +530,11 @@ export namespace main {
 	    address: string;
 	    fingerprint: string;
 	    changed: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new HostChallenge(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -353,21 +544,23 @@ export namespace main {
 	    }
 	}
 	export class ConnectResult {
+	    conversationId: string;
 	    ref: domain.ConnectionRef;
 	    challenge?: HostChallenge;
 	    home: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ConnectResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.conversationId = source["conversationId"];
 	        this.ref = this.convertValues(source["ref"], domain.ConnectionRef);
 	        this.challenge = this.convertValues(source["challenge"], HostChallenge);
 	        this.home = source["home"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -386,24 +579,24 @@ export namespace main {
 		    return a;
 		}
 	}
-	
-	
+
+
 	export class SaveAPIRequest {
 	    profile: domain.APIProfile;
 	    key: string;
 	    memoryOnly: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SaveAPIRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.profile = this.convertValues(source["profile"], domain.APIProfile);
 	        this.key = source["key"];
 	        this.memoryOnly = source["memoryOnly"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -426,18 +619,18 @@ export namespace main {
 	    session: domain.Session;
 	    secret: string;
 	    saveSecret: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SaveSessionRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.session = this.convertValues(source["session"], domain.Session);
 	        this.secret = source["secret"];
 	        this.saveSecret = source["saveSecret"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -460,7 +653,7 @@ export namespace main {
 }
 
 export namespace tasks {
-	
+
 	export class AutoSnapshot {
 	    reasonCode?: string;
 	    reasonParams?: Record<string, any>;
@@ -473,11 +666,11 @@ export namespace tasks {
 	    allowChanges: boolean;
 	    reason: string;
 	    proposal?: domain.Proposal;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AutoSnapshot(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.reasonCode = source["reasonCode"];
@@ -492,7 +685,7 @@ export namespace tasks {
 	        this.reason = source["reason"];
 	        this.proposal = this.convertValues(source["proposal"], domain.Proposal);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;

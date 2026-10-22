@@ -50,7 +50,7 @@
 
 AI 命令通过当前已认证的 SSH 连接直接在远程服务器执行，不需要再次运行 `ssh user@host`。
 
-快速命令与 AI 命令的执行方式不同：快速命令会写入当前交互式终端（PTY），因此使用当前 shell 的目录和环境变量。请确保终端处于 shell 提示符状态；若当前正在使用 vim/top、正在输入密码或运行其他交互式程序，快捷输入可能被该程序接收。
+快速命令与 AI 命令的执行方式不同：快速命令会写入当前交互式终端（PTY），因此使用当前 shell 的目录和环境变量。编辑快速命令时，换行相当于按下 Enter，末尾没有换行则最后一行只输入、不执行。旧版保存的「发送并执行」命令会自动保留执行效果。请确保终端处于 shell 提示符状态；若当前正在使用 vim/top、正在输入密码或运行其他交互式程序，快捷输入可能被该程序接收。
 
 每次使用独立 exec 通道，不继承手动终端里的 `cd`、临时环境变量、虚拟环境或 sudo 身份。执行前可检查并修改远程绝对工作目录；默认使用远程 HOME。
 
@@ -134,7 +134,31 @@ Windows 实测范围和操作步骤见 [验证记录](docs/windows-acceptance.md
 
 ## 当前边界
 
-- 暂无 SFTP、跳板机、SSH agent、云同步和会话导入；快速命令是本地保存的单行模板，不支持参数占位符。
+- 暂无 SFTP、跳板机、SSH agent、云同步和会话导入；快速命令是本地保存的模板，支持多行及末尾换行控制执行，不支持参数占位符。
 - 指纹变化时阻止连接；第一版不提供直接覆盖已信任指纹的按钮。
 - 已知小问题：近期终端历史已按上限裁剪时，预览可能遗漏截断提示；发送文本仍受 200 行/32 KiB 限制。
 - Windows 原生输入法、剪贴板、凭据存储与性能仍需实机验证；真实模型与自定义接口的工具调用支持情况需分别验证。
+
+### AI conversation memory
+
+Each saved server connection owns a shared list of conversations. SSH tabs can
+choose different conversations or view the same conversation with synchronized
+messages. Use the conversation selector to create, rename, delete or resume a
+conversation; duplicated SSH tabs resume the server's last selected conversation.
+
+History and summaries are stored locally and survive closing tabs or restarting
+OpenShell. Clearing or deleting a conversation affects every tab viewing it.
+Only the tab that starts a request can control its commands; reconnecting never
+resumes a pending command or automatic task.
+
+AI settings include **Save conversation history** and **Summarize long
+conversations**, both enabled by default. Turning saving off starts shared
+temporary conversations and leaves existing saved history intact. Turning it
+back on restores saved history without saving the temporary content. Stop active
+tasks before changing the storage mode.
+
+Long conversations use a summary plus recent complete turns. The default request
+budget is 48 KiB of serialized data, not an exact Token limit. Summarization uses
+the selected model and may consume additional credits; if it fails, OpenShell
+keeps the original history and uses bounded recent context. Server output is
+included only when explicitly attached or returned by an AI-executed command.

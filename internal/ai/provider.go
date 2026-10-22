@@ -69,11 +69,7 @@ func (p *Provider) Stream(ctx context.Context, profile domain.APIProfile, key st
 	if strings.TrimSpace(profile.Model) == "" {
 		return Reply{}, apperror.New("enterAModelName", nil)
 	}
-	request := map[string]any{"model": profile.Model, "messages": messages, "stream": true}
-	if profile.ToolsEnabled {
-		request["tools"] = []any{map[string]any{"type": "function", "function": map[string]any{"name": "propose_command", "description": "The app is already connected via SSH. Submit a raw POSIX shell command for the current remote server without ssh/scp/sftp/sshpass wrappers. Execution is controlled by the application permission mode.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"command": map[string]string{"type": "string", "description": "Raw shell command on the current remote server, without ssh login prefixes. For example: ps -eo pid,ppid,etime,args | grep '[j]ava'"}, "purpose": map[string]string{"type": "string"}, "cwd": map[string]string{"type": "string", "description": "Absolute remote working directory"}}, "required": []string{"command", "purpose", "cwd"}, "additionalProperties": false}}}}
-	}
-	body, e := json.Marshal(request)
+	body, e := encodeRequest(profile, messages)
 	if e != nil {
 		return Reply{}, e
 	}
@@ -104,4 +100,16 @@ func (p *Provider) Stream(ctx context.Context, profile domain.APIProfile, key st
 		return Reply{}, apperror.New("apiDidNotReturnAnSseStreamCheck", nil)
 	}
 	return parseSSE(response.Body, emit)
+}
+
+func encodeRequest(profile domain.APIProfile, messages []Message) ([]byte, error) {
+	request := map[string]any{"model": profile.Model, "messages": messages, "stream": true}
+	if profile.ToolsEnabled {
+		request["tools"] = []any{map[string]any{"type": "function", "function": map[string]any{"name": "propose_command", "description": "The app is already connected via SSH. Submit a raw POSIX shell command for the current remote server without ssh/scp/sftp/sshpass wrappers. Execution is controlled by the application permission mode.", "parameters": map[string]any{"type": "object", "properties": map[string]any{"command": map[string]string{"type": "string", "description": "Raw shell command on the current remote server, without ssh login prefixes. For example: ps -eo pid,ppid,etime,args | grep '[j]ava'"}, "purpose": map[string]string{"type": "string"}, "cwd": map[string]string{"type": "string", "description": "Absolute remote working directory"}}, "required": []string{"command", "purpose", "cwd"}, "additionalProperties": false}}}}
+	}
+	return json.Marshal(request)
+}
+func (p *Provider) RequestSize(profile domain.APIProfile, messages []Message) (int, error) {
+	body, e := encodeRequest(profile, messages)
+	return len(body), e
 }

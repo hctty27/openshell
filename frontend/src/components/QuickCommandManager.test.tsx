@@ -60,7 +60,32 @@ test("manager edits and saves existing commands", async () => {
   expect(save.mock.calls[0][0][0].command).toBe("df -Th");
 });
 
-test("manager prevents multiline command submission", async () => {
+test("manager accepts multiline commands, preserves trailing Enter and removes action selector", async () => {
+  const save = vi.fn(async (_commands: QuickCommand[]) => {});
+  render(
+    <DialogProvider>
+      <QuickCommandManager
+        commands={commands}
+        groups={[]}
+        sessions={[]}
+        onSave={save}
+        onClose={vi.fn()}
+      />
+    </DialogProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /磁盘/ }));
+  expect(screen.queryByLabelText("点击后的操作")).toBeNull();
+  expect(screen.getByText(/换行表示按下 Enter/)).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("命令内容"), {
+    target: { value: "ls\npwd\n" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "保存命令" }));
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  expect(save.mock.calls[0][0][0].command).toBe("ls\npwd\n");
+  expect(save.mock.calls[0][0][0].mode).toBeUndefined();
+});
+
+test("manager rejects control characters in command content", async () => {
   const save = vi.fn(async (_commands: QuickCommand[]) => {});
   render(
     <DialogProvider>
@@ -75,7 +100,7 @@ test("manager prevents multiline command submission", async () => {
   );
   fireEvent.click(screen.getByRole("button", { name: /磁盘/ }));
   fireEvent.change(screen.getByLabelText("命令内容"), {
-    target: { value: "ls\nrm -rf /" },
+    target: { value: "ls\u0000" },
   });
   fireEvent.click(screen.getByRole("button", { name: "保存命令" }));
   expect(await screen.findByRole("alert")).toBeTruthy();

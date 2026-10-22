@@ -13,7 +13,6 @@
   "saveUpTo200QuickCommands": "Save up to 200 quick commands",
   "invalidOrDuplicateQuickCommandId": "Invalid or duplicate quick command ID",
   "commandNameMustBe140Characters": "Command name must be 1–40 characters",
-  "commandMustBeASingleLineOf1": "Command must be a single line of 1–4096 bytes without control characters",
   "commandCategoryIsTooLong": "Command category is too long",
   "invalidCommandAction": "Invalid command action",
   "invalidCommandScope": "Invalid command scope",
@@ -113,5 +112,15 @@
   "sessionCleanup": "Session saved, but old credential cleanup failed",
   "fingerprintChanged": "Server fingerprint changed. Connection blocked.",
   "fingerprintFirst": "First connection. Verify the server fingerprint.",
-  "taskStarting": "Starting automatic task"
+  "taskStarting": "Starting automatic task",
+  "memoryBusy": "This conversation or tab is busy. Stop the running task first.",
+  "memoryConnectionChanged": "The connection changed. Reconnect and reload the conversation.",
+  "memoryWrongServer": "This conversation belongs to another server.",
+  "memoryNoRun": "This task has ended. Start a new request.",
+  "memoryNotOwner": "Control this task from the tab where it was started.",
+  "memoryContextTooLarge": "The current message or tool chain is too large. Shorten the message or attachment.",
+  "memoryInvalidRequest": "Invalid conversation request.",
+  "memoryDuplicateRequest": "This message was already saved. Start a new message to retry.",
+  "historicalResultUnknown": "The execution result was not saved. This command will not be retried automatically.",
+  "commandMustBeNonemptyUpTo16384Bytes": "Command cannot be empty; up to 16384 bytes. Line breaks and Tab are allowed, other control characters are not."
 }

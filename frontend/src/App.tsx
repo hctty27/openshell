@@ -47,11 +47,13 @@ import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
 import SFTPView from "./components/SFTPView";
 import AISidebar from "./components/AISidebar";
+import { useConversations } from "./useConversations";
+import { toChatMessages } from "./conversations";
 import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
 import { quickCommandTerminalInput } from "./quickCommands";
 import { DialogProvider, useDialogs } from "./components/DialogProvider";
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.27";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.28";
 const initial: AppState = {
   sessions: [],
   groups: [],
@@ -196,8 +198,30 @@ function Workspace({ initialState }: { initialState: AppState }) {
   }, [notice]);
   const activeIDRef = useRef(activeID);
   activeIDRef.current = activeID;
-  const active = tabs.find((t) => t.id === activeID);
-  const showSFTP = Boolean(active?.ref && fileViews[activeID]);
+  const memory = useConversations();
+  const rawActive = tabs.find((t) => t.id === activeID);
+  const activeConversationID = rawActive
+    ? (memory.selectedByTab[rawActive.id] ?? rawActive.conversationID)
+    : undefined;
+  const activeCache = activeConversationID
+    ? memory.cache[activeConversationID]
+    : undefined;
+  const active: Tab | undefined = rawActive
+    ? {
+        ...rawActive,
+        conversationID: activeConversationID,
+        messages: activeCache
+          ? toChatMessages(activeCache)
+          : rawActive.messages,
+        memoryRun: activeCache?.run,
+        memoryLoading:
+          memory.loadingByTab[rawActive.id] ||
+          !!(activeConversationID && !activeCache?.loaded),
+        memoryError: memory.errors[rawActive.id],
+        memoryStatus: activeCache?.status,
+        hasEarlier: activeCache?.hasMore,
+      }
+    : undefined;
   const update = (tabID: string, fn: (tab: Tab) => Tab) =>
     setTabs((old) => old.map((t) => (t.id === tabID ? fn(t) : t)));
   const notify = (error: unknown) => setToast(error);
@@ -229,6 +253,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
   useEffect(() => {
+    const memoryFailure = listen(
+      "conversation:error",
+      (event: { error: unknown }) => notify(event.error),
+    );
     const off = listen("ssh:disconnected", (ref: Ref) =>
       update(ref.tabId, (t) =>
         t.ref?.generation === ref.generation
@@ -320,6 +348,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           );
           delete streamIDs.current[s.ref.tabId];
         }
+        if (t.conversationID) next.messages = t.messages;
         return next;
       });
     });
@@ -341,6 +370,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     });
     return () => {
       off();
+      memoryFailure();
       end();
       delta();
       autoEvent();
@@ -434,11 +464,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
       update(tab.id, (t) => ({
         ...t,
         ref: result.ref,
+        conversationID: result.conversationId,
         status: "connected",
         home: result.home,
         cwd: result.home,
         error: "",
       }));
+      if (result.conversationId)
+        await memory.restore(result.ref, result.conversationId);
     } catch (e) {
       update(tab.id, (t) => ({ ...t, status: "error", error: e }));
       notify(e);
@@ -500,6 +533,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     }
     try {
       await api.CloseTab(tab.id);
+      memory.forget(tab.id);
       setTabs((old) => old.filter((t) => t.id !== tab.id));
       if (activeID === tab.id) {
         const rest = tabsRef.current.filter((t) => t.id !== tab.id);
@@ -544,7 +578,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
     }
   };
   const saveSession = async (req: SessionRequest) => {
-    const previous = state.sessions.find((session) => session.id === req.session.id);
+    const previous = state.sessions.find(
+      (session) => session.id === req.session.id,
+    );
     try {
       const saved = await api.SaveSession(req);
       setTabs((current) =>
@@ -552,15 +588,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
           tab.session.id === saved.id ? { ...tab, session: saved } : tab,
         ),
       );
-      const connectionChanged = previous && (
-        previous.host !== saved.host ||
-        previous.port !== saved.port ||
-        previous.username !== saved.username ||
-        previous.authType !== saved.authType ||
-        previous.privateKeyPath !== saved.privateKeyPath ||
-        req.secret !== "" ||
-        (previous.credentialRef !== "" && !req.saveSecret)
-      );
+      const connectionChanged =
+        previous &&
+        (previous.host !== saved.host ||
+          previous.port !== saved.port ||
+          previous.username !== saved.username ||
+          previous.authType !== saved.authType ||
+          previous.privateKeyPath !== saved.privateKeyPath ||
+          req.secret !== "" ||
+          (previous.credentialRef !== "" && !req.saveSecret));
       const connected = tabsRef.current.some(
         (tab) =>
           tab.session.id === saved.id &&
@@ -624,6 +660,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     operate: boolean,
     context = "",
   ): ChatRequest => ({
+    requestId: id(),
     ref: tab.ref!,
     profileId: profileID,
     text: tab.cwd
@@ -646,11 +683,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
       ...t,
       chatBusy: true,
       autoRun: continuation ? t.autoRun : undefined,
-      messages: [
-        ...t.messages,
-        ...(continuation ? [] : [{ id: id(), role: "user" as const, text }]),
-        { id: messageID, role: "assistant", text: "" },
-      ],
+      messages: t.conversationID
+        ? t.messages
+        : [
+            ...t.messages,
+            ...(continuation
+              ? []
+              : [{ id: id(), role: "user" as const, text }]),
+            { id: messageID, role: "assistant", text: "" },
+          ],
       error: "",
     }));
     setAttachments((old) => ({ ...old, [tab.id]: "" }));
@@ -711,13 +752,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
         reason: "",
         reasonCode: "taskStarting",
       },
-      messages: [...t.messages, { id: id(), role: "user", text }],
+      messages: t.conversationID
+        ? t.messages
+        : [...t.messages, { id: id(), role: "user", text }],
     }));
     setAttachments((old) => ({ ...old, [tab.id]: "" }));
     try {
       await api.StartAutomatic(requestFor(tab, text, true, context), taskID);
     } catch (e) {
-      await api.StopAutomatic(taskID).catch(notify);
+      await api.StopAutomatic(tab.ref!, taskID).catch(notify);
       update(tab.id, (t) =>
         t.autoRun?.id === taskID
           ? {
@@ -741,6 +784,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     if (!active?.autoRun) return;
     try {
       await api.ResumeAutomatic(
+        active.ref!,
         active.autoRun.id,
         extend ? "" : (active.proposal?.id ?? ""),
         extend,
@@ -762,15 +806,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
       p = active.proposal;
     update(tab.id, (t) => ({ ...t, executing: true }));
     try {
-      const result = await api.ConfirmCommand(p.id);
+      const result = await api.ConfirmCommand(tab.ref!, p.id);
       update(tab.id, (t) => ({
         ...t,
         executing: false,
         proposal: null,
-        messages: [
-          ...t.messages,
-          { id: id(), role: "result", text: "", result },
-        ],
+        messages: t.conversationID
+          ? t.messages
+          : [...t.messages, { id: id(), role: "result", text: "", result }],
       }));
       if (
         result.status !== "unknown" &&
@@ -790,24 +833,26 @@ function Workspace({ initialState }: { initialState: AppState }) {
         active.autoRun.status,
       )
     ) {
-      await api.StopAutomatic(active.autoRun.id).catch(notify);
+      await api.StopAutomatic(active.ref!, active.autoRun.id).catch(notify);
       return;
     }
     if (!active?.proposal) return;
     try {
-      await api.CancelCommand(active.proposal.id);
+      await api.CancelCommand(active.ref!, active.proposal.id);
       if (!active.executing)
         update(active.id, (t) => ({
           ...t,
           proposal: null,
-          messages: [
-            ...t.messages,
-            {
-              id: id(),
-              role: "result",
-              text: tr("common:commandRejectedNothingWasRun"),
-            },
-          ],
+          messages: t.conversationID
+            ? t.messages
+            : [
+                ...t.messages,
+                {
+                  id: id(),
+                  role: "result",
+                  text: tr("common:commandRejectedNothingWasRun"),
+                },
+              ],
         }));
     } catch (e) {
       notify(e);
@@ -821,12 +866,22 @@ function Workspace({ initialState }: { initialState: AppState }) {
         active.autoRun.status,
       )
     )
-      api.StopAutomatic(active.autoRun.id).catch(notify);
+      api.StopAutomatic(active.ref!, active.autoRun.id).catch(notify);
     else if (active.executing) cancelCommand();
-    else api.CancelChat(active.id).catch(notify);
+    else api.CancelChat(active.ref!).catch(notify);
   };
   const clear = async () => {
     if (!active) return;
+    if (
+      active.conversationID &&
+      !(await dialogs.confirm({
+        title: message("ai:clearChat"),
+        description: message("ai:sharedClearDescription"),
+        tone: "danger",
+        confirmLabel: message("ai:clearChat"),
+      }))
+    )
+      return;
     try {
       await api.ClearChat(active.id);
       update(active.id, (t) => ({ ...t, messages: [], proposal: null }));
@@ -1147,6 +1202,69 @@ function Workspace({ initialState }: { initialState: AppState }) {
           <AISidebar
             tab={active}
             profiles={state.profiles}
+            conversationItems={
+              activeCache?.conversation
+                ? memory.lists[activeCache.conversation.serverKey]?.items
+                : []
+            }
+            conversationHasMore={
+              !!(
+                activeCache?.conversation &&
+                memory.lists[activeCache.conversation.serverKey]?.nextCursor
+              )
+            }
+            onConversationSelect={(id) =>
+              active?.ref && memory.select(active.ref, id).catch(notify)
+            }
+            onConversationCreate={() =>
+              active?.ref && memory.create(active.ref).catch(notify)
+            }
+            onConversationRename={async (id) => {
+              if (!active?.ref) return;
+              const ref = active.ref;
+              const title = await dialogs.input({
+                title: message("ai:renameConversation"),
+                description: message("ai:renameConversationDescription"),
+                label: message("ai:conversationTitle"),
+                defaultValue: activeCache?.conversation?.title ?? "",
+                confirmLabel: message("common:saveChanges"),
+              });
+              if (title !== null)
+                await memory.rename(ref, id, title).catch(notify);
+            }}
+            onConversationDelete={async (id) => {
+              if (!active?.ref) return;
+              const ref = active.ref;
+              if (
+                await dialogs.confirm({
+                  title: message("ai:deleteConversation"),
+                  description: message("ai:deleteConversationDescription"),
+                  tone: "danger",
+                  confirmLabel: message("ai:deleteConversation"),
+                })
+              )
+                await memory.remove(ref, id).catch(notify);
+            }}
+            onConversationMore={() =>
+              active?.ref &&
+              activeCache?.conversation &&
+              memory
+                .list(active.ref, activeCache.conversation.serverKey, true)
+                .catch(notify)
+            }
+            onLoadEarlier={() =>
+              active?.ref &&
+              active.conversationID &&
+              memory
+                .loadEarlier(active.ref, active.conversationID)
+                .catch(notify)
+            }
+            onRetryHistory={() =>
+              active?.ref &&
+              active.conversationID &&
+              memory.restore(active.ref, active.conversationID).catch(notify)
+            }
+            onFocusOwner={setActiveID}
             profileID={profileID}
             onProfile={(value) => {
               setProfileID(value);
@@ -1169,6 +1287,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
               if (!active?.proposal) return;
               try {
                 const p = await api.ReviseProposal(
+                  active.ref!,
                   active.proposal.id,
                   command,
                   cwd,
@@ -1220,6 +1339,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
           groups={state.groups}
           profiles={state.profiles}
           autoCommandLimit={state.autoCommandLimit}
+          saveChatHistory={state.saveChatHistory}
+          autoSummarize={state.autoSummarize}
           autoAllowChanges={state.autoAllowChanges}
           language={language}
           languageSaving={languageSaving}
@@ -1394,7 +1515,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
         <div className="toast toast--success" role="status">
           <Check size={16} />
           <span>{notice}</span>
-          <button title={tr("common:dismissNotification")} onClick={() => setNotice("")}>
+          <button
+            title={tr("common:dismissNotification")}
+            onClick={() => setNotice("")}
+          >
             <X size={14} />
           </button>
         </div>

@@ -23,7 +23,6 @@ const empty = (): QuickCommand => ({
   category: "",
   scope: "global",
   scopeId: "",
-  mode: "run",
   confirm: false,
 });
 
@@ -67,16 +66,17 @@ export default function QuickCommandManager(p: Props) {
       name: draft.name.trim(),
       category: draft.category.trim() || t("common:general"),
     };
+    delete item.mode;
     if (!item.name || Array.from(item.name).length > 40) {
       setError(message("terminal:nameMustBe140Characters"));
       return;
     }
     if (
-      !item.command ||
-      item.command.length > 4096 ||
-      /[\r\n\x00]/.test(item.command)
+      !item.command.trim() ||
+      new TextEncoder().encode(item.command).length > 16 * 1024 ||
+      /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(item.command)
     ) {
-      setError(message("terminal:commandMustBeANonemptySingleLineUp"));
+      setError(message("terminal:commandMustBeNonemptyUpTo16384Bytes"));
       return;
     }
     if (Array.from(item.category).length > 40) {
@@ -236,6 +236,7 @@ export default function QuickCommandManager(p: Props) {
               {t("terminal:command")}
               <textarea
                 rows={3}
+                maxLength={16384}
                 value={draft.command}
                 onChange={(e) =>
                   setDraft({ ...draft, command: e.target.value })
@@ -243,6 +244,9 @@ export default function QuickCommandManager(p: Props) {
                 placeholder={t("terminal:eGFreeH")}
               />
             </label>
+            <p className="muted small">
+              {t("terminal:quickCommandNewlineHint")}
+            </p>
             <div className="quick-manager-fields">
               <label>
                 {t("terminal:category")}
@@ -314,23 +318,6 @@ export default function QuickCommandManager(p: Props) {
                 </select>
               </label>
             )}
-            <label>
-              {t("terminal:onClick")}
-              <select
-                value={draft.mode}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    mode: e.target.value as QuickCommand["mode"],
-                  })
-                }
-              >
-                <option value="run">{t("terminal:sendAndRun")}</option>
-                <option value="insert">
-                  {t("terminal:insertWithoutRunning")}
-                </option>
-              </select>
-            </label>
             <label className="checkbox">
               <input
                 type="checkbox"

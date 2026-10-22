@@ -71,8 +71,6 @@ export default function QuickCommandBar({
             title={t("terminal:message", {
               category: command.category || t("common:general"),
               command: command.command,
-              suffix:
-                command.mode === "insert" ? t("terminal:insertOnlySuffix") : "",
             })}
             disabled={tab?.status !== "connected" || !tab?.ref}
             onClick={() => onRun(command)}
