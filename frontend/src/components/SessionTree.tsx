@@ -13,6 +13,7 @@ import {
   Folder,
   Server,
   Pencil,
+  Copy,
   Trash2,
   Plug,
   ChevronDown,
@@ -30,6 +31,7 @@ interface Props {
   active: string;
   onOpen(s: Session): void;
   onEdit(s?: Session): void;
+  onDuplicate(s: Session): Promise<Session | undefined>;
   onCreateInGroup(groupId: string): void;
   onDelete(s: Session): void;
   onGroup(): void;
@@ -231,6 +233,22 @@ export default function SessionTree(p: Props) {
                 label: t("common:editSession"),
                 icon: Pencil,
                 onSelect: () => p.onEdit(targetSession),
+              },
+              {
+                label: t("common:duplicateSession"),
+                icon: Copy,
+                onSelect: () => {
+                  void p.onDuplicate(targetSession).then((duplicated) => {
+                    if (!duplicated) return;
+                    setQuery("");
+                    setRootCollapsed(false);
+                    setCollapsed((previous) => ({
+                      ...previous,
+                      [duplicated.groupId]: false,
+                    }));
+                    setSelected({ kind: "session", id: duplicated.id });
+                  });
+                },
               },
               {
                 label: t("common:deleteSession"),
