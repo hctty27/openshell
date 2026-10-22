@@ -2978,9 +2978,9 @@ select.mode-select {
   color: var(--text-primary);
 }
 .conversation-entry-title > svg:first-child { color: var(--text-muted); flex-shrink: 0; }
-.conversation-entry-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
-.conversation-entry-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-.conversation-entry-text small { color: var(--text-muted); font-size: 10px; }
+.conversation-entry-text { display: flex; flex: 1; align-items: center; gap: 7px; min-width: 0; white-space: nowrap; }
+.conversation-entry-text > span { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.conversation-entry-text small { flex: 0 0 auto; color: var(--text-muted); font-size: 10px; white-space: nowrap; }
 .conversation-selected-icon { flex-shrink: 0; color: var(--accent); }
 .conversation-actions {
   display: flex;
