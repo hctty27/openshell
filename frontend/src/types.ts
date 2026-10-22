@@ -78,7 +78,9 @@ export interface Tab {
   id: string;
   session: Session;
   ref: Ref | null;
-  status: "connecting" | "connected" | "disconnected" | "error";
+  status: "connecting" | "connected" | "reconnecting" | "disconnected" | "error";
+  manualDisconnected?: boolean;
+  retryCount?: number;
   home: string;
   cwd: string;
   cwdReported?: boolean;
@@ -143,6 +145,11 @@ export interface AppState {
   middleClickPaste?: boolean;
   logHighlights?: boolean;
   splitRatio?: number;
+  keepAliveSeconds?: number;
+  autoReconnect?: boolean;
+  maxReconnectAttempts?: number;
+  showDisconnectReason?: boolean;
+  confirmActiveDisconnect?: boolean;
   sessions: Session[];
   groups: Group[];
   profiles: APIProfile[];
