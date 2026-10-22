@@ -81,6 +81,7 @@ export interface Tab {
   ref: Ref | null;
   status: "connecting" | "connected" | "reconnecting" | "disconnected" | "error";
   manualDisconnected?: boolean;
+  everConnected?: boolean;
   retryCount?: number;
   home: string;
   cwd: string;
@@ -94,6 +95,8 @@ export interface Tab {
 }
 export type Theme = "dark" | "light";
 export type TerminalTheme = "follow" | "classic" | "dark" | "light";
+export type DisconnectBehavior = "local" | "retain" | "close";
+export type LocalShell = "powershell" | "pwsh" | "cmd" | "wsl";
 export type QuickCommandLayout = "single" | "multi";
 export interface QuickCommand {
   id: string;
@@ -151,6 +154,9 @@ export interface AppState {
   autoReconnect?: boolean;
   maxReconnectAttempts?: number;
   showDisconnectReason?: boolean;
+  disconnectBehavior?: DisconnectBehavior;
+  localShell?: LocalShell;
+  preserveTerminalHistory?: boolean;
   confirmActiveDisconnect?: boolean;
   sessions: Session[];
   groups: Group[];
