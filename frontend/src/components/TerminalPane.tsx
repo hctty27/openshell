@@ -1,12 +1,16 @@
 import { useTranslation } from "react-i18next";
 import { message, type DisplayText } from "../i18n/message";
 import { t } from "../i18n";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { api, listen, errorText } from "../bridge";
 import {
+  BrowserOpenURL,
   ClipboardGetText,
   ClipboardSetText,
 } from "../../wailsjs/runtime/runtime";
@@ -34,6 +38,10 @@ export default function TerminalPane(p: Props) {
   const container = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const fit = useRef<FitAddon | null>(null);
+  const searchAddon = useRef<SearchAddon | null>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
   const callbacks = useRef(p);
   callbacks.current = p;
   useEffect(() => {
@@ -55,9 +63,24 @@ export default function TerminalPane(p: Props) {
     });
     const addon = new FitAddon();
     term.loadAddon(addon);
+    const search = new SearchAddon();
+    term.loadAddon(search);
+    searchAddon.current = search;
+    term.loadAddon(new WebLinksAddon((_event, url) => {
+      if (/^https?:\/\//i.test(url)) BrowserOpenURL(url);
+    }));
     terminal.current = term;
     fit.current = addon;
     term.open(container.current);
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      term.loadAddon(webgl);
+    } catch {
+      // Keep the default renderer when WebGL is unavailable.
+    }
+    let opened = false;
+    let lastSize = "";
     const same = (r: Ref) =>
       r.tabId === ref.tabId && r.generation === ref.generation;
     const off = listen("ssh:output", (payload) => {
@@ -78,22 +101,58 @@ export default function TerminalPane(p: Props) {
         pending -= bytes.length;
       });
     });
+    const encoder = new TextEncoder();
+    const inputQueue: string[] = [];
+    let inputFlushing = false;
+    let inputScheduled = false;
+    const flushInput = async () => {
+      if (inputFlushing || disposed) return;
+      inputFlushing = true;
+      try {
+        while (inputQueue.length && !disposed) {
+          const bytes = encoder.encode(inputQueue.splice(0).join(""));
+          for (let offset = 0; offset < bytes.length && !disposed; offset += 64 * 1024) {
+            const chunk = bytes.subarray(offset, offset + 64 * 1024);
+            let binary = "";
+            for (let i = 0; i < chunk.length; i += 8192) {
+              binary += String.fromCharCode(...chunk.subarray(i, i + 8192));
+            }
+            await api.WriteTerminal(ref, btoa(binary));
+          }
+        }
+      } catch (error) {
+        inputQueue.length = 0;
+        if (!disposed) callbacks.current.onError(error);
+      } finally {
+        inputFlushing = false;
+        if (inputQueue.length && !disposed) scheduleInput();
+      }
+    };
+    const scheduleInput = () => {
+      if (inputScheduled) return;
+      inputScheduled = true;
+      queueMicrotask(() => {
+        inputScheduled = false;
+        void flushInput();
+      });
+    };
     const input = term.onData((data) => {
-      const bytes = new TextEncoder().encode(data);
-      let encoded = "";
-      for (const b of bytes) encoded += String.fromCharCode(b);
-      api
-        .WriteTerminal(ref, btoa(encoded))
-        .catch((e) => callbacks.current.onError(e));
+      inputQueue.push(data);
+      scheduleInput();
     });
-    const resizeSubscription = term.onResize(({ cols, rows }) =>
-      api.ResizeTerminal(ref, cols, rows).catch(() => {}),
-    );
+    const sendResize = () => {
+      if (!opened || disposed) return;
+      const size = `${term.cols}x${term.rows}`;
+      if (size === lastSize) return;
+      lastSize = size;
+      void api.ResizeTerminal(ref, term.cols, term.rows).catch(() => {});
+    };
+    const resizeSubscription = term.onResize(sendResize);
     const selection = term.onSelectionChange(() =>
       callbacks.current.onSelection(term.getSelection()),
     );
     let selectingWithMouse = false;
-    const paneElement = container.current;
+    const paneElement = container.current.parentElement ?? container.current;
     const onMouseDown = (event: MouseEvent) => {
       selectingWithMouse =
         event.button === 0 &&
@@ -122,55 +181,70 @@ export default function TerminalPane(p: Props) {
           .catch((error) => callbacks.current.onNotice(error));
       }, 0);
     };
+    const pasteFromClipboard = async () => {
+      if (pastePending || disposed || !callbacks.current.active) return;
+      pastePending = true;
+      try {
+        const text = await ClipboardGetText();
+        if (disposed || !callbacks.current.active || !text) return;
+        if (callbacks.current.confirmMultilinePaste && /[\r\n]/.test(text)) {
+          const accepted = await dialogsRef.current.confirm({
+            title: message("terminal:confirmMultilinePaste"),
+            description: message(
+              "terminal:targetTheClipboardContainsMultipleLinesPastingMay",
+              { name: callbacks.current.tab.session.name },
+            ),
+            preview: text,
+            tone: "warning",
+            confirmLabel: message("terminal:paste"),
+          });
+          if (!accepted) return;
+        }
+        const currentRef = callbacks.current.tab.ref;
+        if (
+          disposed ||
+          !callbacks.current.active ||
+          currentRef?.tabId !== ref.tabId ||
+          currentRef?.sessionId !== ref.sessionId ||
+          currentRef?.generation !== ref.generation
+        ) return;
+        term.focus();
+        term.paste(text);
+      } catch (error) {
+        if (!disposed) callbacks.current.onNotice(error);
+      } finally {
+        pastePending = false;
+      }
+    };
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== "keydown" || !callbacks.current.active) return true;
+      if (!event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey) return true;
+      switch (event.key.toLowerCase()) {
+        case "f":
+          event.preventDefault();
+          setSearchOpen(true);
+          return false;
+        case "c": {
+          const selected = term.getSelection();
+          if (!selected) return true;
+          event.preventDefault();
+          void ClipboardSetText(selected).catch((error) => callbacks.current.onNotice(error));
+          return false;
+        }
+        case "v":
+          event.preventDefault();
+          void pasteFromClipboard();
+          return false;
+        default:
+          return true;
+      }
+    });
     const onContextMenu = (event: MouseEvent) => {
-      if (!callbacks.current.active || !callbacks.current.rightClickPaste)
-        return;
+      if (!callbacks.current.active || !callbacks.current.rightClickPaste) return;
       if (term.modes.mouseTrackingMode !== "none") return;
       event.preventDefault();
       event.stopPropagation();
-      if (pastePending) return;
-      pastePending = true;
-      void (async () => {
-        try {
-          const text = await ClipboardGetText();
-          if (
-            disposed ||
-            !callbacks.current.active ||
-            !callbacks.current.rightClickPaste ||
-            !text
-          )
-            return;
-          if (callbacks.current.confirmMultilinePaste && /[\r\n]/.test(text)) {
-            const accepted = await dialogsRef.current.confirm({
-              title: message("terminal:confirmMultilinePaste"),
-              description: message(
-                "terminal:targetTheClipboardContainsMultipleLinesPastingMay",
-                { name: callbacks.current.tab.session.name },
-              ),
-              preview: text,
-              tone: "warning",
-              confirmLabel: message("terminal:paste"),
-            });
-            if (!accepted) return;
-          }
-          const currentRef = callbacks.current.tab.ref;
-          if (
-            disposed ||
-            !callbacks.current.active ||
-            !callbacks.current.rightClickPaste ||
-            currentRef?.sessionId !== ref.sessionId ||
-            currentRef?.generation !== ref.generation
-          ) {
-            return;
-          }
-          term.focus();
-          term.paste(text);
-        } catch (error) {
-          if (!disposed) callbacks.current.onNotice(error);
-        } finally {
-          pastePending = false;
-        }
-      })();
+      void pasteFromClipboard();
     };
     paneElement.addEventListener("mousedown", onMouseDown, true);
     document.addEventListener("mouseup", onMouseUp, true);
@@ -181,7 +255,6 @@ export default function TerminalPane(p: Props) {
       resizeTimer = setTimeout(() => {
         if (disposed || !container.current?.offsetWidth) return;
         addon.fit();
-        api.ResizeTerminal(ref, term.cols, term.rows).catch(() => {});
       }, 80);
     };
     const observer = new ResizeObserver(resize);
@@ -191,11 +264,16 @@ export default function TerminalPane(p: Props) {
       addon.fit();
       api
         .OpenTerminal(ref, Math.max(term.cols, 20), Math.max(term.rows, 5))
-        .then(() => term.focus())
+        .then(() => {
+          opened = true;
+          lastSize = `${term.cols}x${term.rows}`;
+          if (callbacks.current.active) term.focus();
+        })
         .catch((e) => callbacks.current.onError(e));
     });
     return () => {
       disposed = true;
+      inputQueue.length = 0;
       clearTimeout(resizeTimer);
       observer.disconnect();
       off();
@@ -206,6 +284,7 @@ export default function TerminalPane(p: Props) {
       resizeSubscription.dispose();
       selection.dispose();
       term.dispose();
+      searchAddon.current = null;
       terminal.current = null;
       fit.current = null;
     };
@@ -224,18 +303,57 @@ export default function TerminalPane(p: Props) {
     if (p.active) {
       requestAnimationFrame(() => {
         fit.current?.fit();
-        terminal.current?.focus();
+        if (searchOpen) searchInput.current?.focus();
+        else terminal.current?.focus();
       });
     }
-  }, [p.active]);
+  }, [p.active, searchOpen]);
   useEffect(() => {
     if (p.active && p.commandFocusVersion) terminal.current?.focus();
   }, [p.commandFocusVersion]);
+  const closeSearch = () => {
+    searchAddon.current?.clearDecorations();
+    setSearchOpen(false);
+    terminal.current?.focus();
+  };
+  const find = (forward: boolean) => {
+    if (!searchText) return;
+    if (forward) searchAddon.current?.findNext(searchText);
+    else searchAddon.current?.findPrevious(searchText);
+  };
   return (
-    <div
-      className={`terminal-pane ${p.active ? "active" : ""}`}
-      ref={container}
-      aria-label={t("terminal:terminal", { name: p.tab.session.name })}
-    />
+    <div className={`terminal-pane ${p.active ? "active" : ""}`}
+      aria-label={t("terminal:terminal", { name: p.tab.session.name })}>
+      <div className="terminal-surface" ref={container} />
+      {p.active && searchOpen && (
+        <div className="terminal-find">
+          <input
+            ref={searchInput}
+            value={searchText}
+            aria-label="Search terminal output"
+            placeholder="Find in terminal"
+            onChange={(event) => {
+              const next = event.target.value;
+              setSearchText(next);
+              if (next) searchAddon.current?.findNext(next, { incremental: true });
+              else searchAddon.current?.clearDecorations();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") closeSearch();
+              else if (event.key === "Enter") {
+                event.preventDefault();
+                find(!event.shiftKey);
+              }
+            }}
+          />
+          <button type="button" title="Previous match" aria-label="Previous match"
+            onClick={() => find(false)}>↑</button>
+          <button type="button" title="Next match" aria-label="Next match"
+            onClick={() => find(true)}>↓</button>
+          <button type="button" title="Close search" aria-label="Close search"
+            onClick={closeSearch}>×</button>
+        </div>
+      )}
+    </div>
   );
 }
