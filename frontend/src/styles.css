@@ -831,7 +831,6 @@ kbd {
   box-shadow: 0 -6px 24px #0002;
 }
 .transfer-dock-empty { padding: 12px; color: var(--text-muted); }
-.workspace-status { position: relative; z-index: 9; }
 .transfer-dock-item {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, .9fr) minmax(0, 1fr) 26px;
