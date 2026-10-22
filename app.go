@@ -351,7 +351,7 @@ func (a *App) DuplicateSession(id string) (domain.Session, error) {
 			return domain.Session{}, apperror.New("couldNotReadLoginCredentialsEnterThemAgain", nil)
 		}
 	}
-	return a.store.SaveSessionWithSecret(a.ctx, copy, credential, source.CredentialRef != "")
+	return a.store.SaveSessionWithSecret(a.ctx, copy, credential, source.CredentialRef != "", a.secrets)
 }
 
 func (a *App) DeleteSession(id string) error {
