@@ -48,7 +48,7 @@ jobs:
 
   go-tests:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -56,8 +56,10 @@ jobs:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
-      - name: Run Go tests
-        run: go test ./...
+      - name: Run Go race tests
+        run: go test -race ./...
+      - name: Check Go source
+        run: go vet ./...
 
   frontend-tests:
     runs-on: ubuntu-24.04
