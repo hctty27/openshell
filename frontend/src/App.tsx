@@ -451,11 +451,18 @@ function Workspace({ initialState }: { initialState: AppState }) {
       }),
     );
     const end = listen("ssh:terminal-ended", (ref: Ref) => {
+      const tab = tabsRef.current.find(t => t.id === ref.tabId);
+      if (!tab || tab.ref?.generation !== ref.generation || tab.manualDisconnected) return;
       update(ref.tabId, t => t.ref?.generation === ref.generation && !t.manualDisconnected
         ? { ...t, status: "disconnected", manualDisconnected: true,
+            localFallbackPending: true,
             error: message("common:terminalProcessEndedReconnectToContinue") }
         : t);
-      void api.Disconnect(ref).catch(notify);
+      void api.Disconnect(ref)
+        .then(() => update(ref.tabId, t => t.ref?.generation === ref.generation &&
+          t.status === "disconnected" && t.manualDisconnected
+          ? { ...t, localFallbackPending: false } : t))
+        .catch(notify);
     });
     const autoEvent = listen("auto:event", (event: AutoEvent) => {
       const s = event.state;
@@ -618,6 +625,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       ...t,
       status: "connecting",
       manualDisconnected: false,
+      localFallbackPending: false,
       retryCount: 0,
       error: "",
       proposal: null,
@@ -803,6 +811,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     stopRetryTimer(tab.id);
     update(tab.id, t => ({
       ...t, status: "disconnected", manualDisconnected: true,
+      localFallbackPending: true,
       retryCount: 0, chatBusy: false, executing: false, proposal: null,
       error: "",
     }));
@@ -812,6 +821,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
       } else {
         await api.Disconnect(tab.ref);
       }
+      update(tab.id, t => t.manualDisconnected && t.status === "disconnected" &&
+        t.ref?.generation === tab.ref?.generation
+        ? { ...t, localFallbackPending: false } : t);
     } catch (error) { notify(error); }
   };
   const close = async (tab: Tab) => {

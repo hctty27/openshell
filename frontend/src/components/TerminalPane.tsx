@@ -59,7 +59,7 @@ export default function TerminalPane(p: Props) {
   const localSequence = useRef(0);
   const terminalMode = p.tab.status === "connected" && p.tab.ref ? "ssh"
     : p.tab.ref && p.tab.everConnected && ["disconnected", "error"].includes(p.tab.status)
-      ? (p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
+      ? (p.tab.localFallbackPending || p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
       : "none";
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");

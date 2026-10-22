@@ -81,6 +81,7 @@ export interface Tab {
   ref: Ref | null;
   status: "connecting" | "connected" | "reconnecting" | "disconnected" | "error";
   manualDisconnected?: boolean;
+  localFallbackPending?: boolean;
   everConnected?: boolean;
   retryCount?: number;
   home: string;
