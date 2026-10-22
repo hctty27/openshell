@@ -18,12 +18,12 @@ import (
 
 // authenticationMethods may keep an SSH agent socket open until all hop
 // handshakes complete. No agent private key material is copied into OpenShell.
-func authenticationMethods(authType, keyPath string, auth AuthInput) ([]ssh.AuthMethod, func(), error) {
+func authenticationMethods(ctx context.Context, authType, keyPath string, auth AuthInput) ([]ssh.AuthMethod, func(), error) {
  switch authType {
  case "agent":
   conn, err := openAgent()
   if err != nil { return nil, nil, fmt.Errorf("SSH agent unavailable: %w", err) }
-  signers, err := agent.NewClient(conn).Signers()
+  signers, err := loadAgentSigners(ctx, conn)
   if err != nil { conn.Close(); return nil, nil, fmt.Errorf("SSH agent keys: %w", err) }
   if len(signers) == 0 { conn.Close(); return nil, nil, errors.New("SSH agent has no loaded keys") }
   return []ssh.AuthMethod{ssh.PublicKeys(signers...)}, func(){ _ = conn.Close() }, nil
@@ -36,6 +36,33 @@ func authenticationMethods(authType, keyPath string, auth AuthInput) ([]ssh.Auth
   return []ssh.AuthMethod{ssh.PublicKeys(signer)}, func(){}, nil
  default:
   return []ssh.AuthMethod{ssh.Password(auth.Password)}, func(){}, nil
+ }
+}
+
+
+type agentSignerResult struct {
+ signers []ssh.Signer
+ err error
+}
+
+// loadAgentSigners bounds a potentially stuck agent request by the same
+// deadline as the SSH connection. Closing conn unblocks a stuck Read/Write.
+func loadAgentSigners(ctx context.Context, conn net.Conn) ([]ssh.Signer, error) {
+ result := make(chan agentSignerResult, 1)
+ go func() {
+  signers, err := agent.NewClient(conn).Signers()
+  result <- agentSignerResult{signers: signers, err: err}
+ }()
+ select {
+ case <-ctx.Done():
+  _ = conn.Close()
+  return nil, ctx.Err()
+ case value := <-result:
+  if err := ctx.Err(); err != nil {
+   _ = conn.Close()
+   return nil, err
+  }
+  return value.signers, value.err
  }
 }
 
