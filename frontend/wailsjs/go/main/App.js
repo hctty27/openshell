@@ -220,3 +220,16 @@ export function SFTPEnsureDirectory(arg1, arg2, arg3) {
 export function SFTPAIAssist(arg1) {
   return window['go']['main']['App']['SFTPAIAssist'](arg1);
 }
+
+export function StartLocalTerminal(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['StartLocalTerminal'](arg1, arg2, arg3, arg4, arg5);
+}
+export function WriteLocalTerminal(arg1, arg2, arg3) {
+  return window['go']['main']['App']['WriteLocalTerminal'](arg1, arg2, arg3);
+}
+export function ResizeLocalTerminal(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ResizeLocalTerminal'](arg1, arg2, arg3, arg4);
+}
+export function CloseLocalTerminal(arg1, arg2) {
+  return window['go']['main']['App']['CloseLocalTerminal'](arg1, arg2);
+}
