@@ -309,7 +309,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
       if (!target || paths.length === 0) return;
       const pane = target.closest<HTMLElement>(".terminal-pane[data-tab-id]");
       const isRemotePanel = Boolean(target.closest(".workspace-file-panel .sftp-remote"));
-      if (!pane && !isRemotePanel) return;
+      const overTerminal = Boolean(target.closest(".terminal-container"));
+      if (!pane && !overTerminal && !isRemotePanel) return;
       const tab = tabsRef.current.find(item =>
         item.id === (pane?.dataset.tabId || activeIDRef.current));
       if (!tab?.ref || tab.status !== "connected") return;
@@ -329,6 +330,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
         if (!approved) return;
         const existing = new Set((await api.SFTPList(ref, "remote", directory)).map(item => item.name));
         for (const path of paths) {
+          const live = tabsRef.current.find(item => item.id === tab.id);
+          if (!live?.ref || live.ref.sessionId !== ref.sessionId || live.ref.generation !== ref.generation) return;
           const name = path.split(/[\\/]/).filter(Boolean).at(-1);
           if (!name || name === "." || name === "..") continue;
           let overwrite = false;
@@ -341,7 +344,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
             });
             if (!overwrite) continue;
           }
-          const destination = directory.replace(/\\/g, "/").replace(/\\/g, "/").replace(/\/$/, "") + "/" + name;
+          const destination = directory.replace(/\\/g, "/").replace(/\/$/, "") + "/" + name;
           await api.SFTPTransfer(ref, "upload", path, destination, overwrite, true);
           existing.add(name);
         }
