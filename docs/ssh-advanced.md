@@ -28,6 +28,7 @@ In the session editor, enter `user@bastion:2222` or `jump1,jump2`. A maximum of 
 - No private-key material is forwarded to the intermediate SSH servers, and no `ProxyCommand` is executed.
 - The selected password/private key/agent is reused for every SSH hop; separate passwords or different per-hop identity files are not yet supported.
 - Closing/replacing a terminal disconnects its hop transports.
+- Editing a session route (ProxyJump or OpenSSH config mode) clears previously saved and in-memory cached credentials; reconnect to confirm authentication for the new route.
 
 ## Local port forwarding
 
