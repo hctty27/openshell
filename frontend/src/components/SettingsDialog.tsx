@@ -146,7 +146,7 @@ export default function SettingsDialog(p: Props) {
     }
     return names.join(" / ");
   };
-  const field = (name: keyof Session, value: string | number) =>
+  const field = (name: keyof Session, value: string | number | boolean) =>
     setSession({ ...session, [name]: value });
   const run = async (fn: () => Promise<void>, message: DisplayText = "") => {
     setBusy(true);
@@ -288,6 +288,24 @@ export default function SettingsDialog(p: Props) {
                   <option value="light">{t("settings:terminalThemeLight")}</option>
                 </select>
               </label>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={session.useSSHConfig ?? false}
+                  onChange={(e) => field("useSSHConfig", e.target.checked)}
+                />
+                {t("settings:useOpenSSHConfig")}
+              </label>
+              <p className="muted small">{t("settings:useOpenSSHConfigDescription")}</p>
+              <label>
+                {t("settings:proxyJump")}
+                <input
+                  value={session.proxyJump ?? ""}
+                  onChange={(e) => field("proxyJump", e.target.value)}
+                  placeholder="user@bastion.example.com:22"
+                />
+              </label>
+              <p className="muted small">{t("settings:proxyJumpDescription")}</p>
               <label>
                 {t("common:authentication")}
                 <select
@@ -300,6 +318,7 @@ export default function SettingsDialog(p: Props) {
                 >
                   <option value="password">{t("common:password2")}</option>
                   <option value="key">{t("settings:privateKey")}</option>
+                  <option value="agent">{t("settings:sshAgent")}</option>
                 </select>
               </label>
               {session.authType === "key" && (
@@ -325,7 +344,7 @@ export default function SettingsDialog(p: Props) {
                   </div>
                 </label>
               )}
-              <label>
+              {session.authType !== "agent" && <label>
                 {session.authType === "key"
                   ? t("settings:keyPassphraseOptional")
                   : t("common:password")}
@@ -340,17 +359,17 @@ export default function SettingsDialog(p: Props) {
                       : t("settings:enterWhenConnectingIfNotSaved")
                   }
                 />
-              </label>
-              <label className="checkbox">
+              </label>}
+              {session.authType !== "agent" && <label className="checkbox">
                 <input
                   type="checkbox"
                   checked={saveSecret}
                   onChange={(e) => setSaveSecret(e.target.checked)}
                 />
                 {t("settings:saveToWindowsCredentialManager")}
-              </label>
+              </label>}
               <p className="muted small">
-                {t("settings:passwordsAndKeyPassphrasesAreNotStoredIn")}
+                {t(session.authType === "agent" ? "settings:sshAgentDescription" : "settings:passwordsAndKeyPassphrasesAreNotStoredIn")}
               </p>
             </>
           )}
