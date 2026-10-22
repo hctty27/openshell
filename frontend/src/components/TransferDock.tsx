@@ -34,7 +34,13 @@ export default function TransferDock({ refID, onNotice }: Props) {
     if (!refID) return;
     if (typeof api.SFTPTransfers === "function") {
       void api.SFTPTransfers(refID).then(list => {
-        if (!disposed) setTasks(list ?? []);
+        if (disposed) return;
+        setTasks(current => {
+          const byID = new Map((list ?? []).map(task => [task.id, task]));
+          // Events observed since the request started are newer than this snapshot.
+          for (const task of current) byID.set(task.id, task);
+          return [...byID.values()].sort((a, b) => a.created - b.created);
+        });
       }).catch(() => {});
     }
     const offTasks = listen("sftp:transfer", (task: SFTPTask) => {
