@@ -13,7 +13,6 @@
   "saveUpTo200QuickCommands": "最多保存 200 条快速命令",
   "invalidOrDuplicateQuickCommandId": "快速命令 ID 重复或无效",
   "commandNameMustBe140Characters": "命令名称必须为 1–40 个字符",
-  "commandMustBeASingleLineOf1": "命令必须为 1–4096 字节且不含控制字符的单行文本",
   "commandCategoryIsTooLong": "命令分类过长",
   "invalidCommandAction": "无效的命令执行方式",
   "invalidCommandScope": "无效的命令作用范围",
@@ -113,5 +112,6 @@
   "sessionCleanup": "会话已保存，旧系统凭据清理失败",
   "fingerprintChanged": "服务器指纹已变化，连接已阻止",
   "fingerprintFirst": "首次连接，请确认服务器指纹",
-  "taskStarting": "正在启动自动任务"
+  "taskStarting": "正在启动自动任务",
+  "commandMustBeNonemptyUpTo16384Bytes": "命令不能为空，最多 16384 字节，支持换行和 Tab，不允许其他控制字符"
 }
