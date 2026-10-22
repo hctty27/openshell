@@ -439,7 +439,7 @@ export default function TerminalPane(p: Props) {
     searchAddon.current?.findNext(pattern, searchOptions(true));
   };
   return (
-    <div className={`terminal-pane ${(p.visible ?? p.active) ? "visible" : ""} ${p.active ? "active" : ""}`}
+    <div data-tab-id={p.tab.id} className={`terminal-pane ${(p.visible ?? p.active) ? "visible" : ""} ${p.active ? "active" : ""}`}
       aria-label={t("terminal:terminal", { name: p.tab.session.name })}>
       <div className="terminal-surface" ref={container} />
       {p.active && searchOpen && (

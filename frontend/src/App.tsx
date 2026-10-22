@@ -27,6 +27,7 @@ import {
   Rows2,
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
+import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime";
 import type {
   Session,
   Group,
@@ -200,6 +201,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     } | null>(null),
     [attachments, setAttachments] = useState<Record<string, string>>({});
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
+  const remoteUploadDirs = useRef<Record<string, string>>({});
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const splitDragCleanup = useRef<(() => void) | null>(null);
   useEffect(() => () => splitDragCleanup.current?.(), []);
@@ -298,6 +300,56 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const update = (tabID: string, fn: (tab: Tab) => Tab) =>
     setTabs((old) => old.map((t) => (t.id === tabID ? fn(t) : t)));
   const notify = (error: unknown) => setToast(error);
+  const dropDialogs = useRef(dialogs);
+  dropDialogs.current = dialogs;
+  useEffect(() => {
+    if (!desktop) return;
+    OnFileDrop((x, y, paths) => {
+      const target = document.elementFromPoint(x, y);
+      if (!target || paths.length === 0) return;
+      const pane = target.closest<HTMLElement>(".terminal-pane[data-tab-id]");
+      const isRemotePanel = Boolean(target.closest(".workspace-file-panel .sftp-remote"));
+      if (!pane && !isRemotePanel) return;
+      const tab = tabsRef.current.find(item =>
+        item.id === (pane?.dataset.tabId || activeIDRef.current));
+      if (!tab?.ref || tab.status !== "connected") return;
+      const ref = tab.ref;
+      void (async () => {
+        const home = await api.SFTPHome(ref);
+        const directory = isRemotePanel
+          ? (remoteUploadDirs.current[tab.id] || home.remote)
+          : home.remote;
+        const approved = await dropDialogs.current.confirm({
+          title: tr("sftp:confirmDropTitle"),
+          description: tr("sftp:confirmDropDescription", {
+            count: paths.length, directory, server: tab.session.name,
+          }),
+          confirmLabel: tr("sftp:upload"),
+        });
+        if (!approved) return;
+        const existing = new Set((await api.SFTPList(ref, "remote", directory)).map(item => item.name));
+        for (const path of paths) {
+          const name = path.split(/[\\/]/).filter(Boolean).at(-1);
+          if (!name || name === "." || name === "..") continue;
+          let overwrite = false;
+          if (existing.has(name)) {
+            overwrite = await dropDialogs.current.confirm({
+              title: tr("sftp:overwriteTitle"),
+              description: tr("sftp:overwriteDescription", { name }),
+              tone: "warning",
+              confirmLabel: tr("sftp:overwrite"),
+            });
+            if (!overwrite) continue;
+          }
+          const destination = directory.replace(/\\/g, "/").replace(/\\/g, "/").replace(/\/$/, "") + "/" + name;
+          await api.SFTPTransfer(ref, "upload", path, destination, overwrite, true);
+          existing.add(name);
+        }
+      })().catch(setToast);
+    }, true);
+    return () => OnFileDropOff();
+  }, []);
+
   const refresh = async () => {
     try {
       const data = await api.State();
@@ -1333,7 +1385,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
             </div>
             {showSFTP && active?.ref && (
               <aside className="workspace-file-panel" aria-label={tr("sftp:fileManager")}>
-                <SFTPView refID={active.ref} profileID={profileID} onNotice={notify} hideTaskQueue />
+                <SFTPView refID={active.ref} profileID={profileID} onNotice={notify}
+                  onRemoteDirectoryChange={directory => { remoteUploadDirs.current[active.id] = directory; }} hideTaskQueue />
               </aside>
             )}
             </div>

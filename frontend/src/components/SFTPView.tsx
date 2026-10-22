@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type MouseEvent, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, Save, ArrowLeftRight } from "lucide-react";
-import { OnFileDrop, OnFileDropOff } from "../../wailsjs/runtime/runtime";
 import { api, listen, errorText } from "../bridge";
 import type { Ref, SFTPEntry, SFTPTask, SFTPDocument } from "../types";
 import { useDialogs } from "./DialogProvider";
@@ -30,7 +29,7 @@ const niceSize = (value: number) => {
   do { num /= 1024; idx++; } while(num >= 1024 && idx < units.length-1);
   return `${num.toFixed(num < 10 ? 1 : 0)} ${units[idx]}`;
 };
-interface Props { refID: Ref; profileID: string; onNotice(error: unknown): void; hideTaskQueue?: boolean; }
+interface Props { refID: Ref; profileID: string; onNotice(error: unknown): void; hideTaskQueue?: boolean; onRemoteDirectoryChange?(directory: string): void; }
 interface PanelProps {
   side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: unknown; showHidden: boolean;
   onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void; onSelect(item: SFTPEntry, multi: boolean): void;
@@ -89,7 +88,7 @@ function FilePanel(p: PanelProps) {
     </section>
   );
 }
-export default function SFTPView({refID,profileID,onNotice,hideTaskQueue = false}:Props) {
+export default function SFTPView({refID,profileID,onNotice,hideTaskQueue = false,onRemoteDirectoryChange}:Props) {
   useTranslation();
   const dialogs = useDialogs();
   const [localDir,setLocalDir] = useState("");
@@ -168,22 +167,9 @@ export default function SFTPView({refID,profileID,onNotice,hideTaskQueue = false
       }
     }catch(error){onNotice(error);}
   };
-  useEffect(()=>{
-    OnFileDrop((x,y,paths)=>{
-      const target=document.elementFromPoint(x,y);
-      if(paths.length>0 && target?.closest(".sftp-remote")) {
-        void (async () => {
-          const confirmed = await dialogs.confirm({
-            title: t("sftp:confirmDropTitle"),
-            description: t("sftp:confirmDropDescription", { count: paths.length, directory: remoteDir }),
-            confirmLabel: t("sftp:upload"),
-          });
-          if (confirmed) await transfer("local", paths, remoteDir);
-        })().catch(onNotice);
-      }
-    },true);
-    return ()=>OnFileDropOff();
-  },[refID.tabId,refID.generation,remoteDir]);
+  useEffect(() => {
+    if (remoteDir) onRemoteDirectoryChange?.(remoteDir);
+  }, [remoteDir, refID.tabId, refID.generation]);
 
   const changeDir = (side:Side, directory:string) => {
     if(!directory)return;

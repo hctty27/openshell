@@ -668,6 +668,7 @@ kbd {
 }
 .workspace-workarea > .terminal-container {
   min-width: 0;
+  --wails-drop-target: drop;
 }
 .workspace-file-panel {
   display: flex;
