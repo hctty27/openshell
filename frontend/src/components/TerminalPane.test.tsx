@@ -534,6 +534,7 @@ test("waits for completed SSH shutdown before starting local ConPTY", async () =
   const props = {
     active: true, fontSize: 14, theme: "dark" as const,
     disconnectBehavior: "local" as const, localShell: "powershell" as const,
+    autoCopySelection: false, rightClickPaste: false, confirmMultilinePaste: true,
     onNotice: vi.fn(), onError: vi.fn(), onSelection: vi.fn(),
   };
   const { rerender } = render(
