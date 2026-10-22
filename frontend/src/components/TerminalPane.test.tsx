@@ -27,6 +27,13 @@ vi.mock("@xterm/xterm", () => ({
     modes = { mouseTrackingMode: "none" };
     cols = 80;
     rows = 24;
+    parser = {
+      handlers: new Map<number, (payload: string) => boolean>(),
+      registerOscHandler: vi.fn((id: number, cb: (payload: string) => boolean) => {
+        this.parser.handlers.set(id, cb);
+        return { dispose: vi.fn(() => this.parser.handlers.delete(id)) };
+      }),
+    };
     buffer = { active: { viewportY: 4 } };
     scrollToLine = vi.fn();
     clearSelection = vi.fn();
@@ -467,3 +474,15 @@ test("middle click pastes only when enabled and no TUI mouse tracking", async ()
 });
 
 
+
+test("OSC directory reports identify current SSH connection and update cwd", () => {
+  const onDirectoryChange = vi.fn();
+  renderTerminal({ onDirectoryChange });
+  const term = refs.terms[0];
+  expect(term.parser.handlers.get(7)("file://server/data/test%20dir")).toBe(true);
+  expect(onDirectoryChange).toHaveBeenCalledWith(tab.ref, "/data/test dir");
+  expect(term.parser.handlers.get(1337)("CurrentDir=/root")).toBe(true);
+  expect(onDirectoryChange).toHaveBeenCalledWith(tab.ref, "/root");
+  expect(term.parser.handlers.get(7)("https://other/path")).toBe(false);
+  expect(onDirectoryChange).toHaveBeenCalledTimes(2);
+});

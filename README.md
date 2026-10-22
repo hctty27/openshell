@@ -57,6 +57,25 @@
 
 在「设置 → 通用 → 会话备份」可以导出、恢复 OpenShell 原生 JSON 会话备份，保留多级文件夹路径。**这仅包含 SSH 会话和文件夹，暂不备份 AI API 配置、偏好设置、私钥文件或 Windows 凭据**。迁移后需重新配置认证信息。恢复可选择跳过同名会话或为导入会话重命名，默认不会覆盖现有会话。
 
+### SFTP 跟随当前终端目录
+
+打开 SFTP 时优先使用当前 SSH 标签已知的工作目录。OpenShell 支持终端程序使用 **OSC 7**（`file://` URI）或
+**OSC 1337;CurrentDir=** 上报目录；未收到上报时回退到连接初始工作目录。
+如果你的远程 Bash 尚未主动报告目录，可以在其 `~/.bashrc` 中追加（**保留现有 PROMPT_COMMAND**）：
+
+```bash
+__openshell_report_cwd() { printf '\033]7;file://%s%s\007' "${HOSTNAME:-localhost}" "$PWD"; }
+if declare -p PROMPT_COMMAND 2>/dev/null | grep -q 'declare -a'; then
+  PROMPT_COMMAND+=(__openshell_report_cwd)
+else
+  PROMPT_COMMAND="__openshell_report_cwd${PROMPT_COMMAND:+;${PROMPT_COMMAND}}"
+fi
+```
+
+重新登录或重新加载 shell 配置后，`cd /some/path` 将随提示符更新终端目录；再次打开 SFTP 就会进入该目录。
+该机制只使用 shell 自愿发出的目录元数据，**不会向正在运行的 SSH 终端偷偷输入 `pwd`**。
+不支持此类上报的 shell 将使用已知目录；目录被删除或不可访问时则回退到 SFTP 默认目录。
+
 ### ZMODEM 文件传输（rz/sz）
 
 在已连接的 SSH 终端执行 `rz` 可选择本地文件上传，执行 `sz /path/to/file` 可选择本地目录接收。

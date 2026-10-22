@@ -29,7 +29,7 @@ const niceSize = (value: number) => {
   do { num /= 1024; idx++; } while(num >= 1024 && idx < units.length-1);
   return `${num.toFixed(num < 10 ? 1 : 0)} ${units[idx]}`;
 };
-interface Props { refID: Ref; profileID: string; onNotice(error: unknown): void; hideTaskQueue?: boolean; onRemoteDirectoryChange?(directory: string): void; }
+interface Props { refID: Ref; profileID: string; onNotice(error: unknown): void; hideTaskQueue?: boolean; onRemoteDirectoryChange?(directory: string): void; initialRemoteDirectory?: string; }
 interface PanelProps {
   side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: unknown; showHidden: boolean;
   onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void; onSelect(item: SFTPEntry, multi: boolean): void;
@@ -88,7 +88,7 @@ function FilePanel(p: PanelProps) {
     </section>
   );
 }
-export default function SFTPView({refID,profileID,onNotice,hideTaskQueue = false,onRemoteDirectoryChange}:Props) {
+export default function SFTPView({refID,profileID,onNotice,hideTaskQueue = false,onRemoteDirectoryChange,initialRemoteDirectory}:Props) {
   useTranslation();
   const dialogs = useDialogs();
   const [localDir,setLocalDir] = useState("");
@@ -113,8 +113,23 @@ export default function SFTPView({refID,profileID,onNotice,hideTaskQueue = false
 
   useEffect(() => {
     let alive=true;
-    api.SFTPHome(refID).then(paths=>{if(alive){setLocalDir(paths.local);setRemoteDir(paths.remote);}})
-      .catch(error=>{if(alive)onNotice(error);});
+    api.SFTPHome(refID).then(async paths => {
+      if (!alive) return;
+      setLocalDir(paths.local);
+      const preferred = initialRemoteDirectory?.startsWith("/") ? initialRemoteDirectory : "";
+      if (!preferred || preferred === paths.remote) {
+        setRemoteDir(paths.remote);
+        return;
+      }
+      // Confirm cwd exists before opening; a deleted/inaccessible directory
+      // must fall back to the SFTP home instead of trapping the file browser.
+      try {
+        await api.SFTPList(refID, "remote", preferred);
+        if (alive) setRemoteDir(preferred);
+      } catch {
+        if (alive) setRemoteDir(paths.remote);
+      }
+    }).catch(error => { if(alive) onNotice(error); });
     api.SFTPTransfers(refID).then(list=>{if(alive)setTasks(list??[]);}).catch(()=>{});
     return ()=>{alive=false;};
   },[refID.tabId,refID.sessionId,refID.generation]);

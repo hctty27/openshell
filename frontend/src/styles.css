@@ -672,6 +672,7 @@ kbd {
 }
 .workspace-file-panel {
   display: flex;
+  flex-direction: column;
   flex: 0 0 clamp(310px, 43%, 440px);
   min-width: 0;
   min-height: 0;
@@ -799,9 +800,12 @@ kbd {
   opacity: 0.55;
 }
 .transfer-dock {
-  flex-shrink: 0;
-  max-height: 172px;
-  overflow: auto;
+  position: relative;
+  z-index: 10;
+  flex: 0 0 30px;
+  height: 30px;
+  min-width: 0;
+  overflow: visible;
   border-top: 1px solid var(--border);
   background: var(--panel);
   color: var(--text-secondary);
@@ -815,14 +819,43 @@ kbd {
   height: 30px;
   padding: 0 12px;
 }
-.transfer-dock-items { max-height: 139px; overflow: auto; }
+.transfer-dock-items {
+  position: absolute;
+  bottom: 30px;
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 -6px 24px #0002;
+}
+.transfer-dock-empty { padding: 12px; color: var(--text-muted); }
+.workspace-status { position: relative; z-index: 9; }
+.workspace-status-transfer {
+  width: 190px;
+  margin-left: auto;
+}
+.workspace-status-transfer .transfer-dock {
+  height: 26px;
+  flex-basis: 26px;
+  border-top: none;
+  background: transparent;
+  border-left: 1px solid var(--border);
+}
+.workspace-status-transfer .transfer-dock-heading { height: 26px; font-size: 10px; }
+.workspace-status-transfer .transfer-dock-items {
+  bottom: 26px;
+  width: 385px;
+  left: auto;
+}
 .transfer-dock-item {
   display: grid;
-  grid-template-columns: minmax(80px, 1.4fr) minmax(75px, 1fr) minmax(90px, 1fr) 28px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, .9fr) minmax(0, 1fr) 26px;
   align-items: center;
   min-height: 30px;
-  gap: 10px;
-  padding: 4px 12px;
+  gap: 6px;
+  padding: 4px 8px;
   border-top: 1px solid var(--border);
 }
 .transfer-dock-item > span {

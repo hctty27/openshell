@@ -16,6 +16,7 @@ import {
 } from "../../wailsjs/runtime/runtime";
 import type { Tab, Ref, Theme } from "../types";
 import { terminalThemes } from "../terminalThemes";
+import { parseOsc7Directory, parseOsc1337Directory } from "../terminalCwd";
 import { useDialogs } from "./DialogProvider";
 interface Props {
   tab: Tab;
@@ -34,6 +35,7 @@ interface Props {
   searchFocusVersion?: number;
   onError(text: unknown): void;
   onSelection(text: string): void;
+  onDirectoryChange?(ref: Ref, directory: string): void;
 }
 export default function TerminalPane(p: Props) {
   useTranslation();
@@ -81,6 +83,14 @@ export default function TerminalPane(p: Props) {
     terminal.current = term;
     fit.current = addon;
     term.open(container.current);
+    const reportDirectory = (directory: string | null) => {
+      if (!disposed && directory) callbacks.current.onDirectoryChange?.(ref, directory);
+      return Boolean(directory);
+    };
+    const cwdHooks = [
+      term.parser.registerOscHandler(7, payload => reportDirectory(parseOsc7Directory(payload))),
+      term.parser.registerOscHandler(1337, payload => reportDirectory(parseOsc1337Directory(payload))),
+    ];
     let opened = false;
     let lastSize = "";
     const same = (r: Ref) =>
@@ -309,6 +319,7 @@ export default function TerminalPane(p: Props) {
       document.removeEventListener("mouseup", onMouseUp, true);
       paneElement.removeEventListener("contextmenu", onContextMenu, true);
       input.dispose();
+      for (const hook of cwdHooks) hook.dispose();
       resizeSubscription.dispose();
       selection.dispose();
       term.dispose();
