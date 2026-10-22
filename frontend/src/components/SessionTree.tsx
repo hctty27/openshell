@@ -242,10 +242,19 @@ export default function SessionTree(p: Props) {
                     if (!duplicated) return;
                     setQuery("");
                     setRootCollapsed(false);
-                    setCollapsed((previous) => ({
-                      ...previous,
-                      [duplicated.groupId]: false,
-                    }));
+                    setCollapsed((previous) => {
+                      const next = { ...previous };
+                      const visited = new Set<string>();
+                      let groupId = duplicated.groupId;
+                      while (groupId && !visited.has(groupId)) {
+                        next[groupId] = false;
+                        visited.add(groupId);
+                        groupId =
+                          p.groups.find((group) => group.id === groupId)
+                            ?.parentId ?? "";
+                      }
+                      return next;
+                    });
                     setSelected({ kind: "session", id: duplicated.id });
                   });
                 },
