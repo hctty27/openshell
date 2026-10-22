@@ -14,8 +14,8 @@ import {
   ClipboardGetText,
   ClipboardSetText,
 } from "../../wailsjs/runtime/runtime";
-import type { Tab, Ref, Theme } from "../types";
-import { terminalThemes } from "../terminalThemes";
+import type { Tab, Ref, Theme, TerminalTheme } from "../types";
+import { resolveTerminalTheme } from "../terminalThemes";
 import { parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
 import { useDialogs } from "./DialogProvider";
 interface Props {
@@ -25,6 +25,7 @@ interface Props {
   onActivate?: () => void;
   fontSize: number;
   theme: Theme;
+  terminalTheme?: TerminalTheme;
   autoCopySelection: boolean;
   rightClickPaste: boolean;
   middleClickPaste?: boolean;
@@ -53,6 +54,7 @@ export default function TerminalPane(p: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [regexMode, setRegexMode] = useState(false);
+  const resolvedTheme = resolveTerminalTheme(p.theme, p.terminalTheme, p.tab.session.terminalTheme);
   const callbacks = useRef(p);
   callbacks.current = p;
   useEffect(() => {
@@ -65,7 +67,11 @@ export default function TerminalPane(p: Props) {
     const term = new Terminal({
       fontFamily: 'Cascadia Mono,Consolas,"Microsoft YaHei",monospace',
       fontSize: p.fontSize,
-      theme: terminalThemes[callbacks.current.theme],
+      theme: resolveTerminalTheme(
+        callbacks.current.theme,
+        callbacks.current.terminalTheme,
+        callbacks.current.tab.session.terminalTheme,
+      ),
       overviewRuler: { width: 6 },
       minimumContrastRatio: 4.5,
       cursorBlink: true,
@@ -407,9 +413,8 @@ export default function TerminalPane(p: Props) {
     }
   }, [p.fontSize]);
   useEffect(() => {
-    if (terminal.current)
-      terminal.current.options.theme = terminalThemes[p.theme];
-  }, [p.theme]);
+    if (terminal.current) terminal.current.options.theme = resolvedTheme;
+  }, [resolvedTheme]);
   useEffect(() => {
     if (p.visible && !p.active) {
       requestAnimationFrame(() => fit.current?.fit());
@@ -461,7 +466,8 @@ export default function TerminalPane(p: Props) {
   };
   return (
     <div data-tab-id={p.tab.id} className={`terminal-pane ${(p.visible ?? p.active) ? "visible" : ""} ${p.active ? "active" : ""}`}
-      aria-label={t("terminal:terminal", { name: p.tab.session.name })}>
+      aria-label={t("terminal:terminal", { name: p.tab.session.name })}
+      style={{ backgroundColor: resolvedTheme.background }}>
       <div className="terminal-surface" ref={container} />
       {p.active && searchOpen && (
         <div className="terminal-find">

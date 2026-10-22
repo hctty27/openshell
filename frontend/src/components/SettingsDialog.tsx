@@ -22,6 +22,7 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import { api, errorText } from "../bridge";
+import { resolveTerminalTheme } from "../terminalThemes";
 import { useDialogs } from "./DialogProvider";
 import type {
   Session,
@@ -30,6 +31,7 @@ import type {
   SessionRequest,
   APIRequest,
   Theme,
+  TerminalTheme,
   QuickCommandLayout,
 } from "../types";
 interface Props {
@@ -49,6 +51,8 @@ interface Props {
   autoSummarize?: boolean;
   theme: Theme;
   onTheme(theme: Theme): void;
+  terminalTheme: TerminalTheme;
+  onTerminalTheme(theme: TerminalTheme): void;
   quickCommandLayout: QuickCommandLayout;
   onQuickCommandLayout(layout: QuickCommandLayout): void;
   autoCopySelection: boolean;
@@ -95,6 +99,7 @@ const emptyProfile: APIProfile = {
 export default function SettingsDialog(p: Props) {
   useTranslation();
   const dialogs = useDialogs();
+  const terminalPreview = resolveTerminalTheme(p.theme, p.terminalTheme);
   const [tab, setTab] = useState(
     p.kind === "session" ? "session" : "general",
   );
@@ -265,6 +270,18 @@ export default function SettingsDialog(p: Props) {
                   </select>
                 </label>
               </div>
+              <label>
+                {t("settings:sessionTerminalTheme")}
+                <select
+                  value={session.terminalTheme ?? "follow"}
+                  onChange={(e) => field("terminalTheme", e.target.value)}
+                >
+                  <option value="follow">{t("settings:useGlobalTerminalTheme")}</option>
+                  <option value="classic">{t("settings:terminalThemeClassic")}</option>
+                  <option value="dark">{t("settings:terminalThemeDark")}</option>
+                  <option value="light">{t("settings:terminalThemeLight")}</option>
+                </select>
+              </label>
               <label>
                 {t("common:authentication")}
                 <select
@@ -687,6 +704,26 @@ export default function SettingsDialog(p: Props) {
                 <p>{t("settings:terminalDescription")}</p>
               </div>
               <div className="settings-terminal-group">
+                <label htmlFor="settings-terminal-theme">{t("settings:terminalColorScheme")}</label>
+                <select
+                  id="settings-terminal-theme"
+                  value={p.terminalTheme}
+                  onChange={(e) => p.onTerminalTheme(e.target.value as TerminalTheme)}
+                >
+                  <option value="follow">{t("settings:terminalThemeFollow")}</option>
+                  <option value="classic">{t("settings:terminalThemeClassic")}</option>
+                  <option value="dark">{t("settings:terminalThemeDark")}</option>
+                  <option value="light">{t("settings:terminalThemeLight")}</option>
+                </select>
+                <div className="terminal-palette-preview"
+                  aria-label={t("settings:terminalPalettePreview")}
+                  style={{ backgroundColor: terminalPreview.background, color: terminalPreview.foreground }}>
+                  <span style={{ color: terminalPreview.green }}>root@server</span>:~# ls -la{"\n"}
+                  <span style={{ color: terminalPreview.blue }}>Documents  Downloads</span>
+                </div>
+                <p className="muted small">{t("settings:terminalThemeDescription")}</p>
+              </div>
+              <div className="settings-terminal-group">
                 <div className="settings-font-heading">
                   <label htmlFor="settings-font-size">{t("settings:fontSize")}</label>
                   <output htmlFor="settings-font-size">{p.fontSize} px</output>
@@ -915,6 +952,7 @@ export default function SettingsDialog(p: Props) {
                   run(async () => {
                     await api.SavePreference("fontSize", String(p.fontSize));
                     await api.SavePreference("theme", p.theme);
+                    await api.SavePreference("terminalTheme", p.terminalTheme);
                     await api.SavePreference(
                       "quickCommandLayout",
                       p.quickCommandLayout,

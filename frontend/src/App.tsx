@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
 import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime";
+import { normalizeTerminalTheme } from "./terminalThemes";
 import type {
   Session,
   Group,
@@ -61,7 +62,7 @@ import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
 import { quickCommandTerminalInput } from "./quickCommands";
 import { DialogProvider, useDialogs } from "./components/DialogProvider";
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.42";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.43";
 const initial: AppState = {
   sessions: [],
   groups: [],
@@ -153,6 +154,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
     ),
     [theme, setTheme] = useState<Theme>(
       initialState.theme === "light" ? "light" : "dark",
+    ),
+    [terminalTheme, setTerminalTheme] = useState(
+      normalizeTerminalTheme(initialState.terminalTheme),
     ),
     [quickCommandLayout, setQuickCommandLayout] = useState<QuickCommandLayout>(
       initialState.quickCommandLayout === "multi" ? "multi" : "single",
@@ -375,6 +379,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       const data = await api.State();
       setState(data);
       setTheme(data.theme === "light" ? "light" : "dark");
+      setTerminalTheme(normalizeTerminalTheme(data.terminalTheme));
       setQuickCommandLayout(
         data.quickCommandLayout === "multi" ? "multi" : "single",
       );
@@ -1458,6 +1463,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   }}
                   fontSize={fontSize}
                   theme={theme}
+                  terminalTheme={terminalTheme}
                   autoCopySelection={autoCopySelection}
                   rightClickPaste={rightClickPaste}
                   middleClickPaste={middleClickPaste}
@@ -1766,6 +1772,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
           fontSize={fontSize}
           theme={theme}
           onTheme={setTheme}
+          terminalTheme={terminalTheme}
+          onTerminalTheme={setTerminalTheme}
           quickCommandLayout={quickCommandLayout}
           onQuickCommandLayout={setQuickCommandLayout}
           autoCopySelection={autoCopySelection}
