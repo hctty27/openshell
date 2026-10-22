@@ -4,9 +4,9 @@ OpenShell defaults to English (en). Select English or 简体中文 (zh-CN) in Se
 
 ## Translation resources
 
-The bundled JSON resources live in frontend/src/locales/{en,zh-CN}/. Namespaces cover common controls, sessions, settings, terminal, AI and errors. Keep stable semantic keys and translate complete sentences with parameters. Use i18next count-based plural forms for quantities. Missing translations fall back to English.
+The bundled JSON resources live in frontend/src/locales/{en,zh-CN}/. Seven namespaces cover common controls, sessions, settings, terminal, AI, SFTP and errors. Keep stable semantic keys and translate complete sentences with parameters. Use i18next count-based plural forms for quantities. Missing translations fall back to English.
 
-React components subscribe with useTranslation and use the typed t helper. Deferred application dialogs and temporary notices use message(key, values), rendered only when displayed. User names, commands, server output and historical messages stay unchanged. Do not translate protocol values or use translated text for logic.
+React components subscribe with useTranslation and use the typed t helper. Deferred application dialogs and temporary notices use message(key, values), rendered only when displayed. For startup errors, supply localized copy with a predictable English fallback before preferences load. User names, commands, server output and historical messages stay unchanged. Do not translate protocol values or use translated text for logic.
 
 ## Add a language
 
@@ -18,7 +18,7 @@ React components subscribe with useTranslation and use the typed t helper. Defer
 
 ## Errors and task status
 
-Application errors use internal/apperror with a stable code and parameters. Wails v2 sends Error() through Promise rejection; the OPENSHELL_ERROR: JSON envelope is decoded centrally in frontend/src/i18n/errors.ts. Never match translated prose. Unknown third-party errors retain diagnostic text.
+Application errors use internal/apperror with a stable code and parameters. Wails v2 sends Error() through Promise rejection; the OPENSHELL_ERROR: JSON envelope is decoded centrally in frontend/src/i18n/errors.ts. Never match translated prose. Unknown third-party errors retain diagnostic text. Native Windows file-picker titles use the current preference. SFTP transfer error strings and Xshell/backup skipped-entry reasons are translated at render time; filenames and raw diagnostics remain intact.
 
 Execution results and automatic task snapshots carry reasonCode / reasonParams alongside a readable reason fallback. Use reasonText when displaying live states or creating a localized historical snapshot. Do not render error envelopes directly into chat.
 
@@ -31,3 +31,10 @@ Ordinary requests and continuations read the current language at request start. 
 The implementation was checked with Go integration tests using real local SSH and an SSE model fixture, frontend unit tests, Chromium E2E, production bundling, generated Wails v2.17 bindings and Windows amd64 cross-compilation. Native Windows desktop interaction still requires a smoke test.
 
 Known minor deferral: a pending quick-command confirmation can retain its translated run/insert action word if the global language changes externally while that modal is open. Command execution is unaffected; normal Settings access is blocked behind the modal.
+
+## Regression guardrails
+
+- `frontend/src/i18n/index.test.ts` checks parity and interpolation for English and Chinese resources.
+- `frontend/src/i18n/errors.test.ts` exercises bilingual error envelopes and imported-file diagnostic rendering.
+- `i18n_error_coverage_test.go` checks that all literal Go `apperror.New`/`Wrap` codes have translations in both languages and rejects raw `errors.New` in SFTP/Xshell/backup user-facing files.
+- Perform a native Windows smoke test for file pickers, failed transfers, skipped Xshell/backup entries, startup errors, and language changes while a toast or error panel is visible. Keep original third-party or SSH diagnostics available for troubleshooting.
