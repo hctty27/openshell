@@ -3010,3 +3010,25 @@ select.mode-select {
 .conversation-more:hover { background: var(--hover); }
 .conversation-status { flex-shrink: 0; min-height: 26px; padding: 4px 14px; font-size: 10px; color: var(--text-muted); }
 .conversation-status[role="alert"] { color: var(--danger); }
+
+/* SFTP stage 2: synchronization and remote text editing */
+.sftp-sync-controls {min-height:32px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 12px;border-top:1px solid var(--border);background:var(--panel);font-size:11px}
+.sftp-sync-controls > span {display:flex;align-items:center;gap:6px;margin-right:auto;color:var(--text-secondary)}
+.sftp-sync-controls button {display:flex;align-items:center;gap:5px;padding:4px 8px;border:1px solid var(--border);border-radius:5px;color:var(--text-secondary)}
+.sftp-sync-controls button:hover {background:var(--hover)}
+.sftp-sync-controls button:disabled {opacity:.4}
+.sftp-retry-actions {display:flex;align-items:center;gap:3px}
+.sftp-retry-actions button:hover {color:var(--accent)}
+.sftp-editor-backdrop {position:fixed;inset:0;z-index:100;background:#0009;display:flex;align-items:center;justify-content:center;padding:25px}
+.sftp-editor {display:flex;flex-direction:column;min-width:0;width:min(880px,95vw);height:min(680px,85vh);border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel);box-shadow:0 20px 60px #0005;color:var(--text-primary)}
+.sftp-editor header,.sftp-editor footer {padding:10px 15px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.sftp-editor header {border-bottom:1px solid var(--border);justify-content:space-between}
+.sftp-editor header strong {display:flex;align-items:center;gap:8px;font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sftp-editor header button {padding:3px}
+.sftp-editor textarea {flex:1;min-height:0;resize:none;outline:none;border:0;background:var(--surface);color:var(--text-primary);font:12px/1.6 'Cascadia Mono',Consolas,monospace;tab-size:4;padding:14px}
+.sftp-editor footer {border-top:1px solid var(--border);justify-content:flex-end}
+.sftp-editor footer small {margin-right:auto;color:var(--text-muted)}
+.sftp-editor footer button {display:flex;align-items:center;gap:5px;border:1px solid var(--border);padding:7px 13px;border-radius:6px}
+.sftp-editor footer .sftp-editor-save {background:var(--accent-fill);color:var(--on-accent);border-color:transparent}
+.sftp-editor footer button:disabled {opacity:.5}
+@media (max-width:800px){.sftp-sync-controls {gap:3px;padding:0 6px}.sftp-sync-controls button {font-size:10px;padding:4px}.sftp-sync-controls > span {font-size:0}}
