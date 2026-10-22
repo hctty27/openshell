@@ -341,7 +341,10 @@ export default function SFTPView({refID,profileID,onNotice,hideTaskQueue = false
           onFileDrop={event=>drop("local",event)}/>
         <FilePanel side="remote" directory={remoteDir} entries={remoteFiles} selected={selection.remote} loading={remoteBusy} error={remoteError} showHidden={hidden}
           onToggleHidden={()=>setHidden(s=>!s)} onDir={dir=>changeDir("remote",dir)} onReload={()=>setVersion(v=>v+1)}
-          onCwdHelp={!cwdReported ? () => void ClipboardSetText(BASH_CWD_REPORT_COMMAND).then(() => onNotice(t("sftp:cwdCommandCopied"))).catch(onNotice) : undefined}
+          onCwdHelp={!cwdReported ? () => void ClipboardSetText(BASH_CWD_REPORT_COMMAND).then(copied => {
+            if (!copied) throw new Error(t("sftp:cwdCommandCopyFailed"));
+            onNotice(t("sftp:cwdCommandCopied"));
+          }).catch(onNotice) : undefined}
           onOpenFile={item=>void openEditor(item)} onSelect={(item,multi)=>choose("remote",item,multi)} onTransfer={()=>void transfer("remote",selection.remote,localDir)}
           onOperate={(action,entry)=>void operate("remote",action,entry)} onContext={(event,item)=>context(event,"remote",item)}
           onFileDrop={event=>drop("remote",event)}/>

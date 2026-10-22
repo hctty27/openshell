@@ -1,4 +1,4 @@
-export const BASH_CWD_REPORT_COMMAND = "__openshell_report_cwd() { printf '\\033]7;file://%s%s\\007' \"${HOSTNAME:-localhost}\" \"$PWD\"; }; if declare -p PROMPT_COMMAND 2>/dev/null | grep -q '^declare -a'; then PROMPT_COMMAND+=(__openshell_report_cwd); else PROMPT_COMMAND=\"${PROMPT_COMMAND:+${PROMPT_COMMAND};}__openshell_report_cwd\"; fi; __openshell_report_cwd";
+export const BASH_CWD_REPORT_COMMAND = "__openshell_report_cwd() { local path=\"${PWD//%/%25}\"; path=\"${path//#/%23}\"; path=\"${path//\\?/%3F}\"; printf '\\033]7;file://%s%s\\007' \"${HOSTNAME:-localhost}\" \"$path\"; }; if declare -p PROMPT_COMMAND 2>/dev/null | grep -q '^declare -a'; then PROMPT_COMMAND+=(__openshell_report_cwd); else PROMPT_COMMAND=\"${PROMPT_COMMAND:+${PROMPT_COMMAND};}__openshell_report_cwd\"; fi; __openshell_report_cwd";
 
 /**
  * Terminal-side cwd reports from OSC 7 and iTerm2 OSC 1337.

@@ -13,6 +13,9 @@ import { expect, test, vi, afterEach } from "vitest";
 import App from "./App";
 import { api } from "./bridge";
 import type { Session } from "./types";
+const transferEvents = vi.hoisted(() => ({
+  listeners: new Map<string, Set<(payload: any) => void>>(),
+}));
 vi.mock("./components/TerminalPane", () => ({
   default: (props: {
     tab: { id: string };
@@ -41,6 +44,7 @@ vi.mock("./bridge", async () => ({
   api: {
     SavePreference: vi.fn(async () => {}),
     SFTPTransfers: vi.fn(async () => []),
+    CancelZmodem: vi.fn(async () => {}),
     Connect: vi.fn(async (tabId: string, sessionId: string) => ({
       ref: { tabId, sessionId, generation: 1 },
       home: "/root",
@@ -56,7 +60,11 @@ vi.mock("./bridge", async () => ({
       version: "0.1.17",
     })),
   },
-  listen: () => () => {},
+  listen: (name: string, callback: (payload: any) => void) => {
+    if (!transferEvents.listeners.has(name)) transferEvents.listeners.set(name, new Set());
+    transferEvents.listeners.get(name)!.add(callback);
+    return () => transferEvents.listeners.get(name)?.delete(callback);
+  },
 }));
 afterEach(cleanup);
 test("shows workspace and collapsible AI sidebar", async () => {
@@ -495,9 +503,23 @@ test("SFTP opens beside the existing terminal and can close without reconnecting
   expect(terminal.style.display).not.toBe("none");
   expect(screen.getAllByTestId("terminal-pane-stub")).toHaveLength(1);
   fireEvent.click(screen.getByTitle("关闭文件侧栏"));
-  expect(document.querySelector(".workspace-file-panel")).toBeNull();
+  const hiddenPanel = document.querySelector(".workspace-file-panel") as HTMLElement;
+  expect(hiddenPanel.style.display).toBe("none");
+  expect(hiddenPanel.getAttribute("aria-hidden")).toBe("true");
   expect(document.querySelector(".workspace-status-transfer")).toBeNull();
   expect(document.querySelector(".workspace-status .transfer-dock")).toBeNull();
   expect(document.querySelector(".terminal-container")).toBe(terminal);
   expect(api.Connect).toHaveBeenCalledTimes(1);
+
+  const tabID = screen.getByTestId("terminal-pane-stub").getAttribute("data-tab-id");
+  const ref = { tabId: tabID, sessionId: "us-id", generation: 1 };
+  act(() => {
+    for (const listener of transferEvents.listeners.get("ssh:transfer-state") ?? []) {
+      listener({ ref, active: true });
+    }
+  });
+  fireEvent.click(screen.getByTitle("打开 SFTP 文件管理"));
+  expect(screen.getByText("ZMODEM")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
+  await waitFor(() => expect(api.CancelZmodem).toHaveBeenCalledWith(ref));
 });
