@@ -33,6 +33,7 @@ type job struct {
     ctx context.Context
     cancel context.CancelFunc
     slot chan struct{}
+    reservation string
     last time.Time
 }
 var errSymlink = errors.New("symbolic links are not included in transfers")
@@ -50,9 +51,18 @@ func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination
     if direction == "download" { task.Name = path.Base(source) }
     m.mu.Lock()
     if m.closed { m.mu.Unlock(); cancel(); return Task{}, errors.New("file manager closed") }
+    canonical := path.Clean(destination)
+    if dst == "local" { canonical = filepath.Clean(destination) }
+    reservation := ref.SessionID + "|" + direction + "|" + canonical
+    if _, busy := m.reserved[reservation]; busy {
+        m.mu.Unlock()
+        cancel()
+        return Task{}, errors.New("another transfer already targets this path")
+    }
+    m.reserved[reservation] = struct{}{}
     slot := m.slots[ref.SessionID]
     if slot == nil { slot = make(chan struct{},2); m.slots[ref.SessionID] = slot }
-    j := &job{task:task,ctx:ctx,cancel:cancel,slot:slot}
+    j := &job{task:task,ctx:ctx,cancel:cancel,slot:slot,reservation:reservation}
     m.tasks[task.ID] = j
     m.mu.Unlock()
     m.emit("sftp:transfer", task)
@@ -116,6 +126,11 @@ func (m *Manager) progress(j *job,n int) {
     if send { m.emit("sftp:transfer",snap) }
 }
 func (m *Manager) run(j *job) {
+    defer func() {
+        m.mu.Lock()
+        delete(m.reserved, j.reservation)
+        m.mu.Unlock()
+    }()
     select {
     case j.slot<-struct{}{}:
         defer func(){ <-j.slot }()

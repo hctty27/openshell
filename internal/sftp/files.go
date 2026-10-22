@@ -37,11 +37,12 @@ type Manager struct {
     mu sync.Mutex
     tasks map[string]*job
     slots map[string]chan struct{}
+    reserved map[string]struct{}
     closed bool
 }
 
 func NewManager(lookup Lookup, emit func(string, any)) *Manager {
-    return &Manager{lookup: lookup, emit: emit, tasks: make(map[string]*job), slots: make(map[string]chan struct{})}
+    return &Manager{lookup: lookup, emit: emit, tasks: make(map[string]*job), slots: make(map[string]chan struct{}), reserved: make(map[string]struct{})}
 }
 
 func (m *Manager) remote(ref domain.ConnectionRef) (*pkg.Client, error) {
