@@ -8,16 +8,17 @@ import type { Ref, SFTPTask } from "../types";
 interface Props {
   refID?: Ref;
   onNotice(error: unknown): void;
+  alwaysVisible?: boolean;
 }
 interface ZmodemStats { transferred: string; speed: string }
 const sameRef = (a: Ref | undefined, b: Ref | undefined) =>
   Boolean(a && b && a.tabId === b.tabId && a.sessionId === b.sessionId && a.generation === b.generation);
 const size = (bytes: number) => bytes < 1024 ? `${bytes} B` : `${(bytes / 1048576).toFixed(1)} MB`;
 
-export default function TransferDock({ refID, onNotice }: Props) {
+export default function TransferDock({ refID, onNotice, alwaysVisible = false }: Props) {
   useTranslation();
   const [tasks, setTasks] = useState<SFTPTask[]>([]);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [zmodemActive, setZmodemActive] = useState(false);
   const [zmodemCancelling, setZmodemCancelling] = useState(false);
   const [zmodemStats, setZmodemStats] = useState<ZmodemStats | null>(null);
@@ -75,7 +76,7 @@ export default function TransferDock({ refID, onNotice }: Props) {
     };
   }, [refID?.tabId, refID?.sessionId, refID?.generation]);
 
-  if (!refID || (tasks.length === 0 && !zmodemActive && !zmodemEnded)) return null;
+  if (!refID || (!alwaysVisible && tasks.length === 0 && !zmodemActive && !zmodemEnded)) return null;
   const running = tasks.filter(task => task.status === "running" || task.status === "queued").length + Number(zmodemActive);
   const retry = (task: SFTPTask, resume: boolean) => {
     void api.SFTPTransfer(refID, task.direction, task.source, task.destination, task.overwrite, resume).catch(onNotice);
@@ -88,6 +89,9 @@ export default function TransferDock({ refID, onNotice }: Props) {
         {expanded ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
       </button>
       {expanded && <div className="transfer-dock-items">
+        {tasks.length === 0 && !zmodemActive && !zmodemEnded && (
+          <div className="transfer-dock-empty">{t("sftp:noTransfers")}</div>
+        )}
         {zmodemActive && (
           <div className="transfer-dock-item" role="status">
             <span>ZMODEM</span>

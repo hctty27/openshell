@@ -1314,6 +1314,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   active={tab.id === activeID}
                   visible={tab.id === activeID || Boolean(splitReady && splitPair?.includes(tab.id))}
                   onActivate={() => setActiveID(tab.id)}
+                  onDirectoryChange={(ref, directory) => {
+                    update(ref.tabId, current =>
+                      current.ref?.sessionId === ref.sessionId &&
+                      current.ref?.generation === ref.generation &&
+                      current.cwd !== directory
+                        ? { ...current, cwd: directory } : current,
+                    );
+                  }}
                   fontSize={fontSize}
                   theme={theme}
                   autoCopySelection={autoCopySelection}
@@ -1390,11 +1398,12 @@ function Workspace({ initialState }: { initialState: AppState }) {
             {showSFTP && active?.ref && (
               <aside className="workspace-file-panel" aria-label={tr("sftp:fileManager")}>
                 <SFTPView refID={active.ref} profileID={profileID} onNotice={notify}
+                  initialRemoteDirectory={active.cwd}
                   onRemoteDirectoryChange={directory => { remoteUploadDirs.current[active.id] = directory; }} hideTaskQueue />
+                <TransferDock refID={active.ref} onNotice={notify} alwaysVisible />
               </aside>
             )}
             </div>
-            <TransferDock refID={active?.status === "connected" ? (active.ref ?? undefined) : undefined} onNotice={notify} />
             {(
               <QuickCommandBar
                 tab={active}
@@ -1410,6 +1419,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
           <span className="workspace-version">
             OpenShell <span className="status-sep" />v{APP_VERSION}
           </span>
+          {!showSFTP && active?.status === "connected" && (
+            <div className="workspace-status-transfer">
+              <TransferDock refID={active.ref ?? undefined} onNotice={notify} />
+            </div>
+          )}
           <span className="workspace-connection">
             <i
               className={`status-dot ${active?.status === "connected" ? "" : "offline"}`}
