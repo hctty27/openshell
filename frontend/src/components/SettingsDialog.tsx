@@ -979,7 +979,7 @@ export default function SettingsDialog(p: Props) {
                     setError(message("settings:portMustBeBetween1And65535"));
                     return;
                   }
-                  if (session.authType === "key" && !session.privateKeyPath) {
+                  if (session.authType === "key" && !session.privateKeyPath && !session.useSSHConfig) {
                     setError(message("settings:chooseAPrivateKeyFile"));
                     return;
                   }
