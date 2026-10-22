@@ -45,7 +45,7 @@ type QuickCommand struct {
 	Category string `json:"category"`
 	Scope    string `json:"scope"`
 	ScopeID  string `json:"scopeId"`
-	Mode     string `json:"mode"`
+	Mode     string `json:"mode,omitempty"`
 	Confirm  bool   `json:"confirm"`
 }
 
@@ -210,6 +210,18 @@ func (a *App) State() (AppState, error) {
 			return AppState{}, err
 		}
 	}
+	// Preserve existing run/insert actions, then use line breaks as the sole execution signal.
+	for i := range commands {
+		switch commands[i].Mode {
+		case "run":
+			if !strings.HasSuffix(commands[i].Command, "\n") && !strings.HasSuffix(commands[i].Command, "\r") {
+				commands[i].Command += "\n"
+			}
+			commands[i].Mode = ""
+		case "insert":
+			commands[i].Mode = ""
+		}
+	}
 	limit, allow, e := a.automaticSettings()
 	if e != nil {
 		return AppState{}, e
@@ -335,14 +347,16 @@ func validateQuickCommands(raw string) error {
 		if n := len([]rune(strings.TrimSpace(c.Name))); n == 0 || n > 40 {
 			return apperror.New("commandNameMustBe140Characters", nil)
 		}
-		if len(c.Command) == 0 || len(c.Command) > 4096 ||
-			strings.IndexFunc(c.Command, func(r rune) bool { return r < 32 || r == 127 }) >= 0 {
-			return apperror.New("commandMustBeASingleLineOf1", nil)
+		if strings.TrimSpace(c.Command) == "" || len(c.Command) > 16*1024 ||
+			strings.IndexFunc(c.Command, func(r rune) bool {
+				return (r < 32 && r != '\n' && r != '\r' && r != '\t') || r == 127
+			}) >= 0 {
+			return apperror.New("commandMustBeNonemptyUpTo16384Bytes", nil)
 		}
 		if len([]rune(c.Category)) > 40 {
 			return apperror.New("commandCategoryIsTooLong", nil)
 		}
-		if c.Mode != "run" && c.Mode != "insert" {
+		if c.Mode != "" && c.Mode != "run" && c.Mode != "insert" {
 			return apperror.New("invalidCommandAction", nil)
 		}
 		if c.Scope != "global" && c.Scope != "group" && c.Scope != "session" {

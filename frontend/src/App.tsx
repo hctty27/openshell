@@ -48,6 +48,7 @@ import TerminalPane from "./components/TerminalPane";
 import AISidebar from "./components/AISidebar";
 import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
+import { quickCommandTerminalInput } from "./quickCommands";
 import { DialogProvider, useDialogs } from "./components/DialogProvider";
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.26";
 const initial: AppState = {
@@ -358,9 +359,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
       return;
     }
     const risky =
-      /(?:^|[;&| ]+)(?:rm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)|mkfs(?:\.[\w]+)?|dd\s+|shutdown\b|reboot\b|poweroff\b|systemctl\s+(?:stop|restart|disable)\b)/i.test(
+      /(?:^|[;&|\s]+)(?:rm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)|mkfs(?:\.[\w]+)?|dd\s+|shutdown\b|reboot\b|poweroff\b|systemctl\s+(?:stop|restart|disable)\b)/i.test(
         command.command,
       );
+    const willRun = /[\r\n]/.test(command.command);
     if (command.confirm || risky) {
       const accepted = await dialogs.confirm({
         title: risky
@@ -368,17 +370,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
           : message("common:confirmQuickCommand"),
         description: message("common:targetTheFollowingCommand", {
           name: tab.session.name,
-          action:
-            command.mode === "run"
-              ? tr("common:runAction")
-              : tr("common:insertAction"),
+          action: willRun
+            ? tr("common:runAction")
+            : tr("common:insertAction"),
         }),
         preview: command.command,
         tone: risky ? "warning" : "default",
-        confirmLabel:
-          command.mode === "run"
-            ? message("common:runCommand")
-            : message("common:insertCommand"),
+        confirmLabel: willRun
+          ? message("common:runCommand")
+          : message("common:insertCommand"),
       });
       if (!accepted) return;
     }
@@ -394,7 +394,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       return;
     }
     try {
-      const source = command.command + (command.mode === "run" ? "\r" : "");
+      const source = quickCommandTerminalInput(command.command);
       const bytes = new TextEncoder().encode(source);
       let binary = "";
       for (const byte of bytes) binary += String.fromCharCode(byte);
