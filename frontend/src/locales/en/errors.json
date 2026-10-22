@@ -140,5 +140,20 @@
   "sftpAiAIOutputExceededTheSafetyLimit": "AI output exceeded the safety limit",
   "sftpAiAIProposedTextIsTooLargeOrInvalidUTF8": "AI proposed text is too large or invalid UTF-8",
   "sftpAiUnsafeUploadDestination": "unsafe upload destination",
-  "sftpAiInvalidProposal": "AI did not return a valid proposal"
+  "sftpAiInvalidProposal": "AI did not return a valid proposal",
+  "sftpFileInvalidFilePath": "invalid file path",
+  "sftpFileLocalPathMustBeAbsolute": "local path must be absolute",
+  "sftpFileRemotePathMustBeAbsolute": "remote path must be absolute",
+  "sftpFileInvalidFileLocation": "invalid file location",
+  "sftpFileRootDirectoryCannotBeModified": "root directory cannot be modified",
+  "sftpFileVolumeRootCannotBeModified": "volume root cannot be modified",
+  "sftpFileSourceAndTargetAreIdentical": "source and target are identical",
+  "sftpFileInvalidOctalFilePermission": "invalid octal file permission",
+  "sftpFileUnsupportedFileOperation": "unsupported file operation",
+  "sftpAiFileCredentialAndPrivateKeyFilesCannotBeSentToAI": "credential and private-key files cannot be sent to AI",
+  "sftpAiFileAICanOnlyReadRegularFiles": "AI can only read regular files",
+  "sftpAiFileBinaryOrInvalidUTF8FileCannotBeSentToAI": "binary or invalid UTF-8 file cannot be sent to AI",
+  "sftpAiFileRefusingToProposeEditsForTruncatedFiles": "refusing to propose edits for truncated files",
+  "sftpAiFileAIUploadPlanningRequiresOneRegularLocalFile": "AI upload planning requires one regular local file",
+  "sftpAiEditsFileSizeLimit": "AI proposed edits require files under {{limitKiB}} KiB"
 }
