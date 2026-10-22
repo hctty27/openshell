@@ -31,3 +31,9 @@ describe("terminal themes", () => {
     }
   });
 });
+
+it("overview ruler edge matches terminal background in every theme", () => {
+  for (const theme of Object.values(terminalThemes)) {
+    expect(theme.overviewRulerBorder).toBe(theme.background);
+  }
+});

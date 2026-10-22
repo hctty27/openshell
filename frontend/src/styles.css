@@ -930,6 +930,9 @@ kbd {
 }
 .terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical {
   opacity: 1;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
   background: var(--terminal-scroll-track);
 }
 .terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
