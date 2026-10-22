@@ -192,7 +192,7 @@ func (s *Store) SaveSessionWithSecret(ctx context.Context, v domain.Session, val
 	}
 	old, _ := s.GetSession(ctx, v.ID)
 	v.CredentialRef = old.CredentialRef
-	if old.AuthType != v.AuthType || old.PrivateKeyPath != v.PrivateKeyPath || old.Host != v.Host || old.Username != v.Username || old.Port != v.Port {
+	if old.AuthType != v.AuthType || old.PrivateKeyPath != v.PrivateKeyPath || old.Host != v.Host || old.Username != v.Username || old.Port != v.Port || old.UseSSHConfig != v.UseSSHConfig || old.ProxyJump != v.ProxyJump {
 		v.CredentialRef = ""
 	}
 	if value != "" && save {
