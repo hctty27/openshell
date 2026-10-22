@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration for OpenShell (slug: "initial").
+  Paste this into SignPath > Project > Artifact configurations.
+  The GitHub Actions artifact is delivered to SignPath as a ZIP, so the
+  Windows executable (OpenShell.exe or the NSIS Setup.exe) sits inside a zip-file.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file-set>
+      <include path="OpenShell.exe" min-matches="0" max-matches="1" />
+      <include path="OpenShell-v*-windows-x64-Setup.exe" min-matches="0" max-matches="1" />
+      <for-each>
+        <authenticode-sign />
+      </for-each>
+    </pe-file-set>
+  </zip-file>
+</artifact-configuration>

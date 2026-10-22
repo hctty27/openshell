@@ -22,6 +22,15 @@ jobs:
     timeout-minutes: 50
     permissions:
       contents: write
+      actions: read
+    env:
+      # SignPath Foundation code signing. When SIGNPATH_API_TOKEN is not set,
+      # the workflow still builds and publishes unsigned binaries.
+      SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+      SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+      SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG || 'openshell' }}
+      SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+      SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG || 'initial' }}
     steps:
       - uses: actions/checkout@v7
       - name: Validate and set build version
@@ -92,6 +101,41 @@ jobs:
           python scripts/verify_windows_icons.py --icon build/windows/icon.ico --exe build/bin/OpenShell.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Upload unsigned EXE for SignPath
+        id: upload-unsigned-exe
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: OpenShell-unsigned-exe-${{ github.run_id }}
+          path: build/bin/OpenShell.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign EXE with SignPath
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ env.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned-exe.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: build/signed-exe
+
+      - name: Replace EXE with signed EXE
+        if: env.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $signed = Get-ChildItem build/signed-exe -Recurse -Filter OpenShell.exe | Select-Object -First 1
+          if (!$signed) { throw "Signed OpenShell.exe not found" }
+          Copy-Item $signed.FullName "build/bin/OpenShell.exe" -Force
+          $sig = Get-AuthenticodeSignature "build/bin/OpenShell.exe"
+          Write-Host "Signature status: $($sig.Status) / $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') { throw "OpenShell.exe signature is not valid: $($sig.Status)" }
+
       - name: Create portable ZIP
         shell: pwsh
         run: |
@@ -137,6 +181,42 @@ jobs:
           python scripts/verify_windows_icons.py --icon build/windows/icon.ico --exe "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Upload unsigned installer for SignPath
+        id: upload-unsigned-setup
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: OpenShell-unsigned-setup-${{ github.run_id }}
+          path: dist/OpenShell-v${{ env.APP_VERSION }}-windows-x64-Setup.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign installer with SignPath
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ env.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned-setup.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: build/signed-setup
+
+      - name: Replace installer with signed installer
+        if: env.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $name = "OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe"
+          $signed = Get-ChildItem build/signed-setup -Recurse -Filter $name | Select-Object -First 1
+          if (!$signed) { throw "Signed $name not found" }
+          Copy-Item $signed.FullName "dist/$name" -Force
+          $sig = Get-AuthenticodeSignature "dist/$name"
+          Write-Host "Signature status: $($sig.Status) / $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') { throw "Installer signature is not valid: $($sig.Status)" }
+
       - name: Publish build artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -159,6 +239,7 @@ jobs:
             Write-Host "Release $tag already exists; not replacing published binaries."
             exit 0
           }
+          $notes = if ($env:SIGNPATH_ENABLED -eq 'true') { "Windows x64 安装版与便携版；已通过 SignPath 进行代码签名（Free code signing provided by SignPath.io, certificate by SignPath Foundation）。" } else { "Windows x64 安装版与便携版；未经代码签名。" }
           $releaseArgs = @(
             "release", "create", $tag,
             "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe",
@@ -166,7 +247,7 @@ jobs:
             "--repo", $env:GITHUB_REPOSITORY,
             "--title", "OpenShell $tag",
             "--generate-notes",
-            "--notes", "Windows x64 安装版与便携版；未经代码签名。"
+            "--notes", $notes
           )
           $releaseArgs += @("--target", $env:GITHUB_SHA)
           & gh @releaseArgs

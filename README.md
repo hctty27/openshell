@@ -187,3 +187,18 @@ budget is 48 KiB of serialized data, not an exact Token limit. Summarization use
 the selected model and may consume additional credits; if it fails, OpenShell
 keeps the original history and uses bounded recent context. Server output is
 included only when explicitly attached or returned by an AI-executed command.
+
+## Code signing policy / 代码签名策略
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+
+Windows release binaries (`OpenShell.exe`, the portable ZIP and the `Setup.exe` installer) are built from this repository by GitHub Actions (`.github/workflows/windows-release.yml`) and signed through SignPath. Only artifacts built from this repository's source code are signed.
+
+**Team roles**
+
+- Committers and reviewers: [hctty27](https://github.com/hctty27)
+- Approvers: [hctty27](https://github.com/hctty27)
+
+**Privacy policy**
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. Connections to SSH/SFTP servers and to AI providers are only made to endpoints that the user configures.
