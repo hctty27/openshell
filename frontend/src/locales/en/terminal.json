@@ -47,5 +47,9 @@
   "quickCommandsLabel": "QUICK COMMANDS",
   "commandListTitle": "Commands ({{count}})",
   "commandMustBeNonemptyUpTo16384Bytes": "Command cannot be empty; up to 16384 bytes. Line breaks and Tab are allowed, other control characters are not.",
-  "quickCommandNewlineHint": "A line break presses Enter. Without a trailing line break, the last line is inserted but not executed."
+  "quickCommandNewlineHint": "A line break presses Enter. Without a trailing line break, the last line is inserted but not executed.",
+  "findInTerminal": "Find in terminal",
+  "previousMatch": "Previous match",
+  "nextMatch": "Next match",
+  "closeSearch": "Close search"
 }

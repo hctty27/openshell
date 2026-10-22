@@ -19,7 +19,7 @@ import {
 } from "../../wailsjs/runtime/runtime";
 import type { Tab } from "../types";
 
-const refs = vi.hoisted(() => ({ terms: [] as any[] }));
+const refs = vi.hoisted(() => ({ terms: [] as any[], webgl: [] as any[] }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     options = { fontSize: 14, theme: {} };
@@ -28,6 +28,11 @@ vi.mock("@xterm/xterm", () => ({
     rows = 24;
     selected = "";
     onDataCallback = (_data: string) => {};
+    resizeHandler = (_size: { cols: number; rows: number }) => {};
+    keyHandler = (_event: KeyboardEvent) => true;
+    attachCustomKeyEventHandler = vi.fn((callback: (event: KeyboardEvent) => boolean) => {
+      this.keyHandler = callback;
+    });
     getSelection = () => this.selected;
     open = vi.fn();
     write = vi.fn();
@@ -39,11 +44,35 @@ vi.mock("@xterm/xterm", () => ({
       this.onDataCallback = cb;
       return { dispose: vi.fn() };
     });
-    onResize = vi.fn(() => ({ dispose: vi.fn() }));
+    onResize = vi.fn((cb: (size: { cols: number; rows: number }) => void) => {
+      this.resizeHandler = cb;
+      return { dispose: vi.fn() };
+    });
     onSelectionChange = vi.fn(() => ({ dispose: vi.fn() }));
     constructor() {
       refs.terms.push(this);
     }
+  },
+}));
+vi.mock("@xterm/addon-search", () => ({
+  SearchAddon: class {
+    findNext = vi.fn(() => true);
+    findPrevious = vi.fn(() => true);
+    clearDecorations = vi.fn();
+  },
+}));
+vi.mock("@xterm/addon-web-links", () => ({
+  WebLinksAddon: class { constructor(_handler: unknown) {} },
+}));
+vi.mock("@xterm/addon-webgl", () => ({
+  WebglAddon: class {
+    lossHandler = () => {};
+    onContextLoss = vi.fn((callback: () => void) => {
+      this.lossHandler = callback;
+      return { dispose: vi.fn() };
+    });
+    dispose = vi.fn();
+    constructor() { refs.webgl.push(this); }
   },
 }));
 vi.mock("@xterm/addon-fit", () => ({
@@ -63,6 +92,7 @@ vi.mock("../bridge", () => ({
   errorText: (value: unknown) => String(value),
 }));
 vi.mock("../../wailsjs/runtime/runtime", () => ({
+  BrowserOpenURL: vi.fn(),
   ClipboardGetText: vi.fn(async () => "echo hello"),
   ClipboardSetText: vi.fn(async () => true),
 }));
@@ -113,6 +143,7 @@ const renderTerminal = (
 
 beforeEach(() => {
   refs.terms.length = 0;
+  refs.webgl.length = 0;
   vi.clearAllMocks();
   vi.stubGlobal(
     "ResizeObserver",
@@ -217,4 +248,119 @@ test("multiline confirmation only pastes to the original connected tab", async (
   fireEvent.click(screen.getByRole("button", { name: "确认粘贴" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(refs.terms[0].paste).not.toHaveBeenCalled();
+});
+
+test("search shortcut opens localized terminal search and closes with Escape", async () => {
+  const { rerender } = renderTerminal({ searchFocusVersion: 0 });
+  const keyEvent = {
+    type: "keydown",
+    key: "f",
+    ctrlKey: true,
+    shiftKey: true,
+    altKey: false,
+    metaKey: false,
+    preventDefault: vi.fn(),
+  } as unknown as KeyboardEvent;
+  expect(refs.terms[0].keyHandler(keyEvent)).toBe(false);
+  expect(keyEvent.preventDefault).toHaveBeenCalled();
+  const field = await screen.findByRole("textbox", { name: "搜索终端内容" });
+  fireEvent.change(field, { target: { value: "hello" } });
+  fireEvent.keyDown(field, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("textbox", { name: "搜索终端内容" })).toBeNull());
+  rerender(
+    <DialogProvider>
+      <TerminalPane
+        tab={tab} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        searchFocusVersion={1}
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()}
+      />
+    </DialogProvider>,
+  );
+  expect(await screen.findByRole("textbox", { name: "搜索终端内容" })).toBeTruthy();
+});
+
+test("keyboard clipboard shortcuts preserve normal Ctrl+C and ordered writes", async () => {
+  renderTerminal();
+  const terminal = refs.terms[0];
+  const key = (letter: string, shiftKey: boolean) => ({
+    type: "keydown", key: letter, ctrlKey: true, shiftKey,
+    altKey: false, metaKey: false, preventDefault: vi.fn(),
+  }) as unknown as KeyboardEvent;
+  expect(terminal.keyHandler(key("c", false))).toBe(true);
+  terminal.selected = "selected output";
+  expect(terminal.keyHandler(key("c", true))).toBe(false);
+  await waitFor(() => expect(ClipboardSetText).toHaveBeenCalledWith("selected output"));
+  terminal.onDataCallback("first");
+  terminal.onDataCallback("second");
+  await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalled());
+  expect(api.WriteTerminal).toHaveBeenCalledWith(tab.ref, btoa("firstsecond"));
+});
+
+test("only the active tab uses a WebGL context and context loss falls back", () => {
+  const { rerender } = renderTerminal();
+  expect(refs.webgl).toHaveLength(1);
+  const first = refs.webgl[0];
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={tab} active={false} fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>,
+  );
+  expect(first.dispose).toHaveBeenCalledTimes(1);
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={tab} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>,
+  );
+  expect(refs.webgl).toHaveLength(2);
+  const current = refs.webgl[1];
+  current.lossHandler();
+  expect(current.dispose).toHaveBeenCalledTimes(1);
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={tab} active={false} fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>,
+  );
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={tab} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>,
+  );
+  expect(refs.webgl).toHaveLength(2);
+});
+
+test("right click in terminal search does not paste into shell", async () => {
+  renderTerminal();
+  const keyEvent = {
+    type: "keydown", key: "f", ctrlKey: true, shiftKey: true,
+    altKey: false, metaKey: false, preventDefault: vi.fn(),
+  } as unknown as KeyboardEvent;
+  refs.terms[0].keyHandler(keyEvent);
+  const field = await screen.findByRole("textbox", { name: "搜索终端内容" });
+  fireEvent.contextMenu(field);
+  expect(ClipboardGetText).not.toHaveBeenCalled();
+});
+
+test("repeated resize notifications do not duplicate SSH window changes", async () => {
+  renderTerminal();
+  const term = refs.terms[0];
+  await waitFor(() => expect(api.OpenTerminal).toHaveBeenCalled());
+  await act(async () => { await Promise.resolve(); });
+  vi.mocked(api.ResizeTerminal).mockClear();
+  term.cols = 100;
+  term.rows = 35;
+  act(() => {
+    term.resizeHandler({ cols: 100, rows: 35 });
+    term.resizeHandler({ cols: 100, rows: 35 });
+  });
+  expect(api.ResizeTerminal).toHaveBeenCalledTimes(1);
+  expect(api.ResizeTerminal).toHaveBeenCalledWith(tab.ref, 100, 35);
 });

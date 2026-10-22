@@ -22,6 +22,7 @@ import {
   AlertCircle,
   Check,
   FolderOpen,
+  Search,
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
 import type {
@@ -55,7 +56,7 @@ import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
 import { quickCommandTerminalInput } from "./quickCommands";
 import { DialogProvider, useDialogs } from "./components/DialogProvider";
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.31";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.32";
 const initial: AppState = {
   sessions: [],
   groups: [],
@@ -162,6 +163,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     ),
     [showQuickCommandManager, setShowQuickCommandManager] = useState(false),
     [quickCommandFocus, setQuickCommandFocus] = useState(0),
+    [terminalSearchFocus, setTerminalSearchFocus] = useState(0),
     [profileID, setProfileID] = useState(
       initialState.profiles.find((p) => p.id === initialState.activeProfile)
         ?.id ??
@@ -1108,6 +1110,13 @@ function Workspace({ initialState }: { initialState: AppState }) {
               </span>
               <div>
                 <button
+                  title={tr("terminal:findInTerminal")}
+                  disabled={active?.status !== "connected" || showSFTP}
+                  onClick={() => setTerminalSearchFocus((value) => value + 1)}
+                >
+                  <Search size={14} />
+                </button>
+                <button
                   title={tr(showSFTP ? "sftp:terminal" : "sftp:openFileManager")}
                   disabled={active?.status !== "connected"}
                   onClick={() => active && setFileViews(old => ({...old, [active.id]: !old[active.id]}))}
@@ -1155,6 +1164,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   confirmMultilinePaste={confirmMultilinePaste}
                   onNotice={notify}
                   commandFocusVersion={quickCommandFocus}
+                  searchFocusVersion={terminalSearchFocus}
                   onError={(text) => {
                     update(tab.id, (t) => ({
                       ...t,

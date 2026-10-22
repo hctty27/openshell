@@ -1,0 +1,75 @@
+name: Windows terminal smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "frontend/src/components/TerminalPane.tsx"
+      - "frontend/src/components/TerminalPane.test.tsx"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
+      - "internal/ssh/**"
+      - "go.mod"
+      - "go.sum"
+      - "wails.json"
+      - ".github/workflows/windows-terminal-smoke.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-terminal-smoke-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  windows-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Test Go on Windows
+        run: go test ./...
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
+      - name: Generate app icons
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "Pillow==11.3.0"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/generate_app_icons.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Compile Windows executable (no release)
+        shell: pwsh
+        run: |
+          & "$(go env GOPATH)\bin\wails.exe" build -platform windows/amd64 -clean -s -webview2 embed
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path "build/bin/OpenShell.exe")) { throw "OpenShell.exe was not generated" }
+          python scripts/verify_windows_icons.py --icon build/windows/icon.ico --exe build/bin/OpenShell.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package test executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path build/bin/OpenShell.exe -DestinationPath dist/OpenShell-windows-x64-smoke.zip -Force
+      - name: Upload Windows test build
+        uses: actions/upload-artifact@v7
+        with:
+          name: OpenShell-windows-x64-smoke
+          path: dist/OpenShell-windows-x64-smoke.zip
+          if-no-files-found: error
+          retention-days: 7
