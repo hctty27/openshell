@@ -235,6 +235,58 @@ export default function SFTPView({refID,onNotice}:Props) {
       if(source.side!==target && source.path)void transfer(source.side,[source.path],target==="remote"?remoteDir:localDir);
     }catch{ /* ignore unrelated drags */ }
   };
+  const openEditor = async (entry:SFTPEntry) => {
+    try {
+      const doc=await api.SFTPReadRemoteText(refID,entry.path);
+      setEditor(doc); setDraftText(doc.content);
+    }catch(error){onNotice(error);}
+  };
+  const closeEditor = async () => {
+    if(editor && draftText!==editor.content){
+      const ok=await dialogs.confirm({title:t("sftp:discardEditorTitle"),description:t("sftp:discardEditorDescription"),tone:"warning",confirmLabel:t("sftp:discard")});
+      if(!ok)return;
+    }
+    setEditor(null);
+  };
+  const saveEditor = async () => {
+    if(!editor||editorSaving)return;
+    setEditorSaving(true);
+    try {
+      const next=await api.SFTPSaveRemoteText(refID,editor.path,editor.revision,draftText);
+      setEditor(next);setDraftText(next.content);setVersion(v=>v+1);
+    }catch(error){onNotice(error);}
+    finally{setEditorSaving(false);}
+  };
+  const sync = async (direction:"upload"|"download") => {
+    if(syncBusy || !localDir || !remoteDir)return;
+    setSyncBusy(true);
+    try {
+      const preview=await api.SFTPPreviewSync(refID,direction,localDir,remoteDir);
+      const selected=preview.actions.filter(action=>action.operation==="copy");
+      const conflicts=preview.actions.filter(action=>action.operation==="conflict");
+      const lines=selected.slice(0,35).map(a=>`${a.reason==="missing"?"+":"~"} ${a.relative} (${niceSize(a.size)})`);
+      if(conflicts.length)lines.push(String(conflicts.length)+" "+t("sftp:syncConflictsSkipped"));
+      if(selected.length>35)lines.push("… "+String(selected.length-35)+" "+t("sftp:moreItems"));
+      if(selected.length===0){onNotice(t("sftp:syncNoChanges"));return;}
+      const ok=await dialogs.confirm({
+        title:t(direction==="upload"?"sftp:syncUpload":"sftp:syncDownload"),
+        description:t("sftp:syncPreviewDescription",{count:selected.length,skipped:preview.skipped+conflicts.length,size:niceSize(preview.bytes)}),
+        preview:lines.join("\n"),tone:"warning",confirmLabel:t("sftp:syncApply")
+      });
+      if(!ok)return;
+      for(const item of selected){
+        const destSide=direction==="upload"?"remote":"local";
+        await api.SFTPEnsureDirectory(refID,destSide,parent(destSide,item.destination));
+        await api.SFTPTransfer(refID,direction,item.source,item.destination,item.reason==="changed",true);
+      }
+      setVersion(v=>v+1);
+    }catch(error){onNotice(error);}
+    finally{setSyncBusy(false);}
+  };
+  const retry = async (task:SFTPTask, resume:boolean) => {
+    try {await api.SFTPTransfer(refID,task.direction,task.source,task.destination,task.overwrite,resume);}
+    catch(error){onNotice(error);}
+  };
   return (
     <div className="sftp-view">
       <div className="sftp-panes">
@@ -248,6 +300,11 @@ export default function SFTPView({refID,onNotice}:Props) {
           onOpenFile={item=>void openEditor(item)} onSelect={(item,multi)=>choose("remote",item,multi)} onTransfer={()=>void transfer("remote",selection.remote,localDir)}
           onOperate={(action,entry)=>void operate("remote",action,entry)} onContext={(event,item)=>context(event,"remote",item)}
           onFileDrop={event=>drop("remote",event)}/>
+      </div>
+      <div className="sftp-sync-controls">
+        <span><ArrowLeftRight size={13}/>{t("sftp:syncFolders")}</span>
+        <button disabled={syncBusy} onClick={()=>void sync("upload")}><ArrowUpFromLine size={13}/>{t("sftp:syncUpload")}</button>
+        <button disabled={syncBusy} onClick={()=>void sync("download")}><ArrowDownToLine size={13}/>{t("sftp:syncDownload")}</button>
       </div>
       <div className={`sftp-queue ${queueOpen?"expanded":""}`}>
         <button className="sftp-queue-heading" onClick={()=>setQueueOpen(v=>!v)}>
@@ -263,10 +320,25 @@ export default function SFTPView({refID,onNotice}:Props) {
               <span className="sftp-task-size">{niceSize(task.bytes)} / {niceSize(task.total)}</span>
               <div className="sftp-progress"><span style={{width:`${task.total ? Math.min(100,task.bytes/task.total*100) : (task.status==="completed"?100:0)}%`}}/></div>
               {(task.status==="running"||task.status==="queued")&&<button title={t("sftp:cancelTransfer")} onClick={()=>void api.SFTPCancel(task.id).catch(onNotice)}><X size={13}/></button>}
+              {(task.status==="failed"||task.status==="cancelled")&&<span className="sftp-retry-actions">
+                <button title={t("sftp:resumeTransfer")} onClick={()=>void retry(task,true)}><RotateCcw size={13}/></button>
+                <button title={t("sftp:restartTransfer")} onClick={()=>void retry(task,false)}><RefreshCw size={13}/></button>
+              </span>}
             </div>
           ))}
         </div>}
       </div>
+      {editor && (
+        <div className="sftp-editor-backdrop">
+          <section className="sftp-editor" role="dialog" aria-modal="true" aria-label={t("sftp:editText")}>
+            <header><strong><FileText size={15}/>{editor.path}</strong><button title={t("common:close")} onClick={()=>void closeEditor()}><X size={17}/></button></header>
+            <textarea aria-label={t("sftp:editText")} value={draftText} spellCheck={false} onChange={event=>setDraftText(event.target.value)}/>
+            <footer><small>{t("sftp:utf8EditorLimit")}</small><button onClick={()=>void closeEditor()}>{t("common:cancel")}</button>
+              <button disabled={editorSaving||draftText===editor.content} className="sftp-editor-save" onClick={()=>void saveEditor()}><Save size={14}/>{t("sftp:saveFile")}</button>
+            </footer>
+          </section>
+        </div>
+      )}
       {menu && <FloatingContextMenu {...menu} onClose={()=>setMenu(null)}/>}
     </div>
   );
