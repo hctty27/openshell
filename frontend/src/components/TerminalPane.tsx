@@ -40,6 +40,8 @@ export default function TerminalPane(p: Props) {
   const terminal = useRef<Terminal | null>(null);
   const fit = useRef<FitAddon | null>(null);
   const searchAddon = useRef<SearchAddon | null>(null);
+  const webglAddon = useRef<WebglAddon | null>(null);
+  const webglFailed = useRef(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -73,13 +75,6 @@ export default function TerminalPane(p: Props) {
     terminal.current = term;
     fit.current = addon;
     term.open(container.current);
-    try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => webgl.dispose());
-      term.loadAddon(webgl);
-    } catch {
-      // Keep the default renderer when WebGL is unavailable.
-    }
     let opened = false;
     let lastSize = "";
     const same = (r: Ref) =>
@@ -244,6 +239,7 @@ export default function TerminalPane(p: Props) {
     });
     const onContextMenu = (event: MouseEvent) => {
       if (!callbacks.current.active || !callbacks.current.rightClickPaste) return;
+      if ((event.target as HTMLElement).closest(".terminal-find")) return;
       if (term.modes.mouseTrackingMode !== "none") return;
       event.preventDefault();
       event.stopPropagation();
@@ -256,7 +252,7 @@ export default function TerminalPane(p: Props) {
     const resize = () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        if (disposed || !container.current?.offsetWidth) return;
+        if (disposed || !callbacks.current.active || !container.current?.offsetWidth) return;
         addon.fit();
       }, 80);
     };
@@ -291,11 +287,38 @@ export default function TerminalPane(p: Props) {
       resizeSubscription.dispose();
       selection.dispose();
       term.dispose();
+      webglAddon.current = null;
+      webglFailed.current = false;
       searchAddon.current = null;
       terminal.current = null;
       fit.current = null;
     };
   }, [p.tab.ref?.generation, p.tab.id]);
+  useEffect(() => {
+    const term = terminal.current;
+    if (!term) return;
+    if (!p.active) {
+      webglAddon.current?.dispose();
+      webglAddon.current = null;
+      return;
+    }
+    if (webglAddon.current || webglFailed.current) return;
+    let addon: WebglAddon | null = null;
+    try {
+      addon = new WebglAddon();
+      const activeAddon = addon;
+      addon.onContextLoss(() => {
+        activeAddon.dispose();
+        if (webglAddon.current === activeAddon) webglAddon.current = null;
+        webglFailed.current = true;
+      });
+      term.loadAddon(addon);
+      webglAddon.current = addon;
+    } catch {
+      addon?.dispose();
+      webglFailed.current = true;
+    }
+  }, [p.active, p.tab.ref?.generation]);
   useEffect(() => {
     if (terminal.current) {
       terminal.current.options.fontSize = p.fontSize;
