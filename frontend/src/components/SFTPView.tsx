@@ -5,6 +5,7 @@ import { OnFileDrop, OnFileDropOff } from "../../wailsjs/runtime/runtime";
 import { api, listen, errorText } from "../bridge";
 import type { Ref, SFTPEntry, SFTPTask, SFTPDocument } from "../types";
 import { useDialogs } from "./DialogProvider";
+import SFTPAIAssistant from "./SFTPAIAssistant";
 import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMenu";
 import { t } from "../i18n";
 
@@ -29,7 +30,7 @@ const niceSize = (value: number) => {
   do { num /= 1024; idx++; } while(num >= 1024 && idx < units.length-1);
   return `${num.toFixed(num < 10 ? 1 : 0)} ${units[idx]}`;
 };
-interface Props { refID: Ref; onNotice(error: unknown): void; }
+interface Props { refID: Ref; profileID: string; onNotice(error: unknown): void; }
 interface PanelProps {
   side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: string; showHidden: boolean;
   onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void; onSelect(item: SFTPEntry, multi: boolean): void;
@@ -88,7 +89,7 @@ function FilePanel(p: PanelProps) {
     </section>
   );
 }
-export default function SFTPView({refID,onNotice}:Props) {
+export default function SFTPView({refID,profileID,onNotice}:Props) {
   useTranslation();
   const dialogs = useDialogs();
   const [localDir,setLocalDir] = useState("");
@@ -107,6 +108,7 @@ export default function SFTPView({refID,onNotice}:Props) {
   const [editor,setEditor] = useState<SFTPDocument|null>(null);
   const [draftText,setDraftText] = useState("");
   const [editorSaving,setEditorSaving] = useState(false);
+  const [aiStaged,setAIStaged] = useState(false);
   const [syncBusy,setSyncBusy] = useState(false);
   const [menu,setMenu] = useState<{x:number;y:number;anchor:HTMLElement;items:ContextMenuAction[]}|null>(null);
 
@@ -239,7 +241,7 @@ export default function SFTPView({refID,onNotice}:Props) {
   const openEditor = async (entry:SFTPEntry) => {
     try {
       const doc=await api.SFTPReadRemoteText(refID,entry.path);
-      setEditor(doc); setDraftText(doc.content);
+      setAIStaged(false);setEditor(doc);setDraftText(doc.content);
     }catch(error){onNotice(error);}
   };
   const closeEditor = async () => {
@@ -247,16 +249,38 @@ export default function SFTPView({refID,onNotice}:Props) {
       const ok=await dialogs.confirm({title:t("sftp:discardEditorTitle"),description:t("sftp:discardEditorDescription"),tone:"warning",confirmLabel:t("sftp:discard")});
       if(!ok)return;
     }
-    setEditor(null);
+    setAIStaged(false);setEditor(null);
   };
   const saveEditor = async () => {
     if(!editor||editorSaving)return;
     setEditorSaving(true);
     try {
       const next=await api.SFTPSaveRemoteText(refID,editor.path,editor.revision,draftText);
-      setEditor(next);setDraftText(next.content);setVersion(v=>v+1);
+      setAIStaged(false);setEditor(next);setDraftText(next.content);setVersion(v=>v+1);
     }catch(error){onNotice(error);}
     finally{setEditorSaving(false);}
+  };
+  const reviewAIEdit = (response: import("../types").SFTPAIResponse) => {
+    setEditor({path:response.source,content:response.original,revision:response.revision,size:response.original.length});
+    setDraftText(response.proposed);
+    setAIStaged(true);
+  };
+  const reviewAIUpload = async (response: import("../types").SFTPAIResponse) => {
+    if (!remoteDir || !response.destination.startsWith(remoteDir.replace(/\/+$/, "") + "/")) {
+      throw new Error(t("sftp:aiUnsafeDestination"));
+    }
+    const items = await api.SFTPList(refID, "remote", remoteDir);
+    const filename = response.destination.slice(response.destination.lastIndexOf("/") + 1);
+    const existing = (items ?? []).some(item => item.name === filename);
+    const accepted = await dialogs.confirm({
+      title: t("sftp:aiReviewUpload"),
+      description: t(existing ? "sftp:aiOverwriteConfirm" : "sftp:aiUploadConfirm"),
+      preview: response.source + "\n→ " + response.destination,
+      tone: "warning",
+      confirmLabel: t("sftp:upload"),
+    });
+    if (!accepted) return;
+    await api.SFTPTransfer(refID, "upload", response.source, response.destination, existing, true);
   };
   const sync = async (direction:"upload"|"download") => {
     if(syncBusy || !localDir || !remoteDir)return;
@@ -302,6 +326,9 @@ export default function SFTPView({refID,onNotice}:Props) {
           onOperate={(action,entry)=>void operate("remote",action,entry)} onContext={(event,item)=>context(event,"remote",item)}
           onFileDrop={event=>drop("remote",event)}/>
       </div>
+      <SFTPAIAssistant refID={refID} profileID={profileID} remoteDir={remoteDir}
+        localPaths={selection.local} remotePaths={selection.remote}
+        onReview={reviewAIEdit} onUpload={reviewAIUpload} onNotice={onNotice}/>
       <div className="sftp-sync-controls">
         <span><ArrowLeftRight size={13}/>{t("sftp:syncFolders")}</span>
         <button disabled={syncBusy} onClick={()=>void sync("upload")}><ArrowUpFromLine size={13}/>{t("sftp:syncUpload")}</button>
@@ -334,7 +361,7 @@ export default function SFTPView({refID,onNotice}:Props) {
           <section className="sftp-editor" role="dialog" aria-modal="true" aria-label={t("sftp:editText")}>
             <header><strong><FileText size={15}/>{editor.path}</strong><button title={t("common:close")} onClick={()=>void closeEditor()}><X size={17}/></button></header>
             <textarea aria-label={t("sftp:editText")} value={draftText} spellCheck={false} onChange={event=>setDraftText(event.target.value)}/>
-            <footer><small>{t("sftp:utf8EditorLimit")}</small><button onClick={()=>void closeEditor()}>{t("common:cancel")}</button>
+            <footer><small>{t(aiStaged ? "sftp:aiDraftReviewNotice" : "sftp:utf8EditorLimit")}</small><button onClick={()=>void closeEditor()}>{t("common:cancel")}</button>
               <button disabled={editorSaving||draftText===editor.content} className="sftp-editor-save" onClick={()=>void saveEditor()}><Save size={14}/>{t("sftp:saveFile")}</button>
             </footer>
           </section>

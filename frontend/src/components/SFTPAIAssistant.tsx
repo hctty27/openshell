@@ -82,7 +82,7 @@ export default function SFTPAIAssistant({
         <label>
           <span>{t("sftp:aiAction")}</span>
           <select aria-label={t("sftp:aiAction")} value={mode} onChange={e => setMode(e.target.value as SFTPAIMode)}>
-            {modes.map(item => <option key={item.value} value={item.value}>{t("sftp:aiMode_" + item.value)}</option>)}
+            {modes.map(item => <option key={item.value} value={item.value}>{t(("sftp:aiMode_" + item.value) as "sftp:aiMode_analyze")}</option>)}
           </select>
         </label>
         <input aria-label={t("sftp:aiInstruction")} value={instruction} maxLength={1000}
