@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, listen } from "./bridge";
+import { message } from "./i18n/message";
 import {
   emptyConversationCache,
   mergeConversationPage,
@@ -106,7 +107,7 @@ export function useConversations() {
   );
   const accept = useCallback((p: ConversationPage) => {
     if (!p?.conversation) {
-      throw new Error("Conversation history response is unavailable");
+      throw message("errors:memoryHistoryUnavailable");
     }
     setCache((old) => ({
       ...old,
