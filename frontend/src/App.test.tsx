@@ -19,14 +19,12 @@ vi.mock("./components/TerminalPane", () => ({
     active: boolean;
     visible?: boolean;
     onActivate?: () => void;
-    mouseSelectionFirst?: boolean;
   }) => (
     <div
       data-testid="terminal-pane-stub"
       data-tab-id={props.tab.id}
       data-active={props.active}
       data-visible={props.visible}
-      data-mouse-select={props.mouseSelectionFirst}
       onMouseDown={props.onActivate}
     />
   ),
@@ -404,8 +402,6 @@ test("two connected sessions can split, rotate, focus and close without extra SS
   expect(previous).toBeTruthy();
   fireEvent.mouseDown(previous!);
   expect(previous?.getAttribute("data-active")).toBe("true");
-  fireEvent.click(screen.getByRole("button", { name: "优先选中文本（按住 Alt 使用终端程序鼠标操作）" }));
-  expect(screen.getByRole("button", { name: "优先选中文本（按住 Alt 使用终端程序鼠标操作）" }).getAttribute("aria-pressed")).toBe("true");
   fireEvent.click(screen.getByRole("button", { name: "关闭分屏" }));
   expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split")).toBe(false);
   expect(api.Connect).toHaveBeenCalledTimes(2);
