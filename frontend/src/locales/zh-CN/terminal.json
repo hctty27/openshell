@@ -51,5 +51,13 @@
   "findInTerminal": "搜索终端内容",
   "previousMatch": "上一个匹配项",
   "nextMatch": "下一个匹配项",
-  "closeSearch": "关闭搜索"
+  "closeSearch": "关闭搜索",
+  "splitWith": "分屏选择…",
+  "splitNeedsTwo": "至少连接两个终端才能分屏",
+  "rotateSplit": "切换分屏方向",
+  "closeSplit": "关闭分屏",
+  "preferMouseSelection": "优先选中文本（按住 Alt 使用终端程序鼠标操作）",
+  "regexSearch": "使用正则表达式",
+  "highlightLogLevels": "高亮日志级别关键词",
+  "logs": "日志"
 }
