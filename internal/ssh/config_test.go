@@ -62,3 +62,31 @@ func TestApplySSHConfig(t *testing.T) {
  host,user,port,key,jump := ApplySSHConfig("alias","root",22,"","",SSHConfig{HostName:"real.host",User:"admin",Port:2222,IdentityFile:"/tmp/key",ProxyJump:"bastion"})
  if host!="real.host" || user!="admin" || port!=2222 || key!="/tmp/key" || jump!="bastion" { t.Fatal(host,user,port,key,jump) }
 }
+
+func TestNestedIncludeResolvesRelativeToSSHConfigDirectory(t *testing.T) {
+ dir := t.TempDir()
+ if err := os.MkdirAll(filepath.Join(dir, "extra"), 0700); err != nil { t.Fatal(err) }
+ files := map[string]string{
+  "config": "Include extra/first.conf\n",
+  "extra/first.conf": "Include defaults.conf\n",
+  "defaults.conf": "Host production\n  User nested-admin\n  Port 2227\n",
+ }
+ for name, value := range files {
+  if err := os.WriteFile(filepath.Join(dir, name), []byte(value), 0600); err != nil { t.Fatal(err) }
+ }
+ got, err := readOpenSSHConfig(filepath.Join(dir,"config"), "production")
+ if err != nil { t.Fatal(err) }
+ if got.User != "nested-admin" || got.Port != 2227 { t.Fatalf("nested include not applied: %+v", got) }
+}
+
+func TestConfigNeverExecutesProxyCommandOrMatchExec(t *testing.T) {
+ dir := t.TempDir()
+ marker := filepath.Join(dir,"unexpected-exec")
+ content := "Host ignored\n  ProxyCommand touch " + marker + "\nMatch exec touch " + marker + "\n  User hacker\nHost safe\n  HostName safe.internal\n"
+ configPath := filepath.Join(dir,"config")
+ if err := os.WriteFile(configPath, []byte(content), 0600); err != nil { t.Fatal(err) }
+ got, err := readOpenSSHConfig(configPath,"safe")
+ if err != nil { t.Fatal(err) }
+ if got.HostName != "safe.internal" || got.User != "" { t.Fatalf("unsafe config resolution: %+v", got) }
+ if _, err := os.Stat(marker); !os.IsNotExist(err) { t.Fatalf("config executed commands or marker unexpectedly exists: %v", err) }
+}
