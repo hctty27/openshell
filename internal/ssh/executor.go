@@ -72,7 +72,7 @@ func (m *Manager) Run(ctx context.Context, ref domain.ConnectionRef, command, cw
 		}
 		s = v.session
 	case <-ctx.Done():
-		m.Disconnect(ref)
+		// An AI command timeout must never tear down the interactive SSH transport.
 		go func() {
 			v := <-opening
 			if v.session != nil {
@@ -94,7 +94,7 @@ func (m *Manager) Run(ctx context.Context, ref domain.ConnectionRef, command, cw
 			return domain.CommandResult{Status: "unknown", Reason: "start_failed", ReasonCode: "start_failed", DurationMillis: time.Since(start).Milliseconds()}, e
 		}
 	case <-ctx.Done():
-		m.Disconnect(ref)
+		_ = s.Close()
 		return cancelledResult(ctx, start), nil
 	}
 	done := make(chan error, 1)
@@ -124,7 +124,7 @@ func (m *Manager) Run(ctx context.Context, ref domain.ConnectionRef, command, cw
 		select {
 		case <-done:
 		case <-time.After(250 * time.Millisecond):
-			m.Disconnect(ref)
+			_ = s.Close()
 		}
 	}
 	budget.mu.Lock()
