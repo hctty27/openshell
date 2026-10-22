@@ -127,7 +127,7 @@ export default function AISidebar(p: Props) {
           onLoadMore={() => p.onConversationMore?.()}
         />
       )}
-      {p.tab?.ref &&
+      {p.tab &&
         (!!p.tab.memoryLoading ||
           observer ||
           p.tab.memoryStatus === "summarizing" ||

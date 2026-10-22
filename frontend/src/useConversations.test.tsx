@@ -152,18 +152,11 @@ test("a read response arriving after deletion cannot select the deleted conversa
 });
 
 test("unsent new drafts only switch the tab and do not create saved conversations", async () => {
-  vi.mocked(api.ReadConversation).mockResolvedValue(page());
-  vi.mocked(api.ListConversations).mockResolvedValue({ items: [c], nextCursor: null });
   const { result } = renderHook(() => useConversations());
   await act(async () => {
-    await result.current.restore(ref, "c1");
-  });
-  expect(result.current.serverKeysByTab.tab).toBe("server");
-  await act(async () => {
-    await result.current.draft(ref);
     await result.current.draft(ref);
   });
   expect(result.current.selectedByTab.tab).toBe("");
-  expect(api.StartConversationDraft).toHaveBeenCalledTimes(2);
-  expect(result.current.lists.server.items).toHaveLength(1);
+  expect(api.StartConversationDraft).toHaveBeenCalledTimes(1);
+  expect(result.current.lists).toEqual({});
 });

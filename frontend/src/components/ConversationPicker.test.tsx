@@ -69,7 +69,7 @@ test("new empty draft is not repeatedly created and a locked owner cannot switch
       {...events}
     />,
   );
-  fireEvent.click(screen.getByTitle("新建对话"));
+  fireEvent.click(screen.getByRole("button", { name: "新建对话" }));
   expect(events.onCreate).not.toHaveBeenCalled();
   rerender(
     <ConversationPicker
