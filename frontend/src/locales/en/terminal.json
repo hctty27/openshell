@@ -63,5 +63,8 @@
   "resizeSplit": "Resize terminal split",
   "zmodemTransferring": "ZMODEM transfer in progress — waiting for completion",
   "cancelZmodem": "Cancel transfer",
-  "zmodemCancelling": "Cancelling…"
+  "zmodemCancelling": "Cancelling…",
+  "localShellStatus": "Local terminal · {{name}}",
+  "remoteConnectionClosed": "SSH disconnected. Switched to local terminal",
+  "localShellStartFailed": "Failed to launch local terminal"
 }
