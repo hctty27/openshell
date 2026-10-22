@@ -125,5 +125,20 @@
   "commandMustBeNonemptyUpTo16384Bytes": "命令不能为空，最多 16384 字节，支持换行和 Tab，不允许其他控制字符",
   "xshellPreviewTooLarge": "文件过大",
   "xshellPreviewUnsafePath": "文件路径不安全",
-  "xshellPreviewSizeLimit": "文件超过大小限制"
+  "xshellPreviewSizeLimit": "文件超过大小限制",
+  "sftpAiAIReturnedTrailingData": "AI 返回了多余数据",
+  "sftpAiAISuggestedAnUnsafeFilename": "AI 提议的文件名不安全",
+  "sftpAiSSHConnectionIsNoLongerActive": "SSH 连接已失效",
+  "sftpAiConfigureAnAIProfileBeforeUsingSFTPAI": "使用 SFTP AI 前请先配置 AI 模型",
+  "sftpAiAIInstructionExceeds1000Characters": "AI 指令不能超过 1000 个字符",
+  "sftpAiUnsupportedSFTPAIOperation": "不支持的 SFTP AI 操作",
+  "sftpAiSelectTheRequiredNumberOfFiles": "请选择所需数量的文件",
+  "sftpAiChooseTwoDifferentFiles": "请选择两个不同的文件",
+  "sftpAiSelectAnAbsoluteRemoteDirectory": "请选择远程绝对路径目录",
+  "sftpAiFileContainsValuesThatWouldBeRedactedUseTheManualEditorToAvoidCorruptingSecrets": "文件包含敏感内容，请使用手动编辑器，避免破坏敏感信息",
+  "sftpAiSSHConnectionChangedDuringAIAnalysis": "AI 分析期间 SSH 连接已改变",
+  "sftpAiAIOutputExceededTheSafetyLimit": "AI 输出超过安全大小限制",
+  "sftpAiAIProposedTextIsTooLargeOrInvalidUTF8": "AI 提议的内容过大或不是有效的 UTF-8",
+  "sftpAiUnsafeUploadDestination": "上传目标路径不安全",
+  "sftpAiInvalidProposal": "AI 未返回有效的操作提议"
 }
