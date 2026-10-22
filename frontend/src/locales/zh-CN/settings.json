@@ -120,5 +120,13 @@
   "proxyJump": "跳板机（ProxyJump）",
   "proxyJumpDescription": "可选，格式为 user@host:port；多个跳板用逗号分隔（最多 3 跳）。每跳均验证主机指纹，使用选定的认证方式。",
   "sshAgent": "SSH Agent",
-  "sshAgentDescription": "使用 SSH Agent 中已加载的密钥，OpenShell 不保存或读取私钥内容。"
+  "sshAgentDescription": "使用 SSH Agent 中已加载的密钥，OpenShell 不保存或读取私钥内容。",
+  "localForwards": "本地端口转发",
+  "localForwardsDescription": "通过 SSH 把远端服务映射到本机，仅允许监听本地回环地址（最多 8 条）。",
+  "forwardBindHost": "本地监听地址",
+  "forwardBindPort": "本地监听端口",
+  "forwardTargetHost": "远端目标地址",
+  "forwardTargetPort": "远端目标端口",
+  "removeForward": "删除端口转发",
+  "addForward": "添加端口转发"
 }
