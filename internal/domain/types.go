@@ -18,6 +18,7 @@ type Session struct {
 	AuthType       string `json:"authType"`
 	PrivateKeyPath string `json:"privateKeyPath"`
 	CredentialRef  string `json:"credentialRef"`
+	TerminalTheme  string `json:"terminalTheme,omitempty"`
 	CreatedAt      string `json:"createdAt"`
 	UpdatedAt      string `json:"updatedAt"`
 }
@@ -80,6 +81,9 @@ func ValidateSession(s Session) error {
 	}
 	if s.Port < 1 || s.Port > 65535 {
 		return apperror.New("portMustBeBetween1And65535", nil)
+	}
+	if s.TerminalTheme != "" && s.TerminalTheme != "follow" && s.TerminalTheme != "classic" && s.TerminalTheme != "dark" && s.TerminalTheme != "light" {
+		return apperror.New("unsupportedTheme", nil)
 	}
 	if s.AuthType != "" && s.AuthType != "password" && s.AuthType != "key" {
 		return apperror.New("unsupportedAuthenticationMethod", nil)
