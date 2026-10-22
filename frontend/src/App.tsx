@@ -450,12 +450,13 @@ function Workspace({ initialState }: { initialState: AppState }) {
         };
       }),
     );
-    const end = listen("ssh:terminal-ended", (ref: Ref) =>
+    const end = listen("ssh:terminal-ended", (ref: Ref) => {
       update(ref.tabId, t => t.ref?.generation === ref.generation && !t.manualDisconnected
         ? { ...t, status: "disconnected", manualDisconnected: true,
             error: message("common:terminalProcessEndedReconnectToContinue") }
-        : t),
-    );
+        : t);
+      void api.Disconnect(ref).catch(notify);
+    });
     const autoEvent = listen("auto:event", (event: AutoEvent) => {
       const s = event.state;
       update(s.ref.tabId, (t) => {
@@ -642,7 +643,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
         ...t,
         ref: result.ref,
         conversationID: result.conversationId,
-        status: "connected",
+        status: "connected", everConnected: true,
         home: result.home,
         cwd: result.home,
         cwdReported: false,
@@ -723,7 +724,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           }
           update(tab.id, t => ({
             ...t, ref: result.ref, conversationID: result.conversationId,
-            status: "connected", home: result.home, cwd: result.home,
+            status: "connected", everConnected: true, home: result.home, cwd: result.home,
             retryCount: 0, error: "", manualDisconnected: false,
           }));
           if (result.conversationId) await memory.restore(result.ref, result.conversationId);
@@ -750,6 +751,19 @@ function Workspace({ initialState }: { initialState: AppState }) {
       if (!tabs.some(t => t.id === tabID && t.status === "reconnecting" && !t.manualDisconnected)) stopRetryTimer(tabID);
     }
   }, [tabs, state.autoReconnect, state.maxReconnectAttempts]);
+  const autoClosingTabs = useRef(new Set<string>());
+  useEffect(() => {
+    if ((state.disconnectBehavior ?? "local") !== "close") {
+      autoClosingTabs.current.clear();
+      return;
+    }
+    for (const tab of tabs) {
+      if (!tab.everConnected || !["disconnected", "error"].includes(tab.status) ||
+          autoClosingTabs.current.has(tab.id)) continue;
+      autoClosingTabs.current.add(tab.id);
+      void close(tab);
+    }
+  }, [tabs, state.disconnectBehavior]);
   const openFromPicker = (session: Session) => {
     setShowSessionPicker(false);
     const existing = tabsRef.current.find(
@@ -1482,6 +1496,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 <TerminalPane
                   key={tab.id}
                   tab={tab}
+                  disconnectBehavior={state.disconnectBehavior ?? "local"}
+                  localShell={state.localShell ?? "powershell"}
+                  preserveHistory={state.preserveTerminalHistory !== false}
+                  showDisconnectReason={state.showDisconnectReason !== false}
                   active={tab.id === activeID}
                   visible={tab.id === activeID || Boolean(splitReady && splitPair?.includes(tab.id))}
                   onActivate={() => setActiveID(tab.id)}
@@ -1552,20 +1570,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   </p>
                 </div>
               )}
-              {active?.status !== "connected" &&
-                active?.status !== "connecting" && active?.status !== "reconnecting" && (
-                  <div className="terminal-connect-state">
-                    <span className="status-dot offline" />
-                    <span>
-                      {active?.error
-                        ? errorText(active.error)
-                        : tr("common:sessionDisconnected")}
-                    </span>
-                    <button onClick={() => active && manualConnect(active)}>
-                      {tr("common:connect")}
-                    </button>
-                  </div>
-                )}
             </div>
             {tabs.filter(tab => tab.ref && tab.status === "connected").map(tab => {
               const visible = showSFTP && tab.id === activeID;
@@ -1611,7 +1615,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 ? tr("common:connecting2")
                 : active?.status === "reconnecting"
                   ? tr("common:reconnecting")
-                : tr("common:disconnected")}
+                : active?.ref && active.everConnected && (state.disconnectBehavior ?? "local") === "local"
+                  ? tr("terminal:localShellStatus", { name: state.localShell === "pwsh" ? "PowerShell 7" : state.localShell === "cmd" ? "CMD" : state.localShell === "wsl" ? "WSL" : "PowerShell" })
+                  : tr("common:disconnected")}
             {active?.status === "connected" && (
               <>
                 <span className="status-sep" />
@@ -1829,6 +1835,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
           maxReconnectAttempts={state.maxReconnectAttempts}
           showDisconnectReason={state.showDisconnectReason}
           confirmActiveDisconnect={state.confirmActiveDisconnect}
+          disconnectBehavior={state.disconnectBehavior}
+          localShell={state.localShell}
+          preserveTerminalHistory={state.preserveTerminalHistory}
         />
       )}
       {showQuickCommandManager && (

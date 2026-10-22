@@ -108,5 +108,11 @@
   "showDisconnectReason": "Show reason when SSH disconnects",
   "confirmActiveDisconnect": "Confirm disconnect while AI or file transfers are active",
   "seconds": "seconds",
-  "disabled": "Disabled"
+  "disabled": "Disabled",
+  "disconnectBehavior": "When SSH disconnects",
+  "revertToLocalShell": "Revert to local shell (recommended)",
+  "retainDisconnectedTerminal": "Stay disconnected",
+  "closeDisconnectedTab": "Close tab automatically",
+  "defaultLocalShell": "Default local shell",
+  "preserveTerminalHistory": "Preserve terminal scrollback after disconnect"
 }

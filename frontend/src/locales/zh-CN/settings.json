@@ -108,5 +108,11 @@
   "showDisconnectReason": "显示 SSH 断开原因",
   "confirmActiveDisconnect": "执行 AI 任务或传输文件时，断开前确认",
   "seconds": "秒",
-  "disabled": "关闭"
+  "disabled": "关闭",
+  "disconnectBehavior": "SSH 断开后的操作",
+  "revertToLocalShell": "返回本地终端（推荐）",
+  "retainDisconnectedTerminal": "保留已断开的终端",
+  "closeDisconnectedTab": "自动关闭标签页",
+  "defaultLocalShell": "默认本地 Shell",
+  "preserveTerminalHistory": "断线后保留终端历史"
 }

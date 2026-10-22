@@ -1,0 +1,113 @@
+package main
+
+import (
+    "encoding/base64"
+    "errors"
+    "fmt"
+    "io"
+)
+
+type localPTY interface {
+    io.ReadWriteCloser
+    Resize(int, int) error
+}
+type localTerminalSession struct {
+    id string
+    pty localPTY
+}
+type localOutputEvent struct {
+    TabID string `json:"tabId"`
+    TerminalID string `json:"terminalId"`
+    Data string `json:"data"`
+}
+type localEndEvent struct {
+    TabID string `json:"tabId"`
+    TerminalID string `json:"terminalId"`
+}
+func (a *App) StartLocalTerminal(tabID, terminalID, shell string, cols, rows int) error {
+    if len(tabID) == 0 || len(tabID) > 128 || len(terminalID) == 0 || len(terminalID) > 256 {
+        return errors.New("invalid local terminal identifier")
+    }
+    if cols < 1 || cols > 1000 || rows < 1 || rows > 1000 {
+        return errors.New("invalid local terminal dimensions")
+    }
+    a.mu.Lock()
+    _, exists := a.tabRefs[tabID]
+    epoch := a.connectEpoch[tabID]
+    a.mu.Unlock()
+    if !exists { return errors.New("terminal tab no longer exists") }
+    pty, err := newLocalPTY(shell, cols, rows)
+    if err != nil { return fmt.Errorf("start local shell: %w", err) }
+    current := &localTerminalSession{id: terminalID, pty: pty}
+    a.mu.Lock()
+    if _, valid := a.tabRefs[tabID]; !valid || a.connectEpoch[tabID] != epoch {
+        a.mu.Unlock()
+        _ = pty.Close()
+        return errors.New("terminal connection changed")
+    }
+    old := a.localTerminals[tabID]
+    a.localTerminals[tabID] = current
+    a.mu.Unlock()
+    if old != nil { _ = old.pty.Close() }
+    go func() {
+        defer func() {
+            a.mu.Lock()
+            if a.localTerminals[tabID] == current { delete(a.localTerminals, tabID) }
+            a.mu.Unlock()
+            _ = pty.Close()
+            a.emit("local:ended", localEndEvent{TabID:tabID, TerminalID:terminalID})
+        }()
+        buf := make([]byte, 32*1024)
+        for {
+            n, readErr := pty.Read(buf)
+            if n > 0 {
+                a.emit("local:output", localOutputEvent{
+                    TabID:tabID, TerminalID:terminalID,
+                    Data:base64.StdEncoding.EncodeToString(buf[:n]),
+                })
+            }
+            if readErr != nil { return }
+        }
+    }()
+    return nil
+}
+func (a *App) WriteLocalTerminal(tabID, terminalID, data string) error {
+    if len(data) > 1024*1024 { return errors.New("local terminal input too large") }
+    decoded, err := base64.StdEncoding.DecodeString(data)
+    if err != nil { return err }
+    a.mu.Lock()
+    session := a.localTerminals[tabID]
+    a.mu.Unlock()
+    if session == nil || session.id != terminalID { return io.ErrClosedPipe }
+    _, err = session.pty.Write(decoded)
+    return err
+}
+func (a *App) ResizeLocalTerminal(tabID, terminalID string, cols, rows int) error {
+    if cols < 1 || cols > 1000 || rows < 1 || rows > 1000 { return errors.New("invalid terminal dimensions") }
+    a.mu.Lock()
+    session := a.localTerminals[tabID]
+    a.mu.Unlock()
+    if session == nil || session.id != terminalID { return io.ErrClosedPipe }
+    return session.pty.Resize(cols, rows)
+}
+func (a *App) CloseLocalTerminal(tabID, terminalID string) error {
+    a.stopLocalTerminal(tabID, terminalID)
+    return nil
+}
+func (a *App) stopLocalTerminal(tabID, terminalID string) {
+    a.mu.Lock()
+    session := a.localTerminals[tabID]
+    if session != nil && (terminalID == "" || session.id == terminalID) {
+        delete(a.localTerminals, tabID)
+    } else { session = nil }
+    a.mu.Unlock()
+    if session != nil { _ = session.pty.Close() }
+}
+func (a *App) closeAllLocalTerminals() {
+    a.mu.Lock()
+    sessions := make([]*localTerminalSession, 0, len(a.localTerminals))
+    for _, session := range a.localTerminals { sessions = append(sessions, session) }
+    a.localTerminals = map[string]*localTerminalSession{}
+    a.mu.Unlock()
+    for _, session := range sessions { _ = session.pty.Close() }
+}
