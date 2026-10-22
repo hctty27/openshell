@@ -227,10 +227,11 @@ export default function TerminalPane(p: Props) {
           setSearchOpen(true);
           return false;
         case "c": {
-          const selected = term.getSelection();
-          if (!selected) return true;
           event.preventDefault();
-          void ClipboardSetText(selected).catch((error) => callbacks.current.onNotice(error));
+          const selected = term.getSelection();
+          if (selected) {
+            void ClipboardSetText(selected).catch((error) => callbacks.current.onNotice(error));
+          }
           return false;
         }
         case "v":
