@@ -46,6 +46,10 @@ export function ConfirmCommand(arg1, arg2) {
   return window['go']['main']['App']['ConfirmCommand'](arg1, arg2);
 }
 
+export function CancelConnecting(arg1) {
+  return window['go']['main']['App']['CancelConnecting'](arg1);
+}
+
 export function Connect(arg1, arg2, arg3) {
   return window['go']['main']['App']['Connect'](arg1, arg2, arg3);
 }
