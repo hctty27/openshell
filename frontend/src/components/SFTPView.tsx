@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type MouseEvent, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, Save, ArrowLeftRight } from "lucide-react";
 import { OnFileDrop, OnFileDropOff } from "../../wailsjs/runtime/runtime";
 import { api, listen, errorText } from "../bridge";
-import type { Ref, SFTPEntry, SFTPTask } from "../types";
+import type { Ref, SFTPEntry, SFTPTask, SFTPDocument } from "../types";
 import { useDialogs } from "./DialogProvider";
 import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMenu";
 import { t } from "../i18n";
@@ -33,8 +33,8 @@ interface Props { refID: Ref; onNotice(error: unknown): void; }
 interface PanelProps {
   side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: string; showHidden: boolean;
   onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void; onSelect(item: SFTPEntry, multi: boolean): void;
-  onTransfer(): void; onOperate(operation: Operation, entry?: SFTPEntry): void;
-  onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLDivElement>): void;
+  onOpenFile?(entry:SFTPEntry): void; onTransfer(): void; onOperate(operation: Operation, entry?: SFTPEntry): void;
+  onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLElement>): void;
 }
 function FilePanel(p: PanelProps) {
   const visible = useMemo(() => p.showHidden ? p.entries : p.entries.filter(e => !e.name.startsWith(".")), [p.entries,p.showHidden]);
@@ -69,7 +69,7 @@ function FilePanel(p: PanelProps) {
             draggable={!entry.isSymlink}
             onDragStart={event => event.dataTransfer.setData("application/x-openshell-entry",JSON.stringify({side:p.side,path:entry.path}))}
             onClick={event=>p.onSelect(entry,event.ctrlKey||event.metaKey)}
-            onDoubleClick={()=>{if(entry.isDir && !entry.isSymlink)p.onDir(entry.path);}}
+            onDoubleClick={()=>{if(entry.isSymlink)return;if(entry.isDir)p.onDir(entry.path);else p.onOpenFile?.(entry);}}
             onContextMenu={event=>p.onContext(event,entry)}>
             <span className="sftp-file-name">{entry.isDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className="sftp-link-badge">↗</span>}</span>
             <span>{entry.isDir ? "—" : niceSize(entry.size)}</span>
@@ -103,6 +103,10 @@ export default function SFTPView({refID,onNotice}:Props) {
   const [version,setVersion] = useState(0);
   const [tasks,setTasks] = useState<SFTPTask[]>([]);
   const [queueOpen,setQueueOpen] = useState(true);
+  const [editor,setEditor] = useState<SFTPDocument|null>(null);
+  const [draftText,setDraftText] = useState("");
+  const [editorSaving,setEditorSaving] = useState(false);
+  const [syncBusy,setSyncBusy] = useState(false);
   const [menu,setMenu] = useState<{x:number;y:number;anchor:HTMLElement;items:ContextMenuAction[]}|null>(null);
 
   useEffect(() => {
@@ -152,7 +156,7 @@ export default function SFTPView({refID,onNotice}:Props) {
           });
           if (!overwrite) continue;
         }
-        await api.SFTPTransfer(refID,direction,file,join(destSide,dstDir,basename(file)),overwrite);
+        await api.SFTPTransfer(refID,direction,file,join(destSide,dstDir,basename(file)),overwrite,true);
       }
     }catch(error){onNotice(error);}
   };
@@ -198,12 +202,11 @@ export default function SFTPView({refID,onNotice}:Props) {
         if(!validName(name)){onNotice(t("sftp:invalidName"));return;}
         await api.SFTPOperate(refID,side,"rename",file.path,join(side,dir,name));
       } else {
-        if(selected.length!==1)return;
-        const file=selected[0];
-        const mode=await dialogs.input({title:t("sftp:chmodTitle"),label:t("sftp:permissions"),description:t("sftp:chmodDescription"),defaultValue:file.mode});
+        const mode=await dialogs.input({title:t("sftp:chmodTitle"),label:t("sftp:permissions"),description:t("sftp:chmodDescription"),defaultValue:selected.length===1?selected[0].mode:"0644"});
         if(mode===null)return;
         if(!/^[0-7]{3,4}$/.test(mode)){onNotice(t("sftp:chmodDescription"));return;}
-        await api.SFTPOperate(refID,side,"chmod",file.path,mode);
+        if(selected.length>1 && !(await dialogs.confirm({title:t("sftp:batchPermissionsTitle"),description:t("sftp:batchPermissionsDescription",{count:selected.length}),confirmLabel:t("common:confirm")})))return;
+        await api.SFTPBatchChmod(refID,side,selected.map(file=>file.path),mode);
       }
       setVersion(v=>v+1);
       setSelection(s=>({...s,[side]:[]}));
@@ -214,6 +217,7 @@ export default function SFTPView({refID,onNotice}:Props) {
     const other = side==="local" ? remoteDir : localDir;
     const items:ContextMenuAction[] = [
       {label:t(side==="local"?"sftp:upload":"sftp:download"),icon:side==="local"?ArrowUpFromLine:ArrowDownToLine,onSelect:()=>void transfer(side,[item.path],other)},
+      ...(side==="remote" && !item.isDir && !item.isSymlink ? [{label:t("sftp:editText"),icon:FileText,onSelect:()=>void openEditor(item)}] : []),
       {label:t("sftp:rename"),icon:Pencil,onSelect:()=>void operate(side,"rename",item)},
       {label:t("sftp:chmod"),icon:Shield,onSelect:()=>void operate(side,"chmod",item)},
       {label:t("sftp:copyPath"),icon:ClipboardCopy,onSelect:()=>void navigator.clipboard.writeText(item.path)},
@@ -222,7 +226,7 @@ export default function SFTPView({refID,onNotice}:Props) {
     setSelection(s=>({...s,[side]:[item.path]}));
     setMenu({x:event.clientX,y:event.clientY,anchor:event.currentTarget,items});
   };
-  const drop = (target:Side,event:DragEvent<HTMLDivElement>) => {
+  const drop = (target:Side,event:DragEvent<HTMLElement>) => {
     const raw=event.dataTransfer.getData("application/x-openshell-entry");
     if(!raw)return;
     event.preventDefault();
@@ -241,7 +245,7 @@ export default function SFTPView({refID,onNotice}:Props) {
           onFileDrop={event=>drop("local",event)}/>
         <FilePanel side="remote" directory={remoteDir} entries={remoteFiles} selected={selection.remote} loading={remoteBusy} error={remoteError} showHidden={hidden}
           onToggleHidden={()=>setHidden(s=>!s)} onDir={dir=>changeDir("remote",dir)} onReload={()=>setVersion(v=>v+1)}
-          onSelect={(item,multi)=>choose("remote",item,multi)} onTransfer={()=>void transfer("remote",selection.remote,localDir)}
+          onOpenFile={item=>void openEditor(item)} onSelect={(item,multi)=>choose("remote",item,multi)} onTransfer={()=>void transfer("remote",selection.remote,localDir)}
           onOperate={(action,entry)=>void operate("remote",action,entry)} onContext={(event,item)=>context(event,"remote",item)}
           onFileDrop={event=>drop("remote",event)}/>
       </div>
