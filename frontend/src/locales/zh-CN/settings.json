@@ -88,5 +88,16 @@
   "middleClickToPaste": "鼠标中键粘贴",
   "middleClickPasteDescription": "未启用交互程序鼠标追踪时，按中键粘贴剪贴板文本。",
   "logHighlights": "持续高亮日志级别",
-  "logHighlightsDescription": "持续标记新输出中的 WARN、ERROR、FATAL、FAILED，不影响普通搜索。"
+  "logHighlightsDescription": "持续标记新输出中的 WARN、ERROR、FATAL、FAILED，不影响普通搜索。",
+  "connection": "连接",
+  "connectionDescription": "SSH 保活、自动重连和断开行为",
+  "keepAliveInterval": "保活间隔",
+  "autoReconnect": "异常断线自动重连",
+  "autoReconnectDescription": "仅在网络异常断开时重试，主动断开不会自动连接",
+  "maxReconnectAttempts": "最大重试次数",
+  "continuousRetry": "持续重试",
+  "showDisconnectReason": "显示 SSH 断开原因",
+  "confirmActiveDisconnect": "执行 AI 任务或传输文件时，断开前确认",
+  "seconds": "秒",
+  "disabled": "关闭"
 }
