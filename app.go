@@ -28,6 +28,7 @@ type App struct {
 	store        *store.Store
 	secrets      domain.SecretStore
 	ssh          *sshclient.Manager
+	sftp         *files.Manager
 	coordinator  *tasks.Coordinator
 	automatic    *tasks.AutomaticRunner
 	provider     *ai.Provider
@@ -145,6 +146,7 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 		if name == "ssh:disconnected" {
 			if ref, ok := payload.(domain.ConnectionRef); ok {
 				a.cancelExecution(ref, false)
+				if a.sftp != nil { a.sftp.CancelConnection(ref) }
 			}
 		}
 		a.emit(name, payload)

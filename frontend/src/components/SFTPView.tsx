@@ -34,7 +34,7 @@ interface PanelProps {
   side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: string; showHidden: boolean;
   onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void; onSelect(item: SFTPEntry, multi: boolean): void;
   onTransfer(): void; onOperate(operation: Operation, entry?: SFTPEntry): void;
-  onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLElement>): void;
+  onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLDivElement>): void;
 }
 function FilePanel(p: PanelProps) {
   const visible = useMemo(() => p.showHidden ? p.entries : p.entries.filter(e => !e.name.startsWith(".")), [p.entries,p.showHidden]);
@@ -222,7 +222,7 @@ export default function SFTPView({refID,onNotice}:Props) {
     setSelection(s=>({...s,[side]:[item.path]}));
     setMenu({x:event.clientX,y:event.clientY,anchor:event.currentTarget,items});
   };
-  const drop = (target:Side,event:DragEvent<HTMLElement>) => {
+  const drop = (target:Side,event:DragEvent<HTMLDivElement>) => {
     const raw=event.dataTransfer.getData("application/x-openshell-entry");
     if(!raw)return;
     event.preventDefault();

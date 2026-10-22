@@ -222,6 +222,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
         hasEarlier: activeCache?.hasMore,
       }
     : undefined;
+  const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
   const update = (tabID: string, fn: (tab: Tab) => Tab) =>
     setTabs((old) => old.map((t) => (t.id === tabID ? fn(t) : t)));
   const notify = (error: unknown) => setToast(error);

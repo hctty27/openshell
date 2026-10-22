@@ -5,9 +5,9 @@ import {domain} from '../models';
 import {ai} from '../models';
 import {tasks} from '../models';
 
-export function CancelChat(arg1:string):Promise<void>;
+export function CancelChat(arg1:domain.ConnectionRef):Promise<void>;
 
-export function CancelCommand(arg1:string):Promise<void>;
+export function CancelCommand(arg1:domain.ConnectionRef,arg2:string):Promise<void>;
 
 export function Chat(arg1:main.ChatRequest):Promise<main.ChatResponse>;
 
@@ -17,7 +17,7 @@ export function ClearChat(arg1:string):Promise<void>;
 
 export function CloseTab(arg1:string):Promise<void>;
 
-export function ConfirmCommand(arg1:string):Promise<domain.CommandResult>;
+export function ConfirmCommand(arg1:domain.ConnectionRef,arg2:string):Promise<domain.CommandResult>;
 
 export function Connect(arg1:string,arg2:string,arg3:string):Promise<main.ConnectResult>;
 
@@ -37,9 +37,9 @@ export function PreviewContext(arg1:domain.ConnectionRef,arg2:string):Promise<ai
 
 export function ResizeTerminal(arg1:domain.ConnectionRef,arg2:number,arg3:number):Promise<void>;
 
-export function ResumeAutomatic(arg1:string,arg2:string,arg3:boolean):Promise<tasks.AutoSnapshot>;
+export function ResumeAutomatic(arg1:domain.ConnectionRef,arg2:string,arg3:string,arg4:boolean):Promise<tasks.AutoSnapshot>;
 
-export function ReviseProposal(arg1:string,arg2:string,arg3:string,arg4:number):Promise<domain.Proposal>;
+export function ReviseProposal(arg1:domain.ConnectionRef,arg2:string,arg3:string,arg4:string,arg5:number):Promise<domain.Proposal>;
 
 export function SaveAPI(arg1:main.SaveAPIRequest):Promise<domain.APIProfile>;
 
@@ -53,7 +53,7 @@ export function StartAutomatic(arg1:main.ChatRequest,arg2:string):Promise<tasks.
 
 export function State():Promise<main.AppState>;
 
-export function StopAutomatic(arg1:string):Promise<void>;
+export function StopAutomatic(arg1:domain.ConnectionRef,arg2:string):Promise<void>;
 
 export function TestAPI(arg1:main.SaveAPIRequest):Promise<void>;
 
@@ -69,3 +69,10 @@ export function SFTPTransfers(arg1:domain.ConnectionRef):Promise<import('../../.
 export function SFTPCancel(arg1:string):Promise<void>;
 
 export function SFTPChooseDirectory():Promise<string>;
+
+export function ListConversations(arg1:domain.ConnectionRef,arg2:domain.ConversationCursor|null,arg3:number):Promise<domain.ConversationList>;
+export function ReadConversation(arg1:domain.ConnectionRef,arg2:string,arg3:number,arg4:number):Promise<domain.ConversationPage>;
+export function SelectConversation(arg1:domain.ConnectionRef,arg2:string):Promise<domain.ConversationPage>;
+export function CreateConversation(arg1:domain.ConnectionRef):Promise<domain.Conversation>;
+export function RenameConversation(arg1:domain.ConnectionRef,arg2:string,arg3:string):Promise<domain.Conversation>;
+export function DeleteConversation(arg1:domain.ConnectionRef,arg2:string):Promise<void>;

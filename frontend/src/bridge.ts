@@ -17,6 +17,10 @@ import type {
   SFTPEntry,
   SFTPPaths,
   SFTPTask,
+  ConversationCursor,
+  ConversationList,
+  ConversationPage,
+  Conversation,
 } from "./types";
 type Backend = {
   SFTPHome(ref: Ref): Promise<SFTPPaths>;
@@ -27,12 +31,19 @@ type Backend = {
   SFTPTransfers(ref: Ref): Promise<SFTPTask[]>;
   SFTPCancel(taskID: string): Promise<void>;
   StartAutomatic(req: ChatRequest, taskID: string): Promise<AutoSnapshot>;
+  ListConversations(ref: Ref, cursor: ConversationCursor | null, limit: number): Promise<ConversationList>;
+  ReadConversation(ref: Ref, id: string, before: number, limit: number): Promise<ConversationPage>;
+  SelectConversation(ref: Ref, id: string): Promise<ConversationPage>;
+  CreateConversation(ref: Ref): Promise<Conversation>;
+  RenameConversation(ref: Ref, id: string, title: string): Promise<Conversation>;
+  DeleteConversation(ref: Ref, id: string): Promise<void>;
   ResumeAutomatic(
+    ref: Ref,
     taskID: string,
     approvedProposalID: string,
     extend: boolean,
   ): Promise<AutoSnapshot>;
-  StopAutomatic(taskID: string): Promise<void>;
+  StopAutomatic(ref: Ref, taskID: string): Promise<void>;
   State(): Promise<AppState>;
   SaveSession(req: SessionRequest): Promise<Session>;
   DeleteSession(id: string): Promise<void>;
@@ -59,17 +70,18 @@ type Backend = {
     text: string,
   ): Promise<{ text: string; truncated: boolean }>;
   ClearChat(id: string): Promise<void>;
-  CancelChat(id: string): Promise<void>;
+  CancelChat(ref: Ref): Promise<void>;
   Chat(req: ChatRequest): Promise<ChatResponse>;
   Continue(req: ChatRequest): Promise<ChatResponse>;
   ReviseProposal(
+    ref: Ref,
     id: string,
     command: string,
     cwd: string,
     seconds: number,
   ): Promise<Proposal>;
-  ConfirmCommand(id: string): Promise<CommandResult>;
-  CancelCommand(id: string): Promise<void>;
+  ConfirmCommand(ref: Ref, id: string): Promise<CommandResult>;
+  CancelCommand(ref: Ref, id: string): Promise<void>;
 };
 declare global {
   interface Window {
