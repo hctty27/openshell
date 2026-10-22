@@ -51,5 +51,12 @@
   "findInTerminal": "Find in terminal",
   "previousMatch": "Previous match",
   "nextMatch": "Next match",
-  "closeSearch": "Close search"
+  "closeSearch": "Close search",
+  "splitWith": "Split with…",
+  "splitNeedsTwo": "Connect another terminal to split",
+  "rotateSplit": "Switch split direction",
+  "closeSplit": "Close split view",
+  "regexSearch": "Use regular expression",
+  "highlightLogLevels": "Highlight log severity keywords",
+  "logs": "Logs"
 }

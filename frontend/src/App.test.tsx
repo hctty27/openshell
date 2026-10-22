@@ -13,7 +13,22 @@ import { expect, test, vi, afterEach } from "vitest";
 import App from "./App";
 import { api } from "./bridge";
 import type { Session } from "./types";
-vi.mock("./components/TerminalPane", () => ({ default: () => null }));
+vi.mock("./components/TerminalPane", () => ({
+  default: (props: {
+    tab: { id: string };
+    active: boolean;
+    visible?: boolean;
+    onActivate?: () => void;
+  }) => (
+    <div
+      data-testid="terminal-pane-stub"
+      data-tab-id={props.tab.id}
+      data-active={props.active}
+      data-visible={props.visible}
+      onMouseDown={props.onActivate}
+    />
+  ),
+}));
 vi.mock("./bridge", async () => ({
   ...(await vi.importActual<typeof import("./bridge")>("./bridge")),
   desktop: false,
@@ -349,4 +364,45 @@ test("double-clicking a terminal tab opens an independent SSH session beside it 
   const calls = vi.mocked(api.Connect).mock.calls;
   expect(calls[2][1]).toBe("us-id");
   expect(calls[2][0]).not.toBe(calls[0][0]);
+});
+
+test("two connected sessions can split, rotate, focus and close without extra SSH connections", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [
+      {
+        id: "us-id", groupId: "", name: "us", host: "us.example.com", port: 22,
+        username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved",
+      },
+      {
+        id: "eu-id", groupId: "", name: "eu", host: "eu.example.com", port: 22,
+        username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved",
+      },
+    ],
+    groups: [], profiles: [], fontSize: "14", language: "zh-CN",
+    activeProfile: "", version: "0.1.33",
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.click(screen.getByTitle("打开会话列表"));
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 us" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByTitle("打开会话列表"));
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 eu" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
+  const selector = screen.getByRole("combobox", { name: "分屏选择…" }) as HTMLSelectElement;
+  const partner = Array.from(selector.options).find((item) => item.value);
+  expect(partner).toBeTruthy();
+  fireEvent.change(selector, { target: { value: partner!.value } });
+  expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split-columns")).toBe(true);
+  const panes = screen.getAllByTestId("terminal-pane-stub");
+  expect(panes.filter((pane) => pane.getAttribute("data-visible") === "true")).toHaveLength(2);
+  fireEvent.click(screen.getByRole("button", { name: "切换分屏方向" }));
+  expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split-rows")).toBe(true);
+  const previous = panes.find((pane) => pane.getAttribute("data-active") === "false");
+  expect(previous).toBeTruthy();
+  fireEvent.mouseDown(previous!);
+  expect(previous?.getAttribute("data-active")).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "关闭分屏" }));
+  expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split")).toBe(false);
+  expect(api.Connect).toHaveBeenCalledTimes(2);
 });

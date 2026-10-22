@@ -19,7 +19,7 @@ import {
 } from "../../wailsjs/runtime/runtime";
 import type { Tab } from "../types";
 
-const refs = vi.hoisted(() => ({ terms: [] as any[], webgl: [] as any[] }));
+const refs = vi.hoisted(() => ({ terms: [] as any[], webgl: [] as any[], searches: [] as any[] }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     options = { fontSize: 14, theme: {} };
@@ -59,6 +59,7 @@ vi.mock("@xterm/addon-search", () => ({
     findNext = vi.fn(() => true);
     findPrevious = vi.fn(() => true);
     clearDecorations = vi.fn();
+    constructor() { refs.searches.push(this); }
   },
 }));
 vi.mock("@xterm/addon-web-links", () => ({
@@ -144,6 +145,7 @@ const renderTerminal = (
 beforeEach(() => {
   refs.terms.length = 0;
   refs.webgl.length = 0;
+  refs.searches.length = 0;
   vi.clearAllMocks();
   vi.stubGlobal(
     "ResizeObserver",
@@ -364,3 +366,49 @@ test("repeated resize notifications do not duplicate SSH window changes", async 
   expect(api.ResizeTerminal).toHaveBeenCalledTimes(1);
   expect(api.ResizeTerminal).toHaveBeenCalledWith(tab.ref, 100, 35);
 });
+
+test("split-visible terminal activates on mouse click without creating a second terminal", () => {
+  const onActivate = vi.fn();
+  const { container, rerender } = renderTerminal({
+    active: false,
+    visible: true,
+    onActivate,
+  });
+  const pane = container.querySelector(".terminal-pane")!;
+  expect(pane.classList.contains("visible")).toBe(true);
+  expect(pane.classList.contains("active")).toBe(false);
+  fireEvent.mouseDown(pane, { button: 0 });
+  expect(onActivate).toHaveBeenCalledTimes(1);
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={tab} active visible onActivate={onActivate}
+        fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>,
+  );
+  expect(refs.terms).toHaveLength(1);
+  expect(pane.classList.contains("active")).toBe(true);
+});
+
+test("log preset highlights severity keywords through regex search decorations", async () => {
+  renderTerminal();
+  const keyEvent = {
+    type: "keydown", key: "f", ctrlKey: true, shiftKey: true,
+    altKey: false, metaKey: false, preventDefault: vi.fn(),
+  } as unknown as KeyboardEvent;
+  refs.terms[0].keyHandler(keyEvent);
+  const logs = await screen.findByRole("button", { name: "高亮日志级别关键词" });
+  fireEvent.click(logs);
+  expect(screen.getByRole("textbox", { name: "搜索终端内容" })).toHaveProperty(
+    "value", "ERROR|WARN(?:ING)?|FATAL|FAIL(?:ED)?",
+  );
+  expect(refs.searches[0].findNext).toHaveBeenCalledWith(
+    "ERROR|WARN(?:ING)?|FATAL|FAIL(?:ED)?",
+    expect.objectContaining({
+      regex: true,
+      decorations: expect.objectContaining({ matchOverviewRuler: "#d59d54" }),
+    }),
+  );
+});
+

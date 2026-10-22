@@ -20,6 +20,8 @@ import { useDialogs } from "./DialogProvider";
 interface Props {
   tab: Tab;
   active: boolean;
+  visible?: boolean;
+  onActivate?: () => void;
   fontSize: number;
   theme: Theme;
   autoCopySelection: boolean;
@@ -45,6 +47,7 @@ export default function TerminalPane(p: Props) {
   const searchInput = useRef<HTMLInputElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
+  const [regexMode, setRegexMode] = useState(false);
   const callbacks = useRef(p);
   callbacks.current = p;
   useEffect(() => {
@@ -151,10 +154,12 @@ export default function TerminalPane(p: Props) {
     const paneElement = container.current.parentElement ?? container.current;
     const onMouseDown = (event: MouseEvent) => {
       if ((event.target as HTMLElement).closest(".terminal-find")) return;
+      if (callbacks.current.visible ?? callbacks.current.active) callbacks.current.onActivate?.();
       selectingWithMouse =
         event.button === 0 &&
         callbacks.current.active &&
-        (term.modes.mouseTrackingMode === "none" || event.shiftKey);
+        (term.modes.mouseTrackingMode === "none" ||
+          event.shiftKey);
     };
     const onMouseUp = (event: MouseEvent) => {
       if (event.button !== 0 || !selectingWithMouse) return;
@@ -252,7 +257,7 @@ export default function TerminalPane(p: Props) {
     const resize = () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        if (disposed || !callbacks.current.active || !container.current?.offsetWidth) return;
+        if (disposed || !(callbacks.current.visible ?? callbacks.current.active) || !container.current?.offsetWidth) return;
         addon.fit();
       }, 80);
     };
@@ -330,6 +335,11 @@ export default function TerminalPane(p: Props) {
       terminal.current.options.theme = terminalThemes[p.theme];
   }, [p.theme]);
   useEffect(() => {
+    if (p.visible && !p.active) {
+      requestAnimationFrame(() => fit.current?.fit());
+    }
+  }, [p.visible, p.active]);
+  useEffect(() => {
     if (p.active) {
       requestAnimationFrame(() => {
         fit.current?.fit();
@@ -349,13 +359,32 @@ export default function TerminalPane(p: Props) {
     setSearchOpen(false);
     terminal.current?.focus();
   };
+  const searchOptions = (regex: boolean) => ({
+    regex,
+    decorations: {
+      matchOverviewRuler: "#d59d54",
+      activeMatchColorOverviewRuler: "#7bcbb2",
+      matchBackground: "#806127",
+      activeMatchBackground: "#16745f",
+    },
+  });
   const find = (forward: boolean) => {
     if (!searchText) return;
-    if (forward) searchAddon.current?.findNext(searchText);
-    else searchAddon.current?.findPrevious(searchText);
+    if (regexMode) {
+      try { new RegExp(searchText); } catch { return; }
+    }
+    if (forward) searchAddon.current?.findNext(searchText, searchOptions(regexMode));
+    else searchAddon.current?.findPrevious(searchText, searchOptions(regexMode));
+  };
+  const highlightLogs = () => {
+    const pattern = "ERROR|WARN(?:ING)?|FATAL|FAIL(?:ED)?";
+    setSearchText(pattern);
+    setRegexMode(true);
+    setSearchOpen(true);
+    searchAddon.current?.findNext(pattern, searchOptions(true));
   };
   return (
-    <div className={`terminal-pane ${p.active ? "active" : ""}`}
+    <div className={`terminal-pane ${(p.visible ?? p.active) ? "visible" : ""} ${p.active ? "active" : ""}`}
       aria-label={t("terminal:terminal", { name: p.tab.session.name })}>
       <div className="terminal-surface" ref={container} />
       {p.active && searchOpen && (
@@ -368,7 +397,9 @@ export default function TerminalPane(p: Props) {
             onChange={(event) => {
               const next = event.target.value;
               setSearchText(next);
-              if (next) searchAddon.current?.findNext(next, { incremental: true });
+              if (next) searchAddon.current?.findNext(next, {
+                ...searchOptions(regexMode), incremental: true,
+              });
               else searchAddon.current?.clearDecorations();
             }}
             onKeyDown={(event) => {
@@ -379,6 +410,19 @@ export default function TerminalPane(p: Props) {
               }
             }}
           />
+          <button type="button"
+            className={regexMode ? "selected" : ""}
+            title={t("terminal:regexSearch")} aria-label={t("terminal:regexSearch")}
+            aria-pressed={regexMode}
+            onClick={() => {
+              const next = !regexMode;
+              setRegexMode(next);
+              if (searchText) searchAddon.current?.findNext(searchText, searchOptions(next));
+            }}>.*</button>
+          <button type="button" className="terminal-log-preset" title={t("terminal:highlightLogLevels")}
+            aria-label={t("terminal:highlightLogLevels")} onClick={highlightLogs}>
+            {t("terminal:logs")}
+          </button>
           <button type="button" title={t("terminal:previousMatch")} aria-label={t("terminal:previousMatch")}
             onClick={() => find(false)}>↑</button>
           <button type="button" title={t("terminal:nextMatch")} aria-label={t("terminal:nextMatch")}
