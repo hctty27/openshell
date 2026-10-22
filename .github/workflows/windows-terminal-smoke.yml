@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - "frontend/src/components/TerminalPane.tsx"
+      - "frontend/src/terminalThemes.ts"
+      - "frontend/src/styles.css"
+      - "app.go"
+      - "local_terminal*.go"
       - "frontend/src/components/TerminalPane.test.tsx"
       - "frontend/package.json"
       - "frontend/package-lock.json"
