@@ -1411,7 +1411,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                         remoteUploadDirs.current[tab.id] = directory;
                       }} hideTaskQueue />
                   )}
-                  <TransferDock refID={tab.ref} onNotice={notify} alwaysVisible />
+                  <TransferDock refID={tab.ref ?? undefined} onNotice={notify} alwaysVisible />
                 </aside>
               );
             })}
