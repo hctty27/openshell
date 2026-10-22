@@ -42,6 +42,7 @@ type connection struct {
 	client   *ssh.Client
 	terminal *ssh.Session
 	stdin    interface{ Write([]byte) (int, error) }
+	filter   interface { Close(); SetTerminalColumns(int32) }
 	history  *History
 	sequence uint64
 }
