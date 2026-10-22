@@ -73,6 +73,9 @@ type AppState struct {
 	AutoCopySelection     bool                `json:"autoCopySelection"`
 	RightClickPaste       bool                `json:"rightClickPaste"`
 	ConfirmMultilinePaste bool                `json:"confirmMultilinePaste"`
+	MiddleClickPaste       bool                `json:"middleClickPaste"`
+	LogHighlights          bool                `json:"logHighlights"`
+	SplitRatio             int                 `json:"splitRatio"`
 	FontSize              string              `json:"fontSize"`
 	Theme                 string              `json:"theme"`
 	ActiveProfile         string              `json:"activeProfile"`
@@ -224,6 +227,14 @@ func (a *App) State() (AppState, error) {
 	if e != nil {
 		return AppState{}, e
 	}
+	middleClickPaste, e := a.store.GetPreference(a.ctx, "middleClickPaste")
+	if e != nil { return AppState{}, e }
+	logHighlights, e := a.store.GetPreference(a.ctx, "logHighlights")
+	if e != nil { return AppState{}, e }
+	rawSplitRatio, e := a.store.GetPreference(a.ctx, "splitRatio")
+	if e != nil { return AppState{}, e }
+	splitRatio, e := strconv.Atoi(rawSplitRatio)
+	if e != nil || splitRatio < 20 || splitRatio > 80 { splitRatio = 50 }
 	confirmMultilinePaste, e := a.store.GetPreference(a.ctx, "confirmMultilinePaste")
 	if e != nil {
 		return AppState{}, e
@@ -270,6 +281,7 @@ func (a *App) State() (AppState, error) {
 		QuickCommands: commands, QuickCommandLayout: layout,
 		AutoCopySelection: autoCopySelection == "true", RightClickPaste: rightClickPaste == "true",
 		ConfirmMultilinePaste: confirmMultilinePaste != "false",
+		MiddleClickPaste: middleClickPaste == "true", LogHighlights: logHighlights == "true", SplitRatio: splitRatio,
 		Version:               branding.Version,
 	}, nil
 }
@@ -361,10 +373,13 @@ func (a *App) SavePreference(key, value string) error {
 		if e != nil || n < 1 || n > 100 {
 			return apperror.New("commandLimitMustBeBetween1And100", nil)
 		}
-	case "autoCopySelection", "rightClickPaste", "confirmMultilinePaste", "autoAllowChanges", "saveChatHistory", "autoSummarize":
+	case "autoCopySelection", "rightClickPaste", "middleClickPaste", "logHighlights", "confirmMultilinePaste", "autoAllowChanges", "saveChatHistory", "autoSummarize":
 		if value != "true" && value != "false" {
 			return apperror.New("booleanSettingsMustBeTrueOrFalse", nil)
 		}
+	case "splitRatio":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 20 || n > 80 { return apperror.New("unsupportedPreference", nil) }
 	case "quickCommands":
 		if err := validateQuickCommands(value); err != nil {
 			return err
