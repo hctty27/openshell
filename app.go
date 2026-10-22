@@ -337,7 +337,7 @@ func (a *App) DeleteSession(id string) error {
 func (a *App) SaveGroup(g domain.Group) (domain.Group, error) {
 	g.Name = strings.TrimSpace(g.Name)
 	if g.Name == "" || g.ParentID == g.ID && g.ID != "" {
-		return g, errors.New("invalid folder name or parent")
+		return g, apperror.New("folderInvalidNameOrParent",nil)
 	}
 	if g.ID == "" { g.ID = domain.NewID() }
 	groups, err := a.store.ListGroups(a.ctx)
@@ -346,8 +346,8 @@ func (a *App) SaveGroup(g domain.Group) (domain.Group, error) {
 	for _, item := range groups { parents[item.ID] = item.ParentID }
 	seen := map[string]bool{g.ID:true}
 	for id := g.ParentID; id != ""; id = parents[id] {
-		if seen[id] { return g, errors.New("folder cycle is not allowed") }
-		if _, ok := parents[id]; !ok { return g, errors.New("parent folder does not exist") }
+		if seen[id] { return g, apperror.New("folderCycleNotAllowed",nil) }
+		if _, ok := parents[id]; !ok { return g, apperror.New("folderParentNotFound",nil) }
 		seen[id] = true
 	}
 	return g, a.store.SaveGroup(a.ctx, g)
