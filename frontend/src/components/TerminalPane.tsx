@@ -16,7 +16,7 @@ import {
 } from "../../wailsjs/runtime/runtime";
 import type { Tab, Ref, Theme, TerminalTheme } from "../types";
 import { resolveTerminalTheme } from "../terminalThemes";
-import { parseOsc7Directory, parseOsc1337Directory } from "../terminalCwd";
+import { parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
 import { useDialogs } from "./DialogProvider";
 interface Props {
   tab: Tab;
@@ -96,6 +96,15 @@ export default function TerminalPane(p: Props) {
     const cwdHooks = [
       term.parser.registerOscHandler(7, payload => reportDirectory(parseOsc7Directory(payload))),
       term.parser.registerOscHandler(1337, payload => reportDirectory(parseOsc1337Directory(payload))),
+      // Return false to preserve normal title handling in xterm.js.
+      term.parser.registerOscHandler(0, title => {
+        reportDirectory(parseOscTitleDirectory(title, callbacks.current.tab.home));
+        return false;
+      }),
+      term.parser.registerOscHandler(2, title => {
+        reportDirectory(parseOscTitleDirectory(title, callbacks.current.tab.home));
+        return false;
+      }),
     ];
     let opened = false;
     let lastSize = "";

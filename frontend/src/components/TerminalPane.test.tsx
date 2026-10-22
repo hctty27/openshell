@@ -484,5 +484,10 @@ test("OSC directory reports identify current SSH connection and update cwd", () 
   expect(term.parser.handlers.get(1337)("CurrentDir=/root")).toBe(true);
   expect(onDirectoryChange).toHaveBeenCalledWith(tab.ref, "/root");
   expect(term.parser.handlers.get(7)("https://other/path")).toBe(false);
-  expect(onDirectoryChange).toHaveBeenCalledTimes(2);
+  expect(term.parser.handlers.get(0)("root@server:/data/hc")).toBe(false);
+  expect(onDirectoryChange).toHaveBeenCalledWith(tab.ref, "/data/hc");
+  expect(term.parser.handlers.get(2)("root@server:~/logs")).toBe(false);
+  expect(onDirectoryChange).toHaveBeenCalledWith(tab.ref, "/root/logs");
+  expect(term.parser.handlers.get(0)("vim")).toBe(false);
+  expect(onDirectoryChange).toHaveBeenCalledTimes(4);
 });

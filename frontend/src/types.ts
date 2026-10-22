@@ -82,6 +82,7 @@ export interface Tab {
   status: "connecting" | "connected" | "disconnected" | "error";
   home: string;
   cwd: string;
+  cwdReported?: boolean;
   messages: ChatMessage[];
   proposal: Proposal | null;
   autoRun?: AutoSnapshot;

@@ -834,24 +834,6 @@ kbd {
   box-shadow: 0 -6px 24px #0002;
 }
 .transfer-dock-empty { padding: 12px; color: var(--text-muted); }
-.workspace-status { position: relative; z-index: 9; }
-.workspace-status-transfer {
-  width: 190px;
-  margin-left: auto;
-}
-.workspace-status-transfer .transfer-dock {
-  height: 26px;
-  flex-basis: 26px;
-  border-top: none;
-  background: transparent;
-  border-left: 1px solid var(--border);
-}
-.workspace-status-transfer .transfer-dock-heading { height: 26px; font-size: 10px; }
-.workspace-status-transfer .transfer-dock-items {
-  bottom: 26px;
-  width: 385px;
-  left: auto;
-}
 .transfer-dock-item {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, .9fr) minmax(0, 1fr) 26px;
