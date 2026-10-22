@@ -22,7 +22,6 @@ interface Props {
   active: boolean;
   visible?: boolean;
   onActivate?: () => void;
-  mouseSelectionFirst?: boolean;
   fontSize: number;
   theme: Theme;
   autoCopySelection: boolean;
@@ -67,7 +66,6 @@ export default function TerminalPane(p: Props) {
       cursorBlink: true,
       scrollback: 10000,
       allowProposedApi: false,
-      mouseEventsRequireAlt: p.mouseSelectionFirst ?? false,
     });
     const addon = new FitAddon();
     term.loadAddon(addon);
@@ -161,8 +159,7 @@ export default function TerminalPane(p: Props) {
         event.button === 0 &&
         callbacks.current.active &&
         (term.modes.mouseTrackingMode === "none" ||
-          event.shiftKey ||
-          (callbacks.current.mouseSelectionFirst === true && !event.altKey));
+          event.shiftKey);
     };
     const onMouseUp = (event: MouseEvent) => {
       if (event.button !== 0 || !selectingWithMouse) return;
@@ -337,11 +334,6 @@ export default function TerminalPane(p: Props) {
     if (terminal.current)
       terminal.current.options.theme = terminalThemes[p.theme];
   }, [p.theme]);
-  useEffect(() => {
-    if (terminal.current) {
-      terminal.current.options.mouseEventsRequireAlt = p.mouseSelectionFirst ?? false;
-    }
-  }, [p.mouseSelectionFirst]);
   useEffect(() => {
     if (p.visible && !p.active) {
       requestAnimationFrame(() => fit.current?.fit());
