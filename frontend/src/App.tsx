@@ -13,6 +13,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
+  Unplug,
   Copy,
   Sparkles,
   ArrowRight,
@@ -209,6 +210,21 @@ function Workspace({ initialState }: { initialState: AppState }) {
     streamIDs = useRef<Record<string, string>>({}),
     selections = useRef<Record<string, string>>({});
   tabsRef.current = tabs;
+  const reconnectTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const reconnectInFlight = useRef(new Set<string>());
+  const autoReconnectRef = useRef(state.autoReconnect !== false);
+  autoReconnectRef.current = state.autoReconnect !== false;
+  const showDisconnectReasonRef = useRef(state.showDisconnectReason !== false);
+  showDisconnectReasonRef.current = state.showDisconnectReason !== false;
+  const stopRetryTimer = (tabID: string) => {
+    const timer = reconnectTimers.current.get(tabID);
+    if (timer !== undefined) clearTimeout(timer);
+    reconnectTimers.current.delete(tabID);
+  };
+  useEffect(() => () => {
+    for (const timer of reconnectTimers.current.values()) clearTimeout(timer);
+    reconnectTimers.current.clear();
+  }, []);
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 5000);
@@ -389,30 +405,33 @@ function Workspace({ initialState }: { initialState: AppState }) {
       "conversation:error",
       (event: { error: unknown }) => notify(event.error),
     );
+    const lost = listen("ssh:connection-lost", (payload: { ref: Ref; reason: string }) => {
+      if (!showDisconnectReasonRef.current) return;
+      const reasonKeys: Record<string, string> = {
+        keepalive_timeout: "common:connectionLostReasonKeepaliveTimeout",
+        keepalive_failed: "common:connectionLostReasonKeepaliveFailed",
+        network_timeout: "common:connectionLostReasonNetworkTimeout",
+        remote_closed: "common:connectionLostReasonRemoteClosed",
+        connection_lost: "common:connectionLostReasonConnectionLost",
+      };
+      update(payload.ref.tabId, t => t.ref?.generation === payload.ref.generation
+        ? { ...t, error: tr(reasonKeys[payload.reason] ?? "common:connectionLostReasonConnectionLost") } : t);
+    });
     const off = listen("ssh:disconnected", (ref: Ref) =>
-      update(ref.tabId, (t) =>
-        t.ref?.generation === ref.generation
-          ? {
-              ...t,
-              status: "disconnected",
-              chatBusy: false,
-              error:
-                t.error || message("common:connectionLostReconnectToContinue"),
-              proposal: null,
-            }
-          : t,
-      ),
+      update(ref.tabId, t => {
+        if (t.ref?.generation !== ref.generation || t.manualDisconnected) return t;
+        return {
+          ...t, status: autoReconnectRef.current ? "reconnecting" : "disconnected",
+          retryCount: 0, chatBusy: false, executing: false, proposal: null,
+          error: t.error || message("common:connectionInterrupted"),
+        };
+      }),
     );
     const end = listen("ssh:terminal-ended", (ref: Ref) =>
-      update(ref.tabId, (t) =>
-        t.ref?.generation === ref.generation
-          ? {
-              ...t,
-              status: "disconnected",
-              error: message("common:terminalProcessEndedReconnectToContinue"),
-            }
-          : t,
-      ),
+      update(ref.tabId, t => t.ref?.generation === ref.generation
+        ? { ...t, status: "disconnected", manualDisconnected: true,
+            error: message("common:terminalProcessEndedReconnectToContinue") }
+        : t),
     );
     const autoEvent = listen("auto:event", (event: AutoEvent) => {
       const s = event.state;
@@ -502,6 +521,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     });
     return () => {
       off();
+      lost();
       memoryFailure();
       end();
       delta();
@@ -573,6 +593,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
     update(tab.id, (t) => ({
       ...t,
       status: "connecting",
+      manualDisconnected: false,
+      retryCount: 0,
       error: "",
       proposal: null,
       messages: [],
@@ -606,8 +628,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
       if (result.conversationId)
         await memory.restore(result.ref, result.conversationId);
     } catch (e) {
-      update(tab.id, (t) => ({ ...t, status: "error", error: e }));
-      notify(e);
+      update(tab.id, (t) => t.manualDisconnected ? t : ({ ...t, status: "error", error: e }));
+      if (!tabsRef.current.find(t => t.id === tab.id)?.manualDisconnected) notify(e);
     }
   };
   const open = (session: Session, afterTabID?: string) => {
@@ -637,6 +659,63 @@ function Workspace({ initialState }: { initialState: AppState }) {
       setLogin({ tab, secret: "" });
     else setTimeout(() => connect(tab), 0);
   };
+  useEffect(() => {
+    const enabled = state.autoReconnect !== false;
+    for (const tab of tabs) {
+      if (tab.status !== "reconnecting" || tab.manualDisconnected || !enabled) {
+        stopRetryTimer(tab.id);
+        continue;
+      }
+      if (reconnectTimers.current.has(tab.id) || reconnectInFlight.current.has(tab.id)) continue;
+      const nextAttempt = (tab.retryCount ?? 0) + 1;
+      const limit = state.maxReconnectAttempts ?? 10;
+      if (limit > 0 && nextAttempt > limit) {
+        update(tab.id, t => ({ ...t, status: "disconnected", error: message("common:reconnectStopped") }));
+        continue;
+      }
+      const expectedGeneration = tab.ref?.generation;
+      const intervals = [1000, 2000, 5000, 10000, 20000, 30000];
+      const timer = setTimeout(async () => {
+        reconnectTimers.current.delete(tab.id);
+        const current = tabsRef.current.find(t => t.id === tab.id);
+        if (!current || current.status !== "reconnecting" ||
+            current.manualDisconnected || current.ref?.generation !== expectedGeneration) return;
+        reconnectInFlight.current.add(tab.id);
+        try {
+          const result = await api.Reconnect(tab.id, tab.session.id);
+          const latest = tabsRef.current.find(t => t.id === tab.id);
+          if (!latest || latest.manualDisconnected || latest.status !== "reconnecting") {
+            await api.Disconnect(result.ref).catch(() => {});
+            return;
+          }
+          if (result.challenge) {
+            update(tab.id, t => ({ ...t, status: "disconnected", error: message("common:reconnectStopped") }));
+            setChallenge({ host: result.challenge, tab: latest, secret: "" });
+            return;
+          }
+          update(tab.id, t => ({
+            ...t, ref: result.ref, conversationID: result.conversationId,
+            status: "connected", home: result.home, cwd: result.home,
+            retryCount: 0, error: "", manualDisconnected: false,
+          }));
+          if (result.conversationId) await memory.restore(result.ref, result.conversationId);
+        } catch (error) {
+          const description = String(error).toLowerCase();
+          const requiresAuthentication = /authenticat|credential|password|passphrase|fingerprint|private.key/i.test(description);
+          update(tab.id, t => t.status !== "reconnecting" || t.manualDisconnected ? t : ({
+            ...t, status: requiresAuthentication ? "disconnected" : "reconnecting",
+            retryCount: nextAttempt, error,
+          }));
+        } finally {
+          reconnectInFlight.current.delete(tab.id);
+        }
+      }, intervals[Math.min(nextAttempt - 1, intervals.length - 1)]);
+      reconnectTimers.current.set(tab.id, timer);
+    }
+    for (const [tabID] of reconnectTimers.current) {
+      if (!tabs.some(t => t.id === tabID && t.status === "reconnecting" && !t.manualDisconnected)) stopRetryTimer(tabID);
+    }
+  }, [tabs, state.autoReconnect, state.maxReconnectAttempts]);
   const openFromPicker = (session: Session) => {
     setShowSessionPicker(false);
     const existing = tabsRef.current.find(
@@ -653,7 +732,40 @@ function Workspace({ initialState }: { initialState: AppState }) {
       else void connect(existing);
     }
   };
+  const manualConnect = (tab: Tab) => {
+    stopRetryTimer(tab.id);
+    if (tab.session.authType === "password" && !tab.session.credentialRef) {
+      setLogin({ tab, secret: "" });
+    } else {
+      void connect(tab);
+    }
+  };
+  const disconnectTab = async (tab: Tab) => {
+    if (!tab.ref && tab.status !== "connecting") return;
+    if (state.confirmActiveDisconnect !== false && (tab.chatBusy || tab.executing)) {
+      if (!(await dialogs.confirm({
+        title: message("common:disconnectRunningTitle"),
+        description: message("common:disconnectRunningDescription"),
+        tone: "warning",
+        confirmLabel: message("common:disconnectAnyway"),
+      }))) return;
+    }
+    stopRetryTimer(tab.id);
+    update(tab.id, t => ({
+      ...t, status: "disconnected", manualDisconnected: true,
+      retryCount: 0, chatBusy: false, executing: false, proposal: null,
+      error: "",
+    }));
+    try {
+      if (tab.status === "reconnecting" || tab.status === "connecting" || !tab.ref) {
+        await api.CancelConnecting(tab.id);
+      } else {
+        await api.Disconnect(tab.ref);
+      }
+    } catch (error) { notify(error); }
+  };
   const close = async (tab: Tab) => {
+    stopRetryTimer(tab.id);
     if (tab.chatBusy || tab.executing || tab.proposal) {
       if (
         !(await dialogs.confirm({
@@ -1298,10 +1410,18 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </button>
                 <button
                   title={tr("common:reconnect")}
-                  disabled={active?.status === "connecting"}
-                  onClick={() => active && connect(active)}
+                  disabled={active?.status === "connecting" || active?.status === "reconnecting"}
+                  onClick={() => active && manualConnect(active)}
                 >
                   <RefreshCw size={14} />
+                </button>
+                <button
+                  title={tr(active?.status === "connecting" ? "common:cancelConnecting"
+                    : active?.status === "reconnecting" ? "common:stopReconnecting" : "common:disconnect")}
+                  disabled={!active || ["disconnected", "error"].includes(active.status)}
+                  onClick={() => active && void disconnectTab(active)}
+                >
+                  <Unplug size={14} />
                 </button>
                 <button
                   title={tr("common:sendSelectedTextOrRecentOutputToAi")}
@@ -1385,17 +1505,17 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   }}
                 />
               )}
-              {active?.status === "connecting" && (
+              {(active?.status === "connecting" || active?.status === "reconnecting") && (
                 <div className="terminal-overlay">
                   <LoaderCircle size={23} className="spin" />
                   <p>
-                    {tr("common:connecting")}
+                    {active?.status === "reconnecting" ? tr("common:reconnecting") : tr("common:connecting")}
                     {active.session.host}…
                   </p>
                 </div>
               )}
               {active?.status !== "connected" &&
-                active?.status !== "connecting" && (
+                active?.status !== "connecting" && active?.status !== "reconnecting" && (
                   <div className="terminal-connect-state">
                     <span className="status-dot offline" />
                     <span>
@@ -1403,7 +1523,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                         ? errorText(active.error)
                         : tr("common:sessionDisconnected")}
                     </span>
-                    <button onClick={() => active && connect(active)}>
+                    <button onClick={() => active && manualConnect(active)}>
                       {tr("common:connect")}
                     </button>
                   </div>
@@ -1451,6 +1571,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
               ? tr("common:sshConnected")
               : active?.status === "connecting"
                 ? tr("common:connecting2")
+                : active?.status === "reconnecting"
+                  ? tr("common:reconnecting")
                 : tr("common:disconnected")}
             {active?.status === "connected" && (
               <>
@@ -1662,6 +1784,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onImportSessionBackup={previewBackup}
           onRefresh={refresh}
           onFont={setFontSize}
+          keepAliveSeconds={state.keepAliveSeconds}
+          autoReconnect={state.autoReconnect}
+          maxReconnectAttempts={state.maxReconnectAttempts}
+          showDisconnectReason={state.showDisconnectReason}
+          confirmActiveDisconnect={state.confirmActiveDisconnect}
         />
       )}
       {showQuickCommandManager && (
