@@ -268,3 +268,14 @@ func (m *Manager) CancelTab(tab string) {
 		c.client.Close()
 	}
 }
+
+// Client returns the authenticated SSH transport for a live tab reference.
+func (m *Manager) Client(ref domain.ConnectionRef) (*ssh.Client, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c := m.connections[ref.TabID]
+	if c == nil || c.ref != ref {
+		return nil, domain.Error("stale", apperror.New("staleConnection", nil).Error())
+	}
+	return c.client, nil
+}

@@ -45,6 +45,7 @@ import SessionTree from "./components/SessionTree";
 import SessionPicker from "./components/SessionPicker";
 import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
+import SFTPView from "./components/SFTPView";
 import AISidebar from "./components/AISidebar";
 import { useConversations } from "./useConversations";
 import { toChatMessages } from "./conversations";
@@ -185,6 +186,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       truncated: boolean;
     } | null>(null),
     [attachments, setAttachments] = useState<Record<string, string>>({});
+  const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
   const tabsRef = useRef(tabs),
     streamIDs = useRef<Record<string, string>>({}),
     selections = useRef<Record<string, string>>({});
@@ -220,6 +222,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
         hasEarlier: activeCache?.hasMore,
       }
     : undefined;
+  const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
   const update = (tabID: string, fn: (tab: Tab) => Tab) =>
     setTabs((old) => old.map((t) => (t.id === tabID ? fn(t) : t)));
   const notify = (error: unknown) => setToast(error);
@@ -1073,6 +1076,13 @@ function Workspace({ initialState }: { initialState: AppState }) {
               </span>
               <div>
                 <button
+                  title={tr(showSFTP ? "sftp:terminal" : "sftp:openFileManager")}
+                  disabled={active?.status !== "connected"}
+                  onClick={() => active && setFileViews(old => ({...old, [active.id]: !old[active.id]}))}
+                >
+                  {showSFTP ? <Terminal size={14} /> : <FolderOpen size={14} />}
+                </button>
+                <button
                   title={tr("common:reauthenticate")}
                   disabled={active?.status === "connecting"}
                   onClick={() =>
@@ -1100,7 +1110,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </button>
               </div>
             </div>
-            <div className="terminal-container">
+            <div className="terminal-container" style={showSFTP ? { display: "none" } : undefined}>
               {tabs.map((tab) => (
                 <TerminalPane
                   key={tab.id}
@@ -1151,13 +1161,16 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   </div>
                 )}
             </div>
-            <QuickCommandBar
-              tab={active}
-              commands={state.quickCommands ?? []}
-              layout={quickCommandLayout}
-              onManage={() => setShowQuickCommandManager(true)}
-              onRun={runQuickCommand}
-            />
+            {showSFTP && active?.ref && <SFTPView refID={active.ref} onNotice={notify} />}
+            {!showSFTP && (
+              <QuickCommandBar
+                tab={active}
+                commands={state.quickCommands ?? []}
+                layout={quickCommandLayout}
+                onManage={() => setShowQuickCommandManager(true)}
+                onRun={runQuickCommand}
+              />
+            )}
           </>
         )}
         <footer className="workspace-status">

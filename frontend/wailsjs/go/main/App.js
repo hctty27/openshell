@@ -38,16 +38,8 @@ export function Continue(arg1) {
   return window['go']['main']['App']['Continue'](arg1);
 }
 
-export function CreateConversation(arg1) {
-  return window['go']['main']['App']['CreateConversation'](arg1);
-}
-
 export function DeleteAPI(arg1) {
   return window['go']['main']['App']['DeleteAPI'](arg1);
-}
-
-export function DeleteConversation(arg1, arg2) {
-  return window['go']['main']['App']['DeleteConversation'](arg1, arg2);
 }
 
 export function DeleteGroup(arg1) {
@@ -62,24 +54,12 @@ export function Disconnect(arg1) {
   return window['go']['main']['App']['Disconnect'](arg1);
 }
 
-export function ListConversations(arg1, arg2, arg3) {
-  return window['go']['main']['App']['ListConversations'](arg1, arg2, arg3);
-}
-
 export function OpenTerminal(arg1, arg2, arg3) {
   return window['go']['main']['App']['OpenTerminal'](arg1, arg2, arg3);
 }
 
 export function PreviewContext(arg1, arg2) {
   return window['go']['main']['App']['PreviewContext'](arg1, arg2);
-}
-
-export function ReadConversation(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['ReadConversation'](arg1, arg2, arg3, arg4);
-}
-
-export function RenameConversation(arg1, arg2, arg3) {
-  return window['go']['main']['App']['RenameConversation'](arg1, arg2, arg3);
 }
 
 export function ResizeTerminal(arg1, arg2, arg3) {
@@ -110,10 +90,6 @@ export function SaveSession(arg1) {
   return window['go']['main']['App']['SaveSession'](arg1);
 }
 
-export function SelectConversation(arg1, arg2) {
-  return window['go']['main']['App']['SelectConversation'](arg1, arg2);
-}
-
 export function StartAutomatic(arg1, arg2) {
   return window['go']['main']['App']['StartAutomatic'](arg1, arg2);
 }
@@ -136,4 +112,51 @@ export function TrustHost(arg1) {
 
 export function WriteTerminal(arg1, arg2) {
   return window['go']['main']['App']['WriteTerminal'](arg1, arg2);
+}
+
+export function SFTPHome(arg1) {
+  return window['go']['main']['App']['SFTPHome'](arg1);
+}
+export function SFTPList(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SFTPList'](arg1, arg2, arg3);
+}
+export function SFTPOperate(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SFTPOperate'](arg1, arg2, arg3, arg4, arg5);
+}
+export function SFTPTransfer(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SFTPTransfer'](arg1, arg2, arg3, arg4, arg5);
+}
+export function SFTPTransfers(arg1) {
+  return window['go']['main']['App']['SFTPTransfers'](arg1);
+}
+export function SFTPCancel(arg1) {
+  return window['go']['main']['App']['SFTPCancel'](arg1);
+}
+
+export function SFTPChooseDirectory() {
+  return window['go']['main']['App']['SFTPChooseDirectory']();
+}
+
+export function ListConversations(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ListConversations'](arg1, arg2, arg3);
+}
+
+export function ReadConversation(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ReadConversation'](arg1, arg2, arg3, arg4);
+}
+
+export function SelectConversation(arg1, arg2) {
+  return window['go']['main']['App']['SelectConversation'](arg1, arg2);
+}
+
+export function CreateConversation(arg1) {
+  return window['go']['main']['App']['CreateConversation'](arg1);
+}
+
+export function RenameConversation(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RenameConversation'](arg1, arg2, arg3);
+}
+
+export function DeleteConversation(arg1, arg2) {
+  return window['go']['main']['App']['DeleteConversation'](arg1, arg2);
 }

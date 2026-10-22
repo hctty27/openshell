@@ -7,12 +7,14 @@ import enSettings from "../locales/en/settings.json";
 import enTerminal from "../locales/en/terminal.json";
 import enAI from "../locales/en/ai.json";
 import enErrors from "../locales/en/errors.json";
+import enSFTP from "../locales/en/sftp.json";
 import zhCommon from "../locales/zh-CN/common.json";
 import zhSessions from "../locales/zh-CN/sessions.json";
 import zhSettings from "../locales/zh-CN/settings.json";
 import zhTerminal from "../locales/zh-CN/terminal.json";
 import zhAI from "../locales/zh-CN/ai.json";
 import zhErrors from "../locales/zh-CN/errors.json";
+import zhSFTP from "../locales/zh-CN/sftp.json";
 export const resources = {
   en: {
     common: enCommon,
@@ -21,6 +23,7 @@ export const resources = {
     terminal: enTerminal,
     ai: enAI,
     errors: enErrors,
+    sftp: enSFTP,
   },
   "zh-CN": {
     common: zhCommon,
@@ -29,6 +32,7 @@ export const resources = {
     terminal: zhTerminal,
     ai: zhAI,
     errors: zhErrors,
+    sftp: zhSFTP,
   },
 };
 export const i18n = i18next.createInstance();

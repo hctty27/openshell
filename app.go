@@ -11,6 +11,8 @@ import (
 	"github.com/hctty27/openshell/internal/domain"
 	sshclient "github.com/hctty27/openshell/internal/ssh"
 	"github.com/hctty27/openshell/internal/store"
+	files "github.com/hctty27/openshell/internal/sftp"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/hctty27/openshell/internal/tasks"
 	"os"
 	"path/filepath"
@@ -26,6 +28,7 @@ type App struct {
 	store        *store.Store
 	secrets      domain.SecretStore
 	ssh          *sshclient.Manager
+	sftp         *files.Manager
 	coordinator  *tasks.Coordinator
 	automatic    *tasks.AutomaticRunner
 	provider     *ai.Provider
@@ -143,10 +146,12 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 		if name == "ssh:disconnected" {
 			if ref, ok := payload.(domain.ConnectionRef); ok {
 				a.cancelExecution(ref, false)
+				if a.sftp != nil { a.sftp.CancelConnection(ref) }
 			}
 		}
 		a.emit(name, payload)
 	})
+	a.sftp = files.NewManager(a.ssh.Client, func(name string, payload any) { a.emit(name, payload) })
 	a.coordinator = tasks.NewCoordinator(a.ssh.Run, a.ssh.Valid)
 	return a, nil
 }
@@ -603,6 +608,7 @@ func (a *App) ResizeTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	return a.ssh.Resize(ref, cols, rows)
 }
 func (a *App) Disconnect(ref domain.ConnectionRef) error {
+	a.sftp.CancelConnection(ref)
 	a.cancelExecution(ref, true)
 	return a.ssh.Disconnect(ref)
 }
@@ -624,6 +630,7 @@ func (a *App) CloseTab(tabID string) error {
 		}
 	}
 	a.mu.Unlock()
+	a.sftp.CancelTab(tabID)
 	a.ssh.CancelTab(tabID)
 	return nil
 }
@@ -655,4 +662,27 @@ func (a *App) ChoosePrivateKey() (string, error) {
 		return "", apperror.New("filePickerIsNotInitialized", nil)
 	}
 	return a.pickKey()
+}
+
+func (a *App) SFTPHome(ref domain.ConnectionRef) (files.Paths, error) {
+ return a.sftp.Homes(ref)
+}
+func (a *App) SFTPList(ref domain.ConnectionRef, side, directory string) ([]files.Entry, error) {
+ return a.sftp.List(ref, side, directory)
+}
+func (a *App) SFTPOperate(ref domain.ConnectionRef, side, operation, source, argument string) error {
+ return a.sftp.Operate(ref, side, operation, source, argument)
+}
+func (a *App) SFTPTransfer(ref domain.ConnectionRef, direction, source, destination string, overwrite bool) (files.Task, error) {
+ return a.sftp.Start(ref, direction, source, destination, overwrite)
+}
+func (a *App) SFTPTransfers(ref domain.ConnectionRef) []files.Task {
+ return a.sftp.Transfers(ref)
+}
+func (a *App) SFTPCancel(taskID string) error {
+ return a.sftp.Cancel(taskID)
+}
+
+func (a *App) SFTPChooseDirectory() (string, error) {
+ return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title:"Select local folder"})
 }

@@ -233,3 +233,31 @@ export interface ConversationEvent {
   selectedByTab?: Record<string, string>;
   status?: string;
 }
+
+export interface SFTPEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  isSymlink: boolean;
+  size: number;
+  modified: number;
+  mode: string;
+}
+export interface SFTPPaths {
+  local: string;
+  remote: string;
+}
+export interface SFTPTask {
+  id: string;
+  ref: Ref;
+  direction: "upload" | "download";
+  source: string;
+  destination: string;
+  name: string;
+  bytes: number;
+  total: number;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  overwrite: boolean;
+  error: string;
+  created: number;
+}
