@@ -149,6 +149,8 @@ export function useConversations() {
   }, []);
   const restore = useCallback(
     async (ref: Ref, id: string, select = false) => {
+      // A draft has no database ID and must never be restored as history.
+      if (!id) return;
       const token = (epochs.current[ref.tabId] ?? 0) + 1;
       epochs.current[ref.tabId] = token;
       refs.current[ref.tabId] = ref;
@@ -229,7 +231,7 @@ export function useConversations() {
   useEffect(() => {
     for (const [tab, id] of Object.entries(selectedByTab)) {
       const ref = refs.current[tab];
-      if (!ref || cache[id]?.loaded || loadingByTab[tab] || errors[tab])
+      if (!id || !ref || cache[id]?.loaded || loadingByTab[tab] || errors[tab])
         continue;
       void restore(ref, id).catch(() => {});
     }

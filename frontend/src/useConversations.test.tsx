@@ -160,3 +160,39 @@ test("unsent new drafts only switch the tab and do not create saved conversation
   expect(api.StartConversationDraft).toHaveBeenCalledTimes(1);
   expect(result.current.lists).toEqual({});
 });
+
+test("draft selection never requests a SQLite history row with an empty ID", async () => {
+  vi.mocked(api.ReadConversation).mockResolvedValue(page());
+  vi.mocked(api.ListConversations).mockResolvedValue({
+    items: [c],
+    nextCursor: null,
+  });
+  const { result } = renderHook(() => useConversations());
+  await act(async () => {
+    await result.current.restore(ref, "c1");
+  });
+  vi.mocked(api.ReadConversation).mockClear();
+  vi.mocked(api.SelectConversation).mockClear();
+
+  await act(async () => {
+    await result.current.draft(ref);
+  });
+  expect(result.current.selectedByTab.tab).toBe("");
+  expect(api.ReadConversation).not.toHaveBeenCalled();
+  expect(api.SelectConversation).not.toHaveBeenCalled();
+  expect(result.current.errors.tab).toBeFalsy();
+
+  await act(async () => {
+    fixture.emit({
+      ...selection("c1", 99),
+      selectedByTab: { tab: "" },
+    });
+  });
+  expect(result.current.selectedByTab.tab).toBe("");
+  expect(api.ReadConversation).not.toHaveBeenCalled();
+
+  await act(async () => {
+    await result.current.restore(ref, "");
+  });
+  expect(api.ReadConversation).not.toHaveBeenCalled();
+});

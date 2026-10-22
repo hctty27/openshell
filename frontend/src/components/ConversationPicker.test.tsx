@@ -41,6 +41,11 @@ test("compact picker keeps time in dropdown and manages each historical conversa
   expect(trigger.textContent).toBe("Redis");
   fireEvent.click(trigger);
   expect(screen.getByRole("listbox")).toBeTruthy();
+  const item = screen.getByRole("option", { name: /Redis/ });
+  const line = item.querySelector(".conversation-entry-text");
+  expect(line?.querySelector("span")?.textContent).toBe("Redis");
+  expect(line?.querySelector("small")?.textContent).toContain("10/22");
+  expect(line?.children.length).toBe(2);
   fireEvent.contextMenu(screen.getByRole("option", { name: /CPU/ }));
   fireEvent.click(screen.getAllByTitle("重命名对话")[1]);
   expect(events.onRename).toHaveBeenCalledWith("two");
