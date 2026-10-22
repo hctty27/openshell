@@ -19,7 +19,7 @@ import {
 } from "../../wailsjs/runtime/runtime";
 import type { Tab } from "../types";
 
-const refs = vi.hoisted(() => ({ terms: [] as any[], webgl: [] as any[], searches: [] as any[] }));
+const refs = vi.hoisted(() => ({ terms: [] as any[], webgl: [] as any[], searches: [] as any[], fits: [] as any[] }));
 const events = vi.hoisted(() => ({ listeners: new Map<string, (payload: any) => void>() }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
@@ -93,6 +93,7 @@ vi.mock("@xterm/addon-fit", () => ({
   FitAddon: class {
     fit = vi.fn();
     dispose = vi.fn();
+    constructor() { refs.fits.push(this); }
   },
 }));
 vi.mock("../bridge", () => ({
@@ -167,6 +168,7 @@ beforeEach(() => {
   refs.terms.length = 0;
   refs.webgl.length = 0;
   refs.searches.length = 0;
+  refs.fits.length = 0;
   events.listeners.clear();
   vi.clearAllMocks();
   vi.stubGlobal(
@@ -411,6 +413,62 @@ test("split-visible terminal activates on mouse click without creating a second 
   );
   expect(refs.terms).toHaveLength(1);
   expect(pane.classList.contains("active")).toBe(true);
+});
+
+test("switching focus between visible split panes keeps the renderer and terminal geometry", () => {
+  const onActivate = vi.fn();
+  const renderPane = (active: boolean) => (
+    <DialogProvider>
+      <TerminalPane tab={tab} active={active} visible onActivate={onActivate}
+        fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>
+  );
+  const { rerender } = render(renderPane(false));
+  expect(refs.webgl).toHaveLength(1);
+  const originalRenderer = refs.webgl[0];
+  refs.fits[0].fit.mockClear();
+
+  rerender(renderPane(true));
+  rerender(renderPane(false));
+  rerender(renderPane(true));
+
+  expect(refs.terms).toHaveLength(1);
+  expect(refs.webgl).toHaveLength(1);
+  expect(originalRenderer.dispose).not.toHaveBeenCalled();
+  expect(refs.fits[0].fit).not.toHaveBeenCalled();
+});
+
+test("resize observer fits only when a visible pane actually changes size", () => {
+  let notifyResize: ResizeObserverCallback = () => {};
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(callback: ResizeObserverCallback) { notifyResize = callback; }
+    observe() {}
+    disconnect() {}
+  });
+  const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+  const height = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(500);
+  try {
+    renderTerminal({ visible: true });
+    const fitAddon = refs.fits[0];
+    fitAddon.fit.mockClear();
+    act(() => {
+      notifyResize([], {} as ResizeObserver);
+      notifyResize([], {} as ResizeObserver);
+    });
+    expect(fitAddon.fit).not.toHaveBeenCalled();
+
+    width.mockReturnValue(640);
+    act(() => { notifyResize([], {} as ResizeObserver); });
+    expect(fitAddon.fit).toHaveBeenCalledTimes(1);
+
+    act(() => { notifyResize([], {} as ResizeObserver); });
+    expect(fitAddon.fit).toHaveBeenCalledTimes(1);
+  } finally {
+    width.mockRestore();
+    height.mockRestore();
+  }
 });
 
 test("log preset highlights severity keywords through regex search decorations", async () => {
