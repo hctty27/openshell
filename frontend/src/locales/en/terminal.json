@@ -58,5 +58,7 @@
   "closeSplit": "Close split view",
   "regexSearch": "Use regular expression",
   "highlightLogLevels": "Highlight log severity keywords",
-  "logs": "Logs"
+  "logs": "Logs",
+  "resetSplitRatio": "Reset split ratio to 50/50",
+  "resizeSplit": "Resize terminal split"
 }

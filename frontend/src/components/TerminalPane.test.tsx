@@ -26,6 +26,9 @@ vi.mock("@xterm/xterm", () => ({
     modes = { mouseTrackingMode: "none" };
     cols = 80;
     rows = 24;
+    buffer = { active: { viewportY: 4 } };
+    scrollToLine = vi.fn();
+    clearSelection = vi.fn();
     selected = "";
     onDataCallback = (_data: string) => {};
     resizeHandler = (_size: { cols: number; rows: number }) => {};
@@ -59,6 +62,8 @@ vi.mock("@xterm/addon-search", () => ({
     findNext = vi.fn(() => true);
     findPrevious = vi.fn(() => true);
     clearDecorations = vi.fn();
+    clearActiveDecoration = vi.fn();
+    dispose = vi.fn();
     constructor() { refs.searches.push(this); }
   },
 }));
@@ -412,3 +417,45 @@ test("log preset highlights severity keywords through regex search decorations",
   );
 });
 
+
+test("live severity highlighting survives closing manual search and updates independently", async () => {
+  const { rerender } = renderTerminal({ logHighlights: true });
+  expect(refs.searches).toHaveLength(3);
+  const [manual, errors, warnings] = refs.searches;
+  expect(errors.findNext).toHaveBeenCalledWith(
+    expect.stringContaining("ERROR"),
+    expect.objectContaining({ regex: true, caseSensitive: false }),
+  );
+  expect(warnings.findNext).toHaveBeenCalledWith(
+    expect.stringContaining("WARN"),
+    expect.objectContaining({ regex: true }),
+  );
+  expect(refs.terms[0].scrollToLine).toHaveBeenCalledWith(4);
+  const shortcut = { type: "keydown", key: "f", ctrlKey: true, shiftKey: true,
+    altKey: false, metaKey: false, preventDefault: vi.fn() } as unknown as KeyboardEvent;
+  refs.terms[0].keyHandler(shortcut);
+  fireEvent.click(await screen.findByRole("button", { name: "关闭搜索" }));
+  expect(manual.clearDecorations).toHaveBeenCalled();
+  expect(errors.clearDecorations).not.toHaveBeenCalled();
+  expect(warnings.clearDecorations).not.toHaveBeenCalled();
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={tab} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste logHighlights={false}
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>,
+  );
+  expect(errors.dispose).toHaveBeenCalled();
+  expect(warnings.dispose).toHaveBeenCalled();
+  expect(refs.terms).toHaveLength(1);
+});
+
+test("middle click pastes only when enabled and no TUI mouse tracking", async () => {
+  const { container } = renderTerminal({ middleClickPaste: true });
+  fireEvent.mouseDown(container.querySelector(".terminal-pane")!, { button: 1 });
+  await waitFor(() => expect(refs.terms[0].paste).toHaveBeenCalledWith("echo hello"));
+  vi.mocked(ClipboardGetText).mockClear();
+  refs.terms[0].modes.mouseTrackingMode = "vt200";
+  fireEvent.mouseDown(container.querySelector(".terminal-pane")!, { button: 1 });
+  expect(ClipboardGetText).not.toHaveBeenCalled();
+});

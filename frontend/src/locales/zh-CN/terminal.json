@@ -58,5 +58,7 @@
   "closeSplit": "关闭分屏",
   "regexSearch": "使用正则表达式",
   "highlightLogLevels": "高亮日志级别关键词",
-  "logs": "日志"
+  "logs": "日志",
+  "resetSplitRatio": "重置分屏为 50/50",
+  "resizeSplit": "调整终端分屏比例"
 }

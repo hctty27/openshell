@@ -159,8 +159,14 @@ test("terminal mouse settings are opt-in and saved independently", async () => {
   fireEvent.click(screen.getByRole("button", { name: "终端" }));
   const copy = screen.getByLabelText("选中自动复制") as HTMLInputElement;
   const paste = screen.getByLabelText("鼠标右键粘贴") as HTMLInputElement;
+  const middle = screen.getByLabelText("鼠标中键粘贴") as HTMLInputElement;
+  const highlight = screen.getByLabelText("持续高亮日志级别") as HTMLInputElement;
   expect(copy.checked).toBe(false);
   expect(paste.checked).toBe(false);
+  expect(middle.checked).toBe(false);
+  expect(highlight.checked).toBe(false);
+  fireEvent.click(middle);
+  fireEvent.click(highlight);
   fireEvent.click(copy);
   fireEvent.click(paste);
   const confirm = screen.getByLabelText("多行粘贴前确认") as HTMLInputElement;
@@ -173,6 +179,8 @@ test("terminal mouse settings are opt-in and saved independently", async () => {
       "true",
     );
     expect(api.SavePreference).toHaveBeenCalledWith("rightClickPaste", "true");
+    expect(api.SavePreference).toHaveBeenCalledWith("middleClickPaste", "true");
+    expect(api.SavePreference).toHaveBeenCalledWith("logHighlights", "true");
     expect(api.SavePreference).toHaveBeenCalledWith(
       "confirmMultilinePaste",
       "false",
@@ -404,5 +412,50 @@ test("two connected sessions can split, rotate, focus and close without extra SS
   expect(previous?.getAttribute("data-active")).toBe("true");
   fireEvent.click(screen.getByRole("button", { name: "关闭分屏" }));
   expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split")).toBe(false);
+  expect(api.Connect).toHaveBeenCalledTimes(2);
+});
+
+test("split gutter accepts keyboard, drag, and reset with persistent bounds", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [
+      { id: "us-id", groupId: "", name: "us", host: "us.example.com", port: 22,
+        username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved" },
+      { id: "eu-id", groupId: "", name: "eu", host: "eu.example.com", port: 22,
+        username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved" },
+    ],
+    groups: [], profiles: [], fontSize: "14", language: "zh-CN",
+    activeProfile: "", splitRatio: 60, version: "0.1.34",
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.click(screen.getByTitle("打开会话列表"));
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 us" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByTitle("打开会话列表"));
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 eu" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
+  const selector = screen.getByRole("combobox", { name: "分屏选择…" }) as HTMLSelectElement;
+  fireEvent.change(selector, { target: { value: selector.options[1].value } });
+  const separator = screen.getByRole("separator", { name: "调整终端分屏比例" });
+  expect(separator.getAttribute("aria-valuenow")).toBe("60");
+  fireEvent.keyDown(separator, { key: "ArrowRight" });
+  expect(separator.getAttribute("aria-valuenow")).toBe("65");
+  await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("splitRatio", "65"));
+  const container = document.querySelector(".terminal-container") as HTMLElement;
+  vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
+    left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600,
+    x: 0, y: 0, toJSON: () => ({}),
+  });
+  fireEvent.pointerDown(separator, { button: 0, pointerId: 7 });
+  fireEvent.pointerMove(document, { pointerId: 7, clientX: 560, clientY: 100 });
+  fireEvent.pointerUp(document, { pointerId: 7 });
+  expect(separator.getAttribute("aria-valuenow")).toBe("70");
+  await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("splitRatio", "70"));
+  fireEvent.doubleClick(separator);
+  expect(separator.getAttribute("aria-valuenow")).toBe("50");
+  fireEvent.keyDown(separator, { key: "Home" });
+  expect(separator.getAttribute("aria-valuenow")).toBe("20");
+  fireEvent.keyDown(separator, { key: "End" });
+  expect(separator.getAttribute("aria-valuenow")).toBe("80");
   expect(api.Connect).toHaveBeenCalledTimes(2);
 });

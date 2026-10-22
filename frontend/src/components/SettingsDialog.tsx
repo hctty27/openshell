@@ -55,6 +55,10 @@ interface Props {
   rightClickPaste: boolean;
   onRightClickPaste(enabled: boolean): void;
   confirmMultilinePaste: boolean;
+  middleClickPaste: boolean;
+  onMiddleClickPaste(enabled: boolean): void;
+  logHighlights: boolean;
+  onLogHighlights(enabled: boolean): void;
   onConfirmMultilinePaste(enabled: boolean): void;
   onClose(): void;
   onSession(req: SessionRequest): Promise<void>;
@@ -649,6 +653,18 @@ export default function SettingsDialog(p: Props) {
                 </select>
               </div>
               <div className="settings-terminal-group">
+                <label className="settings-toggle-row">
+                  <span className="settings-toggle-copy">
+                    <strong>{t("settings:logHighlights")}</strong>
+                    <small>{t("settings:logHighlightsDescription")}</small>
+                  </span>
+                  <input className="settings-switch" type="checkbox"
+                    aria-label={t("settings:logHighlights")}
+                    checked={p.logHighlights}
+                    onChange={(e) => p.onLogHighlights(e.target.checked)} />
+                </label>
+              </div>
+              <div className="settings-terminal-group">
                 <h4>{t("settings:terminalMouseActions")}</h4>
                 <label className="settings-toggle-row">
                   <span className="settings-toggle-copy">
@@ -676,7 +692,17 @@ export default function SettingsDialog(p: Props) {
                     onChange={(e) => p.onRightClickPaste(e.target.checked)}
                   />
                 </label>
-                {p.rightClickPaste && (
+                <label className="settings-toggle-row">
+                  <span className="settings-toggle-copy">
+                    <strong>{t("settings:middleClickToPaste")}</strong>
+                    <small>{t("settings:middleClickPasteDescription")}</small>
+                  </span>
+                  <input className="settings-switch" type="checkbox"
+                    aria-label={t("settings:middleClickToPaste")}
+                    checked={p.middleClickPaste}
+                    onChange={(e) => p.onMiddleClickPaste(e.target.checked)} />
+                </label>
+                {(p.rightClickPaste || p.middleClickPaste) && (
                   <label className="settings-toggle-row settings-toggle-row--nested">
                     <span className="settings-toggle-copy">
                       <strong>{t("settings:confirmMultilinePaste")}</strong>
@@ -832,6 +858,8 @@ export default function SettingsDialog(p: Props) {
                       "confirmMultilinePaste",
                       String(p.confirmMultilinePaste),
                     );
+                    await api.SavePreference("middleClickPaste", String(p.middleClickPaste));
+                    await api.SavePreference("logHighlights", String(p.logHighlights));
                   }, message("settings:settingsSaved"))
                 }
               >
