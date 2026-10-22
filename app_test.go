@@ -20,6 +20,9 @@ func TestThemePreferencePersistsAcrossRestart(t *testing.T) {
 	if err = a.SavePreference("theme", "light"); err != nil {
 		t.Fatal(err)
 	}
+	if err = a.SavePreference("terminalTheme", "classic"); err != nil {
+		t.Fatal(err)
+	}
 	a.shutdown(context.Background())
 	b, err := newApp(path, &vault{m: map[string]string{}}, nil)
 	if err != nil {
@@ -35,6 +38,12 @@ func TestThemePreferencePersistsAcrossRestart(t *testing.T) {
 	json.Unmarshal(data, &decoded)
 	if decoded["theme"] != "light" {
 		t.Fatalf("theme not restored: %s", data)
+	}
+	if decoded["terminalTheme"] != "classic" {
+		t.Fatalf("terminal palette not restored: %s", data)
+	}
+	if err = b.SavePreference("terminalTheme", "invalid"); err == nil {
+		t.Fatal("invalid terminal palette accepted")
 	}
 	if err = b.SavePreference("theme", "invalid"); err == nil {
 		t.Fatal("invalid theme accepted")
