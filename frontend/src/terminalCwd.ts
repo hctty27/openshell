@@ -1,3 +1,5 @@
+export const BASH_CWD_REPORT_COMMAND = String.raw`__openshell_report_cwd() { printf '\033]7;file://%s%s\007' "${HOSTNAME:-localhost}" "$PWD"; }; if declare -p PROMPT_COMMAND 2>/dev/null | grep -q '^declare -a'; then PROMPT_COMMAND+=(__openshell_report_cwd); else PROMPT_COMMAND="${PROMPT_COMMAND:+${PROMPT_COMMAND};}__openshell_report_cwd"; fi; __openshell_report_cwd`;
+
 /**
  * Terminal-side cwd reports from OSC 7 and iTerm2 OSC 1337.
  * Only absolute POSIX paths are accepted; SFTP still validates existence.

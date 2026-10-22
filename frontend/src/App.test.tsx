@@ -30,8 +30,8 @@ vi.mock("./components/TerminalPane", () => ({
   ),
 }));
 vi.mock("./components/SFTPView", () => ({
-  default: (props: { initialRemoteDirectory?: string }) =>
-    <div data-testid="sftp-panel-stub" data-initial-directory={props.initialRemoteDirectory}>
+  default: (props: { initialRemoteDirectory?: string; cwdReported?: boolean }) =>
+    <div data-testid="sftp-panel-stub" data-initial-directory={props.initialRemoteDirectory} data-cwd-reported={String(props.cwdReported)}>
       SFTP file view
     </div>,
 }));
@@ -490,11 +490,14 @@ test("SFTP opens beside the existing terminal and can close without reconnecting
   expect(document.querySelector(".workspace-file-panel .transfer-dock")).toBeTruthy();
   expect(document.querySelector(".workspace-workarea > .transfer-dock")).toBeNull();
   expect(document.querySelector(".workspace-file-panel .transfer-dock-heading")).toBeTruthy();
+  expect(screen.getByTestId("sftp-panel-stub").getAttribute("data-cwd-reported")).toBe("false");
   const terminal = document.querySelector(".terminal-container") as HTMLElement;
   expect(terminal.style.display).not.toBe("none");
   expect(screen.getAllByTestId("terminal-pane-stub")).toHaveLength(1);
   fireEvent.click(screen.getByTitle("关闭文件侧栏"));
   expect(document.querySelector(".workspace-file-panel")).toBeNull();
+  expect(document.querySelector(".workspace-status-transfer")).toBeNull();
+  expect(document.querySelector(".workspace-status .transfer-dock")).toBeNull();
   expect(document.querySelector(".terminal-container")).toBe(terminal);
   expect(api.Connect).toHaveBeenCalledTimes(1);
 });
