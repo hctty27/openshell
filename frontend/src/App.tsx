@@ -25,7 +25,6 @@ import {
   Search,
   Columns2,
   Rows2,
-  MousePointer2,
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
 import type {
@@ -169,7 +168,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     [terminalSearchFocus, setTerminalSearchFocus] = useState(0),
     [splitPair, setSplitPair] = useState<[string, string] | null>(null),
     [splitDirection, setSplitDirection] = useState<"columns" | "rows">("columns"),
-    [mouseSelectionFirst, setMouseSelectionFirst] = useState(false),
     [profileID, setProfileID] = useState(
       initialState.profiles.find((p) => p.id === initialState.activeProfile)
         ?.id ??
@@ -1148,14 +1146,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   </>
                 )}
                 <button
-                  title={tr("terminal:preferMouseSelection")}
-                  aria-label={tr("terminal:preferMouseSelection")}
-                  aria-pressed={mouseSelectionFirst}
-                  className={mouseSelectionFirst ? "terminal-toggle-on" : ""}
-                  disabled={showSFTP}
-                  onClick={() => setMouseSelectionFirst((value) => !value)}
-                ><MousePointer2 size={14} /></button>
-                <button
                   title={tr("terminal:findInTerminal")}
                   disabled={active?.status !== "connected" || showSFTP}
                   onClick={() => setTerminalSearchFocus((value) => value + 1)}
@@ -1206,7 +1196,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   active={tab.id === activeID}
                   visible={tab.id === activeID || Boolean(splitReady && splitPair?.includes(tab.id))}
                   onActivate={() => setActiveID(tab.id)}
-                  mouseSelectionFirst={mouseSelectionFirst}
                   fontSize={fontSize}
                   theme={theme}
                   autoCopySelection={autoCopySelection}
