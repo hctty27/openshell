@@ -10,6 +10,7 @@ import (
 	"github.com/hctty27/openshell/internal/domain"
 	sshclient "github.com/hctty27/openshell/internal/ssh"
 	"github.com/hctty27/openshell/internal/store"
+	files "github.com/hctty27/openshell/internal/sftp"
 	"github.com/hctty27/openshell/internal/tasks"
 	"os"
 	"path/filepath"
@@ -25,6 +26,7 @@ type App struct {
 	store         *store.Store
 	secrets       domain.SecretStore
 	ssh           *sshclient.Manager
+	sftp          *files.Manager
 	coordinator   *tasks.Coordinator
 	automatic     *tasks.AutomaticRunner
 	provider      *ai.Provider
@@ -123,11 +125,13 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 			if ref, ok := payload.(domain.ConnectionRef); ok {
 				a.coordinator.Invalidate(ref)
 				a.automatic.Invalidate(ref)
+				if a.sftp != nil { a.sftp.CancelConnection(ref) }
 				a.CancelChat(ref.TabID)
 			}
 		}
 		a.emit(name, payload)
 	})
+	a.sftp = files.NewManager(a.ssh.Client, func(name string, payload any) { a.emit(name, payload) })
 	a.coordinator = tasks.NewCoordinator(a.ssh.Run, a.ssh.Valid)
 	return a, nil
 }
@@ -146,6 +150,7 @@ func (a *App) shutdown(context.Context) {
 		a.automatic.Invalidate(ref)
 		a.coordinator.Invalidate(ref)
 	}
+	a.sftp.Close()
 	a.ssh.Close()
 	a.store.Close()
 }
@@ -768,4 +773,23 @@ func (a *App) ChoosePrivateKey() (string, error) {
 		return "", apperror.New("filePickerIsNotInitialized", nil)
 	}
 	return a.pickKey()
+}
+
+func (a *App) SFTPHome(ref domain.ConnectionRef) (files.Paths, error) {
+ return a.sftp.Homes(ref)
+}
+func (a *App) SFTPList(ref domain.ConnectionRef, side, directory string) ([]files.Entry, error) {
+ return a.sftp.List(ref, side, directory)
+}
+func (a *App) SFTPOperate(ref domain.ConnectionRef, side, operation, source, argument string) error {
+ return a.sftp.Operate(ref, side, operation, source, argument)
+}
+func (a *App) SFTPTransfer(ref domain.ConnectionRef, direction, source, destination string) (files.Task, error) {
+ return a.sftp.Start(ref, direction, source, destination)
+}
+func (a *App) SFTPTransfers(ref domain.ConnectionRef) []files.Task {
+ return a.sftp.Transfers(ref)
+}
+func (a *App) SFTPCancel(taskID string) error {
+ return a.sftp.Cancel(taskID)
 }
