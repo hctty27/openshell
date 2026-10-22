@@ -149,8 +149,12 @@ export default function SFTPView({refID,profileID,onNotice,hideTaskQueue = false
     const direction = side==="local" ? "upload" : "download";
     const destSide = side==="local" ? "remote" : "local";
     try {
+      // The visible listing may be stale while uploads are queued. Resolve
+      // destination conflicts from the current filesystem, not React state.
+      const destinationNames = new Set((await api.SFTPList(refID, destSide, dstDir)).map(item => item.name));
       for(const file of paths) {
-        const existing = (destSide==="remote" ? remoteFiles : localFiles).some(item=>item.name===basename(file));
+        const name = basename(file);
+        const existing = destinationNames.has(name);
         let overwrite = false;
         if (existing) {
           overwrite = await dialogs.confirm({
@@ -159,7 +163,8 @@ export default function SFTPView({refID,profileID,onNotice,hideTaskQueue = false
           });
           if (!overwrite) continue;
         }
-        await api.SFTPTransfer(refID,direction,file,join(destSide,dstDir,basename(file)),overwrite,true);
+        await api.SFTPTransfer(refID,direction,file,join(destSide,dstDir,name),overwrite,true);
+        destinationNames.add(name);
       }
     }catch(error){onNotice(error);}
   };
