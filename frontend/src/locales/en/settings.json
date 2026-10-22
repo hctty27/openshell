@@ -114,5 +114,11 @@
   "retainDisconnectedTerminal": "Stay disconnected",
   "closeDisconnectedTab": "Close tab automatically",
   "defaultLocalShell": "Default local shell",
-  "preserveTerminalHistory": "Preserve terminal scrollback after disconnect"
+  "preserveTerminalHistory": "Preserve terminal scrollback after disconnect",
+  "useOpenSSHConfig": "Use ~/.ssh/config (Host alias)",
+  "useOpenSSHConfigDescription": "Resolve HostName, User, Port, IdentityFile and ProxyJump from OpenSSH config at connection time. Saved values are preserved.",
+  "proxyJump": "Jump host (ProxyJump)",
+  "proxyJumpDescription": "Optional. Use user@host:port or multiple comma-separated hops (maximum 3). Every hop requires host key trust and uses the selected authentication method.",
+  "sshAgent": "SSH Agent",
+  "sshAgentDescription": "Uses keys already loaded in your SSH agent; OpenShell does not store or access private key material."
 }
