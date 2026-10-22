@@ -20,6 +20,10 @@ import { parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } fro
 import { useDialogs } from "./DialogProvider";
 interface Props {
   tab: Tab;
+  disconnectBehavior?: import("../types").DisconnectBehavior;
+  localShell?: import("../types").LocalShell;
+  preserveHistory?: boolean;
+  showDisconnectReason?: boolean;
   active: boolean;
   visible?: boolean;
   onActivate?: () => void;
@@ -52,6 +56,11 @@ export default function TerminalPane(p: Props) {
   const webglFailed = useRef(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const scrollbackSnapshot = useRef("");
+  const localSequence = useRef(0);
+  const terminalMode = p.tab.status === "connected" && p.tab.ref ? "ssh"
+    : p.tab.ref && p.tab.everConnected && ["disconnected", "error"].includes(p.tab.status)
+      ? (p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
+      : "none";
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [regexMode, setRegexMode] = useState(false);
@@ -60,7 +69,9 @@ export default function TerminalPane(p: Props) {
   callbacks.current = p;
   useEffect(() => {
     const ref = p.tab.ref;
-    if (!ref || p.tab.status !== "connected" || !container.current) return;
+    if (terminalMode === "none" || !container.current) return;
+    const local = terminalMode === "local";
+    const localID = `${p.tab.id}:${++localSequence.current}`;
     let pastePending = false;
     let disposed = false,
       pending = 0,
@@ -90,11 +101,14 @@ export default function TerminalPane(p: Props) {
     terminal.current = term;
     fit.current = addon;
     term.open(container.current);
-    if (scrollbackSnapshot.current) {
+    if (scrollbackSnapshot.current && p.preserveHistory !== false) {
       term.write(scrollbackSnapshot.current + "\r\n");
     }
+    if (local && p.showDisconnectReason !== false) {
+      term.write(`\r\n\x1b[90m[${t("terminal:remoteConnectionClosed")}]\x1b[0m\r\n`);
+    }
     const reportDirectory = (directory: string | null) => {
-      if (!disposed && directory) callbacks.current.onDirectoryChange?.(ref, directory);
+      if (!disposed && directory && ref && terminalMode === "ssh") callbacks.current.onDirectoryChange?.(ref, directory);
       return Boolean(directory);
     };
     const cwdHooks = [
@@ -113,9 +127,10 @@ export default function TerminalPane(p: Props) {
     let opened = false;
     let lastSize = "";
     const same = (r: Ref) =>
-      r.tabId === ref.tabId && r.generation === ref.generation;
-    const off = listen("ssh:output", (payload) => {
-      if (disposed || !same(payload.ref)) return;
+      !!ref && r.tabId === ref.tabId && r.generation === ref.generation;
+    const off = listen(local ? "local:output" : "ssh:output", (payload) => {
+      if (disposed || terminalMode === "offline") return;
+      if (local ? (payload.tabId !== p.tab.id || payload.terminalId !== localID) : !same(payload.ref)) return;
       const bytes = Uint8Array.from(atob(payload.data), (c) => c.charCodeAt(0));
       pending += bytes.length;
       if (pending > 2 * 1024 * 1024) {
@@ -149,7 +164,8 @@ export default function TerminalPane(p: Props) {
             for (let i = 0; i < chunk.length; i += 8192) {
               binary += String.fromCharCode(...chunk.subarray(i, i + 8192));
             }
-            await api.WriteTerminal(ref, btoa(binary));
+            if (local) await api.WriteLocalTerminal(p.tab.id, localID, btoa(binary));
+            else if (ref) await api.WriteTerminal(ref, btoa(binary));
           }
         }
       } catch (error) {
@@ -169,6 +185,7 @@ export default function TerminalPane(p: Props) {
       });
     };
     const input = term.onData((data) => {
+      if (terminalMode === "offline") return;
       inputQueue.push(data);
       scheduleInput();
     });
@@ -177,7 +194,8 @@ export default function TerminalPane(p: Props) {
       const size = `${term.cols}x${term.rows}`;
       if (size === lastSize) return;
       lastSize = size;
-      void api.ResizeTerminal(ref, term.cols, term.rows).catch(() => {});
+      if (local) void api.ResizeLocalTerminal(p.tab.id, localID, term.cols, term.rows).catch(() => {});
+      else if (ref) void api.ResizeTerminal(ref, term.cols, term.rows).catch(() => {});
     };
     const resizeSubscription = term.onResize(sendResize);
     const selection = term.onSelectionChange(() =>
@@ -247,9 +265,10 @@ export default function TerminalPane(p: Props) {
         if (
           disposed ||
           !callbacks.current.active ||
-          currentRef?.tabId !== ref.tabId ||
-          currentRef?.sessionId !== ref.sessionId ||
-          currentRef?.generation !== ref.generation
+          terminalMode === "offline" ||
+          (!local && (currentRef?.tabId !== ref?.tabId ||
+          currentRef?.sessionId !== ref?.sessionId ||
+          currentRef?.generation !== ref?.generation))
         ) return;
         term.focus();
         term.paste(text);
@@ -317,8 +336,9 @@ export default function TerminalPane(p: Props) {
       addon.fit();
       const cols = Math.max(term.cols, 20);
       const rows = Math.max(term.rows, 5);
-      api
-        .OpenTerminal(ref, cols, rows)
+      if (terminalMode === "offline") return;
+      (local ? api.StartLocalTerminal(p.tab.id, localID, p.localShell ?? "powershell", cols, rows)
+        : api.OpenTerminal(ref!, cols, rows))
         .then(() => {
           if (disposed) return;
           opened = true;
@@ -326,7 +346,12 @@ export default function TerminalPane(p: Props) {
           sendResize();
           if (callbacks.current.active) term.focus();
         })
-        .catch((e) => callbacks.current.onError(e));
+        .catch((e) => {
+          if (local) {
+            term.write(`\r\n${t("terminal:localShellStartFailed")}: ${String(e)}\r\n`);
+            callbacks.current.onNotice(e);
+          } else callbacks.current.onError(e);
+        });
     });
     return () => {
       disposed = true;
@@ -334,6 +359,7 @@ export default function TerminalPane(p: Props) {
       clearTimeout(resizeTimer);
       observer.disconnect();
       off();
+      if (local) void api.CloseLocalTerminal(p.tab.id, localID).catch(() => {});
       paneElement.removeEventListener("mousedown", onMouseDown, true);
       paneElement.removeEventListener("auxclick", onAuxClick, true);
       document.removeEventListener("mouseup", onMouseUp, true);
@@ -345,11 +371,11 @@ export default function TerminalPane(p: Props) {
       const buffer = term.buffer.normal;
       if (buffer) {
         const lines: string[] = [];
-        for (let index = Math.max(0, buffer.length - 1500); index < buffer.length; index++) {
+        for (let index = Math.max(0, buffer.length - 10000); index < buffer.length; index++) {
           const line = buffer.getLine(index);
           if (line) lines.push(line.translateToString(true));
         }
-        scrollbackSnapshot.current = lines.join("\r\n").slice(-65536);
+        scrollbackSnapshot.current = p.preserveHistory !== false ? lines.join("\r\n").slice(-1048576) : "";
       }
       term.dispose();
       logAddons.current = [];
@@ -359,7 +385,7 @@ export default function TerminalPane(p: Props) {
       terminal.current = null;
       fit.current = null;
     };
-  }, [p.tab.ref?.generation, p.tab.id]);
+  }, [p.tab.ref?.generation, p.tab.id, terminalMode, p.localShell]);
   useEffect(() => {
     const term = terminal.current;
     if (!term) return;
