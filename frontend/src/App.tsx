@@ -1204,17 +1204,17 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 )}
                 <button
                   title={tr("terminal:findInTerminal")}
-                  disabled={active?.status !== "connected" || showSFTP}
+                  disabled={active?.status !== "connected"}
                   onClick={() => setTerminalSearchFocus((value) => value + 1)}
                 >
                   <Search size={14} />
                 </button>
                 <button
-                  title={tr(showSFTP ? "sftp:terminal" : "sftp:openFileManager")}
+                  title={tr(showSFTP ? "sftp:closeFilePanel" : "sftp:openFileManager")}
                   disabled={active?.status !== "connected"}
                   onClick={() => active && setFileViews(old => ({...old, [active.id]: !old[active.id]}))}
                 >
-                  {showSFTP ? <Terminal size={14} /> : <FolderOpen size={14} />}
+                  {showSFTP ? <PanelRightOpen size={14} /> : <FolderOpen size={14} />}
                 </button>
                 <button
                   title={tr("common:reauthenticate")}
@@ -1244,10 +1244,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </button>
               </div>
             </div>
+            <div className={`workspace-workarea ${showSFTP ? "with-sftp" : ""}`}>
             <div ref={splitContainerRef}
               className={`terminal-container ${splitReady ? `terminal-split terminal-split-${splitDirection}` : ""}`}
               style={{
-                ...(showSFTP ? { display: "none" } : {}),
                 "--split-ratio": `${splitRatio}%`,
               } as CSSProperties}>
               {tabs.map((tab) => (
@@ -1330,8 +1330,13 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   </div>
                 )}
             </div>
-            {showSFTP && active?.ref && <SFTPView refID={active.ref} profileID={profileID} onNotice={notify} />}
-            {!showSFTP && (
+            {showSFTP && active?.ref && (
+              <aside className="workspace-file-panel" aria-label={tr("sftp:fileManager")}>
+                <SFTPView refID={active.ref} profileID={profileID} onNotice={notify} />
+              </aside>
+            )}
+            </div>
+            {(
               <QuickCommandBar
                 tab={active}
                 commands={state.quickCommands ?? []}

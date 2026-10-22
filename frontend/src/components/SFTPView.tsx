@@ -166,7 +166,16 @@ export default function SFTPView({refID,profileID,onNotice}:Props) {
   useEffect(()=>{
     OnFileDrop((x,y,paths)=>{
       const target=document.elementFromPoint(x,y);
-      if(paths.length>0 && target?.closest(".sftp-remote"))void transfer("local",paths,remoteDir);
+      if(paths.length>0 && target?.closest(".sftp-remote")) {
+        void (async () => {
+          const confirmed = await dialogs.confirm({
+            title: t("sftp:confirmDropTitle"),
+            description: t("sftp:confirmDropDescription", { count: paths.length, directory: remoteDir }),
+            confirmLabel: t("sftp:upload"),
+          });
+          if (confirmed) await transfer("local", paths, remoteDir);
+        })().catch(onNotice);
+      }
     },true);
     return ()=>OnFileDropOff();
   },[refID.tabId,refID.generation,remoteDir]);
