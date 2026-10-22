@@ -658,6 +658,50 @@ kbd {
   min-height: 0;
   overflow: hidden;
 }
+.workspace-workarea {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.workspace-workarea > .terminal-container {
+  min-width: 0;
+  --wails-drop-target: drop;
+}
+.workspace-file-panel {
+  display: flex;
+  flex: 0 0 clamp(310px, 43%, 440px);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+}
+.workspace-file-panel .sftp-panes {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+.workspace-file-panel .sftp-panel + .sftp-panel {
+  border-left: none;
+  border-top: 1px solid var(--border);
+}
+.workspace-file-panel .sftp-task {
+  grid-template-columns: 14px minmax(0, 1fr) 72px 32px;
+}
+.workspace-file-panel .sftp-task-size,
+.workspace-file-panel .sftp-progress { display: none; }
+@media (max-width: 1280px) {
+  .workspace-file-panel {
+    position: absolute;
+    z-index: 8;
+    inset: 0 0 0 auto;
+    width: min(430px, 62%);
+    background: var(--surface);
+    box-shadow: -8px 0 24px #0003;
+  }
+}
+
 .terminal-pane {
   position: absolute;
   inset: 12px 8px 8px 13px;
@@ -754,6 +798,54 @@ kbd {
 .terminal-transfer-indicator button:disabled {
   opacity: 0.55;
 }
+.transfer-dock {
+  flex-shrink: 0;
+  max-height: 172px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.transfer-dock-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 30px;
+  padding: 0 12px;
+}
+.transfer-dock-items { max-height: 139px; overflow: auto; }
+.transfer-dock-item {
+  display: grid;
+  grid-template-columns: minmax(80px, 1.4fr) minmax(75px, 1fr) minmax(90px, 1fr) 28px;
+  align-items: center;
+  min-height: 30px;
+  gap: 10px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--border);
+}
+.transfer-dock-item > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.transfer-dock-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+}
+.transfer-dock-metric { font-variant-numeric: tabular-nums; }
+.transfer-dock-item button {
+  width: 26px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+}
+.transfer-dock-item button:hover { color: var(--accent); }
+.transfer-dock-item button:disabled { opacity: .5; }
 .terminal-find {
   position: absolute;
   top: 8px;

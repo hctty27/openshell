@@ -27,6 +27,7 @@ import {
   Rows2,
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
+import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime";
 import type {
   Session,
   Group,
@@ -51,6 +52,7 @@ import XshellImportDialog from "./components/XshellImportDialog";
 import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
 import SFTPView from "./components/SFTPView";
+import TransferDock from "./components/TransferDock";
 import AISidebar from "./components/AISidebar";
 import { useConversations } from "./useConversations";
 import { toChatMessages } from "./conversations";
@@ -199,6 +201,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     } | null>(null),
     [attachments, setAttachments] = useState<Record<string, string>>({});
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
+  const remoteUploadDirs = useRef<Record<string, string>>({});
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const splitDragCleanup = useRef<(() => void) | null>(null);
   useEffect(() => () => splitDragCleanup.current?.(), []);
@@ -297,6 +300,60 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const update = (tabID: string, fn: (tab: Tab) => Tab) =>
     setTabs((old) => old.map((t) => (t.id === tabID ? fn(t) : t)));
   const notify = (error: unknown) => setToast(error);
+  const dropDialogs = useRef(dialogs);
+  dropDialogs.current = dialogs;
+  useEffect(() => {
+    const fileRuntime = window.runtime as (typeof window.runtime & { OnFileDrop?: unknown }) | undefined;
+    if (!desktop || typeof fileRuntime?.OnFileDrop !== "function") return;
+    OnFileDrop((x, y, paths) => {
+      const target = document.elementFromPoint(x, y);
+      if (!target || paths.length === 0) return;
+      const pane = target.closest<HTMLElement>(".terminal-pane[data-tab-id]");
+      const isRemotePanel = Boolean(target.closest(".workspace-file-panel .sftp-remote"));
+      const overTerminal = Boolean(target.closest(".terminal-container"));
+      if (!pane && !overTerminal && !isRemotePanel) return;
+      const tab = tabsRef.current.find(item =>
+        item.id === (pane?.dataset.tabId || activeIDRef.current));
+      if (!tab?.ref || tab.status !== "connected") return;
+      const ref = tab.ref;
+      void (async () => {
+        const home = await api.SFTPHome(ref);
+        const directory = isRemotePanel
+          ? (remoteUploadDirs.current[tab.id] || home.remote)
+          : home.remote;
+        const approved = await dropDialogs.current.confirm({
+          title: tr("sftp:confirmDropTitle"),
+          description: tr("sftp:confirmDropDescription", {
+            count: paths.length, directory, server: tab.session.name,
+          }),
+          confirmLabel: tr("sftp:upload"),
+        });
+        if (!approved) return;
+        const existing = new Set((await api.SFTPList(ref, "remote", directory)).map(item => item.name));
+        for (const path of paths) {
+          const live = tabsRef.current.find(item => item.id === tab.id);
+          if (!live?.ref || live.ref.sessionId !== ref.sessionId || live.ref.generation !== ref.generation) return;
+          const name = path.split(/[\\/]/).filter(Boolean).at(-1);
+          if (!name || name === "." || name === "..") continue;
+          let overwrite = false;
+          if (existing.has(name)) {
+            overwrite = await dropDialogs.current.confirm({
+              title: tr("sftp:overwriteTitle"),
+              description: tr("sftp:overwriteDescription", { name }),
+              tone: "warning",
+              confirmLabel: tr("sftp:overwrite"),
+            });
+            if (!overwrite) continue;
+          }
+          const destination = directory.replace(/\\/g, "/").replace(/\/$/, "") + "/" + name;
+          await api.SFTPTransfer(ref, "upload", path, destination, overwrite, true);
+          existing.add(name);
+        }
+      })().catch(setToast);
+    }, true);
+    return () => OnFileDropOff();
+  }, []);
+
   const refresh = async () => {
     try {
       const data = await api.State();
@@ -1204,17 +1261,17 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 )}
                 <button
                   title={tr("terminal:findInTerminal")}
-                  disabled={active?.status !== "connected" || showSFTP}
+                  disabled={active?.status !== "connected"}
                   onClick={() => setTerminalSearchFocus((value) => value + 1)}
                 >
                   <Search size={14} />
                 </button>
                 <button
-                  title={tr(showSFTP ? "sftp:terminal" : "sftp:openFileManager")}
+                  title={tr(showSFTP ? "sftp:closeFilePanel" : "sftp:openFileManager")}
                   disabled={active?.status !== "connected"}
                   onClick={() => active && setFileViews(old => ({...old, [active.id]: !old[active.id]}))}
                 >
-                  {showSFTP ? <Terminal size={14} /> : <FolderOpen size={14} />}
+                  {showSFTP ? <PanelRightOpen size={14} /> : <FolderOpen size={14} />}
                 </button>
                 <button
                   title={tr("common:reauthenticate")}
@@ -1244,10 +1301,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </button>
               </div>
             </div>
+            <div className={`workspace-workarea ${showSFTP ? "with-sftp" : ""}`}>
             <div ref={splitContainerRef}
               className={`terminal-container ${splitReady ? `terminal-split terminal-split-${splitDirection}` : ""}`}
               style={{
-                ...(showSFTP ? { display: "none" } : {}),
                 "--split-ratio": `${splitRatio}%`,
               } as CSSProperties}>
               {tabs.map((tab) => (
@@ -1330,8 +1387,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   </div>
                 )}
             </div>
-            {showSFTP && active?.ref && <SFTPView refID={active.ref} profileID={profileID} onNotice={notify} />}
-            {!showSFTP && (
+            {showSFTP && active?.ref && (
+              <aside className="workspace-file-panel" aria-label={tr("sftp:fileManager")}>
+                <SFTPView refID={active.ref} profileID={profileID} onNotice={notify}
+                  onRemoteDirectoryChange={directory => { remoteUploadDirs.current[active.id] = directory; }} hideTaskQueue />
+              </aside>
+            )}
+            </div>
+            <TransferDock refID={active?.status === "connected" ? (active.ref ?? undefined) : undefined} onNotice={notify} />
+            {(
               <QuickCommandBar
                 tab={active}
                 commands={state.quickCommands ?? []}

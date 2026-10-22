@@ -42,7 +42,7 @@ type connection struct {
 	client   *ssh.Client
 	terminal *ssh.Session
 	stdin    interface{ Write([]byte) (int, error) }
-	filter   interface { Close(); SetTerminalColumns(int32) }
+	filter   interface { Close(); SetTerminalColumns(int32); IsTransferringFiles() bool; StopTransferringFiles(bool) }
 	transferring bool
 	history  *History
 	sequence uint64

@@ -162,3 +162,38 @@ func TestZmodemProgressEventExtractsApproximateMetrics(t *testing.T) {
     }
     closer.Close()
 }
+
+type recordingTransferFilter struct {
+    stopped bool
+    deletePartial bool
+}
+func (f *recordingTransferFilter) Close() {}
+func (f *recordingTransferFilter) SetTerminalColumns(int32) {}
+func (f *recordingTransferFilter) IsTransferringFiles() bool { return true }
+func (f *recordingTransferFilter) StopTransferringFiles(deletePartial bool) {
+    f.stopped = true
+    f.deletePartial = deletePartial
+}
+
+func TestCancelZmodemDelegatesToFilterAndPreservesFiles(t *testing.T) {
+    m, ref := connected(t)
+    filter := &recordingTransferFilter{}
+    m.mu.Lock()
+    c := m.connections[ref.TabID]
+    c.filter = filter
+    c.stdin = &testInputWriter{}
+    c.transferring = true
+    m.mu.Unlock()
+    if err := m.CancelZmodem(ref); err != nil { t.Fatal(err) }
+    if !filter.stopped || filter.deletePartial {
+        t.Fatalf("expected cancellation without deleting partial files: %+v", filter)
+    }
+    stale := ref
+    stale.Generation++
+    if err := m.CancelZmodem(stale); err == nil {
+        t.Fatal("stale connection was allowed to cancel active transfer")
+    }
+}
+
+type testInputWriter struct{}
+func (*testInputWriter) Write(p []byte) (int, error) { return len(p), nil }
