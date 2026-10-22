@@ -29,6 +29,9 @@ vi.mock("./components/TerminalPane", () => ({
     />
   ),
 }));
+vi.mock("./components/SFTPView", () => ({
+  default: () => <div data-testid="sftp-panel-stub">SFTP file view</div>,
+}));
 vi.mock("./bridge", async () => ({
   ...(await vi.importActual<typeof import("./bridge")>("./bridge")),
   desktop: false,
@@ -459,4 +462,32 @@ test("split gutter accepts keyboard, drag, and reset with persistent bounds", as
   fireEvent.keyDown(separator, { key: "End" });
   expect(separator.getAttribute("aria-valuenow")).toBe("80");
   expect(api.Connect).toHaveBeenCalledTimes(2);
+});
+
+test("SFTP opens beside the existing terminal and can close without reconnecting", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{
+      id: "us-id", groupId: "", name: "us", host: "us.example.com",
+      port: 22, username: "root", authType: "key",
+      privateKeyPath: "", credentialRef: "saved",
+    }],
+    groups: [], profiles: [], fontSize: "14", language: "zh-CN",
+    activeProfile: "", version: "0.1.39",
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.click(screen.getByTitle("打开会话列表"));
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 us" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  expect(screen.getAllByTestId("terminal-pane-stub")).toHaveLength(1);
+  fireEvent.click(screen.getByTitle("打开 SFTP 文件管理"));
+  expect(document.querySelector(".workspace-workarea")?.classList.contains("with-sftp")).toBe(true);
+  expect(screen.getByTestId("sftp-panel-stub")).toBeTruthy();
+  const terminal = document.querySelector(".terminal-container") as HTMLElement;
+  expect(terminal.style.display).not.toBe("none");
+  expect(screen.getAllByTestId("terminal-pane-stub")).toHaveLength(1);
+  fireEvent.click(screen.getByTitle("关闭文件侧栏"));
+  expect(document.querySelector(".workspace-file-panel")).toBeNull();
+  expect(document.querySelector(".terminal-container")).toBe(terminal);
+  expect(api.Connect).toHaveBeenCalledTimes(1);
 });
