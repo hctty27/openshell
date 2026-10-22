@@ -4,7 +4,10 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "frontend/**"
+      - "frontend/src/components/TerminalPane.tsx"
+      - "frontend/src/components/TerminalPane.test.tsx"
+      - "frontend/package.json"
+      - "frontend/package-lock.json"
       - "internal/ssh/**"
       - "go.mod"
       - "go.sum"
