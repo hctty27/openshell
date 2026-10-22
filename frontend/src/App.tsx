@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
 import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime";
-import { normalizeTerminalTheme } from "./terminalThemes";
+import { normalizeTerminalTheme, resolveTerminalTheme } from "./terminalThemes";
 import type {
   Session,
   Group,
@@ -246,6 +246,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
         hasEarlier: activeCache?.hasMore,
       }
     : undefined;
+  const activeTerminalBackground = resolveTerminalTheme(theme, terminalTheme, active?.session.terminalTheme).background;
   const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
   const splitReady = Boolean(
     !showSFTP && splitPair?.includes(activeID) &&
@@ -1325,6 +1326,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
               className={`terminal-container ${splitReady ? `terminal-split terminal-split-${splitDirection}` : ""}`}
               style={{
                 "--split-ratio": `${splitRatio}%`,
+                "--terminal-background": activeTerminalBackground,
               } as CSSProperties}>
               {tabs.map((tab) => (
                 <TerminalPane
