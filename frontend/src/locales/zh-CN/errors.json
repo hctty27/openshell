@@ -115,7 +115,7 @@
   "taskStarting": "正在启动自动任务",
   "memoryBusy": "此对话或标签页正有任务运行，请先停止任务。",
   "memoryConnectionChanged": "连接已变更，请重连后重新加载对话。",
-  "memoryWrongServer": "此对话属于其他服务器。",
+  "memoryWrongServer": "该对话属于其他服务器",
   "memoryNoRun": "此任务已结束，请发起新的请求。",
   "memoryNotOwner": "请在发起任务的标签页控制此任务。",
   "memoryContextTooLarge": "当前消息或工具调用链过大，请缩短消息或附件。",
@@ -212,5 +212,10 @@
   "sessionBackupFolderCycleInBackup": "备份中存在循环嵌套的文件夹",
   "sessionBackupUnknownParentFolderInBackup": "备份中存在未知的父文件夹",
   "sessionBackupFilePickerIsUnavailable": "文件选择器不可用",
-  "sessionBackupBackupFileExceedsSizeLimit": "备份文件超出大小限制"
+  "sessionBackupBackupFileExceedsSizeLimit": "备份文件超出大小限制",
+  "folderInvalidNameOrParent": "文件夹名称或上级文件夹无效",
+  "folderCycleNotAllowed": "不允许循环嵌套文件夹",
+  "folderParentNotFound": "父文件夹不存在",
+  "memoryMessageIdRequired": "缺少消息 ID",
+  "memoryUnsupportedMutation": "不支持的对话修改操作"
 }
