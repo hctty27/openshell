@@ -9,6 +9,7 @@ import (
  "runtime"
  "strconv"
  "strings"
+ "sync"
  "time"
 
  "golang.org/x/crypto/ssh"
@@ -133,28 +134,58 @@ func (m *Manager) handshake(ctx context.Context, raw net.Conn, addr, user string
 
 // dialRoute authenticates each SSH hop and validates each hop's public host key.
 // Intermediary clients stay owned by the final connection until it disconnects.
+func closeHopClients(hops []*ssh.Client) {
+ for i := len(hops)-1; i >= 0; i-- { _ = hops[i].Close() }
+}
+
+func closeSSHConnection(c *connection) {
+ if c == nil { return }
+ if c.client != nil { _ = c.client.Close() }
+ closeHopClients(c.hops)
+}
+
 func (m *Manager) dialRoute(ctx context.Context, address, user string, methods []ssh.AuthMethod, hops []jumpHost) (*ssh.Client, []*ssh.Client, error) {
  clients := make([]*ssh.Client, 0, len(hops))
- release := func() { for i := len(clients)-1; i >= 0; i-- { _ = clients[i].Close() } }
+ var mu sync.Mutex
+ release := func() {
+  mu.Lock()
+  snapshot := append([]*ssh.Client(nil), clients...)
+  mu.Unlock()
+  closeHopClients(snapshot)
+ }
  stop := make(chan struct{})
- go func() { select { case <-ctx.Done(): release(); case <-stop: } }()
- defer close(stop)
+ watcherDone := make(chan struct{})
+ go func() {
+  defer close(watcherDone)
+  select {
+  case <-ctx.Done():
+   select { case <-stop: return; default: release() }
+  case <-stop:
+  }
+ }()
+ defer func(){ close(stop); <-watcherDone }()
  for i := 0; i <= len(hops); i++ {
   target, login := address, user
   if i < len(hops) { target, login = hops[i].address, hops[i].user }
   var raw net.Conn
   var err error
-  if len(clients) == 0 {
+  if i == 0 {
    raw, err = (&net.Dialer{}).DialContext(ctx, "tcp", target)
   } else {
-   // A jump is an SSH direct-tcpip channel, not a local TCP dial.
-   raw, err = clients[len(clients)-1].Dial("tcp", target)
+   raw, err = clients[i-1].Dial("tcp", target)
   }
   if err != nil { release(); return nil, nil, fmt.Errorf("SSH connection to %s: %w", target, err) }
   client, err := m.handshake(ctx, raw, target, login, methods)
   if err != nil { release(); return nil, nil, err }
+  if ctx.Err() != nil {
+   _ = client.Close()
+   release()
+   return nil, nil, ctx.Err()
+  }
   if i == len(hops) { return client, clients, nil }
+  mu.Lock()
   clients = append(clients, client)
+  mu.Unlock()
  }
  return nil, nil, errors.New("unreachable SSH route")
 }
