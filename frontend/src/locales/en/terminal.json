@@ -51,5 +51,13 @@
   "findInTerminal": "Find in terminal",
   "previousMatch": "Previous match",
   "nextMatch": "Next match",
-  "closeSearch": "Close search"
+  "closeSearch": "Close search",
+  "splitWith": "Split with…",
+  "splitNeedsTwo": "Connect another terminal to split",
+  "rotateSplit": "Switch split direction",
+  "closeSplit": "Close split view",
+  "preferMouseSelection": "Prefer text selection (hold Alt for TUI mouse actions)",
+  "regexSearch": "Use regular expression",
+  "highlightLogLevels": "Highlight log severity keywords",
+  "logs": "Logs"
 }
