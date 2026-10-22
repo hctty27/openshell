@@ -343,12 +343,14 @@ export default function TerminalPane(p: Props) {
       resizeSubscription.dispose();
       selection.dispose();
       const buffer = term.buffer.normal;
-      const lines: string[] = [];
-      for (let index = Math.max(0, buffer.length - 1500); index < buffer.length; index++) {
-        const line = buffer.getLine(index);
-        if (line) lines.push(line.translateToString(true));
+      if (buffer) {
+        const lines: string[] = [];
+        for (let index = Math.max(0, buffer.length - 1500); index < buffer.length; index++) {
+          const line = buffer.getLine(index);
+          if (line) lines.push(line.translateToString(true));
+        }
+        scrollbackSnapshot.current = lines.join("\r\n").slice(-65536);
       }
-      scrollbackSnapshot.current = lines.join("\r\n").slice(-65536);
       term.dispose();
       logAddons.current = [];
       webglAddon.current = null;
