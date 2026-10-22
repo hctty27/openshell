@@ -75,6 +75,11 @@ type AppState struct {
 	ConfirmMultilinePaste bool                `json:"confirmMultilinePaste"`
 	MiddleClickPaste       bool                `json:"middleClickPaste"`
 	LogHighlights          bool                `json:"logHighlights"`
+	KeepAliveSeconds       int                 `json:"keepAliveSeconds"`
+	AutoReconnect          bool                `json:"autoReconnect"`
+	MaxReconnectAttempts   int                 `json:"maxReconnectAttempts"`
+	ShowDisconnectReason   bool                `json:"showDisconnectReason"`
+	ConfirmActiveDisconnect bool              `json:"confirmActiveDisconnect"`
 	SplitRatio             int                 `json:"splitRatio"`
 	FontSize              string              `json:"fontSize"`
 	Theme                 string              `json:"theme"`
@@ -159,6 +164,10 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 		}
 		a.emit(name, payload)
 	})
+	interval, _ := db.GetPreference(a.ctx, "keepAliveSeconds")
+	keepAliveSeconds, err := strconv.Atoi(interval)
+	if err != nil || keepAliveSeconds < 0 || keepAliveSeconds > 300 { keepAliveSeconds = 30 }
+	a.ssh.SetKeepAliveInterval(time.Duration(keepAliveSeconds) * time.Second)
 	a.sftp = files.NewManager(a.ssh.Client, func(name string, payload any) { a.emit(name, payload) })
 	a.coordinator = tasks.NewCoordinator(a.ssh.Run, a.ssh.Valid)
 	return a, nil
@@ -283,7 +292,26 @@ func (a *App) State() (AppState, error) {
 	if e != nil {
 		return AppState{}, e
 	}
+ 	keepAliveRaw, e := a.store.GetPreference(a.ctx, "keepAliveSeconds")
+	if e != nil { return AppState{}, e }
+	keepAliveSeconds, e := strconv.Atoi(keepAliveRaw)
+	if e != nil || keepAliveSeconds < 0 || keepAliveSeconds > 300 { keepAliveSeconds = 30 }
+	maxRetriesRaw, e := a.store.GetPreference(a.ctx, "maxReconnectAttempts")
+	if e != nil { return AppState{}, e }
+	maxRetries, e := strconv.Atoi(maxRetriesRaw)
+	if e != nil || maxRetries < 0 || maxRetries > 50 { maxRetries = 10 }
+	autoReconnect, e := a.store.GetPreference(a.ctx, "autoReconnect")
+	if e != nil { return AppState{}, e }
+	showReason, e := a.store.GetPreference(a.ctx, "showDisconnectReason")
+	if e != nil { return AppState{}, e }
+	confirmDisconnect, e := a.store.GetPreference(a.ctx, "confirmActiveDisconnect")
+	if e != nil { return AppState{}, e }
 	return AppState{
+		KeepAliveSeconds: keepAliveSeconds,
+		AutoReconnect: autoReconnect != "false",
+		MaxReconnectAttempts: maxRetries,
+		ShowDisconnectReason: showReason != "false",
+		ConfirmActiveDisconnect: confirmDisconnect != "false",
 		SaveChatHistory: saveChat != "false", AutoSummarize: autoSummary != "false",
 		Language: language, AutoCommandLimit: limit, AutoAllowChanges: allow,
 		Sessions: sessions, Groups: groups, Profiles: profiles,
@@ -430,10 +458,16 @@ func (a *App) SavePreference(key, value string) error {
 		if e != nil || n < 1 || n > 100 {
 			return apperror.New("commandLimitMustBeBetween1And100", nil)
 		}
-	case "autoCopySelection", "rightClickPaste", "middleClickPaste", "logHighlights", "confirmMultilinePaste", "autoAllowChanges", "saveChatHistory", "autoSummarize":
+	case "autoCopySelection", "rightClickPaste", "middleClickPaste", "logHighlights", "confirmMultilinePaste", "autoAllowChanges", "saveChatHistory", "autoSummarize", "autoReconnect", "showDisconnectReason", "confirmActiveDisconnect":
 		if value != "true" && value != "false" {
 			return apperror.New("booleanSettingsMustBeTrueOrFalse", nil)
 		}
+	case "keepAliveSeconds":
+		n, err := strconv.Atoi(value)
+		if err != nil || (n != 0 && n != 15 && n != 30 && n != 60) { return apperror.New("unsupportedPreference", nil) }
+	case "maxReconnectAttempts":
+		n, err := strconv.Atoi(value)
+		if err != nil || (n != 0 && n != 5 && n != 10 && n != 20) { return apperror.New("unsupportedPreference", nil) }
 	case "splitRatio":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 20 || n > 80 { return apperror.New("unsupportedPreference", nil) }
@@ -463,7 +497,12 @@ func (a *App) SavePreference(key, value string) error {
 		}
 		return nil
 	}
-	return a.store.SetPreference(a.ctx, key, value)
+	if err := a.store.SetPreference(a.ctx, key, value); err != nil { return err }
+	if key == "keepAliveSeconds" {
+		seconds, _ := strconv.Atoi(value)
+		a.ssh.SetKeepAliveInterval(time.Duration(seconds) * time.Second)
+	}
+	return nil
 }
 
 func validateQuickCommands(raw string) error {
@@ -611,7 +650,8 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 	epoch := a.connectEpoch[tabID]
 	a.tabRefs[tabID] = domain.ConnectionRef{TabID: tabID, SessionID: sessionID}
 	if secret == "" {
-		secret = a.transient["session:"+sessionID]
+		secret = a.transient["connection:"+tabID+":"+sessionID]
+		if secret == "" { secret = a.transient["session:"+sessionID] }
 	}
 	a.mu.Unlock()
 	if exists {
@@ -670,6 +710,11 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 	if e != nil {
 		return ConnectResult{Ref: ref, Home: home}, e
 	}
+	if secret != "" {
+		a.mu.Lock()
+		a.transient["connection:"+tabID+":"+sessionID] = secret
+		a.mu.Unlock()
+	}
 	return ConnectResult{Ref: ref, Home: home, ConversationID: c.ID}, nil
 }
 func (a *App) TrustHost(challengeID string) error {
@@ -697,16 +742,55 @@ func (a *App) CancelZmodem(ref domain.ConnectionRef) error {
 func (a *App) ResizeTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	return a.ssh.Resize(ref, cols, rows)
 }
-func (a *App) Disconnect(ref domain.ConnectionRef) error {
-	a.sftp.CancelConnection(ref)
+// Reconnect reuses only an in-memory credential or an existing saved credential.
+func (a *App) Reconnect(tabID, sessionID string) (ConnectResult, error) {
+	a.mu.Lock()
+	s, err := a.store.GetSession(a.ctx, sessionID)
+	secret := a.transient["connection:"+tabID+":"+sessionID]
+	if secret == "" { secret = a.transient["session:"+sessionID] }
+	a.mu.Unlock()
+	if err != nil { return ConnectResult{}, err }
+	if s.AuthType == "password" && secret == "" && s.CredentialRef == "" {
+		return ConnectResult{}, apperror.New("couldNotReadLoginCredentialsEnterThemAgain", nil)
+	}
+	return a.Connect(tabID, sessionID, secret)
+}
+
+// CancelConnecting cancels an in-flight connection or automatic retry for one tab.
+func (a *App) CancelConnecting(tabID string) {
+	a.mu.Lock()
+	a.connectEpoch[tabID]++
+	ref := a.tabRefs[tabID]
+	delete(a.transient, "connection:"+tabID+":"+ref.SessionID)
+	a.mu.Unlock()
+	a.sftp.CancelTab(tabID)
 	a.cancelExecution(ref, true)
-	return a.ssh.Disconnect(ref)
+	a.ssh.CancelTab(tabID)
+}
+
+func (a *App) Disconnect(ref domain.ConnectionRef) error {
+	a.mu.Lock()
+	if current, ok := a.tabRefs[ref.TabID]; ok && current != ref {
+		a.mu.Unlock()
+		return nil
+	}
+	a.connectEpoch[ref.TabID]++
+	delete(a.transient, "connection:"+ref.TabID+":"+ref.SessionID)
+	a.mu.Unlock()
+	a.sftp.CancelTab(ref.TabID)
+	a.cancelExecution(ref, true)
+	a.ssh.CancelTab(ref.TabID)
+	a.emit("ssh:disconnected", ref)
+	return nil
 }
 func (a *App) CloseTab(tabID string) error {
 	a.mu.Lock()
 	ref := a.tabRefs[tabID]
 	a.mu.Unlock()
 	a.cancelExecution(ref, true)
+	a.mu.Lock()
+	delete(a.transient, "connection:"+tabID+":"+ref.SessionID)
+	a.mu.Unlock()
 	a.automatic.Forget(tabID)
 	a.coordinator.Forget(tabID)
 	a.memory.Unbind(ref)

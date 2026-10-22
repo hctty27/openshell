@@ -2,6 +2,7 @@ package sshclient
 
 import (
 	"context"
+	"errors"
 	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
@@ -46,6 +47,8 @@ type connection struct {
 	transferring bool
 	history  *History
 	sequence uint64
+	keepaliveCancel context.CancelFunc
+	disconnectReason string
 }
 type Manager struct {
 	mu          sync.Mutex
@@ -54,6 +57,7 @@ type Manager struct {
 	connections map[string]*connection
 	generations map[string]uint64
 	connecting  map[string]context.CancelFunc
+	keepaliveInterval time.Duration
 	closed      bool
 }
 
@@ -61,7 +65,7 @@ func NewManager(keys HostKeyStore, emit EmitFunc) *Manager {
 	if emit == nil {
 		emit = func(string, any) {}
 	}
-	return &Manager{keys: keys, emit: emit, connections: map[string]*connection{}, generations: map[string]uint64{}, connecting: map[string]context.CancelFunc{}}
+	return &Manager{keys: keys, emit: emit, connections: map[string]*connection{}, generations: map[string]uint64{}, connecting: map[string]context.CancelFunc{}, keepaliveInterval: 30 * time.Second}
 }
 func Address(host string, port int) string {
 	return net.JoinHostPort(strings.Trim(host, "[]"), strconv.Itoa(port))
@@ -82,6 +86,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 		cancel()
 	}
 	if old := m.connections[tab]; old != nil {
+		if old.keepaliveCancel != nil { old.keepaliveCancel() }
 		old.client.Close()
 		delete(m.connections, tab)
 	}
@@ -156,13 +161,18 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	delete(m.connecting, tab)
 	c := &connection{ref: ref, session: s, client: client, history: NewHistory(1024 * 1024)}
 	m.connections[tab] = c
+	m.startKeepaliveLocked(c)
 	m.mu.Unlock()
 	go func() {
-		client.Wait()
+		err := client.Wait()
 		m.mu.Lock()
 		if m.connections[tab] == c {
 			delete(m.connections, tab)
+			if c.keepaliveCancel != nil { c.keepaliveCancel() }
+			reason := c.disconnectReason
+			if reason == "" { reason = classifyDisconnect(err) }
 			m.mu.Unlock()
+			m.emit("ssh:connection-lost", map[string]any{"ref": ref, "reason": reason})
 			m.emit("ssh:disconnected", ref)
 		} else {
 			m.mu.Unlock()
@@ -221,6 +231,7 @@ func (m *Manager) Disconnect(ref domain.ConnectionRef) error {
 		return nil
 	}
 	delete(m.connections, ref.TabID)
+	if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	m.mu.Unlock()
 	e := c.client.Close()
 	m.emit("ssh:disconnected", ref)
@@ -234,6 +245,7 @@ func (m *Manager) Close() {
 		cancel()
 	}
 	for _, c := range m.connections {
+		if c.keepaliveCancel != nil { c.keepaliveCancel() }
 		c.client.Close()
 	}
 	m.connections = map[string]*connection{}
@@ -267,6 +279,7 @@ func (m *Manager) CancelTab(tab string) {
 	}
 	if c := m.connections[tab]; c != nil {
 		delete(m.connections, tab)
+		if c.keepaliveCancel != nil { c.keepaliveCancel() }
 		c.client.Close()
 	}
 }
@@ -280,4 +293,70 @@ func (m *Manager) Client(ref domain.ConnectionRef) (*ssh.Client, error) {
 		return nil, domain.Error("stale", apperror.New("staleConnection", nil).Error())
 	}
 	return c.client, nil
+}
+
+func classifyDisconnect(err error) string {
+	if err == nil { return "remote_closed" }
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() { return "network_timeout" }
+	return "connection_lost"
+}
+
+// SetKeepAliveInterval reconfigures active sessions without closing the transport.
+// A zero interval disables protocol-level keepalive.
+func (m *Manager) SetKeepAliveInterval(interval time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.keepaliveInterval = interval
+	for _, c := range m.connections {
+		if c.keepaliveCancel != nil { c.keepaliveCancel() }
+		m.startKeepaliveLocked(c)
+	}
+}
+
+// Caller holds m.mu.
+func (m *Manager) startKeepaliveLocked(c *connection) {
+	c.keepaliveCancel = nil
+	if m.keepaliveInterval <= 0 { return }
+	ctx, cancel := context.WithCancel(context.Background())
+	c.keepaliveCancel = cancel
+	interval := m.keepaliveInterval
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				done := make(chan error, 1)
+				go func() {
+					// A negative reply still proves the SSH peer is reachable.
+					_, _, err := c.client.SendRequest("keepalive@openssh.com", true, nil)
+					done <- err
+				}()
+				select {
+				case <-ctx.Done():
+					return
+				case err := <-done:
+					if err == nil { continue }
+					m.mu.Lock()
+					if ctx.Err() == nil && m.connections[c.ref.TabID] == c {
+						c.disconnectReason = "keepalive_failed"
+						_ = c.client.Close()
+					}
+					m.mu.Unlock()
+					return
+				case <-time.After(10 * time.Second):
+					m.mu.Lock()
+					if ctx.Err() == nil && m.connections[c.ref.TabID] == c {
+						c.disconnectReason = "keepalive_timeout"
+						_ = c.client.Close()
+					}
+					m.mu.Unlock()
+					return
+				}
+			}
+		}
+	}()
 }

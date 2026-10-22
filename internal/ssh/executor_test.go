@@ -108,3 +108,18 @@ func TestExecTimeoutCoversChannelOpenAndStart(t *testing.T) {
 		})
 	}
 }
+
+func TestExecTimeoutDoesNotDisconnectInteractiveSSH(t *testing.T) {
+	m, ref := connected(t)
+	result, err := m.Run(context.Background(), ref, "sleep 2", "/tmp", 30*time.Millisecond)
+	if err != nil || result.Reason != "timed_out" {
+		t.Fatalf("expected command timeout: %+v, %v", result, err)
+	}
+	if !m.Valid(ref) {
+		t.Fatal("timed-out AI command disconnected the SSH transport")
+	}
+	followup, err := m.Run(context.Background(), ref, "printf alive", "/tmp", time.Second)
+	if err != nil || followup.Status != "completed" || followup.Stdout != "alive" {
+		t.Fatalf("SSH must remain usable after command timeout: %+v, %v", followup, err)
+	}
+}

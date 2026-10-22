@@ -27,6 +27,8 @@ export function CloseTab(arg1:string):Promise<void>;
 
 export function ConfirmCommand(arg1:domain.ConnectionRef,arg2:string):Promise<domain.CommandResult>;
 
+export function CancelConnecting(arg1:string):Promise<void>;
+
 export function Connect(arg1:string,arg2:string,arg3:string):Promise<main.ConnectResult>;
 
 export function Continue(arg1:main.ChatRequest):Promise<main.ChatResponse>;
@@ -38,6 +40,8 @@ export function DeleteGroup(arg1:string):Promise<void>;
 export function DeleteSession(arg1:string):Promise<void>;
 
 export function DuplicateSession(arg1:string):Promise<domain.Session>;
+
+export function Reconnect(arg1:string,arg2:string):Promise<main.ConnectResult>;
 
 export function Disconnect(arg1:domain.ConnectionRef):Promise<void>;
 

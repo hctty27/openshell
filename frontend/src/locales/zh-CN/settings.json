@@ -97,5 +97,16 @@
   "terminalThemeDark": "Xshell 深灰 · 深色",
   "terminalThemeLight": "Xshell 浅色 · 白色",
   "terminalPalettePreview": "终端配色预览",
-  "terminalThemeDescription": "切换后已连接终端立即生效，无需重连。单独为会话设置配色时，将覆盖全局设置。"
+  "terminalThemeDescription": "切换后已连接终端立即生效，无需重连。单独为会话设置配色时，将覆盖全局设置。",
+  "connection": "连接",
+  "connectionDescription": "SSH 保活、自动重连和断开行为",
+  "keepAliveInterval": "保活间隔",
+  "autoReconnect": "异常断线自动重连",
+  "autoReconnectDescription": "仅在网络异常断开时重试，主动断开不会自动连接",
+  "maxReconnectAttempts": "最大重试次数",
+  "continuousRetry": "持续重试",
+  "showDisconnectReason": "显示 SSH 断开原因",
+  "confirmActiveDisconnect": "执行 AI 任务或传输文件时，断开前确认",
+  "seconds": "秒",
+  "disabled": "关闭"
 }

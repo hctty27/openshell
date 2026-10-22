@@ -82,6 +82,8 @@ type Backend = {
   WriteTerminal(ref: Ref, data: string): Promise<void>;
   CancelZmodem(ref: Ref): Promise<void>;
   ResizeTerminal(ref: Ref, cols: number, rows: number): Promise<void>;
+  CancelConnecting(tabID: string): Promise<void>;
+  Reconnect(tabID: string, sessionID: string): Promise<ConnectResult>;
   Disconnect(ref: Ref): Promise<void>;
   CloseTab(id: string): Promise<void>;
   PreviewContext(

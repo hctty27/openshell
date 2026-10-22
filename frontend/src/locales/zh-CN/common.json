@@ -132,5 +132,21 @@
   "sessionConnectionChangesOnNextReconnect": "连接配置已更新，当前 SSH 连接保持不变，新参数将在下次连接时生效",
   "unableToLoadWorkspace": "无法加载工作区。",
   "retry": "重试",
-  "loadingOpenShell": "正在启动 OpenShell…"
+  "loadingOpenShell": "正在启动 OpenShell…",
+  "disconnect": "断开连接",
+  "cancelConnecting": "取消连接",
+  "stopReconnecting": "停止重连",
+  "reconnecting": "正在重连",
+  "reconnectAttempt": "第 {{count}} 次重连",
+  "connectionInterrupted": "连接意外中断，正在尝试重连…",
+  "reconnectStopped": "自动重连已停止，请手动连接",
+  "disconnectRunningTitle": "确认断开 SSH 连接？",
+  "disconnectRunningDescription": "正在执行的 AI 任务或文件传输可能被中断",
+  "disconnectAnyway": "断开连接",
+  "connectionReason": "断开原因：{{reason}}",
+  "connectionLostReasonKeepaliveTimeout": "SSH 心跳超时",
+  "connectionLostReasonKeepaliveFailed": "SSH 心跳失败",
+  "connectionLostReasonNetworkTimeout": "网络连接超时",
+  "connectionLostReasonRemoteClosed": "服务器主动关闭连接",
+  "connectionLostReasonConnectionLost": "网络连接中断"
 }

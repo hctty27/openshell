@@ -38,7 +38,7 @@
   "confirmBeforeEachRun": "每次发送前确认",
   "commandsGoToTheActiveSshTerminalExit": "命令将发送给当前 SSH 终端。请先退出 vim、top 等交互程序再执行；危险命令建议开启确认。",
   "saveCommand": "保存命令",
-  "terminalOutputExceededTheProcessingLimitDisconnectedLimit": "终端输出超过处理上限，已断开连接；请限制日志输出量后重连",
+  "terminalOutputExceededTheProcessingLimitDisconnectedLimit": "终端输出速度过快，已跳过部分输出；SSH 连接保持正常。",
   "failedToCopySelection": "选中内容复制失败",
   "confirmMultilinePaste": "确认粘贴多行命令",
   "targetTheClipboardContainsMultipleLinesPastingMay": "目标服务器：{{name}}。检测到剪贴板包含多行内容，粘贴后可能立即执行命令。",

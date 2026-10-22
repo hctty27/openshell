@@ -97,5 +97,16 @@
   "terminalThemeDark": "Xshell Dark · charcoal",
   "terminalThemeLight": "Xshell Light · white",
   "terminalPalettePreview": "Terminal color preview",
-  "terminalThemeDescription": "Updates connected terminals immediately without reconnecting. A session-specific scheme overrides this default."
+  "terminalThemeDescription": "Updates connected terminals immediately without reconnecting. A session-specific scheme overrides this default.",
+  "connection": "Connection",
+  "connectionDescription": "SSH keepalive, reconnect and disconnection behavior",
+  "keepAliveInterval": "Keepalive interval",
+  "autoReconnect": "Reconnect automatically",
+  "autoReconnectDescription": "Only after unexpected network loss; never after manual disconnect",
+  "maxReconnectAttempts": "Maximum retry attempts",
+  "continuousRetry": "Keep trying",
+  "showDisconnectReason": "Show reason when SSH disconnects",
+  "confirmActiveDisconnect": "Confirm disconnect while AI or file transfers are active",
+  "seconds": "seconds",
+  "disabled": "Disabled"
 }

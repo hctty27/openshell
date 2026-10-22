@@ -7,6 +7,7 @@ import { useState } from "react";
 import {
   X,
   Server,
+  Network,
   KeyRound,
   Settings2,
   Terminal,
@@ -62,6 +63,11 @@ interface Props {
   middleClickPaste: boolean;
   onMiddleClickPaste(enabled: boolean): void;
   logHighlights: boolean;
+  keepAliveSeconds?: number;
+  autoReconnect?: boolean;
+  maxReconnectAttempts?: number;
+  showDisconnectReason?: boolean;
+  confirmActiveDisconnect?: boolean;
   onLogHighlights(enabled: boolean): void;
   onConfirmMultilinePaste(enabled: boolean): void;
   onClose(): void;
@@ -104,6 +110,11 @@ export default function SettingsDialog(p: Props) {
   });
   const [autoLimit, setAutoLimit] = useState(p.autoCommandLimit ?? 10);
   const [allowChanges, setAllowChanges] = useState(p.autoAllowChanges ?? false);
+  const [keepAliveSeconds, setKeepAliveSeconds] = useState(p.keepAliveSeconds ?? 30);
+  const [autoReconnect, setAutoReconnect] = useState(p.autoReconnect !== false);
+  const [maxReconnectAttempts, setMaxReconnectAttempts] = useState(p.maxReconnectAttempts ?? 10);
+  const [showDisconnectReason, setShowDisconnectReason] = useState(p.showDisconnectReason !== false);
+  const [confirmActiveDisconnect, setConfirmActiveDisconnect] = useState(p.confirmActiveDisconnect !== false);
   const [secret, setSecret] = useState("");
   const [saveSecret, setSaveSecret] = useState(!!p.session?.credentialRef);
   const [profile, setProfile] = useState<APIProfile>(
@@ -173,6 +184,7 @@ export default function SettingsDialog(p: Props) {
               {[
                 { id: "general", label: t("settings:general"), icon: Settings2 },
                 { id: "terminal", label: t("settings:terminal"), icon: Terminal },
+                { id: "connection", label: t("settings:connection"), icon: Network },
                 { id: "api", label: t("settings:aiSettings"), icon: Bot },
                 { id: "automatic", label: t("ai:automatic"), icon: ShieldCheck },
               ].map(({ id, label, icon: Icon }) => (
@@ -636,6 +648,55 @@ export default function SettingsDialog(p: Props) {
               </div>
             </section>
           )}
+          {tab === "connection" && (
+            <section className="settings-panel" aria-labelledby="settings-connection-title">
+              <div className="settings-panel-heading">
+                <h3 id="settings-connection-title">{t("settings:connection")}</h3>
+                <p>{t("settings:connectionDescription")}</p>
+              </div>
+              <div className="settings-terminal-group">
+                <label htmlFor="settings-keepalive">{t("settings:keepAliveInterval")}</label>
+                <select id="settings-keepalive" value={keepAliveSeconds} onChange={e => setKeepAliveSeconds(Number(e.target.value))}>
+                  <option value={0}>{t("settings:disabled")}</option>
+                  <option value={15}>15 {t("settings:seconds")}</option>
+                  <option value={30}>30 {t("settings:seconds")}</option>
+                  <option value={60}>60 {t("settings:seconds")}</option>
+                </select>
+              </div>
+              <div className="settings-terminal-group">
+                <label className="settings-toggle-row">
+                  <span className="settings-toggle-copy">
+                    <strong>{t("settings:autoReconnect")}</strong>
+                    <small>{t("settings:autoReconnectDescription")}</small>
+                  </span>
+                  <input className="settings-switch" type="checkbox" checked={autoReconnect}
+                    onChange={e => setAutoReconnect(e.target.checked)} />
+                </label>
+              </div>
+              <div className="settings-terminal-group">
+                <label htmlFor="settings-retries">{t("settings:maxReconnectAttempts")}</label>
+                <select id="settings-retries" disabled={!autoReconnect} value={maxReconnectAttempts}
+                  onChange={e => setMaxReconnectAttempts(Number(e.target.value))}>
+                  <option value={5}>5</option><option value={10}>10</option><option value={20}>20</option>
+                  <option value={0}>{t("settings:continuousRetry")}</option>
+                </select>
+              </div>
+              <div className="settings-terminal-group">
+                <label className="settings-toggle-row">
+                  <span className="settings-toggle-copy"><strong>{t("settings:showDisconnectReason")}</strong></span>
+                  <input className="settings-switch" type="checkbox" checked={showDisconnectReason}
+                    onChange={e => setShowDisconnectReason(e.target.checked)} />
+                </label>
+              </div>
+              <div className="settings-terminal-group">
+                <label className="settings-toggle-row">
+                  <span className="settings-toggle-copy"><strong>{t("settings:confirmActiveDisconnect")}</strong></span>
+                  <input className="settings-switch" type="checkbox" checked={confirmActiveDisconnect}
+                    onChange={e => setConfirmActiveDisconnect(e.target.checked)} />
+                </label>
+              </div>
+            </section>
+          )}
           {tab === "terminal" && (
             <section className="settings-panel" aria-labelledby="settings-terminal-title">
               <div className="settings-panel-heading">
@@ -869,6 +930,18 @@ export default function SettingsDialog(p: Props) {
                 }
               >
                 {t("settings:saveAutomaticSettings")}
+              </button>
+            )}
+            {tab === "connection" && (
+              <button className="primary" disabled={busy} onClick={() => run(async () => {
+                await api.SavePreference("keepAliveSeconds", String(keepAliveSeconds));
+                await api.SavePreference("autoReconnect", String(autoReconnect));
+                await api.SavePreference("maxReconnectAttempts", String(maxReconnectAttempts));
+                await api.SavePreference("showDisconnectReason", String(showDisconnectReason));
+                await api.SavePreference("confirmActiveDisconnect", String(confirmActiveDisconnect));
+                await p.onRefresh();
+              }, message("settings:settingsSaved"))}>
+                {t("settings:saveSettings")}
               </button>
             )}
             {(tab === "general" || tab === "terminal") && (
