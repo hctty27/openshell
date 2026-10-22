@@ -412,15 +412,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
     );
     const lost = listen("ssh:connection-lost", (payload: { ref: Ref; reason: string }) => {
       if (!showDisconnectReasonRef.current) return;
-      const reasonKeys: Record<string, string> = {
-        keepalive_timeout: "common:connectionLostReasonKeepaliveTimeout",
-        keepalive_failed: "common:connectionLostReasonKeepaliveFailed",
-        network_timeout: "common:connectionLostReasonNetworkTimeout",
-        remote_closed: "common:connectionLostReasonRemoteClosed",
-        connection_lost: "common:connectionLostReasonConnectionLost",
+      const reasons: Record<string, string> = {
+        keepalive_timeout: tr("common:connectionLostReasonKeepaliveTimeout"),
+        keepalive_failed: tr("common:connectionLostReasonKeepaliveFailed"),
+        network_timeout: tr("common:connectionLostReasonNetworkTimeout"),
+        remote_closed: tr("common:connectionLostReasonRemoteClosed"),
+        connection_lost: tr("common:connectionLostReasonConnectionLost"),
       };
       update(payload.ref.tabId, t => t.ref?.generation === payload.ref.generation
-        ? { ...t, error: tr(reasonKeys[payload.reason] ?? "common:connectionLostReasonConnectionLost") } : t);
+        ? { ...t, error: reasons[payload.reason] ?? tr("common:connectionLostReasonConnectionLost") } : t);
     });
     const off = listen("ssh:disconnected", (ref: Ref) =>
       update(ref.tabId, t => {
