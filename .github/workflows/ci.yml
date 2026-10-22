@@ -83,11 +83,11 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json') }}
-      - name: Verify compact layout in Chromium
+      - name: Verify terminal background and compact layout in Chromium
         working-directory: frontend
         run: |
           npx playwright install --with-deps chromium
-          npx playwright test --grep "compact sidebar removes detail actions|AI header aligns with SSH title bar|bilingual"
+          npx playwright test --grep "terminal backdrop fills its pane|compact sidebar removes detail actions|AI header aligns with SSH title bar|bilingual"
 
   release:
     name: Windows release after CI

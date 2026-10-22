@@ -375,7 +375,7 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(page.locator(".terminal-pane.active .xterm-viewport")).toHaveCSS(
     "background-color",
-    "rgb(250, 251, 253)",
+    "rgb(255, 255, 255)",
   );
   await page.getByRole("button", { name: "保存设置" }).click();
   await expect(page.getByText("设置已保存")).toBeVisible();
@@ -406,6 +406,82 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
   await page
     .getByRole("button", { name: "深色", exact: true }).click();
   await page.screenshot({ path: "../tmp/theme-dark.png" });
+});
+
+test("terminal backdrop fills its pane across mixed application and terminal palettes", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1200, height: 720 });
+  await page.goto("/");
+  await page.getByTitle("新建会话", { exact: true }).first().click();
+  await page.getByLabel("会话名称", { exact: true }).fill("无露边测试");
+  await page.getByLabel("主机地址").fill("127.0.0.1");
+  await page.getByLabel("登录密码").fill("fixture-password");
+  await page.getByText("保存到 Windows 凭据管理器").click();
+  await page.getByRole("button", { name: "保存会话", exact: true }).click();
+  await page.getByText("无露边测试", { exact: true }).dblclick();
+  await page.getByRole("button", { name: "信任并连接" }).click();
+  await expect(page.locator(".terminal-pane.active .xterm-screen")).toBeVisible();
+
+  await page.getByTitle("设置", { exact: true }).click();
+  await page.getByRole("button", { name: "浅色", exact: true }).click();
+  await page.getByRole("button", { name: "终端", exact: true }).click();
+  await page.locator("#settings-terminal-theme").selectOption("classic");
+  await page.getByRole("button", { name: "保存设置" }).click();
+  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+
+  const snapshot = () => page.evaluate(() => {
+    const container = document.querySelector(".terminal-container")!;
+    const pane = container.querySelector(".terminal-pane.active")!;
+    const xterm = pane.querySelector(".xterm")!;
+    const viewport = pane.querySelector(".xterm-viewport")!;
+    const screen = pane.querySelector(".xterm-screen")!;
+    const scrollbar = pane.querySelector(".scrollbar.vertical")!;
+    const outer = container.getBoundingClientRect();
+    const inner = pane.getBoundingClientRect();
+    const glyphs = screen.getBoundingClientRect();
+    const scroll = scrollbar.getBoundingClientRect();
+    return {
+      backgrounds: [container, pane, xterm, viewport].map((el) =>
+        getComputedStyle(el).backgroundColor
+      ),
+      leftGap: inner.left - outer.left,
+      topGap: inner.top - outer.top,
+      rightGap: outer.right - inner.right,
+      bottomGap: outer.bottom - inner.bottom,
+      textInsetLeft: glyphs.left - inner.left,
+      textInsetTop: glyphs.top - inner.top,
+      scrollbarRightInset: inner.right - scroll.right,
+      screenRight: glyphs.right,
+      paneRight: inner.right,
+    };
+  });
+
+  await expect.poll(async () => (await snapshot()).backgrounds)
+    .toEqual(Array(4).fill("rgb(8, 9, 12)"));
+  const dark = await snapshot();
+  for (const gap of [dark.leftGap, dark.topGap, dark.rightGap, dark.bottomGap]) {
+    expect(Math.abs(gap)).toBeLessThan(1);
+  }
+  expect(dark.textInsetLeft).toBeGreaterThanOrEqual(10);
+  expect(dark.textInsetTop).toBeGreaterThanOrEqual(8);
+  expect(dark.scrollbarRightInset).toBeGreaterThanOrEqual(0);
+  expect(dark.scrollbarRightInset).toBeLessThanOrEqual(10);
+  expect(dark.screenRight).toBeLessThanOrEqual(dark.paneRight + 1);
+
+  await page.getByTitle("设置", { exact: true }).click();
+  await page.getByRole("button", { name: "终端", exact: true }).click();
+  await page.locator("#settings-terminal-theme").selectOption("light");
+  await page.getByRole("button", { name: "保存设置" }).click();
+  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await expect.poll(async () => (await snapshot()).backgrounds)
+    .toEqual(Array(4).fill("rgb(255, 255, 255)"));
+
+  await page.getByTitle("设置", { exact: true }).click();
+  await page.getByRole("button", { name: "深色", exact: true }).click();
+  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await expect.poll(async () => (await snapshot()).backgrounds)
+    .toEqual(Array(4).fill("rgb(255, 255, 255)"));
 });
 
 test("compact sidebar removes detail actions and aligns single-row footer heights", async ({
