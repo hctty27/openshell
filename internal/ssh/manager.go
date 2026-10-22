@@ -118,6 +118,18 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	defer closeAuth()
 	hops, err := parseProxyJump(s.ProxyJump, s.Username)
 	if err != nil { return ref, domain.Error("proxy_jump", err.Error()) }
+	if s.UseSSHConfig {
+		for i := range hops {
+			jumpCfg, configErr := ReadOpenSSHConfig(hops[i].alias)
+			if configErr != nil { return ref, domain.Error("ssh_config", configErr.Error()) }
+			host := hops[i].alias
+			if jumpCfg.HostName != "" { host = jumpCfg.HostName }
+			port := hops[i].port
+			if !hops[i].explicitPort && jumpCfg.Port != 0 { port = jumpCfg.Port }
+			if !hops[i].explicitUser && jumpCfg.User != "" { hops[i].user = jumpCfg.User }
+			hops[i].address = Address(host, port)
+		}
+	}
 	client, jumpClients, err := m.dialRoute(ctx, address, s.Username, methods, hops)
 	if err != nil {
 		var hostErr *HostKeyError
