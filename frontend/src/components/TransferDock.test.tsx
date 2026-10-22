@@ -63,3 +63,11 @@ test("ZMODEM progress and cancellation do not claim unverified success", async (
   expect(screen.getByText("传输流程已退出")).toBeTruthy();
   expect(screen.getByText("请查看终端确认结果")).toBeTruthy();
 });
+
+test("empty SFTP sidebar reserves only the collapsed transfer footer", () => {
+  render(<TransferDock refID={ref} onNotice={vi.fn()} alwaysVisible />);
+  const heading = screen.getByRole("button", { name: /传输任务/ });
+  expect(heading.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(heading);
+  expect(screen.getByText("暂无传输任务")).toBeTruthy();
+});

@@ -30,7 +30,10 @@ vi.mock("./components/TerminalPane", () => ({
   ),
 }));
 vi.mock("./components/SFTPView", () => ({
-  default: () => <div data-testid="sftp-panel-stub">SFTP file view</div>,
+  default: (props: { initialRemoteDirectory?: string }) =>
+    <div data-testid="sftp-panel-stub" data-initial-directory={props.initialRemoteDirectory}>
+      SFTP file view
+    </div>,
 }));
 vi.mock("./bridge", async () => ({
   ...(await vi.importActual<typeof import("./bridge")>("./bridge")),
@@ -483,6 +486,10 @@ test("SFTP opens beside the existing terminal and can close without reconnecting
   fireEvent.click(screen.getByTitle("打开 SFTP 文件管理"));
   expect(document.querySelector(".workspace-workarea")?.classList.contains("with-sftp")).toBe(true);
   expect(screen.getByTestId("sftp-panel-stub")).toBeTruthy();
+  expect(screen.getByTestId("sftp-panel-stub").getAttribute("data-initial-directory")).toBe("/root");
+  expect(document.querySelector(".workspace-file-panel .transfer-dock")).toBeTruthy();
+  expect(document.querySelector(".workspace-workarea > .transfer-dock")).toBeNull();
+  expect(document.querySelector(".workspace-file-panel .transfer-dock-heading")).toBeTruthy();
   const terminal = document.querySelector(".terminal-container") as HTMLElement;
   expect(terminal.style.display).not.toBe("none");
   expect(screen.getAllByTestId("terminal-pane-stub")).toHaveLength(1);
