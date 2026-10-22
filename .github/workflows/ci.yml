@@ -95,6 +95,8 @@ jobs:
     if: github.event_name == 'push' && needs.changes.outputs.release == 'true'
     permissions:
       contents: write
+      actions: read
     uses: ./.github/workflows/windows-release.yml
+    secrets: inherit
     with:
       publish: true
