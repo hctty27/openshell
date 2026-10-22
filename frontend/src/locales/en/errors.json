@@ -115,7 +115,7 @@
   "taskStarting": "Starting automatic task",
   "memoryBusy": "This conversation or tab is busy. Stop the running task first.",
   "memoryConnectionChanged": "The connection changed. Reconnect and reload the conversation.",
-  "memoryWrongServer": "This conversation belongs to another server.",
+  "memoryWrongServer": "Conversation belongs to another server",
   "memoryNoRun": "This task has ended. Start a new request.",
   "memoryNotOwner": "Control this task from the tab where it was started.",
   "memoryContextTooLarge": "The current message or tool chain is too large. Shorten the message or attachment.",
@@ -212,5 +212,10 @@
   "sessionBackupFolderCycleInBackup": "folder cycle in backup",
   "sessionBackupUnknownParentFolderInBackup": "unknown parent folder in backup",
   "sessionBackupFilePickerIsUnavailable": "file picker is unavailable",
-  "sessionBackupBackupFileExceedsSizeLimit": "backup file exceeds size limit"
+  "sessionBackupBackupFileExceedsSizeLimit": "backup file exceeds size limit",
+  "folderInvalidNameOrParent": "Invalid folder name or parent",
+  "folderCycleNotAllowed": "Folder nesting cannot form a cycle",
+  "folderParentNotFound": "Parent folder does not exist",
+  "memoryMessageIdRequired": "Message ID is required",
+  "memoryUnsupportedMutation": "Unsupported conversation change"
 }
