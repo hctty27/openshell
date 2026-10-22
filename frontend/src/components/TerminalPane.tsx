@@ -419,7 +419,7 @@ export default function TerminalPane(p: Props) {
               setRegexMode(next);
               if (searchText) searchAddon.current?.findNext(searchText, searchOptions(next));
             }}>.*</button>
-          <button type="button" title={t("terminal:highlightLogLevels")}
+          <button type="button" className="terminal-log-preset" title={t("terminal:highlightLogLevels")}
             aria-label={t("terminal:highlightLogLevels")} onClick={highlightLogs}>
             {t("terminal:logs")}
           </button>
