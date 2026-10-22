@@ -30,7 +30,7 @@ const niceSize = (value: number) => {
   do { num /= 1024; idx++; } while(num >= 1024 && idx < units.length-1);
   return `${num.toFixed(num < 10 ? 1 : 0)} ${units[idx]}`;
 };
-interface Props { refID: Ref; profileID: string; onNotice(error: unknown): void; }
+interface Props { refID: Ref; profileID: string; onNotice(error: unknown): void; hideTaskQueue?: boolean; }
 interface PanelProps {
   side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: unknown; showHidden: boolean;
   onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void; onSelect(item: SFTPEntry, multi: boolean): void;
@@ -89,7 +89,7 @@ function FilePanel(p: PanelProps) {
     </section>
   );
 }
-export default function SFTPView({refID,profileID,onNotice}:Props) {
+export default function SFTPView({refID,profileID,onNotice,hideTaskQueue = false}:Props) {
   useTranslation();
   const dialogs = useDialogs();
   const [localDir,setLocalDir] = useState("");
@@ -343,7 +343,7 @@ export default function SFTPView({refID,profileID,onNotice}:Props) {
         <button disabled={syncBusy} onClick={()=>void sync("upload")}><ArrowUpFromLine size={13}/>{t("sftp:syncUpload")}</button>
         <button disabled={syncBusy} onClick={()=>void sync("download")}><ArrowDownToLine size={13}/>{t("sftp:syncDownload")}</button>
       </div>
-      <div className={`sftp-queue ${queueOpen?"expanded":""}`}>
+      {!hideTaskQueue && <div className={`sftp-queue ${queueOpen?"expanded":""}`}>
         <button className="sftp-queue-heading" onClick={()=>setQueueOpen(v=>!v)}>
           <span><ArrowUpFromLine size={13}/>{t("sftp:transferQueue")} ({tasks.length})</span><ChevronUp size={14}/>
         </button>
@@ -364,7 +364,7 @@ export default function SFTPView({refID,profileID,onNotice}:Props) {
             </div>
           ))}
         </div>}
-      </div>
+      </div>}
       {editor && (
         <div className="sftp-editor-backdrop">
           <section className="sftp-editor" role="dialog" aria-modal="true" aria-label={t("sftp:editText")}>

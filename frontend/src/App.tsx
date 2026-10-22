@@ -51,6 +51,7 @@ import XshellImportDialog from "./components/XshellImportDialog";
 import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
 import SFTPView from "./components/SFTPView";
+import TransferDock from "./components/TransferDock";
 import AISidebar from "./components/AISidebar";
 import { useConversations } from "./useConversations";
 import { toChatMessages } from "./conversations";
@@ -1332,10 +1333,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
             </div>
             {showSFTP && active?.ref && (
               <aside className="workspace-file-panel" aria-label={tr("sftp:fileManager")}>
-                <SFTPView refID={active.ref} profileID={profileID} onNotice={notify} />
+                <SFTPView refID={active.ref} profileID={profileID} onNotice={notify} hideTaskQueue />
               </aside>
             )}
             </div>
+            <TransferDock refID={active?.status === "connected" ? active.ref : undefined} onNotice={notify} />
             {(
               <QuickCommandBar
                 tab={active}

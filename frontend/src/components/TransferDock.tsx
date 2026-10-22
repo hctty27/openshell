@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, ChevronDown, ChevronUp, X, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, errorText, listen } from "../bridge";
@@ -21,6 +21,7 @@ export default function TransferDock({ refID, onNotice }: Props) {
   const [zmodemCancelling, setZmodemCancelling] = useState(false);
   const [zmodemStats, setZmodemStats] = useState<ZmodemStats | null>(null);
   const [zmodemEnded, setZmodemEnded] = useState(false);
+  const seenZmodem = useRef(false);
   useEffect(() => {
     let disposed = false;
     setTasks([]);
@@ -28,6 +29,7 @@ export default function TransferDock({ refID, onNotice }: Props) {
     setZmodemCancelling(false);
     setZmodemStats(null);
     setZmodemEnded(false);
+    seenZmodem.current = false;
     if (!refID) return;
     void api.SFTPTransfers(refID).then(list => {
       if (!disposed) setTasks(list ?? []);
@@ -43,10 +45,12 @@ export default function TransferDock({ refID, onNotice }: Props) {
       setZmodemCancelling(false);
       setZmodemStats(null);
       if (payload.active) {
+        seenZmodem.current = true;
         setZmodemEnded(false);
         setExpanded(true);
-      } else {
-        setZmodemEnded(old => old || true);
+      } else if (seenZmodem.current) {
+        seenZmodem.current = false;
+        setZmodemEnded(true);
       }
     });
     const offProgress = listen("ssh:transfer-progress", (payload: { ref: Ref; transferred: string; speed: string }) => {

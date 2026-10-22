@@ -51,9 +51,6 @@ export default function TerminalPane(p: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [regexMode, setRegexMode] = useState(false);
-  const [transferActive, setTransferActive] = useState(false);
-  const [transferProgress, setTransferProgress] = useState<{ transferred: string; speed: string } | null>(null);
-  const [transferCancelling, setTransferCancelling] = useState(false);
   const callbacks = useRef(p);
   callbacks.current = p;
   useEffect(() => {
@@ -105,16 +102,6 @@ export default function TerminalPane(p: Props) {
       term.write(bytes, () => {
         pending -= bytes.length;
       });
-    });
-    const offTransfer = listen("ssh:transfer-state", (payload) => {
-      if (disposed || !payload?.ref || !same(payload.ref)) return;
-      setTransferActive(payload.active === true);
-      setTransferCancelling(false);
-      setTransferProgress(null);
-    });
-    const offProgress = listen("ssh:transfer-progress", (payload) => {
-      if (disposed || !payload?.ref || !same(payload.ref)) return;
-      setTransferProgress({ transferred: payload.transferred, speed: payload.speed });
     });
     const encoder = new TextEncoder();
     const inputQueue: string[] = [];
@@ -317,9 +304,6 @@ export default function TerminalPane(p: Props) {
       clearTimeout(resizeTimer);
       observer.disconnect();
       off();
-      offTransfer();
-      offProgress();
-      setTransferActive(false);
       paneElement.removeEventListener("mousedown", onMouseDown, true);
       paneElement.removeEventListener("auxclick", onAuxClick, true);
       document.removeEventListener("mouseup", onMouseUp, true);
@@ -458,29 +442,6 @@ export default function TerminalPane(p: Props) {
     <div className={`terminal-pane ${(p.visible ?? p.active) ? "visible" : ""} ${p.active ? "active" : ""}`}
       aria-label={t("terminal:terminal", { name: p.tab.session.name })}>
       <div className="terminal-surface" ref={container} />
-      {p.active && transferActive && (
-        <div className="terminal-transfer-indicator" role="status">
-          <span>{t("terminal:zmodemTransferring")}</span>
-          {transferProgress && (
-            <span className="terminal-transfer-stats">
-              {transferProgress.transferred} · {transferProgress.speed}
-            </span>
-          )}
-          <button type="button" disabled={transferCancelling}
-            aria-label={t("terminal:cancelZmodem")}
-            onClick={() => {
-              const ref = callbacks.current.tab.ref;
-              if (!ref || transferCancelling) return;
-              setTransferCancelling(true);
-              void api.CancelZmodem(ref).catch((error) => {
-                setTransferCancelling(false);
-                callbacks.current.onNotice(error);
-              });
-            }}>
-            {transferCancelling ? t("terminal:zmodemCancelling") : t("terminal:cancelZmodem")}
-          </button>
-        </div>
-      )}
       {p.active && searchOpen && (
         <div className="terminal-find">
           <input
