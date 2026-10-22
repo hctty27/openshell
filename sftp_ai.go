@@ -3,7 +3,6 @@ package main
 import (
  "context"
  "encoding/json"
- "errors"
  "fmt"
  "io"
  "path"
@@ -11,6 +10,7 @@ import (
  "time"
  "unicode/utf8"
 
+ "github.com/hctty27/openshell/internal/apperror"
  "github.com/hctty27/openshell/internal/ai"
  "github.com/hctty27/openshell/internal/domain"
 )
@@ -49,30 +49,30 @@ func parseAIJSON(text string, result any) error {
  if strings.HasSuffix(text,fence) {text=strings.TrimSpace(strings.TrimSuffix(text,fence))}
  decoder:=json.NewDecoder(strings.NewReader(text))
  decoder.DisallowUnknownFields()
- if err:=decoder.Decode(result);err!=nil{return fmt.Errorf("AI did not return a valid proposal: %w",err)}
+ if err:=decoder.Decode(result);err!=nil{return apperror.Wrap("sftpAiInvalidProposal",err,nil)}
  var extra any
- if err:=decoder.Decode(&extra);err!=io.EOF{return errors.New("AI returned trailing data")}
+ if err:=decoder.Decode(&extra);err!=io.EOF{return apperror.New("sftpAiAIReturnedTrailingData",nil)}
  return nil
 }
 func proposedFilename(value string) (string,error) {
  if value=="" || value=="." || value==".." || len(value)>200 || strings.ContainsAny(value,"/\\\x00\r\n") || !utf8.ValidString(value) {
-  return "",errors.New("AI suggested an unsafe filename")
+  return "",apperror.New("sftpAiAISuggestedAnUnsafeFilename",nil)
  }
  return value,nil
 }
 func (a *App) SFTPAIAssist(req SFTPAIRequest) (SFTPAIResponse,error) {
  out:=SFTPAIResponse{Mode:req.Mode}
- if !a.ssh.Valid(req.Ref) {return out,errors.New("SSH connection is no longer active")}
- if req.ProfileID=="" {return out,errors.New("configure an AI profile before using SFTP AI")}
- if len(req.Instruction)>1000 {return out,errors.New("AI instruction exceeds 1000 characters")}
+ if !a.ssh.Valid(req.Ref) {return out,apperror.New("sftpAiSSHConnectionIsNoLongerActive",nil)}
+ if req.ProfileID=="" {return out,apperror.New("sftpAiConfigureAnAIProfileBeforeUsingSFTPAI",nil)}
+ if len(req.Instruction)>1000 {return out,apperror.New("sftpAiAIInstructionExceeds1000Characters",nil)}
  expected:=1
  switch req.Mode {
  case "analyze","log","edit","upload":
  case "compare":expected=2
- default:return out,errors.New("unsupported SFTP AI operation")
+ default:return out,apperror.New("sftpAiUnsupportedSFTPAIOperation",nil)
  }
- if len(req.Paths)!=expected{return out,errors.New("select the required number of files")}
- if req.Mode=="compare" && req.Paths[0]==req.Paths[1] {return out,errors.New("choose two different files")}
+ if len(req.Paths)!=expected{return out,apperror.New("sftpAiSelectTheRequiredNumberOfFiles",nil)}
+ if req.Mode=="compare" && req.Paths[0]==req.Paths[1] {return out,apperror.New("sftpAiChooseTwoDifferentFiles",nil)}
  profile,key,err:=a.profile(req.ProfileID)
  if err!=nil{return out,err}
  profile.ToolsEnabled=false
@@ -89,7 +89,7 @@ Do not output secrets or credential material.
  var data strings.Builder
  out.Source=req.Paths[0]
  if req.Mode=="upload" {
-  if req.RemoteDir=="" || !path.IsAbs(req.RemoteDir){return out,errors.New("select an absolute remote directory")}
+  if req.RemoteDir=="" || !path.IsAbs(req.RemoteDir){return out,apperror.New("sftpAiSelectAnAbsoluteRemoteDirectory",nil)}
   name,e:=a.sftp.AILocalFileName(req.Ref,req.Paths[0])
   if e!=nil{return out,e}
   data.WriteString("Selected local filename: "+name+"\nTarget remote directory: "+req.RemoteDir+"\n")
@@ -101,7 +101,7 @@ The program validates the name and shows an explicit confirmation before any tra
    excerpt,e:=a.sftp.ReadAIExcerpt(req.Ref,p,req.Mode=="log",req.Mode=="edit")
    if e!=nil{return out,e}
    if req.Mode=="edit" && ai.Redact(excerpt.Content)!=excerpt.Content {
-    return out,errors.New("file contains values that would be redacted; use the manual editor to avoid corrupting secrets")
+    return out,apperror.New("sftpAiFileContainsValuesThatWouldBeRedactedUseTheManualEditorToAvoidCorruptingSecrets",nil)
    }
    if req.Mode=="edit" {out.Revision=excerpt.Revision;out.Original=excerpt.Content}
    out.Truncated=out.Truncated||excerpt.Truncated
@@ -128,13 +128,13 @@ The program ONLY stages this text in an editor. The user must review and click S
  defer cancel()
  reply,err:=a.provider.Stream(ctx,profile,key,messages,nil)
  if err!=nil{return out,err}
- if !a.ssh.Valid(req.Ref){return out,errors.New("SSH connection changed during AI analysis")}
- if len(reply.Text)>128*1024{return out,errors.New("AI output exceeded the safety limit")}
+ if !a.ssh.Valid(req.Ref){return out,apperror.New("sftpAiSSHConnectionChangedDuringAIAnalysis",nil)}
+ if len(reply.Text)>128*1024{return out,apperror.New("sftpAiAIOutputExceededTheSafetyLimit",nil)}
  switch req.Mode{
  case "edit":
   var proposal aiEditJSON
   if err=parseAIJSON(reply.Text,&proposal);err!=nil{return out,err}
-  if !utf8.ValidString(proposal.Content) || strings.ContainsRune(proposal.Content,0) || len(proposal.Content)>24*1024{return out,errors.New("AI proposed text is too large or invalid UTF-8")}
+  if !utf8.ValidString(proposal.Content) || strings.ContainsRune(proposal.Content,0) || len(proposal.Content)>24*1024{return out,apperror.New("sftpAiAIProposedTextIsTooLargeOrInvalidUTF8",nil)}
   out.Proposed=proposal.Content
   out.Summary=strings.TrimSpace(proposal.Summary)
  case "upload":
@@ -143,7 +143,7 @@ The program ONLY stages this text in an editor. The user must review and click S
   filename,err:=proposedFilename(proposal.Filename)
   if err!=nil{return out,err}
   out.Destination=path.Join(req.RemoteDir,filename)
-  if out.Destination=="/"{return out,errors.New("unsafe upload destination")}
+  if out.Destination=="/"{return out,apperror.New("sftpAiUnsafeUploadDestination",nil)}
   out.Summary=strings.TrimSpace(proposal.Summary)
  default:
   out.Summary=strings.TrimSpace(ai.Redact(reply.Text))
