@@ -14,6 +14,22 @@ export function Chat(arg1) {
   return window['go']['main']['App']['Chat'](arg1);
 }
 
+export function PreviewSessionBackup() {
+  return window['go']['main']['App']['PreviewSessionBackup']();
+}
+
+export function ExportSessionBackup() {
+  return window['go']['main']['App']['ExportSessionBackup']();
+}
+
+export function PreviewXshellImport() {
+  return window['go']['main']['App']['PreviewXshellImport']();
+}
+
+export function ImportXshell(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ImportXshell'](arg1, arg2, arg3);
+}
+
 export function ChoosePrivateKey() {
   return window['go']['main']['App']['ChoosePrivateKey']();
 }

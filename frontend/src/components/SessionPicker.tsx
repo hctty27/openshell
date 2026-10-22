@@ -68,7 +68,20 @@ export default function SessionPicker(p: Props) {
     );
   });
   const selected = visible.find((session) => session.id === selectedId);
-  const groups = [{ id: "", name: t("common:defaultFolder") }, ...p.groups];
+  const groupLabel = (group: Group) => {
+    const parts = [group.name];
+    const seen = new Set<string>([group.id]);
+    let parent = group.parentId;
+    while (parent && !seen.has(parent)) {
+      const folder = p.groups.find((item) => item.id === parent);
+      if (!folder) break;
+      parts.unshift(folder.name);
+      seen.add(parent);
+      parent = folder.parentId;
+    }
+    return parts.join(" / ");
+  };
+  const groups = [{ id: "", name: t("common:defaultFolder") }, ...p.groups.map((group) => ({ ...group, name: groupLabel(group) }))];
   const opened = new Set(p.openedSessionIds);
 
   const openContextMenu = (event: React.MouseEvent, session: Session) => {

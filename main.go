@@ -21,6 +21,29 @@ func main() {
 		log.Fatal("无法初始化应用：", e)
 	}
 	app.emit = func(name string, payload any) { runtime.EventsEmit(app.ctx, name, payload) }
+	app.pickBackupRead = func() (string, error) {
+		return runtime.OpenFileDialog(app.ctx, runtime.OpenDialogOptions{
+			Title: "OpenShell session backup / 会话备份",
+			Filters: []runtime.FileFilter{{DisplayName: "OpenShell session backup (*.json)", Pattern: "*.json"}},
+		})
+	}
+	app.pickBackupWrite = func() (string, error) {
+		return runtime.SaveFileDialog(app.ctx, runtime.SaveDialogOptions{
+			Title: "Backup OpenShell sessions / 备份会话",
+			DefaultFilename: "openshell-sessions.json",
+			Filters: []runtime.FileFilter{{DisplayName: "OpenShell session backup (*.json)", Pattern: "*.json"}},
+		})
+	}
+	app.pickImport = func() (string, error) {
+		language, err := app.language()
+		if err != nil { return "", err }
+		title := "Import Xshell sessions"
+		if language == "zh-CN" { title = "导入 Xshell 会话" }
+		return runtime.OpenFileDialog(app.ctx, runtime.OpenDialogOptions{
+			Title: title,
+			Filters: []runtime.FileFilter{{DisplayName: "Xshell sessions (*.xts;*.xsh)", Pattern: "*.xts;*.xsh"}},
+		})
+	}
 	app.pickKey = func() (string, error) {
 		language, err := app.language()
 		if err != nil {

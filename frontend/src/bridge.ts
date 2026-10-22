@@ -7,6 +7,8 @@ import type {
   APIRequest,
   APIProfile,
   Group,
+  XshellImportPreview,
+  XshellImportResult,
   Ref,
   ConnectResult,
   ChatRequest,
@@ -45,6 +47,10 @@ type Backend = {
   ): Promise<AutoSnapshot>;
   StopAutomatic(ref: Ref, taskID: string): Promise<void>;
   State(): Promise<AppState>;
+  PreviewXshellImport(): Promise<XshellImportPreview>;
+  PreviewSessionBackup(): Promise<XshellImportPreview>;
+  ExportSessionBackup(): Promise<string>;
+  ImportXshell(token: string, ids: string[], conflict: "skip" | "rename"): Promise<XshellImportResult>;
   SaveSession(req: SessionRequest): Promise<Session>;
   DeleteSession(id: string): Promise<void>;
   SaveGroup(group: Group): Promise<Group>;

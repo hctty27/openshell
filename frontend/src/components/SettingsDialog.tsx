@@ -58,6 +58,8 @@ interface Props {
   onConfirmMultilinePaste(enabled: boolean): void;
   onClose(): void;
   onSession(req: SessionRequest): Promise<void>;
+  onExportSessionBackup?(): Promise<void>;
+  onImportSessionBackup?(): Promise<void>;
   onRefresh(): Promise<void>;
   onFont(n: number): void;
 }
@@ -105,6 +107,19 @@ export default function SettingsDialog(p: Props) {
   const [error, setError] = useState<unknown>("");
   const [success, setSuccess] = useState<DisplayText>("");
   const [busy, setBusy] = useState(false);
+  const groupPath = (g: Group): string => {
+    const names = [g.name];
+    const seen = new Set([g.id]);
+    let parent = g.parentId;
+    while (parent && !seen.has(parent)) {
+      const item = p.groups.find((entry) => entry.id === parent);
+      if (!item) break;
+      names.unshift(item.name);
+      seen.add(parent);
+      parent = item.parentId;
+    }
+    return names.join(" / ");
+  };
   const field = (name: keyof Session, value: string | number) =>
     setSession({ ...session, [name]: value });
   const run = async (fn: () => Promise<void>, message: DisplayText = "") => {
@@ -228,7 +243,7 @@ export default function SettingsDialog(p: Props) {
                     <option value="">{t("common:defaultFolder")}</option>
                     {p.groups.map((g) => (
                       <option key={g.id} value={g.id}>
-                        {g.name}
+                        {groupPath(g)}
                       </option>
                     ))}
                   </select>
@@ -556,6 +571,16 @@ export default function SettingsDialog(p: Props) {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="settings-control-row">
+                <div className="settings-control-copy">
+                  <label>{t("sessions:sessionBackupTitle")}</label>
+                  <p>{t("sessions:sessionBackupDescription")}</p>
+                </div>
+                <div style={{ display:"flex", gap: 8 }}>
+                  <button type="button" onClick={() => p.onExportSessionBackup?.()}>{t("sessions:exportSessionBackup")}</button>
+                  <button type="button" onClick={() => p.onImportSessionBackup?.()}>{t("sessions:restoreSessionBackup")}</button>
+                </div>
               </div>
               <div className="settings-theme-group">
                 <h4>{t("settings:theme")}</h4>

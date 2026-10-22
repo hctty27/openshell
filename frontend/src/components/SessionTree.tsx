@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Settings,
   Network,
+  FileInput,
 } from "lucide-react";
 import type { Session, Group } from "../types";
 import FloatingContextMenu, {
@@ -32,6 +33,8 @@ interface Props {
   onCreateInGroup(groupId: string): void;
   onDelete(s: Session): void;
   onGroup(): void;
+  onCreateSubgroup?(g: Group): void;
+  onImport?(): void;
   onRenameGroup(g: Group): void;
   onDeleteGroup(g: Group): void;
   onSettings(): void;
@@ -62,7 +65,22 @@ export default function SessionTree(p: Props) {
       v.toLowerCase().includes(query.toLowerCase()),
     ),
   );
-  const groups = [{ id: "", name: t("common:defaultFolder") }, ...p.groups];
+  const groups: Group[] = [{ id: "", name: t("common:defaultFolder") }, ...p.groups];
+  const orderedGroups: { group: Group; depth: number }[] = [{ group: groups[0], depth: 0 }];
+  const include = (id: string, seen = new Set<string>()): boolean => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return visible.some((s) => s.groupId === id) ||
+      p.groups.some((child) => (child.parentId ?? "") === id && include(child.id, new Set(seen)));
+  };
+  const walk = (parent: string, depth: number, seen = new Set<string>()) => {
+    p.groups.filter((g) => (g.parentId ?? "") === parent).forEach((g) => {
+      if (seen.has(g.id)) return;
+      if (!query || include(g.id)) orderedGroups.push({ group: g, depth });
+      if (!collapsed[g.id] || !!query) walk(g.id, depth + 1, new Set([...seen, g.id]));
+    });
+  };
+  walk("", 0);
   const selectedSession =
     selected.kind === "session"
       ? p.sessions.find((session) => session.id === selected.id)
@@ -167,6 +185,11 @@ export default function SessionTree(p: Props) {
             icon: FolderPlus,
             onSelect: p.onGroup,
           },
+          {
+            label: t("sessions:importXshellTitle"),
+            icon: FileInput,
+            onSelect: () => p.onImport?.(),
+          },
         ]
       : contextMenu?.kind === "group" && targetGroup
         ? [
@@ -182,6 +205,11 @@ export default function SessionTree(p: Props) {
                     icon: Pencil,
                     separatorBefore: true,
                     onSelect: () => p.onRenameGroup(targetGroup),
+                  },
+                  {
+                    label: t("sessions:newSubfolder"),
+                    icon: FolderPlus,
+                    onSelect: () => p.onCreateSubgroup?.(targetGroup),
                   },
                   {
                     label: t("common:deleteFolder"),
@@ -242,6 +270,9 @@ export default function SessionTree(p: Props) {
       <div className="sidebar-heading">
         <span>{t("common:sessions")}</span>
         <div>
+          <button title={t("sessions:importXshellTitle")} onClick={() => p.onImport?.()}>
+            <FileInput size={16} />
+          </button>
           <button title={t("common:newFolder")} onClick={p.onGroup}>
             <FolderPlus size={16} />
           </button>
@@ -291,10 +322,10 @@ export default function SessionTree(p: Props) {
         </div>
         {(!rootCollapsed || !!query) && (
           <div className="tree-groups">
-            {groups
-              .filter((g) => !query || visible.some((s) => s.groupId === g.id))
-              .map((g) => (
-                <div key={g.id} className="group">
+            {orderedGroups
+              .filter(({ group }) => !query || include(group.id))
+              .map(({ group: g, depth }) => (
+                <div key={g.id} className="group" style={{ paddingLeft: depth * 12 }}>
                   <div
                     className={
                       "group-heading" +

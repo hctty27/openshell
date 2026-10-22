@@ -22,8 +22,9 @@ type Session struct {
 	UpdatedAt      string `json:"updatedAt"`
 }
 type Group struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	ParentID string `json:"parentId,omitempty"`
 }
 type APIProfile struct {
 	ID           string `json:"id"`
