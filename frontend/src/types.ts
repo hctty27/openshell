@@ -269,6 +269,30 @@ export interface SFTPTask {
   total: number;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
   overwrite: boolean;
+  resume: boolean;
   error: string;
   created: number;
+}
+
+export interface SFTPDocument {
+  path: string;
+  content: string;
+  revision: string;
+  size: number;
+}
+export interface SFTPSyncAction {
+  relative: string;
+  source: string;
+  destination: string;
+  operation: "copy" | "conflict" | "skip";
+  reason: string;
+  size: number;
+}
+export interface SFTPSyncPreview {
+  direction: "upload" | "download";
+  localDir: string;
+  remoteDir: string;
+  actions: SFTPSyncAction[];
+  skipped: number;
+  bytes: number;
 }
