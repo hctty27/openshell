@@ -85,9 +85,10 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	if cancel := m.connecting[tab]; cancel != nil {
 		cancel()
 	}
+	var oldClient *ssh.Client
 	if old := m.connections[tab]; old != nil {
 		if old.keepaliveCancel != nil { old.keepaliveCancel() }
-		old.client.Close()
+		oldClient = old.client
 		delete(m.connections, tab)
 	}
 	m.generations[tab]++
@@ -95,7 +96,15 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	m.connecting[tab] = cancel
 	m.mu.Unlock()
-	defer cancel()
+	if oldClient != nil { _ = oldClient.Close() }
+	defer func() {
+		cancel()
+		m.mu.Lock()
+		if m.generations[tab] == ref.Generation {
+			delete(m.connecting, tab)
+		}
+		m.mu.Unlock()
+	}()
 	address := Address(s.Host, s.Port)
 	var method ssh.AuthMethod
 	if s.AuthType == "key" {
@@ -239,16 +248,18 @@ func (m *Manager) Disconnect(ref domain.ConnectionRef) error {
 }
 func (m *Manager) Close() {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.closed = true
-	for _, cancel := range m.connecting {
-		cancel()
-	}
-	for _, c := range m.connections {
-		if c.keepaliveCancel != nil { c.keepaliveCancel() }
-		c.client.Close()
-	}
+	pending := m.connecting
+	live := m.connections
+	m.connecting = map[string]context.CancelFunc{}
 	m.connections = map[string]*connection{}
+	for _, c := range live {
+		if c.keepaliveCancel != nil { c.keepaliveCancel() }
+	}
+	m.mu.Unlock()
+
+	for _, cancel := range pending { cancel() }
+	for _, c := range live { _ = c.client.Close() }
 }
 func (m *Manager) Home(ref domain.ConnectionRef) (string, error) {
 	s, e := m.OpenSession(ref)
@@ -271,17 +282,18 @@ func (m *Manager) Home(ref domain.ConnectionRef) (string, error) {
 
 func (m *Manager) CancelTab(tab string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.generations[tab]++
 	if cancel := m.connecting[tab]; cancel != nil {
 		cancel()
 		delete(m.connecting, tab)
 	}
-	if c := m.connections[tab]; c != nil {
+	c := m.connections[tab]
+	if c != nil {
 		delete(m.connections, tab)
 		if c.keepaliveCancel != nil { c.keepaliveCancel() }
-		c.client.Close()
 	}
+	m.mu.Unlock()
+	if c != nil { _ = c.client.Close() }
 }
 
 // Client returns the authenticated SSH transport for a live tab reference.
@@ -340,23 +352,24 @@ func (m *Manager) startKeepaliveLocked(c *connection) {
 					return
 				case err := <-done:
 					if err == nil { continue }
-					m.mu.Lock()
-					if ctx.Err() == nil && m.connections[c.ref.TabID] == c {
-						c.disconnectReason = "keepalive_failed"
-						_ = c.client.Close()
-					}
-					m.mu.Unlock()
+					m.failKeepalive(c, ctx, "keepalive_failed")
 					return
 				case <-time.After(10 * time.Second):
-					m.mu.Lock()
-					if ctx.Err() == nil && m.connections[c.ref.TabID] == c {
-						c.disconnectReason = "keepalive_timeout"
-						_ = c.client.Close()
-					}
-					m.mu.Unlock()
+					m.failKeepalive(c, ctx, "keepalive_timeout")
 					return
 				}
 			}
 		}
 	}()
+}
+
+
+// failKeepalive closes only the still-active transport. Never hold the
+// manager lock while closing a socket: SSH teardown can wake other callbacks.
+func (m *Manager) failKeepalive(c *connection, ctx context.Context, reason string) {
+	m.mu.Lock()
+	active := ctx.Err() == nil && m.connections[c.ref.TabID] == c
+	if active { c.disconnectReason = reason }
+	m.mu.Unlock()
+	if active { _ = c.client.Close() }
 }
