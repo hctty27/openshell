@@ -6,6 +6,7 @@ import (
  "fmt"
  "net"
  "os"
+ "os/user"
  "runtime"
  "strconv"
  "strings"
@@ -96,6 +97,23 @@ type jumpHost struct {
  port int
  explicitUser bool
  explicitPort bool
+}
+
+
+// defaultProxyJumpUser follows OpenSSH: a jump without a user uses the
+// local account, not the destination session's username.
+func defaultProxyJumpUser(fallback string) string {
+ if runtime.GOOS == "windows" {
+  if login := strings.TrimSpace(os.Getenv("USERNAME")); login != "" { return login }
+ }
+ current, err := user.Current()
+ if err != nil || current.Username == "" { return fallback }
+ login := current.Username
+ if runtime.GOOS == "windows" {
+  if index := strings.LastIndex(login, "\\\\"); index >= 0 { login = login[index+1:] }
+ }
+ if login == "" { return fallback }
+ return login
 }
 
 // parseProxyJump deliberately supports SSH jump endpoints only, never arbitrary
