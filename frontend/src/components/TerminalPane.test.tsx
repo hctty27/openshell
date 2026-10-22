@@ -477,7 +477,8 @@ test("shows approximate ZMODEM progress and can cancel active transfer", async (
   expect(screen.getByText("2.3 MB · 1.2 MB/s")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
   await waitFor(() => expect(api.CancelZmodem).toHaveBeenCalledWith(tab.ref));
-  expect(screen.getByRole("button", { name: "正在取消…" })).toHaveProperty("disabled", true);
+  expect(screen.getByRole("button", { name: "取消传输" })).toHaveProperty("disabled", true);
+  expect(screen.getByText("正在取消…")).toBeTruthy();
   act(() => {
     events.listeners.get("ssh:transfer-state")?.({ ref: tab.ref, active: false });
   });
