@@ -64,7 +64,7 @@
 如果你的远程 Bash 尚未主动报告目录，可以在其 `~/.bashrc` 中追加（**保留现有 PROMPT_COMMAND**）：
 
 ```bash
-__openshell_report_cwd() { printf '\\033]7;file://%s%s\\007' "${HOSTNAME:-localhost}" "$PWD"; }
+__openshell_report_cwd() { printf '\033]7;file://%s%s\007' "${HOSTNAME:-localhost}" "$PWD"; }
 if declare -p PROMPT_COMMAND 2>/dev/null | grep -q 'declare -a'; then
   PROMPT_COMMAND+=(__openshell_report_cwd)
 else
