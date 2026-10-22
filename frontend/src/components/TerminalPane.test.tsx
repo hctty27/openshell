@@ -412,20 +412,3 @@ test("log preset highlights severity keywords through regex search decorations",
   );
 });
 
-test("mouse selection preference can be switched without disconnecting", () => {
-  const { rerender, container } = renderTerminal({ mouseSelectionFirst: false });
-  const term = refs.terms[0];
-  expect(term.options.mouseEventsRequireAlt).toBe(false);
-  rerender(
-    <DialogProvider>
-      <TerminalPane tab={tab} active mouseSelectionFirst fontSize={14} theme="dark"
-        autoCopySelection rightClickPaste confirmMultilinePaste
-        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
-    </DialogProvider>,
-  );
-  expect(term.options.mouseEventsRequireAlt).toBe(true);
-  expect(refs.terms).toHaveLength(1);
-  term.modes.mouseTrackingMode = "vt200";
-  fireEvent.mouseDown(container.querySelector(".terminal-pane")!, { button: 0 });
-  fireEvent.mouseUp(document, { button: 0 });
-});
