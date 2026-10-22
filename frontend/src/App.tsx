@@ -745,6 +745,17 @@ function Workspace({ initialState }: { initialState: AppState }) {
       await refresh();
     }
   };
+  const duplicateSession = async (session: Session): Promise<Session | undefined> => {
+    try {
+      const duplicated = await api.DuplicateSession(session.id);
+      await refresh();
+      setNotice(message("common:sessionDuplicated"));
+      return duplicated;
+    } catch (error) {
+      notify(error);
+      return undefined;
+    }
+  };
   const openXshellImport = async () => {
     try {
       const preview = await api.PreviewXshellImport();
@@ -1096,6 +1107,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
             onOpen={open}
             onEdit={(session) => setDialog({ kind: "session", session })}
             onDelete={removeSession}
+            onDuplicate={duplicateSession}
             onCreateInGroup={(groupID) =>
               setDialog({ kind: "session", groupID })
             }
