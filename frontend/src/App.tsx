@@ -1,5 +1,5 @@
 import { reasonText } from "./i18n/errors";
-import { message } from "./i18n/message";
+import { message, renderMessage, type DisplayText } from "./i18n/message";
 import { t as tr } from "./i18n";
 import { useTranslation } from "react-i18next";
 import { initializeI18n, i18n } from "./i18n";
@@ -102,11 +102,11 @@ export default function App() {
       <main className="startup-screen" role="status">
         {failed ? (
           <>
-            <p>Unable to load workspace.</p>
-            <button onClick={() => setAttempt((n) => n + 1)}>Retry</button>
+            <p>{tr("common:unableToLoadWorkspace")}</p>
+            <button onClick={() => setAttempt((n) => n + 1)}>{tr("common:retry")}</button>
           </>
         ) : (
-          "Loading OpenShell…"
+          tr("common:loadingOpenShell")
         )}
       </main>
     );
@@ -183,7 +183,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       groupID?: string;
     } | null>(null),
     [toast, setToast] = useState<unknown>(""),
-    [notice, setNotice] = useState(""),
+    [notice, setNotice] = useState<DisplayText>(""),
     [aiWidth, setAIWidth] = useState(370),
     [sessionWidth, setSessionWidth] = useState(235),
     [challenge, setChallenge] = useState<{
@@ -678,7 +678,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           (tab.status === "connected" || tab.status === "connecting"),
       );
       setNotice(
-        tr(
+        message(
           connected && connectionChanged
             ? "common:sessionConnectionChangesOnNextReconnect"
             : "common:sessionSaved",
@@ -703,7 +703,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const exportBackup = async () => {
     try {
       const path = await api.ExportSessionBackup();
-      if (path) setNotice(tr("sessions:backupSaved"));
+      if (path) setNotice(message("sessions:backupSaved"));
     } catch (error) { notify(error); }
   };
   const importXshell = async (ids: string[], conflict: "skip" | "rename") => {
@@ -711,7 +711,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     const result = await api.ImportXshell(xshellPreview.token, ids, conflict);
     await refresh();
     setXshellPreview(null);
-    setNotice(tr("sessions:xshellImportResult", { imported: result.imported, skipped: result.skipped }));
+    setNotice(message("sessions:xshellImportResult", { imported: result.imported, skipped: result.skipped }));
   };
   const group = async (g?: Group, parentID = "") => {
     const name = await dialogs.input({
@@ -1719,7 +1719,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       {!!notice && !toast && (
         <div className="toast toast--success" role="status">
           <Check size={16} />
-          <span>{notice}</span>
+          <span>{renderMessage(notice)}</span>
           <button
             title={tr("common:dismissNotification")}
             onClick={() => setNotice("")}
