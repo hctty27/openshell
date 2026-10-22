@@ -1,6 +1,12 @@
 package main
 
-import "testing"
+import (
+    "io"
+    "sync"
+    "testing"
+
+    "github.com/hctty27/openshell/internal/domain"
+)
 
 func TestStartLocalTerminalRejectsInvalidArguments(t *testing.T) {
     app := &App{}
@@ -30,5 +36,86 @@ func TestLocalTerminalStaleSessionCannotReceiveInput(t *testing.T) {
     }
     if err := app.ResizeLocalTerminal("tab-1", "expired", 80, 24); err == nil {
         t.Fatal("stale terminal accepted resize")
+    }
+}
+
+type blockingLocalPTY struct {
+    closed chan struct{}
+    once sync.Once
+}
+func (p *blockingLocalPTY) Read(_ []byte) (int, error) {
+    <-p.closed
+    return 0, io.EOF
+}
+func (p *blockingLocalPTY) Write(data []byte) (int, error) { return len(data), nil }
+func (p *blockingLocalPTY) Resize(_, _ int) error { return nil }
+func (p *blockingLocalPTY) Close() error {
+    p.once.Do(func() { close(p.closed) })
+    return nil
+}
+
+func newLocalRaceTestApp() (*App, chan struct{}, chan struct{}, *blockingLocalPTY) {
+    started := make(chan struct{})
+    release := make(chan struct{})
+    pty := &blockingLocalPTY{closed: make(chan struct{})}
+    a := &App{
+        tabRefs: map[string]domain.ConnectionRef{
+            "tab-1": {TabID: "tab-1", SessionID: "ssh-1", Generation: 1},
+        },
+        connectEpoch: map[string]uint64{"tab-1": 1},
+        localTerminals: map[string]*localTerminalSession{},
+        localTerminalPending: map[string]string{},
+        emit: func(string, any) {},
+    }
+    a.localTerminalFactory = func(_ string, _, _ int) (localPTY, error) {
+        close(started)
+        <-release
+        return pty, nil
+    }
+    return a, started, release, pty
+}
+
+func TestLocalPTYLaunchIgnoresDisconnectEpochChange(t *testing.T) {
+    a, started, release, _ := newLocalRaceTestApp()
+    done := make(chan error, 1)
+    go func() { done <- a.StartLocalTerminal("tab-1", "local-1", "powershell", 80, 24) }()
+    <-started
+    a.mu.Lock()
+    a.connectEpoch["tab-1"]++ // A delayed SSH Disconnect must not cancel the local PTY.
+    a.mu.Unlock()
+    close(release)
+    if err := <-done; err != nil { t.Fatalf("local PTY rejected disconnect: %v", err) }
+    a.CloseLocalTerminal("tab-1", "local-1")
+}
+
+func TestCancelledPendingLocalPTYCannotResurrectAfterClose(t *testing.T) {
+    a, started, release, pty := newLocalRaceTestApp()
+    done := make(chan error, 1)
+    go func() { done <- a.StartLocalTerminal("tab-1", "local-1", "powershell", 80, 24) }()
+    <-started
+    a.CloseLocalTerminal("tab-1", "local-1")
+    close(release)
+    if err := <-done; err == nil { t.Fatal("cancelled local PTY was adopted") }
+    select {
+    case <-pty.closed:
+    default:
+        t.Fatal("cancelled local PTY was not closed")
+    }
+}
+
+func TestPendingLocalPTYCannotAttachToReconnectedSSH(t *testing.T) {
+    a, started, release, pty := newLocalRaceTestApp()
+    done := make(chan error, 1)
+    go func() { done <- a.StartLocalTerminal("tab-1", "local-1", "powershell", 80, 24) }()
+    <-started
+    a.mu.Lock()
+    a.tabRefs["tab-1"] = domain.ConnectionRef{TabID: "tab-1", SessionID: "ssh-1", Generation: 2}
+    a.mu.Unlock()
+    close(release)
+    if err := <-done; err == nil { t.Fatal("stale local PTY attached to reconnected SSH") }
+    select {
+    case <-pty.closed:
+    default:
+        t.Fatal("stale local PTY was not closed")
     }
 }

@@ -583,3 +583,26 @@ test("disconnected SSH session in retain mode does not start local shell", async
   renderTerminal({ tab: disconnected, disconnectBehavior: "retain" });
   expect(api.StartLocalTerminal).not.toHaveBeenCalled();
 });
+
+test("waits for completed SSH shutdown before starting local ConPTY", async () => {
+  const switching: Tab = {
+    ...tab, status: "disconnected", everConnected: true,
+    manualDisconnected: true, localFallbackPending: true,
+  };
+  const props = {
+    active: true, fontSize: 14, theme: "dark" as const,
+    disconnectBehavior: "local" as const, localShell: "powershell" as const,
+    autoCopySelection: false, rightClickPaste: false, confirmMultilinePaste: true,
+    onNotice: vi.fn(), onError: vi.fn(), onSelection: vi.fn(),
+  };
+  const { rerender } = render(
+    <DialogProvider><TerminalPane tab={switching} {...props} /></DialogProvider>,
+  );
+  expect(api.StartLocalTerminal).not.toHaveBeenCalled();
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={{ ...switching, localFallbackPending: false }} {...props} />
+    </DialogProvider>,
+  );
+  await waitFor(() => expect(api.StartLocalTerminal).toHaveBeenCalledTimes(1));
+});

@@ -50,6 +50,8 @@ type App struct {
 	pending      map[string]string
 	tabRefs      map[string]domain.ConnectionRef
 	localTerminals map[string]*localTerminalSession
+	localTerminalPending map[string]string
+	localTerminalFactory func(string, int, int) (localPTY, error)
 }
 type QuickCommand struct {
 	ID       string `json:"id"`
@@ -144,7 +146,7 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 	if emit == nil {
 		emit = func(string, any) {}
 	}
-	a := &App{ctx: context.Background(), store: db, secrets: secrets, provider: ai.NewProvider(), executions: map[string]*conversationExecution{}, closing: map[string]domain.ConnectionRef{}, proposalRuns: map[string]string{}, emit: emit, transient: map[string]string{}, challenges: map[string]*sshclient.HostKeyError{}, chatCancels: map[string]context.CancelFunc{}, pending: map[string]string{}, tabRefs: map[string]domain.ConnectionRef{}, localTerminals: map[string]*localTerminalSession{}}
+	a := &App{ctx: context.Background(), store: db, secrets: secrets, provider: ai.NewProvider(), executions: map[string]*conversationExecution{}, closing: map[string]domain.ConnectionRef{}, proposalRuns: map[string]string{}, emit: emit, transient: map[string]string{}, challenges: map[string]*sshclient.HostKeyError{}, chatCancels: map[string]context.CancelFunc{}, pending: map[string]string{}, tabRefs: map[string]domain.ConnectionRef{}, localTerminals: map[string]*localTerminalSession{}, localTerminalPending: map[string]string{}}
 	a.memory = conversation.NewService(db, func(event domain.ConversationEvent) { a.emit("conversation:event", event) })
 	saved, e := db.GetPreference(a.ctx, "saveChatHistory")
 	if e != nil {
