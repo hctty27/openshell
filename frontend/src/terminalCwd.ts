@@ -41,5 +41,6 @@ export function parseOscTitleDirectory(title: string, home?: string): string | n
   const path = match[1];
   if (!path.startsWith("~")) return normalizeRemoteDirectory(path);
   if (!home || !home.startsWith("/")) return null;
+  if (path === "~") return normalizeRemoteDirectory(home);
   return normalizeRemoteDirectory(home.replace(/\/$/, "") + path.slice(1));
 }

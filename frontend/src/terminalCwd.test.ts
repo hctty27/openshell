@@ -21,6 +21,8 @@ test("Xshell-compatible OSC title paths resolve absolute cwd and tilde home", ()
   expect(parseOscTitleDirectory("user@host: /data/my logs", "/home/user")).toBe("/data/my logs");
   expect(parseOscTitleDirectory("root@server:~", "/root")).toBe("/root");
   expect(parseOscTitleDirectory("root@server:~/logs", "/root")).toBe("/root/logs");
+  expect(parseOscTitleDirectory("root@server:~", "/")).toBe("/");
+  expect(parseOscTitleDirectory("root@server:~/etc", "/")).toBe("/etc");
   expect(parseOscTitleDirectory("root@server:~/logs")).toBeNull();
   expect(parseOscTitleDirectory("OpenShell - connected")).toBeNull();
   expect(parseOscTitleDirectory("root@server:relative/path", "/root")).toBeNull();
