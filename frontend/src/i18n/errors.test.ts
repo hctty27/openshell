@@ -56,3 +56,15 @@ test("structured SFTP failures render in the active language", async () => {
   const wrapped = 'file.xsh: OPENSHELL_ERROR:{"code":"xshellImportMissingHost"}';
   expect(importIssueText(wrapped)).toBe("file.xsh: 缺少主机地址");
 });
+
+test("nested application errors localize both layers without displaying wire envelopes", async () => {
+  const inner = 'OPENSHELL_ERROR:{"code":"xshellImportMissingHost"}';
+  const wire = 'OPENSHELL_ERROR:' + JSON.stringify({
+    code: "xshellImportInvalidSshConnection",
+    detail: inner,
+  });
+  await initializeI18n("en");
+  expect(errorText(wire)).toBe("Invalid SSH connection: missing host");
+  await initializeI18n("zh-CN");
+  expect(errorText(wire)).toBe("SSH 连接配置无效: 缺少主机地址");
+});
