@@ -303,7 +303,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const dropDialogs = useRef(dialogs);
   dropDialogs.current = dialogs;
   useEffect(() => {
-    if (!desktop || !window.runtime) return;
+    const fileRuntime = window.runtime as (typeof window.runtime & { OnFileDrop?: unknown }) | undefined;
+    if (!desktop || typeof fileRuntime?.OnFileDrop !== "function") return;
     OnFileDrop((x, y, paths) => {
       const target = document.elementFromPoint(x, y);
       if (!target || paths.length === 0) return;
