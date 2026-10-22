@@ -60,5 +60,6 @@
   "highlightLogLevels": "Highlight log severity keywords",
   "logs": "Logs",
   "resetSplitRatio": "Reset split ratio to 50/50",
-  "resizeSplit": "Resize terminal split"
+  "resizeSplit": "Resize terminal split",
+  "zmodemTransferring": "ZMODEM transfer in progress — waiting for completion"
 }
