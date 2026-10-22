@@ -342,6 +342,17 @@ func (a *App) State() (AppState, error) {
 	}, nil
 }
 
+// clearSessionCredentialsLocked invalidates both the session fallback and
+// credentials cached per terminal tab. Caller must hold a.mu.
+func (a *App) clearSessionCredentialsLocked(sessionID string) {
+ suffix := ":" + sessionID
+ for key := range a.transient {
+  if key == "session:"+sessionID || (strings.HasPrefix(key, "connection:") && strings.HasSuffix(key, suffix)) {
+   delete(a.transient, key)
+  }
+ }
+}
+
 func (a *App) SaveSession(req SaveSessionRequest) (domain.Session, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -357,9 +368,9 @@ func (a *App) SaveSession(req SaveSessionRequest) (domain.Session, error) {
 	committed := e == nil || (errors.As(e, &appErr) && appErr.Code == "cleanup")
 	if committed {
 		key := "session:" + row.ID
-		authChanged := old.AuthType != row.AuthType || old.PrivateKeyPath != row.PrivateKeyPath || old.Host != row.Host || old.Port != row.Port || old.Username != row.Username
-		if req.SaveSecret || authChanged {
-			delete(a.transient, key)
+		authChanged := old.AuthType != row.AuthType || old.PrivateKeyPath != row.PrivateKeyPath || old.Host != row.Host || old.Port != row.Port || old.Username != row.Username || old.UseSSHConfig != row.UseSSHConfig || old.ProxyJump != row.ProxyJump
+		if req.SaveSecret || authChanged || req.Secret != "" || old.CredentialRef != row.CredentialRef {
+			a.clearSessionCredentialsLocked(row.ID)
 		}
 		if !req.SaveSecret && req.Secret != "" {
 			a.transient[key] = req.Secret
@@ -425,7 +436,7 @@ func (a *App) DeleteSession(id string) error {
 	if e = a.store.DeleteSession(a.ctx, id); e != nil {
 		return e
 	}
-	delete(a.transient, "session:"+id)
+	a.clearSessionCredentialsLocked(id)
 	if s.CredentialRef != "" {
 		if e = a.secrets.Delete(a.ctx, s.CredentialRef); e != nil {
 			return apperror.New("sessionDeletedButCredentialCleanupFailedRemoveOpenshell", nil)
