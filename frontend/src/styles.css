@@ -652,11 +652,6 @@ kbd {
 .terminal-toolbar .terminal-split-select:disabled {
   opacity: 0.5;
 }
-.terminal-toolbar .terminal-toggle-on {
-  color: var(--accent);
-  background: var(--accent-soft);
-  border-radius: 4px;
-}
 .terminal-container {
   position: relative;
   flex: 1;
