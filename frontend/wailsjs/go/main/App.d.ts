@@ -90,3 +90,5 @@ export function SFTPSaveRemoteText(arg1:domain.ConnectionRef,arg2:string,arg3:st
 export function SFTPPreviewSync(arg1:domain.ConnectionRef,arg2:string,arg3:string,arg4:string):Promise<import('../../../src/types').SFTPSyncPreview>;
 export function SFTPBatchChmod(arg1:domain.ConnectionRef,arg2:string,arg3:string[],arg4:string):Promise<number>;
 export function SFTPEnsureDirectory(arg1:domain.ConnectionRef,arg2:string,arg3:string):Promise<void>;
+
+export function SFTPAIAssist(arg1:import('../../../src/types').SFTPAIRequest):Promise<import('../../../src/types').SFTPAIResponse>;

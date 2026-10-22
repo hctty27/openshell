@@ -17,6 +17,8 @@ import type {
   CommandResult,
   AutoSnapshot,
   SFTPEntry,
+  SFTPAIRequest,
+  SFTPAIResponse,
   SFTPPaths,
   SFTPTask,
   SFTPDocument,
@@ -27,6 +29,7 @@ import type {
   Conversation,
 } from "./types";
 type Backend = {
+  SFTPAIAssist(req: SFTPAIRequest): Promise<SFTPAIResponse>;
   SFTPHome(ref: Ref): Promise<SFTPPaths>;
   SFTPChooseDirectory(): Promise<string>;
   SFTPList(ref: Ref, side: string, directory: string): Promise<SFTPEntry[]>;

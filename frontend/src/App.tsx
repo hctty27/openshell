@@ -1242,7 +1242,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   </div>
                 )}
             </div>
-            {showSFTP && active?.ref && <SFTPView refID={active.ref} onNotice={notify} />}
+            {showSFTP && active?.ref && <SFTPView refID={active.ref} profileID={profileID} onNotice={notify} />}
             {!showSFTP && (
               <QuickCommandBar
                 tab={active}

@@ -200,3 +200,7 @@ export function SFTPBatchChmod(arg1, arg2, arg3, arg4) {
 export function SFTPEnsureDirectory(arg1, arg2, arg3) {
   return window['go']['main']['App']['SFTPEnsureDirectory'](arg1, arg2, arg3);
 }
+
+export function SFTPAIAssist(arg1) {
+  return window['go']['main']['App']['SFTPAIAssist'](arg1);
+}
