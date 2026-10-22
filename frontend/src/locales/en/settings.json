@@ -88,5 +88,16 @@
   "middleClickToPaste": "Middle-click to paste",
   "middleClickPasteDescription": "Paste with the middle mouse button when an interactive application is not tracking the mouse.",
   "logHighlights": "Continuous log severity highlighting",
-  "logHighlightsDescription": "Highlight new WARN, ERROR, FATAL and FAILED messages while they arrive; leaves search independent."
+  "logHighlightsDescription": "Highlight new WARN, ERROR, FATAL and FAILED messages while they arrive; leaves search independent.",
+  "connection": "Connection",
+  "connectionDescription": "SSH keepalive, reconnect and disconnection behavior",
+  "keepAliveInterval": "Keepalive interval",
+  "autoReconnect": "Reconnect automatically",
+  "autoReconnectDescription": "Only after unexpected network loss; never after manual disconnect",
+  "maxReconnectAttempts": "Maximum retry attempts",
+  "continuousRetry": "Keep trying",
+  "showDisconnectReason": "Show reason when SSH disconnects",
+  "confirmActiveDisconnect": "Confirm disconnect while AI or file transfers are active",
+  "seconds": "seconds",
+  "disabled": "Disabled"
 }
