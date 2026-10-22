@@ -59,6 +59,10 @@
 
 ### SFTP 跟随当前终端目录
 
+OpenShell 可直接从 Xshell 常用的 **OSC 0/2 终端标题**（如 `root@server:/data/hc`）以及 OSC 7 / OSC 1337
+解析工作目录。若服务器已有终端标题目录上报，无需额外配置。
+完全没有上报的远程 Shell 则仍须启用 Shell 集成；默认不在交互式会话里执行隐藏命令。
+
 打开 SFTP 时优先使用当前 SSH 标签已知的工作目录。OpenShell 支持终端程序使用 **OSC 7**（`file://` URI）或
 **OSC 1337;CurrentDir=** 上报目录；未收到上报时回退到连接初始工作目录。
 如果你的远程 Bash 尚未主动报告目录，可以在其 `~/.bashrc` 中追加（**保留现有 PROMPT_COMMAND**）：

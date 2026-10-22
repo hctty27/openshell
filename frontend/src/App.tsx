@@ -600,6 +600,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
         status: "connected",
         home: result.home,
         cwd: result.home,
+        cwdReported: false,
         error: "",
       }));
       if (result.conversationId)
@@ -617,6 +618,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       status: "disconnected",
       home: "",
       cwd: "",
+      cwdReported: false,
       messages: [],
       proposal: null,
       chatBusy: false,
@@ -1330,8 +1332,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
                     update(ref.tabId, current =>
                       current.ref?.sessionId === ref.sessionId &&
                       current.ref?.generation === ref.generation &&
-                      current.cwd !== directory
-                        ? { ...current, cwd: directory } : current,
+                      (current.cwd !== directory || !current.cwdReported)
+                        ? { ...current, cwd: directory, cwdReported: true } : current,
                     );
                   }}
                   fontSize={fontSize}
@@ -1407,14 +1409,24 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   </div>
                 )}
             </div>
-            {showSFTP && active?.ref && (
-              <aside className="workspace-file-panel" aria-label={tr("sftp:fileManager")}>
-                <SFTPView refID={active.ref} profileID={profileID} onNotice={notify}
-                  initialRemoteDirectory={active.cwd}
-                  onRemoteDirectoryChange={directory => { remoteUploadDirs.current[active.id] = directory; }} hideTaskQueue />
-                <TransferDock refID={active.ref} onNotice={notify} alwaysVisible />
-              </aside>
-            )}
+            {tabs.filter(tab => tab.ref && tab.status === "connected").map(tab => {
+              const visible = showSFTP && tab.id === activeID;
+              return (
+                <aside key={tab.id} className="workspace-file-panel"
+                  aria-label={tr("sftp:fileManager")} aria-hidden={!visible}
+                  style={visible ? undefined : { display: "none" }}>
+                  {visible && (
+                    <SFTPView refID={tab.ref!} profileID={profileID} onNotice={notify}
+                      initialRemoteDirectory={active?.cwd}
+                      cwdReported={active?.cwdReported === true}
+                      onRemoteDirectoryChange={directory => {
+                        remoteUploadDirs.current[tab.id] = directory;
+                      }} hideTaskQueue />
+                  )}
+                  <TransferDock refID={tab.ref ?? undefined} onNotice={notify} alwaysVisible />
+                </aside>
+              );
+            })}
             </div>
             {(
               <QuickCommandBar
@@ -1431,11 +1443,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
           <span className="workspace-version">
             OpenShell <span className="status-sep" />v{APP_VERSION}
           </span>
-          {!showSFTP && active?.status === "connected" && (
-            <div className="workspace-status-transfer">
-              <TransferDock refID={active.ref ?? undefined} onNotice={notify} />
-            </div>
-          )}
           <span className="workspace-connection">
             <i
               className={`status-dot ${active?.status === "connected" ? "" : "offline"}`}
