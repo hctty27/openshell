@@ -19,7 +19,7 @@ import {
 } from "../../wailsjs/runtime/runtime";
 import type { Tab } from "../types";
 
-const refs = vi.hoisted(() => ({ terms: [] as any[] }));
+const refs = vi.hoisted(() => ({ terms: [] as any[], webgl: [] as any[] }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     options = { fontSize: 14, theme: {} };
@@ -28,6 +28,7 @@ vi.mock("@xterm/xterm", () => ({
     rows = 24;
     selected = "";
     onDataCallback = (_data: string) => {};
+    resizeHandler = (_size: { cols: number; rows: number }) => {};
     keyHandler = (_event: KeyboardEvent) => true;
     attachCustomKeyEventHandler = vi.fn((callback: (event: KeyboardEvent) => boolean) => {
       this.keyHandler = callback;
@@ -43,7 +44,10 @@ vi.mock("@xterm/xterm", () => ({
       this.onDataCallback = cb;
       return { dispose: vi.fn() };
     });
-    onResize = vi.fn(() => ({ dispose: vi.fn() }));
+    onResize = vi.fn((cb: (size: { cols: number; rows: number }) => void) => {
+      this.resizeHandler = cb;
+      return { dispose: vi.fn() };
+    });
     onSelectionChange = vi.fn(() => ({ dispose: vi.fn() }));
     constructor() {
       refs.terms.push(this);
@@ -62,8 +66,13 @@ vi.mock("@xterm/addon-web-links", () => ({
 }));
 vi.mock("@xterm/addon-webgl", () => ({
   WebglAddon: class {
-    onContextLoss = vi.fn();
+    lossHandler = () => {};
+    onContextLoss = vi.fn((callback: () => void) => {
+      this.lossHandler = callback;
+      return { dispose: vi.fn() };
+    });
     dispose = vi.fn();
+    constructor() { refs.webgl.push(this); }
   },
 }));
 vi.mock("@xterm/addon-fit", () => ({
@@ -134,6 +143,7 @@ const renderTerminal = (
 
 beforeEach(() => {
   refs.terms.length = 0;
+  refs.webgl.length = 0;
   vi.clearAllMocks();
   vi.stubGlobal(
     "ResizeObserver",
@@ -285,4 +295,72 @@ test("keyboard clipboard shortcuts preserve normal Ctrl+C and ordered writes", a
   terminal.onDataCallback("second");
   await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalled());
   expect(api.WriteTerminal).toHaveBeenCalledWith(tab.ref, btoa("firstsecond"));
+});
+
+test("only the active tab uses a WebGL context and context loss falls back", () => {
+  const { rerender } = renderTerminal();
+  expect(refs.webgl).toHaveLength(1);
+  const first = refs.webgl[0];
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={tab} active={false} fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>,
+  );
+  expect(first.dispose).toHaveBeenCalledTimes(1);
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={tab} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>,
+  );
+  expect(refs.webgl).toHaveLength(2);
+  const current = refs.webgl[1];
+  current.lossHandler();
+  expect(current.dispose).toHaveBeenCalledTimes(1);
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={tab} active={false} fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>,
+  );
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={tab} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>,
+  );
+  expect(refs.webgl).toHaveLength(2);
+});
+
+test("right click in terminal search does not paste into shell", async () => {
+  renderTerminal();
+  const keyEvent = {
+    type: "keydown", key: "f", ctrlKey: true, shiftKey: true,
+    altKey: false, metaKey: false, preventDefault: vi.fn(),
+  } as unknown as KeyboardEvent;
+  refs.terms[0].keyHandler(keyEvent);
+  const field = await screen.findByRole("textbox", { name: "搜索终端内容" });
+  fireEvent.contextMenu(field);
+  expect(ClipboardGetText).not.toHaveBeenCalled();
+});
+
+test("repeated resize notifications do not duplicate SSH window changes", async () => {
+  renderTerminal();
+  const term = refs.terms[0];
+  await waitFor(() => expect(api.OpenTerminal).toHaveBeenCalled());
+  await act(async () => { await Promise.resolve(); });
+  vi.mocked(api.ResizeTerminal).mockClear();
+  term.cols = 100;
+  term.rows = 35;
+  act(() => {
+    term.resizeHandler({ cols: 100, rows: 35 });
+    term.resizeHandler({ cols: 100, rows: 35 });
+  });
+  expect(api.ResizeTerminal).toHaveBeenCalledTimes(1);
+  expect(api.ResizeTerminal).toHaveBeenCalledWith(tab.ref, 100, 35);
 });
