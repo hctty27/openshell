@@ -17,6 +17,7 @@ export interface Group {
   parentId?: string;
 }
 export interface XshellImportPreview {
+  source?: "xshell" | "openshell";
   token: string;
   entries: { id: string; folder: string; session: Session; warning?: string }[];
   skipped: string[];

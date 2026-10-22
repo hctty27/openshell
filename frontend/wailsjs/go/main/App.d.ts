@@ -11,6 +11,10 @@ export function CancelCommand(arg1:string):Promise<void>;
 
 export function Chat(arg1:main.ChatRequest):Promise<main.ChatResponse>;
 
+export function PreviewSessionBackup():Promise<{source?:string,token:string,entries:Array<{id:string,folder:string,session:domain.Session,warning?:string}>,skipped:string[]}>;
+
+export function ExportSessionBackup():Promise<string>;
+
 export function PreviewXshellImport():Promise<{token:string,entries:Array<{id:string,folder:string,session:domain.Session,warning?:string}>,skipped:string[]}>;
 
 export function ImportXshell(arg1:string,arg2:string[],arg3:string):Promise<{imported:number,skipped:number}>;

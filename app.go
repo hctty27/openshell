@@ -32,6 +32,8 @@ type App struct {
 	emit          sshclient.EmitFunc
 	pickKey       func() (string, error)
 	pickImport    func() (string, error)
+	pickBackupRead func() (string, error)
+	pickBackupWrite func() (string, error)
 	xshellPreview *XshellImportPreview
 	mu            sync.Mutex
 	transient     map[string]string

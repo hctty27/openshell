@@ -32,6 +32,7 @@ type XshellImportEntry struct {
 	Warning string         `json:"warning,omitempty"`
 }
 type XshellImportPreview struct {
+	Source   string              `json:"source"`
 	Token    string              `json:"token"`
 	Entries  []XshellImportEntry `json:"entries"`
 	Skipped  []string            `json:"skipped"`
@@ -42,7 +43,7 @@ type XshellImportResult struct {
 }
 
 func parseXshellImport(filePath string) (XshellImportPreview, error) {
-	result := XshellImportPreview{Entries: []XshellImportEntry{}, Skipped: []string{}}
+	result := XshellImportPreview{Source:"xshell", Entries: []XshellImportEntry{}, Skipped: []string{}}
 	stat, err := os.Stat(filePath)
 	if err != nil {
 		return result, err

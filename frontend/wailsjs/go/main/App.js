@@ -14,6 +14,14 @@ export function Chat(arg1) {
   return window['go']['main']['App']['Chat'](arg1);
 }
 
+export function PreviewSessionBackup() {
+  return window['go']['main']['App']['PreviewSessionBackup']();
+}
+
+export function ExportSessionBackup() {
+  return window['go']['main']['App']['ExportSessionBackup']();
+}
+
 export function PreviewXshellImport() {
   return window['go']['main']['App']['PreviewXshellImport']();
 }
