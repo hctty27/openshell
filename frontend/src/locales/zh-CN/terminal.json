@@ -63,5 +63,8 @@
   "resizeSplit": "调整终端分屏比例",
   "zmodemTransferring": "ZMODEM 文件传输中 · 等待传输完成",
   "cancelZmodem": "取消传输",
-  "zmodemCancelling": "正在取消…"
+  "zmodemCancelling": "正在取消…",
+  "localShellStatus": "本地终端 · {{name}}",
+  "remoteConnectionClosed": "SSH 已断开，已切换本地终端",
+  "localShellStartFailed": "启动本地终端失败"
 }
