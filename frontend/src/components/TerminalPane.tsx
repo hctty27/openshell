@@ -51,6 +51,7 @@ export default function TerminalPane(p: Props) {
   const webglAddon = useRef<WebglAddon | null>(null);
   const webglFailed = useRef(false);
   const searchInput = useRef<HTMLInputElement>(null);
+  const scrollbackSnapshot = useRef("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [regexMode, setRegexMode] = useState(false);
@@ -89,6 +90,9 @@ export default function TerminalPane(p: Props) {
     terminal.current = term;
     fit.current = addon;
     term.open(container.current);
+    if (scrollbackSnapshot.current) {
+      term.write(scrollbackSnapshot.current + "\r\n");
+    }
     const reportDirectory = (directory: string | null) => {
       if (!disposed && directory) callbacks.current.onDirectoryChange?.(ref, directory);
       return Boolean(directory);
@@ -338,6 +342,13 @@ export default function TerminalPane(p: Props) {
       for (const hook of cwdHooks) hook.dispose();
       resizeSubscription.dispose();
       selection.dispose();
+      const buffer = term.buffer.normal;
+      const lines: string[] = [];
+      for (let index = Math.max(0, buffer.length - 1500); index < buffer.length; index++) {
+        const line = buffer.getLine(index);
+        if (line) lines.push(line.translateToString(true));
+      }
+      scrollbackSnapshot.current = lines.join("\r\n").slice(-65536);
       term.dispose();
       logAddons.current = [];
       webglAddon.current = null;
