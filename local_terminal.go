@@ -5,6 +5,7 @@ import (
     "errors"
     "fmt"
     "io"
+    "sync"
 )
 
 type localPTY interface {
@@ -14,6 +15,15 @@ type localPTY interface {
 type localTerminalSession struct {
     id string
     pty localPTY
+    closeOnce sync.Once
+    closeErr error
+}
+
+func (s *localTerminalSession) close() error {
+    s.closeOnce.Do(func() {
+        s.closeErr = s.pty.Close()
+    })
+    return s.closeErr
 }
 type localOutputEvent struct {
     TabID string `json:"tabId"`
@@ -60,20 +70,20 @@ func (a *App) StartLocalTerminal(tabID, terminalID, shell string, cols, rows int
     latestRef, valid := a.tabRefs[tabID]
     if !valid || latestRef != ref || a.localTerminalPending[tabID] != terminalID {
         a.mu.Unlock()
-        _ = pty.Close()
+        _ = current.close()
         return errors.New("terminal connection changed")
     }
     delete(a.localTerminalPending, tabID)
     old := a.localTerminals[tabID]
     a.localTerminals[tabID] = current
     a.mu.Unlock()
-    if old != nil { _ = old.pty.Close() }
+    if old != nil { _ = old.close() }
     go func() {
         defer func() {
             a.mu.Lock()
             if a.localTerminals[tabID] == current { delete(a.localTerminals, tabID) }
             a.mu.Unlock()
-            _ = pty.Close()
+            _ = current.close()
             a.emit("local:ended", localEndEvent{TabID:tabID, TerminalID:terminalID})
         }()
         buf := make([]byte, 32*1024)
@@ -131,7 +141,7 @@ func (a *App) stopLocalTerminal(tabID, terminalID string) {
         delete(a.localTerminals, tabID)
     } else { session = nil }
     a.mu.Unlock()
-    if session != nil { _ = session.pty.Close() }
+    if session != nil { _ = session.close() }
 }
 func (a *App) closeAllLocalTerminals() {
     a.mu.Lock()
@@ -140,5 +150,5 @@ func (a *App) closeAllLocalTerminals() {
     a.localTerminals = map[string]*localTerminalSession{}
     a.localTerminalPending = map[string]string{}
     a.mu.Unlock()
-    for _, session := range sessions { _ = session.pty.Close() }
+    for _, session := range sessions { _ = session.close() }
 }

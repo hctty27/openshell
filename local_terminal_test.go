@@ -3,6 +3,7 @@ package main
 import (
     "io"
     "sync"
+    "sync/atomic"
     "testing"
 
     "github.com/hctty27/openshell/internal/domain"
@@ -117,5 +118,37 @@ func TestPendingLocalPTYCannotAttachToReconnectedSSH(t *testing.T) {
     case <-pty.closed:
     default:
         t.Fatal("stale local PTY was not closed")
+    }
+}
+
+type countingLocalPTY struct {
+    closes atomic.Int32
+}
+
+func (p *countingLocalPTY) Read(_ []byte) (int, error) { return 0, io.EOF }
+func (p *countingLocalPTY) Write(data []byte) (int, error) { return len(data), nil }
+func (p *countingLocalPTY) Resize(_, _ int) error { return nil }
+func (p *countingLocalPTY) Close() error {
+    p.closes.Add(1)
+    return nil
+}
+
+func TestLocalTerminalCloseOnceAcrossConcurrentTeardown(t *testing.T) {
+    pty := &countingLocalPTY{}
+    session := &localTerminalSession{id: "local-1", pty: pty}
+    app := &App{localTerminals: map[string]*localTerminalSession{"tab-1": session}}
+    var wg sync.WaitGroup
+    for i := 0; i < 32; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            if err := session.close(); err != nil { t.Errorf("close: %v", err) }
+            app.stopLocalTerminal("tab-1", "local-1")
+        }()
+    }
+    wg.Wait()
+    app.closeAllLocalTerminals()
+    if got := pty.closes.Load(); got != 1 {
+        t.Fatalf("ConPTY Close called %d times, want exactly once", got)
     }
 }

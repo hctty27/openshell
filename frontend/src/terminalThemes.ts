@@ -4,6 +4,7 @@ import type { TerminalTheme, Theme } from "./types";
 export const terminalThemes: Record<Exclude<TerminalTheme, "follow">, ITheme> = {
   dark: {
     background: "#171A1F",
+    overviewRulerBorder: "#171A1F",
     foreground: "#DCE4EE",
     cursor: "#96BDF0",
     cursorAccent: "#171A1F",
@@ -31,6 +32,7 @@ export const terminalThemes: Record<Exclude<TerminalTheme, "follow">, ITheme> = 
   },
   classic: {
     background: "#08090C",
+    overviewRulerBorder: "#08090C",
     foreground: "#E0E4EA",
     cursor: "#EDF2FA",
     cursorAccent: "#08090C",
@@ -58,6 +60,7 @@ export const terminalThemes: Record<Exclude<TerminalTheme, "follow">, ITheme> = 
   },
   light: {
     background: "#FFFFFF",
+    overviewRulerBorder: "#FFFFFF",
     foreground: "#263445",
     cursor: "#2766AD",
     cursorAccent: "#FFFFFF",
