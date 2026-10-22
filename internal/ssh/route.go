@@ -140,6 +140,7 @@ func closeHopClients(hops []*ssh.Client) {
 
 func closeSSHConnection(c *connection) {
  if c == nil { return }
+ closeForwardListeners(c)
  if c.client != nil { _ = c.client.Close() }
  closeHopClients(c.hops)
 }
