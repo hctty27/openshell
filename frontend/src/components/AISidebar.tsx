@@ -116,7 +116,7 @@ export default function AISidebar(p: Props) {
       {p.tab?.ref && p.tab.status === "connected" && (
         <ConversationPicker
           items={p.conversationItems ?? []}
-          selectedID={p.tab.conversationID}
+          selectedID={p.tab.conversationID ?? ""}
           busy={ownerBusy || !!p.tab.memoryLoading}
           locked={!!run}
           hasMore={!!p.conversationHasMore}

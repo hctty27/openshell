@@ -72,7 +72,11 @@ func (s *Service) publish(c domain.Conversation, kind string, run *domain.Conver
 			}
 		}
 	}
-	s.emit(domain.ConversationEvent{EventID: domain.NewID(), EventSeq: s.sequences[c.ID], ServerKey: c.ServerKey, ConversationID: c.ID, Kind: kind, Revision: c.Revision, Run: run, Message: message, Conversation: &c, SelectedByTab: selected, SelectedRefs: selectedRefs, SelectionRevision: selectionRevision, Status: status})
+	var metadata *domain.Conversation
+	if c.ID != "" {
+		metadata = &c
+	}
+	s.emit(domain.ConversationEvent{EventID: domain.NewID(), EventSeq: s.sequences[c.ID], ServerKey: c.ServerKey, ConversationID: c.ID, Kind: kind, Revision: c.Revision, Run: run, Message: message, Conversation: metadata, SelectedByTab: selected, SelectedRefs: selectedRefs, SelectionRevision: selectionRevision, Status: status})
 }
 func (s *Service) runFor(id string) *domain.ConversationRun {
 	for _, r := range s.runs {
@@ -135,8 +139,12 @@ func (s *Service) Bind(ctx context.Context, ref domain.ConnectionRef, row domain
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c, e := s.bind(ctx, ref, row)
-	if e == nil && c.ID != "" {
-		s.publish(c, "selection", s.runFor(c.ID), nil, "")
+	if e == nil {
+		if c.ID == "" {
+			s.publish(domain.Conversation{ServerKey: ServerKey(row)}, "selection", nil, nil, "")
+		} else {
+			s.publish(c, "selection", s.runFor(c.ID), nil, "")
+		}
 	}
 	return c, e
 }
@@ -571,7 +579,9 @@ func (s *Service) Configure(ctx context.Context, save bool) error {
 		s.temporary = nextDB
 	}
 	for _, b := range s.bindings {
-		if c, err := s.db.GetConversation(ctx, b.ID); err == nil {
+		if b.ID == "" {
+			s.publish(domain.Conversation{ServerKey: b.Key}, "selection", nil, nil, "")
+		} else if c, err := s.db.GetConversation(ctx, b.ID); err == nil {
 			s.publish(c, "selection", nil, nil, "")
 		}
 	}

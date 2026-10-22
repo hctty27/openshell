@@ -295,3 +295,33 @@ func TestDeletingFinalConversationDoesNotInsertPlaceholder(t *testing.T) {
 		t.Fatal("last conversation should fall back to draft", selected, err)
 	}
 }
+
+func TestEmptyBindingAndStorageSwitchEmitDraftSelection(t *testing.T) {
+	s, _, ctx, row, a, _ := fixture(t)
+	var events []domain.ConversationEvent
+	s.emit = func(event domain.ConversationEvent) { events = append(events, event) }
+	if _, err := s.Bind(ctx, a, row); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 || events[0].Conversation != nil || events[0].SelectedByTab[a.TabID] != "" {
+		t.Fatal("missing unsaved selection event", events)
+	}
+	saved, err := s.Create(ctx, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Configure(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	last := events[len(events)-1]
+	if last.Conversation != nil || last.SelectedByTab[a.TabID] != "" {
+		t.Fatal("switching to unsaved storage did not clear selection", last)
+	}
+	if err = s.Configure(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	selected, err := s.Selected(a)
+	if err != nil || selected != saved.ID {
+		t.Fatal("persisted selection was not restored", selected, err)
+	}
+}
