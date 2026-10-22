@@ -4,6 +4,14 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "app.go"
+      - "app_integration_test.go"
+      - "local_terminal.go"
+      - "local_terminal_windows.go"
+      - "local_terminal_test.go"
+      - "frontend/src/App.tsx"
+      - "frontend/src/terminalCwd.ts"
+      - "frontend/src/terminalThemes.ts"
       - "frontend/src/components/TerminalPane.tsx"
       - "frontend/src/components/TerminalPane.test.tsx"
       - "frontend/package.json"
