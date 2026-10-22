@@ -91,11 +91,12 @@ export function normalizeTerminalTheme(value: unknown): TerminalTheme {
 
 export function resolveTerminalTheme(
   appTheme: Theme,
-  globalTerminalTheme: TerminalTheme,
-  sessionTerminalTheme: TerminalTheme = "follow",
+  globalTerminalTheme: TerminalTheme | undefined,
+  sessionTerminalTheme?: TerminalTheme,
 ): ITheme {
-  const selected = sessionTerminalTheme === "follow"
-    ? globalTerminalTheme
-    : sessionTerminalTheme;
+  const override = normalizeTerminalTheme(sessionTerminalTheme);
+  const selected = override === "follow"
+    ? normalizeTerminalTheme(globalTerminalTheme)
+    : override;
   return terminalThemes[selected === "follow" ? appTheme : selected];
 }
