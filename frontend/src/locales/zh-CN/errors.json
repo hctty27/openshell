@@ -217,5 +217,6 @@
   "folderCycleNotAllowed": "不允许循环嵌套文件夹",
   "folderParentNotFound": "父文件夹不存在",
   "memoryMessageIdRequired": "缺少消息 ID",
-  "memoryUnsupportedMutation": "不支持的对话修改操作"
+  "memoryUnsupportedMutation": "不支持的对话修改操作",
+  "backupInvalidConnection": "连接配置无效"
 }
