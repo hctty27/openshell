@@ -25,7 +25,7 @@ interface Props {
   onActivate?: () => void;
   fontSize: number;
   theme: Theme;
-  terminalTheme: TerminalTheme;
+  terminalTheme?: TerminalTheme;
   autoCopySelection: boolean;
   rightClickPaste: boolean;
   middleClickPaste?: boolean;
