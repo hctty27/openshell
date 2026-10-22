@@ -63,12 +63,10 @@
 OpenShell 在 Go 层过滤协议帧，不会将传输主体写入终端历史或发送给 AI。
 文件选择使用本地系统对话框，传输提示在当前终端内展示。
 
-**当前必要条件：** 服务端安装 `lrzsz`，并且运行 OpenShell 的 Windows 本机也需安装可执行的
-`sz.exe` 和 `rz.exe`，且二者位于 `PATH`。可参考
-[trzsz-ssh 官方 Windows 安装说明](https://github.com/trzsz/trzsz-ssh/blob/main/README.en.md)
-（例如通过 scoop/choco/winget 安装 lrzsz）。
-安装后应重启 OpenShell 使其继承新 `PATH`。若本机缺少辅助程序，传输无法完成，终端会显示相应错误。
-本阶段未在安装包中捆绑 lrzsz，也没有完成真实 Windows 大文件传输的人工验证。
+**Windows 开箱即用：** 安装版和便携版包含已验证的 `rz.exe`、`sz.exe`、`msys-2.0.dll`、
+GPL 许可证与对应源码包，无需配置 Windows 系统 PATH。远端服务器仍须安装 `lrzsz`。
+下载已有同名文件时使用 `rz -E` 重命名策略，避免直接覆盖。传输中可点击取消或按 Ctrl+C，
+传输状态和速度估计仍以过滤器报告为准。真正的 Windows GUI 大文件、批量以及异常中断场景仍需实机验收。
 
 ZMODEM 和 SFTP 相互独立：交互终端的 `rz/sz` 使用 ZMODEM；普通文件浏览、目录同步与断点续传仍使用 SFTP。
 ZMODEM 在 tmux/screen 中可能不稳定；目录传输请继续使用 SFTP。取消、覆盖冲突和统一传输管理将在后续阶段增强。

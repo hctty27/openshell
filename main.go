@@ -4,6 +4,8 @@ package main
 
 import (
 	"embed"
+	"os"
+	"path/filepath"
 	"github.com/hctty27/openshell/internal/branding"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -16,7 +18,20 @@ import (
 var assets embed.FS
 
 func main() {
-	app, e := NewApp()
+    // Prefer checked-in release helper binaries next to the application.
+    if executable, err := os.Executable(); err == nil {
+        helperDir := filepath.Join(filepath.Dir(executable), "zmodem")
+        helpers := []string{"rz.exe", "sz.exe", "msys-2.0.dll"}
+        complete := true
+        for _, name := range helpers {
+            info, err := os.Stat(filepath.Join(helperDir, name))
+            if err != nil || info.IsDir() { complete = false; break }
+        }
+        if complete {
+            _ = os.Setenv("PATH", helperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+        }
+    }
+    app, e := NewApp()
 	if e != nil {
 		log.Fatal("无法初始化应用：", e)
 	}

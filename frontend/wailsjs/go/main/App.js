@@ -70,6 +70,10 @@ export function Disconnect(arg1) {
   return window['go']['main']['App']['Disconnect'](arg1);
 }
 
+export function CancelZmodem(arg1) {
+  return window['go']['main']['App']['CancelZmodem'](arg1);
+}
+
 export function OpenTerminal(arg1, arg2, arg3) {
   return window['go']['main']['App']['OpenTerminal'](arg1, arg2, arg3);
 }

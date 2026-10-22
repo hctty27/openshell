@@ -79,6 +79,7 @@ type Backend = {
   TrustHost(id: string): Promise<void>;
   OpenTerminal(ref: Ref, cols: number, rows: number): Promise<void>;
   WriteTerminal(ref: Ref, data: string): Promise<void>;
+  CancelZmodem(ref: Ref): Promise<void>;
   ResizeTerminal(ref: Ref, cols: number, rows: number): Promise<void>;
   Disconnect(ref: Ref): Promise<void>;
   CloseTab(id: string): Promise<void>;

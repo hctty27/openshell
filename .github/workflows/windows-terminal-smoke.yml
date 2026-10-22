@@ -66,11 +66,18 @@ jobs:
           if (!(Test-Path "build/bin/OpenShell.exe")) { throw "OpenShell.exe was not generated" }
           python scripts/verify_windows_icons.py --icon build/windows/icon.ico --exe build/bin/OpenShell.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prepare bundled ZMODEM utilities
+        shell: pwsh
+        run: |
+          ./scripts/prepare_zmodem_windows.ps1
+          foreach ($file in @("rz.exe", "sz.exe", "msys-2.0.dll", "lrzsz-win32-source.zip", "COPYING-lrzsz.txt")) {
+            if (!(Test-Path "build/bin/zmodem/$file")) { throw "Missing bundled helper: $file" }
+          }
       - name: Package test executable
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path build/bin/OpenShell.exe -DestinationPath dist/OpenShell-windows-x64-smoke.zip -Force
+          Compress-Archive -Path build/bin/OpenShell.exe, build/bin/zmodem -DestinationPath dist/OpenShell-windows-x64-smoke.zip -Force
       - name: Upload Windows test build
         uses: actions/upload-artifact@v7
         with:

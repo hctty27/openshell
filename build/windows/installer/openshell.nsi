@@ -13,6 +13,9 @@ Unicode true
 !ifndef APP_ICON
   !error "APP_ICON is required"
 !endif
+!ifndef APP_HELPER_DIR
+  !error "APP_HELPER_DIR is required"
+!endif
 
 !define MUI_ICON "${APP_ICON}"
 !define MUI_UNICON "${APP_ICON}"
@@ -42,6 +45,9 @@ Section "Install" SecMain
   SetShellVarContext current
   SetOutPath "$INSTDIR"
   File "${APP_BINARY}"
+  SetOutPath "$INSTDIR\zmodem"
+  File /r "${APP_HELPER_DIR}\*"
+  SetOutPath "$INSTDIR"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateDirectory "$SMPROGRAMS\OpenShell"
   CreateShortcut "$SMPROGRAMS\OpenShell\OpenShell.lnk" "$INSTDIR\OpenShell.exe"
@@ -59,6 +65,7 @@ SectionEnd
 Section "Uninstall"
   SetShellVarContext current
   Delete "$INSTDIR\OpenShell.exe"
+  RMDir /r "$INSTDIR\zmodem"
   Delete "$INSTDIR\Uninstall.exe"
   RMDir "$INSTDIR"
   Delete "$SMPROGRAMS\OpenShell\OpenShell.lnk"

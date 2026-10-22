@@ -130,3 +130,35 @@ func TestTerminalFilterPreservesOrdinarySSHOutput(t *testing.T) {
 		t.Fatalf("terminal history missing plain output: %q", history)
 	}
 }
+
+func TestCancelZmodemOnlyWhenActive(t *testing.T) {
+    m, ref := connected(t)
+    if err := m.CancelZmodem(ref); err == nil {
+        t.Fatal("cancel should reject a missing terminal")
+    }
+    if err := m.OpenTerminal(ref, 80, 24); err != nil { t.Fatal(err) }
+    if err := m.CancelZmodem(ref); err == nil {
+        t.Fatal("cancel should reject an idle terminal")
+    }
+}
+
+func TestZmodemProgressEventExtractsApproximateMetrics(t *testing.T) {
+    progress := make(chan map[string]any, 4)
+    m := NewManager(nil, func(name string, payload any) {
+        if name == "ssh:transfer-progress" { progress <- payload.(map[string]any) }
+    })
+    w := &terminalWriter{m:m, c:&connection{ref:domain.ConnectionRef{TabID:"tab"}, history:NewHistory(4096)}}
+    closer := &terminalOutputCloser{writer:w, done:make(chan struct{})}
+    chunks := []string{"\\r\\x1b[2KTrans", "ferred 2.3 MB, Speed 1.2 MB/s."}
+    for _, piece := range chunks {
+        if _, err := closer.Write([]byte(piece)); err != nil { t.Fatal(err) }
+    }
+    select {
+    case event := <-progress:
+        if event["transferred"] != "2.3 MB" || event["speed"] != "1.2 MB/s" {
+            t.Fatalf("unexpected transfer event: %+v", event)
+        }
+    default: t.Fatal("transfer progress was not reported")
+    }
+    closer.Close()
+}

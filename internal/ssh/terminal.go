@@ -7,6 +7,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"github.com/trzsz/trzsz-go/trzsz"
 	"io"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -158,9 +159,13 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	filter := trzsz.NewTrzszFilter(userInput, clientOutput, remoteInput, filterOutput,
 		trzsz.TrzszOptions{TerminalColumns: int32(cols), EnableZmodem: true})
 	filter.SetTransferStateCallback(func(transferring bool) {
-		if !m.Valid(ref) { return }
-		m.emit("ssh:transfer-state", map[string]any{"ref": ref, "active": transferring})
-	})
+        m.mu.Lock()
+        current := m.connections[ref.TabID]
+        valid := current == connection && current.ref == ref
+        if valid { connection.transferring = transferring }
+        m.mu.Unlock()
+        if valid { m.emit("ssh:transfer-state", map[string]any{"ref": ref, "active": transferring}) }
+    })
 	session.Stdout, session.Stderr = remoteOutput, remoteOutput
 	if err = session.Shell(); err != nil {
 		filter.Close()
@@ -199,12 +204,31 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 
 // terminalOutputCloser signals when the filtered output has been fully drained.
 type terminalOutputCloser struct {
-	writer *terminalWriter
-	done chan struct{}
-	once sync.Once
+    writer *terminalWriter
+    done chan struct{}
+    once sync.Once
+    mu sync.Mutex
+    tail []byte
+    lastProgress time.Time
 }
+var zmodemProgressPattern = regexp.MustCompile(`Transferred ([0-9.]+[[:space:]]*[KMGTPE]?B), Speed ((?:[0-9.]+[[:space:]]*[KMGTPE]?B/s)|N/A)`)
 func (o *terminalOutputCloser) Write(p []byte) (int, error) {
-	return o.writer.Write(p)
+    o.mu.Lock()
+    data := append(append([]byte(nil), o.tail...), p...)
+    matches := zmodemProgressPattern.FindAllSubmatch(data, -1)
+    if len(data) > 256 { data = data[len(data)-256:] }
+    o.tail = append(o.tail[:0], data...)
+    if len(matches) != 0 && time.Since(o.lastProgress) >= 180*time.Millisecond {
+        last := matches[len(matches)-1]
+        o.lastProgress = time.Now()
+        o.writer.m.emit("ssh:transfer-progress", map[string]any{
+            "ref": o.writer.c.ref,
+            "transferred": string(last[1]),
+            "speed": string(last[2]),
+        })
+    }
+    o.mu.Unlock()
+    return o.writer.Write(p)
 }
 func (o *terminalOutputCloser) Close() error {
 	o.once.Do(func() { o.writer.Close(); close(o.done) })
@@ -225,6 +249,22 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	m.mu.Unlock()
 	_, e = stdin.Write(p)
 	return e
+}
+// CancelZmodem sends the filter's supported Ctrl+C cancellation sequence.
+func (m *Manager) CancelZmodem(ref domain.ConnectionRef) error {
+    m.mu.Lock()
+    c := m.connections[ref.TabID]
+    if c == nil || c.ref != ref || c.stdin == nil || !c.transferring {
+        m.mu.Unlock()
+        return apperror.New("noActiveFileTransfer", nil)
+    }
+    stdin := c.stdin
+    m.mu.Unlock()
+    // A pipe may momentarily block while the filter handles incoming data.
+    // The reader is closed with the SSH session, so a failed transfer cannot
+    // permanently block this UI call.
+    go func() { _, _ = stdin.Write([]byte{0x03}) }()
+    return nil
 }
 func (m *Manager) Resize(ref domain.ConnectionRef, cols, rows int) error {
 	if cols < 1 || cols > 1000 || rows < 1 || rows > 1000 {

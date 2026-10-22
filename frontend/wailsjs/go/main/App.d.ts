@@ -39,6 +39,8 @@ export function DeleteSession(arg1:string):Promise<void>;
 
 export function Disconnect(arg1:domain.ConnectionRef):Promise<void>;
 
+export function CancelZmodem(arg1:domain.ConnectionRef):Promise<void>;
+
 export function OpenTerminal(arg1:domain.ConnectionRef,arg2:number,arg3:number):Promise<void>;
 
 export function PreviewContext(arg1:domain.ConnectionRef,arg2:string):Promise<ai.Preview>;

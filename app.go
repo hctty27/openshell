@@ -632,7 +632,10 @@ func (a *App) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	return a.ssh.OpenTerminal(ref, cols, rows)
 }
 func (a *App) WriteTerminal(ref domain.ConnectionRef, data string) error {
-	return a.ssh.Write(ref, data)
+    return a.ssh.Write(ref, data)
+}
+func (a *App) CancelZmodem(ref domain.ConnectionRef) error {
+    return a.ssh.CancelZmodem(ref)
 }
 func (a *App) ResizeTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	return a.ssh.Resize(ref, cols, rows)
