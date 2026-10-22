@@ -201,15 +201,15 @@ export default function SessionTree(p: Props) {
             ...(targetGroup.id
               ? [
                   {
-                    label: t("sessions:newSubfolder"),
-                    icon: FolderPlus,
-                    onSelect: () => p.onCreateSubgroup?.(targetGroup),
-                  },
-                  {
                     label: t("common:rename"),
                     icon: Pencil,
                     separatorBefore: true,
                     onSelect: () => p.onRenameGroup(targetGroup),
+                  },
+                  {
+                    label: t("sessions:newSubfolder"),
+                    icon: FolderPlus,
+                    onSelect: () => p.onCreateSubgroup?.(targetGroup),
                   },
                   {
                     label: t("common:deleteFolder"),

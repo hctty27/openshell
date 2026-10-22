@@ -105,6 +105,19 @@ export default function SettingsDialog(p: Props) {
   const [error, setError] = useState<unknown>("");
   const [success, setSuccess] = useState<DisplayText>("");
   const [busy, setBusy] = useState(false);
+  const groupPath = (g: Group): string => {
+    const names = [g.name];
+    const seen = new Set([g.id]);
+    let parent = g.parentId;
+    while (parent && !seen.has(parent)) {
+      const item = p.groups.find((entry) => entry.id === parent);
+      if (!item) break;
+      names.unshift(item.name);
+      seen.add(parent);
+      parent = item.parentId;
+    }
+    return names.join(" / ");
+  };
   const field = (name: keyof Session, value: string | number) =>
     setSession({ ...session, [name]: value });
   const run = async (fn: () => Promise<void>, message: DisplayText = "") => {
@@ -228,7 +241,7 @@ export default function SettingsDialog(p: Props) {
                     <option value="">{t("common:defaultFolder")}</option>
                     {p.groups.map((g) => (
                       <option key={g.id} value={g.id}>
-                        {g.name}
+                        {groupPath(g)}
                       </option>
                     ))}
                   </select>
