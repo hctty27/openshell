@@ -68,6 +68,9 @@ interface Props {
   maxReconnectAttempts?: number;
   showDisconnectReason?: boolean;
   confirmActiveDisconnect?: boolean;
+  disconnectBehavior?: import("../types").DisconnectBehavior;
+  localShell?: import("../types").LocalShell;
+  preserveTerminalHistory?: boolean;
   onLogHighlights(enabled: boolean): void;
   onConfirmMultilinePaste(enabled: boolean): void;
   onClose(): void;
@@ -115,6 +118,9 @@ export default function SettingsDialog(p: Props) {
   const [maxReconnectAttempts, setMaxReconnectAttempts] = useState(p.maxReconnectAttempts ?? 10);
   const [showDisconnectReason, setShowDisconnectReason] = useState(p.showDisconnectReason !== false);
   const [confirmActiveDisconnect, setConfirmActiveDisconnect] = useState(p.confirmActiveDisconnect !== false);
+  const [disconnectBehavior, setDisconnectBehavior] = useState(p.disconnectBehavior ?? "local");
+  const [localShell, setLocalShell] = useState(p.localShell ?? "powershell");
+  const [preserveTerminalHistory, setPreserveTerminalHistory] = useState(p.preserveTerminalHistory !== false);
   const [secret, setSecret] = useState("");
   const [saveSecret, setSaveSecret] = useState(!!p.session?.credentialRef);
   const [profile, setProfile] = useState<APIProfile>(
@@ -689,6 +695,34 @@ export default function SettingsDialog(p: Props) {
                 </label>
               </div>
               <div className="settings-terminal-group">
+                <label htmlFor="settings-disconnect-behavior">{t("settings:disconnectBehavior")}</label>
+                <select id="settings-disconnect-behavior" value={disconnectBehavior}
+                  onChange={e => setDisconnectBehavior(e.target.value as import("../types").DisconnectBehavior)}>
+                  <option value="local">{t("settings:revertToLocalShell")}</option>
+                  <option value="retain">{t("settings:retainDisconnectedTerminal")}</option>
+                  <option value="close">{t("settings:closeDisconnectedTab")}</option>
+                </select>
+              </div>
+              {disconnectBehavior === "local" && (
+                <div className="settings-terminal-group">
+                  <label htmlFor="settings-local-shell">{t("settings:defaultLocalShell")}</label>
+                  <select id="settings-local-shell" value={localShell}
+                    onChange={e => setLocalShell(e.target.value as import("../types").LocalShell)}>
+                    <option value="powershell">Windows PowerShell</option>
+                    <option value="pwsh">PowerShell 7</option>
+                    <option value="cmd">CMD</option>
+                    <option value="wsl">WSL</option>
+                  </select>
+                </div>
+              )}
+              <div className="settings-terminal-group">
+                <label className="settings-toggle-row">
+                  <span className="settings-toggle-copy"><strong>{t("settings:preserveTerminalHistory")}</strong></span>
+                  <input className="settings-switch" type="checkbox" checked={preserveTerminalHistory}
+                    onChange={e => setPreserveTerminalHistory(e.target.checked)} />
+                </label>
+              </div>
+              <div className="settings-terminal-group">
                 <label className="settings-toggle-row">
                   <span className="settings-toggle-copy"><strong>{t("settings:confirmActiveDisconnect")}</strong></span>
                   <input className="settings-switch" type="checkbox" checked={confirmActiveDisconnect}
@@ -939,6 +973,9 @@ export default function SettingsDialog(p: Props) {
                 await api.SavePreference("maxReconnectAttempts", String(maxReconnectAttempts));
                 await api.SavePreference("showDisconnectReason", String(showDisconnectReason));
                 await api.SavePreference("confirmActiveDisconnect", String(confirmActiveDisconnect));
+                 await api.SavePreference("disconnectBehavior", disconnectBehavior);
+                 await api.SavePreference("localShell", localShell);
+                 await api.SavePreference("preserveTerminalHistory", String(preserveTerminalHistory));
                 await p.onRefresh();
               }, message("settings:settingsSaved"))}>
                 {t("settings:saveSettings")}
