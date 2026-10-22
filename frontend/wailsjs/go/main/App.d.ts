@@ -39,6 +39,8 @@ export function DeleteSession(arg1:string):Promise<void>;
 
 export function DuplicateSession(arg1:string):Promise<domain.Session>;
 
+export function Reconnect(arg1:string,arg2:string):Promise<main.ConnectResult>;
+
 export function Disconnect(arg1:domain.ConnectionRef):Promise<void>;
 
 export function CancelZmodem(arg1:domain.ConnectionRef):Promise<void>;
