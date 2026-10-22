@@ -26,6 +26,7 @@ import { resolveTerminalTheme } from "../terminalThemes";
 import { useDialogs } from "./DialogProvider";
 import type {
   Session,
+  LocalForward,
   Group,
   APIProfile,
   SessionRequest,
@@ -148,6 +149,14 @@ export default function SettingsDialog(p: Props) {
   };
   const field = (name: keyof Session, value: string | number | boolean) =>
     setSession({ ...session, [name]: value });
+  const updateForward = (index: number, update: Partial<LocalForward>) => {
+    setSession((current) => ({
+      ...current,
+      localForwards: (current.localForwards ?? []).map((forward, i) =>
+        i === index ? { ...forward, ...update } : forward,
+      ),
+    }));
+  };
   const run = async (fn: () => Promise<void>, message: DisplayText = "") => {
     setBusy(true);
     setError("");
@@ -306,6 +315,61 @@ export default function SettingsDialog(p: Props) {
                 />
               </label>
               <p className="muted small">{t("settings:proxyJumpDescription")}</p>
+              <div className="settings-panel-heading">
+                <h3>{t("settings:localForwards")}</h3>
+                <p>{t("settings:localForwardsDescription")}</p>
+              </div>
+              {(session.localForwards ?? []).map((forward, index) => (
+                <div key={index} className="form-row">
+                  <input
+                    aria-label={t("settings:forwardBindHost")}
+                    value={forward.bindHost}
+                    onChange={(e) => updateForward(index, { bindHost: e.target.value })}
+                    placeholder="127.0.0.1"
+                  />
+                  <input
+                    type="number" min="1" max="65535"
+                    aria-label={t("settings:forwardBindPort")}
+                    value={forward.bindPort}
+                    onChange={(e) => updateForward(index, { bindPort: Number(e.target.value) })}
+                    placeholder="8080"
+                  />
+                  <input
+                    aria-label={t("settings:forwardTargetHost")}
+                    value={forward.targetHost}
+                    onChange={(e) => updateForward(index, { targetHost: e.target.value })}
+                    placeholder="127.0.0.1"
+                  />
+                  <input
+                    type="number" min="1" max="65535"
+                    aria-label={t("settings:forwardTargetPort")}
+                    value={forward.targetPort}
+                    onChange={(e) => updateForward(index, { targetPort: Number(e.target.value) })}
+                    placeholder="80"
+                  />
+                  <button
+                    type="button"
+                    title={t("settings:removeForward")}
+                    onClick={() => setSession((current) => ({
+                      ...current,
+                      localForwards: (current.localForwards ?? []).filter((_, i) => i !== index),
+                    }))}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+              {(session.localForwards ?? []).length < 8 && (
+                <button type="button" onClick={() => setSession((current) => ({
+                  ...current,
+                  localForwards: [...(current.localForwards ?? []), {
+                    bindHost: "127.0.0.1", bindPort: 8080,
+                    targetHost: "127.0.0.1", targetPort: 80,
+                  }],
+                }))}>
+                  <Plus size={15} /> {t("settings:addForward")}
+                </button>
+              )}
               <label>
                 {t("common:authentication")}
                 <select
