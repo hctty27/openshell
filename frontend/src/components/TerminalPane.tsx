@@ -264,11 +264,15 @@ export default function TerminalPane(p: Props) {
     requestAnimationFrame(() => {
       if (disposed) return;
       addon.fit();
+      const cols = Math.max(term.cols, 20);
+      const rows = Math.max(term.rows, 5);
       api
-        .OpenTerminal(ref, Math.max(term.cols, 20), Math.max(term.rows, 5))
+        .OpenTerminal(ref, cols, rows)
         .then(() => {
+          if (disposed) return;
           opened = true;
-          lastSize = `${term.cols}x${term.rows}`;
+          lastSize = `${cols}x${rows}`;
+          sendResize();
           if (callbacks.current.active) term.focus();
         })
         .catch((e) => callbacks.current.onError(e));
