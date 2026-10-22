@@ -197,11 +197,11 @@ func TestConversationDeleteSessionCleansAllHistory(t *testing.T) {
 		t.Fatal(last, err)
 	}
 }
-func TestConversationDeleteFallbackIsAtomic(t *testing.T) {
+func TestConversationDeleteLastRowIsAtomic(t *testing.T) {
 	s, ctx := memoryDB(t)
 	c, _ := s.CreateConversation(ctx, "server", "s")
 	s.SelectConversation(ctx, "server", c.ID)
-	if _, err := s.db.Exec("CREATE TRIGGER fail_selection BEFORE INSERT ON conversation_selections BEGIN SELECT RAISE(ABORT,'disk full'); END"); err != nil {
+	if _, err := s.db.Exec("CREATE TRIGGER fail_delete BEFORE DELETE ON conversations BEGIN SELECT RAISE(ABORT,'disk full'); END"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.DeleteAndSelectConversation(ctx, c.ID); err == nil {
