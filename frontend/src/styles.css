@@ -638,6 +638,25 @@ kbd {
   height: 25px;
   padding: 4px;
 }
+.terminal-toolbar .terminal-split-select {
+  max-width: 122px;
+  min-width: 88px;
+  height: 24px;
+  padding: 2px 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--field-bg);
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+.terminal-toolbar .terminal-split-select:disabled {
+  opacity: 0.5;
+}
+.terminal-toolbar .terminal-toggle-on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+}
 .terminal-container {
   position: relative;
   flex: 1;
@@ -650,8 +669,37 @@ kbd {
   padding: 0;
   visibility: hidden;
 }
-.terminal-pane.active {
+.terminal-pane.visible {
   visibility: visible;
+}
+.terminal-container.terminal-split {
+  display: grid;
+  gap: 1px;
+  background: var(--border);
+}
+.terminal-container.terminal-split-columns {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+.terminal-container.terminal-split-rows {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+.terminal-container.terminal-split > .terminal-pane.visible {
+  position: relative;
+  inset: auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 12px 8px 8px 13px;
+  background: var(--surface);
+}
+.terminal-container.terminal-split > .terminal-pane.visible.active {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.terminal-container.terminal-split > .terminal-pane:not(.visible) {
+  position: absolute;
+  visibility: hidden;
 }
 .terminal-surface {
   width: 100%;
@@ -695,6 +743,16 @@ kbd {
 .terminal-find button:hover {
   color: var(--text-primary);
   background: var(--hover);
+}
+.terminal-find button.selected {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.terminal-find button[aria-label$="高亮"],
+.terminal-find button[aria-label="Highlight logs"] {
+  width: auto;
+  padding-inline: 6px;
+  font-size: 11px;
 }
 .xterm {
   height: 100%;
