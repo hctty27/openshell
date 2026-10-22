@@ -161,7 +161,7 @@ func walkLocal(root string)(map[string]syncInfo,error){
         if len(result)>=maxSyncEntries{return errors.New("directory sync exceeds 4000 entries")}
         info,err:=ent.Info()
         if err!=nil{return err}
-        if info.Mode()&os.ModeSymlink!=0{return filepath.SkipDir}
+        if info.Mode()&os.ModeSymlink!=0{return nil}
         rel,err:=filepath.Rel(root,name)
         if err!=nil{return err}
         result[filepath.ToSlash(rel)]=syncInfo{isDir:info.IsDir(),size:info.Size(),modified:info.ModTime()}

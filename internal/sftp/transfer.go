@@ -2,6 +2,9 @@ package sftp
 
 import (
     "context"
+    "crypto/sha256"
+    "encoding/hex"
+    "bytes"
     "errors"
     "fmt"
     "io"
@@ -25,6 +28,7 @@ type Task struct {
     Total int64 `json:"total"`
     Status string `json:"status"`
     Overwrite bool `json:"overwrite"`
+    Resume bool `json:"resume"`
     Error string `json:"error"`
     Created int64 `json:"created"`
 }
@@ -38,7 +42,7 @@ type job struct {
 }
 var errSymlink = errors.New("symbolic links are not included in transfers")
 
-func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination string, overwrite bool) (Task, error) {
+func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination string, overwrite, resume bool) (Task, error) {
     if direction != "upload" && direction != "download" { return Task{}, errors.New("invalid transfer direction") }
     src, dst := "local", "remote"
     if direction == "download" { src, dst = "remote", "local" }
@@ -47,7 +51,7 @@ func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination
     if _, err := m.lookup(ref); err != nil { return Task{}, err }
     ctx, cancel := context.WithCancel(context.Background())
     task := Task{ID:domain.NewID(), Ref:ref, Direction:direction, Source:source,
-        Destination:destination, Name:filepath.Base(source), Overwrite:overwrite, Status:"queued", Created:time.Now().UnixMilli()}
+        Destination:destination, Name:filepath.Base(source), Overwrite:overwrite, Resume:resume, Status:"queued", Created:time.Now().UnixMilli()}
     if direction == "download" { task.Name = path.Base(source) }
     m.mu.Lock()
     if m.closed { m.mu.Unlock(); cancel(); return Task{}, errors.New("file manager closed") }
@@ -209,16 +213,28 @@ func sizeRemote(c *pkg.Client,source string)(int64,error) {
     }
     return total,nil
 }
+// Partial files are deterministic across app restarts. Prefix hashes are
+// checked before resuming; a changed source never appends to stale data.
+func partialName(source,destination string) string {
+    digest:=sha256.Sum256([]byte(source+"\x00"+destination))
+    return destination+".openshell-"+hex.EncodeToString(digest[:8])+".part"
+}
+func prefixMatches(left,right io.Reader,n int64) (bool,error) {
+    a,b:=sha256.New(),sha256.New()
+    if _,err:=io.CopyN(a,left,n);err!=nil{return false,err}
+    if _,err:=io.CopyN(b,right,n);err!=nil{return false,err}
+    return bytes.Equal(a.Sum(nil),b.Sum(nil)),nil
+}
 func (m *Manager) upload(j *job,c *pkg.Client,src,dst string) error {
     if err:=j.ctx.Err();err!=nil{return err}
     info,err:=os.Lstat(src)
     if err!=nil{return err}
     if info.Mode()&os.ModeSymlink!=0{return errSymlink}
-    if info.IsDir() {
+    if info.IsDir(){
         remote,err:=c.Lstat(dst)
-        if errors.Is(err,os.ErrNotExist) {
+        if errors.Is(err,os.ErrNotExist){
             if err=c.Mkdir(dst);err!=nil{return err}
-        } else if err!=nil{return err} else if !remote.IsDir() {return fmt.Errorf("target is not a directory: %s",dst)}
+        }else if err!=nil{return err}else if !remote.IsDir(){return fmt.Errorf("target is not a directory: %s",dst)}
         entries,err:=os.ReadDir(src)
         if err!=nil{return err}
         for _,ent:=range entries {
@@ -226,21 +242,49 @@ func (m *Manager) upload(j *job,c *pkg.Client,src,dst string) error {
         }
         return nil
     }
-    if _,err:=checkTarget(c.Lstat,dst,j.task.Overwrite);err!=nil{return err}
+    if _,err=checkTarget(c.Lstat,dst,j.task.Overwrite);err!=nil{return err}
     reader,err:=os.Open(src)
     if err!=nil{return err}
     defer reader.Close()
-    tmp:=dst+".openshell-"+j.task.ID+".part"
-    writer,err:=c.OpenFile(tmp,os.O_CREATE|os.O_EXCL|os.O_WRONLY)
+    temp:=partialName(src,dst)
+    var offset int64
+    part,err:=c.Lstat(temp)
+    if err!=nil && !errors.Is(err,os.ErrNotExist){return err}
+    if err==nil {
+        if !part.Mode().IsRegular(){return errors.New("partial upload target is not a regular file")}
+        if !j.task.Resume {
+            if err=c.Remove(temp);err!=nil{return err}
+        }else{
+            offset=part.Size()
+            if offset>info.Size(){return errors.New("partial upload is larger than the source; restart transfer")}
+            prefix,err:=c.Open(temp)
+            if err!=nil{return err}
+            match,checkErr:=prefixMatches(reader,prefix,offset)
+            closeErr:=prefix.Close()
+            if checkErr!=nil{return checkErr}
+            if closeErr!=nil{return closeErr}
+            if !match{return errors.New("partial upload differs from source; restart transfer")}
+        }
+    }
+    if _,err=reader.Seek(offset,io.SeekStart);err!=nil{return err}
+    flags:=os.O_WRONLY
+    if offset==0 {flags=os.O_WRONLY|os.O_CREATE|os.O_EXCL}
+    writer,err:=c.OpenFile(temp,flags)
     if err!=nil{return err}
-    defer c.Remove(tmp)
+    if offset>0 {
+        if _,err=writer.Seek(offset,io.SeekStart);err!=nil{writer.Close();return err}
+        m.progress(j,int(offset))
+    }
     err=copyContext(j.ctx,writer,reader,func(n int){m.progress(j,n)})
     closeErr:=writer.Close()
     if err!=nil{return err}
     if closeErr!=nil{return closeErr}
+    after,err:=os.Stat(src)
+    if err!=nil{return err}
+    if after.Size()!=info.Size() || !after.ModTime().Equal(info.ModTime()) {return errors.New("source file changed during upload")}
     exists,err:=checkTarget(c.Lstat,dst,j.task.Overwrite)
     if err!=nil{return err}
-    if exists { err=c.PosixRename(tmp,dst) } else { err=c.Rename(tmp,dst) }
+    if exists{err=c.PosixRename(temp,dst)}else{err=c.Rename(temp,dst)}
     if err!=nil{return err}
     return c.Chmod(dst,info.Mode().Perm())
 }
@@ -249,9 +293,9 @@ func (m *Manager) download(j *job,c *pkg.Client,src,dst string) error {
     info,err:=c.Lstat(src)
     if err!=nil{return err}
     if info.Mode()&os.ModeSymlink!=0{return errSymlink}
-    if info.IsDir() {
+    if info.IsDir(){
         local,err:=os.Lstat(dst)
-        if errors.Is(err,os.ErrNotExist) {
+        if errors.Is(err,os.ErrNotExist){
             if err=os.Mkdir(dst,0755);err!=nil{return err}
         }else if err!=nil{return err}else if !local.IsDir(){return fmt.Errorf("target is not a directory: %s",dst)}
         entries,err:=c.ReadDir(src)
@@ -261,20 +305,48 @@ func (m *Manager) download(j *job,c *pkg.Client,src,dst string) error {
         }
         return nil
     }
-    if _,err:=checkTarget(os.Lstat,dst,j.task.Overwrite);err!=nil{return err}
+    if _,err=checkTarget(os.Lstat,dst,j.task.Overwrite);err!=nil{return err}
     reader,err:=c.Open(src)
     if err!=nil{return err}
     defer reader.Close()
-    tmp:=dst+".openshell-"+j.task.ID+".part"
-    writer,err:=os.OpenFile(tmp,os.O_CREATE|os.O_EXCL|os.O_WRONLY,0600)
+    temp:=partialName(src,dst)
+    var offset int64
+    part,err:=os.Lstat(temp)
+    if err!=nil && !errors.Is(err,os.ErrNotExist){return err}
+    if err==nil{
+        if !part.Mode().IsRegular(){return errors.New("partial download target is not a regular file")}
+        if !j.task.Resume{
+            if err=os.Remove(temp);err!=nil{return err}
+        }else{
+            offset=part.Size()
+            if offset>info.Size(){return errors.New("partial download is larger than source; restart transfer")}
+            existing,err:=os.Open(temp)
+            if err!=nil{return err}
+            match,checkErr:=prefixMatches(reader,existing,offset)
+            closeErr:=existing.Close()
+            if checkErr!=nil{return checkErr}
+            if closeErr!=nil{return closeErr}
+            if !match{return errors.New("partial download differs from source; restart transfer")}
+        }
+    }
+    if _,err=reader.Seek(offset,io.SeekStart);err!=nil{return err}
+    flags:=os.O_WRONLY
+    if offset==0{flags=os.O_WRONLY|os.O_CREATE|os.O_EXCL}
+    writer,err:=os.OpenFile(temp,flags,0600)
     if err!=nil{return err}
-    defer os.Remove(tmp)
+    if offset>0{
+        if _,err=writer.Seek(offset,io.SeekStart);err!=nil{writer.Close();return err}
+        m.progress(j,int(offset))
+    }
     err=copyContext(j.ctx,writer,reader,func(n int){m.progress(j,n)})
     closeErr:=writer.Close()
     if err!=nil{return err}
     if closeErr!=nil{return closeErr}
+    after,err:=c.Lstat(src)
+    if err!=nil{return err}
+    if info.Size()!=after.Size() || !info.ModTime().Equal(after.ModTime()) {return errors.New("source file changed during download")}
     if _,err=checkTarget(os.Lstat,dst,j.task.Overwrite);err!=nil{return err}
-    if err=os.Rename(tmp,dst);err!=nil{return err}
+    if err=os.Rename(temp,dst);err!=nil{return err}
     return os.Chmod(dst,info.Mode().Perm())
 }
 func copyContext(ctx context.Context,dst io.Writer,src io.Reader,progress func(int)) error {
