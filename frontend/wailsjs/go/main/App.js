@@ -169,6 +169,10 @@ export function CreateConversation(arg1) {
   return window['go']['main']['App']['CreateConversation'](arg1);
 }
 
+export function StartConversationDraft(arg1) {
+  return window['go']['main']['App']['StartConversationDraft'](arg1);
+}
+
 export function RenameConversation(arg1, arg2, arg3) {
   return window['go']['main']['App']['RenameConversation'](arg1, arg2, arg3);
 }

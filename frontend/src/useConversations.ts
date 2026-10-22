@@ -16,6 +16,7 @@ import type {
 export function useConversations() {
   const [cache, setCache] = useState<Record<string, ConversationCache>>({});
   const [selectedByTab, setSelected] = useState<Record<string, string>>({});
+  const [serverKeysByTab, setServerKeys] = useState<Record<string, string>>({});
   const [lists, setLists] = useState<Record<string, ConversationList>>({});
   const [loadingByTab, setLoading] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, unknown>>({});
@@ -75,6 +76,13 @@ export function useConversations() {
               }
             }
             setSelection(accepted);
+            if (e.serverKey && Object.keys(accepted).length) {
+              setServerKeys((old) => {
+                const next = { ...old };
+                for (const tab of Object.keys(accepted)) next[tab] = e.serverKey;
+                return next;
+              });
+            }
           }
         }
         const fresh =
@@ -96,17 +104,18 @@ export function useConversations() {
       }),
     [setSelection],
   );
-  const accept = useCallback(
-    (p: ConversationPage) =>
-      setCache((old) => ({
-        ...old,
-        [p.conversation.id]: mergeConversationPage(
-          old[p.conversation.id] ?? emptyConversationCache(),
-          p,
-        ),
-      })),
-    [],
-  );
+  const accept = useCallback((p: ConversationPage) => {
+    if (!p?.conversation) {
+      throw new Error("Conversation history response is unavailable");
+    }
+    setCache((old) => ({
+      ...old,
+      [p.conversation.id]: mergeConversationPage(
+        old[p.conversation.id] ?? emptyConversationCache(),
+        p,
+      ),
+    }));
+  }, []);
   const list = useCallback(async (ref: Ref, key: string, more = false) => {
     const cursor: ConversationCursor | null = more
       ? (listsRef.current[key]?.nextCursor ?? null)
@@ -154,6 +163,10 @@ export function useConversations() {
           return;
         accept(p);
         setSelection({ [ref.tabId]: id });
+        setServerKeys((old) => ({
+          ...old,
+          [ref.tabId]: p.conversation.serverKey,
+        }));
         await list(ref, p.conversation.serverKey);
       } catch (e) {
         if (epochs.current[ref.tabId] === token)
@@ -168,9 +181,24 @@ export function useConversations() {
     },
     [accept, list, setSelection],
   );
-  const create = async (ref: Ref) => {
-    const c = await api.CreateConversation(ref);
-    await restore(ref, c.id);
+  const draft = async (ref: Ref) => {
+    const tab = ref.tabId;
+    const token = (epochs.current[tab] ?? 0) + 1;
+    epochs.current[tab] = token;
+    refs.current[tab] = ref;
+    delete pending.current[tab];
+    setLoading((old) => ({ ...old, [tab]: true }));
+    setErrors((old) => ({ ...old, [tab]: null }));
+    try {
+      await api.StartConversationDraft(ref);
+      if (epochs.current[tab] === token) {
+        setSelection({ [tab]: "" });
+      }
+    } finally {
+      if (epochs.current[tab] === token) {
+        setLoading((old) => ({ ...old, [tab]: false }));
+      }
+    }
   };
   const select = async (ref: Ref, id: string) => restore(ref, id, true);
   const rename = async (ref: Ref, id: string, title: string) => {
@@ -192,6 +220,11 @@ export function useConversations() {
     delete next[tabID];
     selectedRef.current = next;
     setSelected(next);
+    setServerKeys((old) => {
+      const copy = { ...old };
+      delete copy[tabID];
+      return copy;
+    });
   };
   useEffect(() => {
     for (const [tab, id] of Object.entries(selectedByTab)) {
@@ -204,12 +237,13 @@ export function useConversations() {
   return {
     cache,
     selectedByTab,
+    serverKeysByTab,
     lists,
     loadingByTab,
     errors,
     restore,
     list,
-    create,
+    draft,
     select,
     rename,
     remove,

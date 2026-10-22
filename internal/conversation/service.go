@@ -25,6 +25,7 @@ type Service struct {
 	sequences                 map[string]uint64
 	selectionSequences        map[string]uint64
 	streams                   map[string]domain.ConversationMessage
+	pendingDrafts             map[string]bool
 	emit                      func(domain.ConversationEvent)
 }
 
@@ -32,7 +33,7 @@ func NewService(db *store.Store, emit func(domain.ConversationEvent)) *Service {
 	if emit == nil {
 		emit = func(domain.ConversationEvent) {}
 	}
-	return &Service{persistent: db, db: db, bindings: map[string]binding{}, runs: map[string]domain.ConversationRun{}, sequences: map[string]uint64{}, selectionSequences: map[string]uint64{}, streams: map[string]domain.ConversationMessage{}, emit: emit}
+	return &Service{persistent: db, db: db, bindings: map[string]binding{}, runs: map[string]domain.ConversationRun{}, sequences: map[string]uint64{}, selectionSequences: map[string]uint64{}, streams: map[string]domain.ConversationMessage{}, pendingDrafts: map[string]bool{}, emit: emit}
 }
 func ServerKey(s domain.Session) string {
 	data, _ := json.Marshal([]any{s.ID, strings.ToLower(strings.TrimSpace(s.Host)), s.Port, s.Username})
@@ -71,7 +72,11 @@ func (s *Service) publish(c domain.Conversation, kind string, run *domain.Conver
 			}
 		}
 	}
-	s.emit(domain.ConversationEvent{EventID: domain.NewID(), EventSeq: s.sequences[c.ID], ServerKey: c.ServerKey, ConversationID: c.ID, Kind: kind, Revision: c.Revision, Run: run, Message: message, Conversation: &c, SelectedByTab: selected, SelectedRefs: selectedRefs, SelectionRevision: selectionRevision, Status: status})
+	var metadata *domain.Conversation
+	if c.ID != "" {
+		metadata = &c
+	}
+	s.emit(domain.ConversationEvent{EventID: domain.NewID(), EventSeq: s.sequences[c.ID], ServerKey: c.ServerKey, ConversationID: c.ID, Kind: kind, Revision: c.Revision, Run: run, Message: message, Conversation: metadata, SelectedByTab: selected, SelectedRefs: selectedRefs, SelectionRevision: selectionRevision, Status: status})
 }
 func (s *Service) runFor(id string) *domain.ConversationRun {
 	for _, r := range s.runs {
@@ -117,10 +122,8 @@ func (s *Service) bind(ctx context.Context, ref domain.ConnectionRef, row domain
 		if len(list.Items) > 0 {
 			c = list.Items[0]
 		} else {
-			c, err = s.db.CreateConversation(ctx, key, row.ID)
-			if err != nil {
-				return c, err
-			}
+			s.bindings[ref.TabID] = binding{ref, row, key, ""}
+			return domain.Conversation{}, nil
 		}
 	}
 	if c.ServerKey != key {
@@ -137,7 +140,11 @@ func (s *Service) Bind(ctx context.Context, ref domain.ConnectionRef, row domain
 	defer s.mu.Unlock()
 	c, e := s.bind(ctx, ref, row)
 	if e == nil {
-		s.publish(c, "selection", s.runFor(c.ID), nil, "")
+		if c.ID == "" {
+			s.publish(domain.Conversation{ServerKey: ServerKey(row)}, "selection", nil, nil, "")
+		} else {
+			s.publish(c, "selection", s.runFor(c.ID), nil, "")
+		}
 	}
 	return c, e
 }
@@ -185,6 +192,29 @@ func (s *Service) Create(ctx context.Context, ref domain.ConnectionRef) (domain.
 	s.bindings[ref.TabID] = b
 	s.publish(c, "created", nil, nil, "")
 	return c, nil
+}
+// StartDraft selects an unsaved, tab-local conversation without creating a database row.
+func (s *Service) StartDraft(ctx context.Context, ref domain.ConnectionRef) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b, err := s.binding(ref)
+	if err != nil {
+		return err
+	}
+	if s.tabRun(ref) != nil {
+		return apperror.New("memoryBusy", nil)
+	}
+	if b.ID == "" {
+		return nil
+	}
+	previous, err := s.owned(ctx, b, b.ID)
+	if err != nil {
+		return err
+	}
+	b.ID = ""
+	s.bindings[ref.TabID] = b
+	s.publish(previous, "selection", s.runFor(previous.ID), nil, "")
+	return nil
 }
 func (s *Service) Select(ctx context.Context, ref domain.ConnectionRef, id string) (domain.ConversationPage, error) {
 	s.mu.Lock()
@@ -274,6 +304,9 @@ func (s *Service) Clear(ctx context.Context, ref domain.ConnectionRef) error {
 	if e != nil {
 		return e
 	}
+	if b.ID == "" {
+		return nil
+	}
 	if s.runFor(b.ID) != nil {
 		return apperror.New("memoryBusy", nil)
 	}
@@ -312,7 +345,9 @@ func (s *Service) Delete(ctx context.Context, ref domain.ConnectionRef, id strin
 		}
 	}
 	s.publish(c, "deleted", nil, nil, "")
-	s.publish(replacement, "selection", s.runFor(replacement.ID), nil, "")
+	if replacement.ID != "" {
+		s.publish(replacement, "selection", s.runFor(replacement.ID), nil, "")
+	}
 	return nil
 }
 func (s *Service) Begin(ref domain.ConnectionRef, kind string) (domain.ConversationRun, error) {
@@ -322,8 +357,23 @@ func (s *Service) Begin(ref domain.ConnectionRef, kind string) (domain.Conversat
 	if e != nil {
 		return domain.ConversationRun{}, e
 	}
-	if s.runFor(b.ID) != nil || s.tabRun(ref) != nil {
+	if s.tabRun(ref) != nil || (b.ID != "" && s.runFor(b.ID) != nil) {
 		return domain.ConversationRun{}, apperror.New("memoryBusy", nil)
+	}
+	created := false
+	if b.ID == "" {
+		c, err := s.db.CreateConversation(context.Background(), b.Key, b.Session.ID)
+		if err != nil {
+			return domain.ConversationRun{}, err
+		}
+		if err := s.db.SelectConversation(context.Background(), b.Key, c.ID); err != nil {
+			_ = s.db.DeleteConversation(context.Background(), c.ID)
+			return domain.ConversationRun{}, err
+		}
+		b.ID = c.ID
+		s.bindings[ref.TabID] = b
+		s.publish(c, "created", nil, nil, "")
+		created = true
 	}
 	c, e := s.db.GetConversation(context.Background(), b.ID)
 	if e != nil {
@@ -331,6 +381,9 @@ func (s *Service) Begin(ref domain.ConnectionRef, kind string) (domain.Conversat
 	}
 	r := domain.ConversationRun{ID: domain.NewID(), ConversationID: b.ID, OwnerRef: ref, Kind: kind, Status: "running"}
 	s.runs[r.ID] = r
+	if created {
+		s.pendingDrafts[r.ID] = true
+	}
 	s.publish(c, "run", &r, nil, "")
 	return r, nil
 }
@@ -364,6 +417,22 @@ func (s *Service) End(id string) {
 	}
 	delete(s.runs, id)
 	delete(s.streams, id)
+	fresh := s.pendingDrafts[id]
+	delete(s.pendingDrafts, id)
+	if fresh {
+		ctx := context.Background()
+		page, err := s.db.ReadConversation(ctx, r.ConversationID, 0, 1)
+		if err == nil && len(page.Messages) == 0 {
+			if err = s.db.DeleteConversation(ctx, r.ConversationID); err == nil {
+				if b, exists := s.bindings[r.OwnerRef.TabID]; exists && b.Ref == r.OwnerRef && b.ID == r.ConversationID {
+					b.ID = ""
+					s.bindings[r.OwnerRef.TabID] = b
+				}
+				s.publish(page.Conversation, "deleted", nil, nil, "")
+				return
+			}
+		}
+	}
 	if c, e := s.db.GetConversation(context.Background(), r.ConversationID); e == nil {
 		s.publish(c, "run", nil, nil, "")
 	}
@@ -510,7 +579,9 @@ func (s *Service) Configure(ctx context.Context, save bool) error {
 		s.temporary = nextDB
 	}
 	for _, b := range s.bindings {
-		if c, err := s.db.GetConversation(ctx, b.ID); err == nil {
+		if b.ID == "" {
+			s.publish(domain.Conversation{ServerKey: b.Key}, "selection", nil, nil, "")
+		} else if c, err := s.db.GetConversation(ctx, b.ID); err == nil {
 			s.publish(c, "selection", nil, nil, "")
 		}
 	}

@@ -2,9 +2,10 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { initializeI18n } from "../i18n";
 import ConversationPicker from "./ConversationPicker";
-const c = {
+
+const conversation = {
   id: "one",
-  serverKey: "s",
+  serverKey: "server",
   sessionId: "s",
   title: "Redis",
   titleManual: true,
@@ -12,65 +13,85 @@ const c = {
   summaryThroughSeq: 0,
   revision: 0,
   createdAt: "",
-  updatedAt: "",
+  updatedAt: "2026-10-22T02:00:00Z",
 };
+const handlers = () => ({
+  onSelect: vi.fn(),
+  onCreate: vi.fn(),
+  onRename: vi.fn(),
+  onDelete: vi.fn(),
+  onLoadMore: vi.fn(),
+});
 beforeEach(() => initializeI18n("zh-CN"));
 afterEach(cleanup);
-test("picker selects by conversation ID and exposes compact management actions", () => {
-  const onSelect = vi.fn(),
-    onCreate = vi.fn(),
-    onRename = vi.fn(),
-    onDelete = vi.fn(),
-    onLoadMore = vi.fn();
+
+test("compact picker keeps time in dropdown and manages each historical conversation", () => {
+  const events = handlers();
   render(
     <ConversationPicker
-      items={[c, { ...c, id: "two" }]}
+      items={[conversation, { ...conversation, id: "two", title: "CPU" }]}
       selectedID="one"
       busy={false}
       locked={false}
-      hasMore={true}
-      onSelect={onSelect}
-      onCreate={onCreate}
-      onRename={onRename}
-      onDelete={onDelete}
-      onLoadMore={onLoadMore}
+      hasMore
+      {...events}
     />,
   );
-  fireEvent.change(screen.getByLabelText("当前对话"), {
-    target: { value: "two" },
-  });
-  expect(onSelect).toHaveBeenCalledWith("two");
+  const trigger = screen.getByRole("button", { name: "当前对话" });
+  expect(trigger.textContent).toBe("Redis");
+  fireEvent.click(trigger);
+  expect(screen.getByRole("listbox")).toBeTruthy();
+  fireEvent.contextMenu(screen.getByRole("option", { name: /CPU/ }));
+  fireEvent.click(screen.getAllByTitle("重命名对话")[1]);
+  expect(events.onRename).toHaveBeenCalledWith("two");
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole("option", { name: /CPU/ }));
+  expect(events.onSelect).toHaveBeenCalledWith("two");
   fireEvent.click(screen.getByTitle("新建对话"));
-  expect(onCreate).toHaveBeenCalledOnce();
-  fireEvent.click(screen.getByTitle("重命名对话"));
-  expect(onRename).toHaveBeenCalledWith("one");
-  fireEvent.click(screen.getByTitle("删除对话"));
-  expect(onDelete).toHaveBeenCalledWith("one");
-  fireEvent.click(screen.getByTitle("加载更多对话"));
-  expect(onLoadMore).toHaveBeenCalledOnce();
+  expect(events.onCreate).toHaveBeenCalledOnce();
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getAllByTitle("删除对话")[0]);
+  expect(events.onDelete).toHaveBeenCalledWith("one");
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByText("加载更多对话"));
+  expect(events.onLoadMore).toHaveBeenCalledOnce();
 });
-test("busy owner cannot switch, while a peer may open another conversation", () => {
-  const props = {
-    items: [c],
-    selectedID: "one",
-    busy: true,
-    locked: true,
-    hasMore: false,
-    onSelect: vi.fn(),
-    onCreate: vi.fn(),
-    onRename: vi.fn(),
-    onDelete: vi.fn(),
-    onLoadMore: vi.fn(),
-  };
-  const { rerender } = render(<ConversationPicker {...props} />);
-  expect(
-    (screen.getByLabelText("当前对话") as HTMLSelectElement).disabled,
-  ).toBe(true);
-  rerender(<ConversationPicker {...props} busy={false} />);
-  expect(
-    (screen.getByLabelText("当前对话") as HTMLSelectElement).disabled,
-  ).toBe(false);
-  expect((screen.getByTitle("删除对话") as HTMLButtonElement).disabled).toBe(
-    true,
+
+test("new empty draft is not repeatedly created and a locked owner cannot switch", () => {
+  const events = handlers();
+  const { rerender } = render(
+    <ConversationPicker
+      items={[conversation]}
+      selectedID=""
+      busy={false}
+      locked={false}
+      hasMore={false}
+      {...events}
+    />,
   );
+  fireEvent.click(screen.getByRole("button", { name: "新建对话" }));
+  expect(events.onCreate).not.toHaveBeenCalled();
+  rerender(
+    <ConversationPicker
+      items={[conversation]}
+      selectedID="one"
+      busy
+      locked
+      hasMore={false}
+      {...events}
+    />,
+  );
+  expect((screen.getByRole("button", { name: "当前对话" }) as HTMLButtonElement).disabled).toBe(true);
+  rerender(
+    <ConversationPicker
+      items={[conversation]}
+      selectedID="one"
+      busy={false}
+      locked
+      hasMore={false}
+      {...events}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "当前对话" }));
+  expect((screen.getByTitle("删除对话") as HTMLButtonElement).disabled).toBe(true);
 });

@@ -15,6 +15,7 @@ vi.mock("./bridge", () => ({
     ReadConversation: vi.fn(),
     SelectConversation: vi.fn(),
     ListConversations: vi.fn(),
+    StartConversationDraft: vi.fn(async () => {}),
   },
 }));
 afterEach(() => {
@@ -148,4 +149,14 @@ test("a read response arriving after deletion cannot select the deleted conversa
     await pending;
   });
   await waitFor(() => expect(result.current.selectedByTab.tab).toBe("c2"));
+});
+
+test("unsent new drafts only switch the tab and do not create saved conversations", async () => {
+  const { result } = renderHook(() => useConversations());
+  await act(async () => {
+    await result.current.draft(ref);
+  });
+  expect(result.current.selectedByTab.tab).toBe("");
+  expect(api.StartConversationDraft).toHaveBeenCalledTimes(1);
+  expect(result.current.lists).toEqual({});
 });

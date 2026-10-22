@@ -49,6 +49,18 @@ func memoryFixtureAt(t *testing.T, tool bool, path string) (*App, domain.Session
 	}
 	one := memoryConnect(t, a, row, "a")
 	two := memoryConnect(t, a, row, "b")
+	if one.ConversationID != "" || two.ConversationID != "" {
+		t.Fatal("initial SSH connection created unwanted history", one, two)
+	}
+	seed, e := a.CreateConversation(one.Ref)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = a.SelectConversation(two.Ref, seed.ID); e != nil {
+		t.Fatal(e)
+	}
+	one.ConversationID = seed.ID
+	two.ConversationID = seed.ID
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		delta := map[string]any{"content": "remembered"}
@@ -363,4 +375,39 @@ func TestLateRevisionCannotReviveCancelledProposal(t *testing.T) {
 		t.Error("cancelled proposal revived")
 	}
 	done()
+}
+
+func TestConversationDraftPersistsOnlyAfterSending(t *testing.T) {
+	a, row, first, peer, profile, _ := memoryFixture(t, false)
+	list, err := a.ListConversations(first.Ref, nil, 50)
+	if err != nil || len(list.Items) != 1 {
+		t.Fatal(list, err)
+	}
+	if err = a.StartConversationDraft(first.Ref); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.StartConversationDraft(first.Ref); err != nil {
+		t.Fatal(err)
+	}
+	list, err = a.ListConversations(first.Ref, nil, 50)
+	if err != nil || len(list.Items) != 1 {
+		t.Fatal("empty draft persisted", list, err)
+	}
+	if _, err = a.Chat(ChatRequest{Ref: first.Ref, ProfileID: profile.ID, Text: "new session"}); err != nil {
+		t.Fatal(err)
+	}
+	list, err = a.ListConversations(first.Ref, nil, 50)
+	if err != nil || len(list.Items) != 2 {
+		t.Fatal("first message did not save draft", list, err)
+	}
+	peerSelected, err := a.memory.Selected(peer.Ref)
+	if err != nil || peerSelected != peer.ConversationID {
+		t.Fatal("changed peer selection", peerSelected, err)
+	}
+	a.CloseTab("a")
+	a.CloseTab("b")
+	reconnected := memoryConnect(t, a, row, "new")
+	if reconnected.ConversationID == "" {
+		t.Fatal("sent draft did not survive reconnect")
+	}
 }
