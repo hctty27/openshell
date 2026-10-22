@@ -87,6 +87,14 @@ func configDirective(line string) (string, string) {
 }
 
 func expandConfigFile(path string, depth int, active map[string]bool) ([]string, error) {
+ // OpenSSH resolves relative Include patterns against the user's ~/.ssh
+ // directory, including when an included config contains another Include.
+ baseDir, err := filepath.Abs(filepath.Dir(path))
+ if err != nil { return nil, err }
+ return expandConfigFileWithBase(path, baseDir, depth, active)
+}
+
+func expandConfigFileWithBase(path, baseDir string, depth int, active map[string]bool) ([]string, error) {
  if depth >= 8 { return nil, fmt.Errorf("SSH config Include nesting exceeds 8 levels") }
  abs, err := filepath.Abs(path)
  if err != nil { return nil, err }
@@ -109,11 +117,11 @@ func expandConfigFile(path string, depth int, active map[string]bool) ([]string,
   // Include is expanded in place, preserving Host section scope.
   for _, pattern := range strings.Fields(value) {
    pattern = expandUserPath(pattern)
-   if !filepath.IsAbs(pattern) { pattern = filepath.Join(filepath.Dir(abs), pattern) }
+   if !filepath.IsAbs(pattern) { pattern = filepath.Join(baseDir, pattern) }
    paths, err := filepath.Glob(pattern)
    if err != nil { return nil, err }
    for _, include := range paths {
-    child, err := expandConfigFile(include, depth+1, active)
+    child, err := expandConfigFileWithBase(include, baseDir, depth+1, active)
     if err != nil { return nil, err }
     lines = append(lines, child...)
    }
