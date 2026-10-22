@@ -93,6 +93,7 @@ vi.mock("../bridge", () => ({
     ResizeTerminal: vi.fn(async () => {}),
     OpenTerminal: vi.fn(async () => {}),
     Disconnect: vi.fn(async () => {}),
+    CancelZmodem: vi.fn(async () => {}),
   },
   listen: () => () => {},
   errorText: (value: unknown) => String(value),

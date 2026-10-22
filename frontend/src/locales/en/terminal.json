@@ -61,5 +61,7 @@
   "logs": "Logs",
   "resetSplitRatio": "Reset split ratio to 50/50",
   "resizeSplit": "Resize terminal split",
-  "zmodemTransferring": "ZMODEM transfer in progress — waiting for completion"
+  "zmodemTransferring": "ZMODEM transfer in progress — waiting for completion",
+  "cancelZmodem": "Cancel transfer",
+  "zmodemCancelling": "Cancelling…"
 }

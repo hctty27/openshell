@@ -737,7 +737,22 @@ kbd {
   background: var(--panel);
   color: var(--text-primary);
   font-size: 11px;
-  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.terminal-transfer-stats {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.terminal-transfer-indicator button {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+}
+.terminal-transfer-indicator button:disabled {
+  opacity: 0.55;
 }
 .terminal-find {
   position: absolute;

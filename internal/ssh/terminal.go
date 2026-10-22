@@ -7,6 +7,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"github.com/trzsz/trzsz-go/trzsz"
 	"io"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -203,12 +204,31 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 
 // terminalOutputCloser signals when the filtered output has been fully drained.
 type terminalOutputCloser struct {
-	writer *terminalWriter
-	done chan struct{}
-	once sync.Once
+    writer *terminalWriter
+    done chan struct{}
+    once sync.Once
+    mu sync.Mutex
+    tail []byte
+    lastProgress time.Time
 }
+var zmodemProgressPattern = regexp.MustCompile(`Transferred ([0-9.]+[[:space:]]*[KMGTPE]?B), Speed ((?:[0-9.]+[[:space:]]*[KMGTPE]?B/s)|N/A)`)
 func (o *terminalOutputCloser) Write(p []byte) (int, error) {
-	return o.writer.Write(p)
+    o.mu.Lock()
+    data := append(append([]byte(nil), o.tail...), p...)
+    matches := zmodemProgressPattern.FindAllSubmatch(data, -1)
+    if len(data) > 256 { data = data[len(data)-256:] }
+    o.tail = append(o.tail[:0], data...)
+    if len(matches) != 0 && time.Since(o.lastProgress) >= 180*time.Millisecond {
+        last := matches[len(matches)-1]
+        o.lastProgress = time.Now()
+        o.writer.m.emit("ssh:transfer-progress", map[string]any{
+            "ref": o.writer.c.ref,
+            "transferred": string(last[1]),
+            "speed": string(last[2]),
+        })
+    }
+    o.mu.Unlock()
+    return o.writer.Write(p)
 }
 func (o *terminalOutputCloser) Close() error {
 	o.once.Do(func() { o.writer.Close(); close(o.done) })
