@@ -79,7 +79,7 @@ export interface QuickCommand {
   category: string;
   scope: "global" | "group" | "session";
   scopeId: string;
-  mode: "run" | "insert";
+  mode?: "run" | "insert"; // Legacy persisted action.
   confirm: boolean;
 }
 export type ChatMode = "chat" | "confirm" | "auto";
