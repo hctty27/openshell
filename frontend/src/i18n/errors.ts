@@ -70,6 +70,7 @@ const importSkipCodes = {
   "too large": "errors:xshellPreviewTooLarge",
   "unsafe path": "errors:xshellPreviewUnsafePath",
   "size limit": "errors:xshellPreviewSizeLimit",
+  "invalid connection": "errors:backupInvalidConnection",
 } as const;
 
 export function importIssueText(value: string): string {
