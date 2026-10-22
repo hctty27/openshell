@@ -2,6 +2,7 @@ package sshclient
 
 import (
 	"context"
+	"errors"
 	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
@@ -296,7 +297,8 @@ func (m *Manager) Client(ref domain.ConnectionRef) (*ssh.Client, error) {
 
 func classifyDisconnect(err error) string {
 	if err == nil { return "remote_closed" }
-	if netErr, ok := err.(net.Error); ok && netErr.Timeout() { return "network_timeout" }
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() { return "network_timeout" }
 	return "connection_lost"
 }
 
@@ -339,15 +341,19 @@ func (m *Manager) startKeepaliveLocked(c *connection) {
 				case err := <-done:
 					if err == nil { continue }
 					m.mu.Lock()
-					if m.connections[c.ref.TabID] == c { c.disconnectReason = "keepalive_failed" }
+					if ctx.Err() == nil && m.connections[c.ref.TabID] == c {
+						c.disconnectReason = "keepalive_failed"
+						_ = c.client.Close()
+					}
 					m.mu.Unlock()
-					_ = c.client.Close()
 					return
 				case <-time.After(10 * time.Second):
 					m.mu.Lock()
-					if m.connections[c.ref.TabID] == c { c.disconnectReason = "keepalive_timeout" }
+					if ctx.Err() == nil && m.connections[c.ref.TabID] == c {
+						c.disconnectReason = "keepalive_timeout"
+						_ = c.client.Close()
+					}
 					m.mu.Unlock()
-					_ = c.client.Close()
 					return
 				}
 			}
