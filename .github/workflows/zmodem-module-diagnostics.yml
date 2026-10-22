@@ -1,0 +1,32 @@
+name: ZMODEM module diagnostics
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "internal/ssh/**"
+      - ".github/workflows/zmodem-module-diagnostics.yml"
+permissions:
+  contents: read
+jobs:
+  module-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Show tidy module diff
+        shell: bash
+        run: |
+          go mod tidy
+          echo 'START_GO_MOD_DIFF'
+          git diff -- go.mod
+          echo 'END_GO_MOD_DIFF'
+          echo 'START_GO_SUM_DIFF'
+          git diff -- go.sum
+          echo 'END_GO_SUM_DIFF'
+      - name: Validate compiled Go code
+        run: go test ./...
