@@ -28,6 +28,10 @@ vi.mock("@xterm/xterm", () => ({
     rows = 24;
     selected = "";
     onDataCallback = (_data: string) => {};
+    keyHandler = (_event: KeyboardEvent) => true;
+    attachCustomKeyEventHandler = vi.fn((callback: (event: KeyboardEvent) => boolean) => {
+      this.keyHandler = callback;
+    });
     getSelection = () => this.selected;
     open = vi.fn();
     write = vi.fn();
@@ -44,6 +48,22 @@ vi.mock("@xterm/xterm", () => ({
     constructor() {
       refs.terms.push(this);
     }
+  },
+}));
+vi.mock("@xterm/addon-search", () => ({
+  SearchAddon: class {
+    findNext = vi.fn(() => true);
+    findPrevious = vi.fn(() => true);
+    clearDecorations = vi.fn();
+  },
+}));
+vi.mock("@xterm/addon-web-links", () => ({
+  WebLinksAddon: class { constructor(_handler: unknown) {} },
+}));
+vi.mock("@xterm/addon-webgl", () => ({
+  WebglAddon: class {
+    onContextLoss = vi.fn();
+    dispose = vi.fn();
   },
 }));
 vi.mock("@xterm/addon-fit", () => ({
@@ -63,6 +83,7 @@ vi.mock("../bridge", () => ({
   errorText: (value: unknown) => String(value),
 }));
 vi.mock("../../wailsjs/runtime/runtime", () => ({
+  BrowserOpenURL: vi.fn(),
   ClipboardGetText: vi.fn(async () => "echo hello"),
   ClipboardSetText: vi.fn(async () => true),
 }));
@@ -217,4 +238,51 @@ test("multiline confirmation only pastes to the original connected tab", async (
   fireEvent.click(screen.getByRole("button", { name: "确认粘贴" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(refs.terms[0].paste).not.toHaveBeenCalled();
+});
+
+test("search shortcut opens localized terminal search and closes with Escape", async () => {
+  const { rerender } = renderTerminal({ searchFocusVersion: 0 });
+  const keyEvent = {
+    type: "keydown",
+    key: "f",
+    ctrlKey: true,
+    shiftKey: true,
+    altKey: false,
+    metaKey: false,
+    preventDefault: vi.fn(),
+  } as unknown as KeyboardEvent;
+  expect(refs.terms[0].keyHandler(keyEvent)).toBe(false);
+  expect(keyEvent.preventDefault).toHaveBeenCalled();
+  const field = await screen.findByRole("textbox", { name: "搜索终端内容" });
+  fireEvent.change(field, { target: { value: "hello" } });
+  fireEvent.keyDown(field, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("textbox", { name: "搜索终端内容" })).toBeNull());
+  rerender(
+    <DialogProvider>
+      <TerminalPane
+        tab={tab} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        searchFocusVersion={1}
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()}
+      />
+    </DialogProvider>,
+  );
+  expect(await screen.findByRole("textbox", { name: "搜索终端内容" })).toBeTruthy();
+});
+
+test("keyboard clipboard shortcuts preserve normal Ctrl+C and ordered writes", async () => {
+  renderTerminal();
+  const terminal = refs.terms[0];
+  const key = (letter: string, shiftKey: boolean) => ({
+    type: "keydown", key: letter, ctrlKey: true, shiftKey,
+    altKey: false, metaKey: false, preventDefault: vi.fn(),
+  }) as unknown as KeyboardEvent;
+  expect(terminal.keyHandler(key("c", false))).toBe(true);
+  terminal.selected = "selected output";
+  expect(terminal.keyHandler(key("c", true))).toBe(false);
+  await waitFor(() => expect(ClipboardSetText).toHaveBeenCalledWith("selected output"));
+  terminal.onDataCallback("first");
+  terminal.onDataCallback("second");
+  await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalled());
+  expect(api.WriteTerminal).toHaveBeenCalledWith(tab.ref, btoa("firstsecond"));
 });
