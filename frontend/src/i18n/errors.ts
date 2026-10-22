@@ -65,6 +65,23 @@ export function errorText(value: unknown): string {
       ? summary
       : `${summary}: ${payload.code}`;
 }
+
+const importSkipCodes = {
+  "too large": "errors:xshellPreviewTooLarge",
+  "unsafe path": "errors:xshellPreviewUnsafePath",
+  "size limit": "errors:xshellPreviewSizeLimit",
+} as const;
+
+export function importIssueText(value: string): string {
+  const split = value.lastIndexOf(": ");
+  if (split < 0) return value;
+  const name = value.slice(0, split);
+  const reason = value.slice(split + 2);
+  if (reason.startsWith(prefix)) return `${name}: ${errorText(reason)}`;
+  const code = importSkipCodes[reason as keyof typeof importSkipCodes];
+  return code ? `${name}: ${t(code)}` : value;
+}
+
 export function reasonText(value: {
   reasonCode?: string;
   reasonParams?: Record<string, string | number>;
