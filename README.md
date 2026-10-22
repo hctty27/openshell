@@ -149,3 +149,27 @@ Windows 实测范围和操作步骤见 [验证记录](docs/windows-acceptance.md
 - 指纹变化时阻止连接；第一版不提供直接覆盖已信任指纹的按钮。
 - 已知小问题：近期终端历史已按上限裁剪时，预览可能遗漏截断提示；发送文本仍受 200 行/32 KiB 限制。
 - Windows 原生输入法、剪贴板、凭据存储与性能仍需实机验证；真实模型与自定义接口的工具调用支持情况需分别验证。
+
+### AI conversation memory
+
+Each saved server connection owns a shared list of conversations. SSH tabs can
+choose different conversations or view the same conversation with synchronized
+messages. Use the conversation selector to create, rename, delete or resume a
+conversation; duplicated SSH tabs resume the server's last selected conversation.
+
+History and summaries are stored locally and survive closing tabs or restarting
+OpenShell. Clearing or deleting a conversation affects every tab viewing it.
+Only the tab that starts a request can control its commands; reconnecting never
+resumes a pending command or automatic task.
+
+AI settings include **Save conversation history** and **Summarize long
+conversations**, both enabled by default. Turning saving off starts shared
+temporary conversations and leaves existing saved history intact. Turning it
+back on restores saved history without saving the temporary content. Stop active
+tasks before changing the storage mode.
+
+Long conversations use a summary plus recent complete turns. The default request
+budget is 48 KiB of serialized data, not an exact Token limit. Summarization uses
+the selected model and may consume additional credits; if it fails, OpenShell
+keeps the original history and uses bounded recent context. Server output is
+included only when explicitly attached or returned by an AI-executed command.

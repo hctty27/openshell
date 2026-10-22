@@ -25,8 +25,12 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	s := &Store{db}
-	_, e = db.Exec(`PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,data TEXT NOT NULL);CREATE TABLE IF NOT EXISTS groups(id TEXT PRIMARY KEY,data TEXT NOT NULL);CREATE TABLE IF NOT EXISTS profiles(id TEXT PRIMARY KEY,data TEXT NOT NULL);CREATE TABLE IF NOT EXISTS hostkeys(address TEXT PRIMARY KEY,key BLOB NOT NULL);CREATE TABLE IF NOT EXISTS preferences(key TEXT PRIMARY KEY,value TEXT NOT NULL);PRAGMA user_version=1;`)
+	_, e = db.Exec(`PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,data TEXT NOT NULL);CREATE TABLE IF NOT EXISTS groups(id TEXT PRIMARY KEY,data TEXT NOT NULL);CREATE TABLE IF NOT EXISTS profiles(id TEXT PRIMARY KEY,data TEXT NOT NULL);CREATE TABLE IF NOT EXISTS hostkeys(address TEXT PRIMARY KEY,key BLOB NOT NULL);CREATE TABLE IF NOT EXISTS preferences(key TEXT PRIMARY KEY,value TEXT NOT NULL);`)
 	if e != nil {
+		db.Close()
+		return nil, e
+	}
+	if e = s.migrateConversations(); e != nil {
 		db.Close()
 		return nil, e
 	}
@@ -88,8 +92,21 @@ func (s *Store) SaveSession(ctx context.Context, v domain.Session) error {
 	return s.save(ctx, "INSERT INTO sessions(id,data)VALUES(?,?) ON CONFLICT(id)DO UPDATE SET data=excluded.data", v.ID, v)
 }
 func (s *Store) DeleteSession(ctx context.Context, id string) error {
-	_, e := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE id=?", id)
-	return e
+	tx, e := s.db.BeginTx(ctx, nil)
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback()
+	for _, query := range []string{
+		"DELETE FROM conversation_messages WHERE conversation_id IN (SELECT id FROM conversations WHERE session_id=?)",
+		"DELETE FROM conversation_selections WHERE last_conversation_id IN (SELECT id FROM conversations WHERE session_id=?)",
+		"DELETE FROM conversations WHERE session_id=?", "DELETE FROM sessions WHERE id=?",
+	} {
+		if _, e = tx.ExecContext(ctx, query, id); e != nil {
+			return e
+		}
+	}
+	return tx.Commit()
 }
 func (s *Store) ListGroups(ctx context.Context) ([]domain.Group, error) {
 	return list[domain.Group](ctx, s.db, "SELECT data FROM groups ORDER BY id")

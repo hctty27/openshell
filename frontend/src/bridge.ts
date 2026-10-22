@@ -16,15 +16,40 @@ import type {
   Proposal,
   CommandResult,
   AutoSnapshot,
+  Conversation,
+  ConversationCursor,
+  ConversationList,
+  ConversationPage,
 } from "./types";
 type Backend = {
+  ListConversations(
+    ref: Ref,
+    cursor: ConversationCursor | null,
+    limit: number,
+  ): Promise<ConversationList>;
+  ReadConversation(
+    ref: Ref,
+    id: string,
+    beforeSeq: number,
+    limit: number,
+  ): Promise<ConversationPage>;
+  CreateConversation(ref: Ref): Promise<Conversation>;
+  SelectConversation(ref: Ref, id: string): Promise<ConversationPage>;
+  RenameConversation(
+    ref: Ref,
+    id: string,
+    title: string,
+  ): Promise<Conversation>;
+  DeleteConversation(ref: Ref, id: string): Promise<void>;
+
   StartAutomatic(req: ChatRequest, taskID: string): Promise<AutoSnapshot>;
   ResumeAutomatic(
+    ref: Ref,
     taskID: string,
     approvedProposalID: string,
     extend: boolean,
   ): Promise<AutoSnapshot>;
-  StopAutomatic(taskID: string): Promise<void>;
+  StopAutomatic(ref: Ref, taskID: string): Promise<void>;
   State(): Promise<AppState>;
   PreviewXshellImport(): Promise<XshellImportPreview>;
   PreviewSessionBackup(): Promise<XshellImportPreview>;
@@ -55,17 +80,18 @@ type Backend = {
     text: string,
   ): Promise<{ text: string; truncated: boolean }>;
   ClearChat(id: string): Promise<void>;
-  CancelChat(id: string): Promise<void>;
+  CancelChat(ref: Ref): Promise<void>;
   Chat(req: ChatRequest): Promise<ChatResponse>;
   Continue(req: ChatRequest): Promise<ChatResponse>;
   ReviseProposal(
+    ref: Ref,
     id: string,
     command: string,
     cwd: string,
     seconds: number,
   ): Promise<Proposal>;
-  ConfirmCommand(id: string): Promise<CommandResult>;
-  CancelCommand(id: string): Promise<void>;
+  ConfirmCommand(ref: Ref, id: string): Promise<CommandResult>;
+  CancelCommand(ref: Ref, id: string): Promise<void>;
 };
 declare global {
   interface Window {

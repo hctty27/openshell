@@ -2722,6 +2722,89 @@ select.mode-select {
 }
 
 
+.conversation-picker {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 30px;
+  padding: 3px 9px;
+  border-bottom: 1px solid var(--border);
+}
+.conversation-picker select {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 2px 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+.conversation-picker button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: transparent;
+}
+.conversation-picker button:hover {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+.conversation-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.conversation-status:empty {
+  display: none;
+}
+.conversation-status button,
+.load-history {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 10px;
+  padding: 2px 4px;
+}
+.load-history {
+  display: block;
+  margin: 0 auto 8px;
+}
+.settings-memory {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.settings-memory label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.settings-memory input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+.settings-memory p {
+  margin: 4px 0 10px;
+  line-height: 1.5;
+}
+.settings-memory p:last-child {
+  margin-bottom: 0;
+}
+
 /* Portable SSH session import preview */
 .xshell-import-dialog {
   width: min(620px, calc(100vw - 32px));

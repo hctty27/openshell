@@ -44,6 +44,8 @@ interface Props {
   fontSize: number;
   autoCommandLimit?: number;
   autoAllowChanges?: boolean;
+  saveChatHistory?: boolean;
+  autoSummarize?: boolean;
   theme: Theme;
   onTheme(theme: Theme): void;
   quickCommandLayout: QuickCommandLayout;
@@ -319,7 +321,49 @@ export default function SettingsDialog(p: Props) {
                 <h3 id="settings-api-title">{t("settings:aiSettings")}</h3>
                 <p>{t("settings:aiDescription")}</p>
               </div>
-              <div className="api-presets">
+              <div className="settings-memory">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={p.saveChatHistory !== false}
+                      disabled={busy}
+                      onChange={(e) =>
+                        void run(async () => {
+                          await api.SavePreference(
+                            "saveChatHistory",
+                            String(e.target.checked),
+                          );
+                          await p.onRefresh();
+                        })
+                      }
+                    />
+                    {t("settings:saveChatHistory")}
+                  </label>
+                  <p className="muted small">
+                    {t("settings:memoryDescription")}
+                  </p>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={p.autoSummarize !== false}
+                      disabled={busy}
+                      onChange={(e) =>
+                        void run(async () => {
+                          await api.SavePreference(
+                            "autoSummarize",
+                            String(e.target.checked),
+                          );
+                          await p.onRefresh();
+                        })
+                      }
+                    />
+                    {t("settings:autoSummarize")}
+                  </label>
+                  <p className="muted small">
+                    {t("settings:summaryDescription")}
+                  </p>
+                </div>
+                <div className="api-presets">
                 <select
                   aria-label={t("settings:apiProfile")}
                   value={profile.id}

@@ -68,6 +68,13 @@ export interface ChatMessage {
   command?: string;
 }
 export interface Tab {
+  conversationID?: string;
+  memoryRun?: ConversationRun | null;
+  memoryLoading?: boolean;
+  memoryError?: unknown;
+  memoryStatus?: string;
+  hasEarlier?: boolean;
+
   id: string;
   session: Session;
   ref: Ref | null;
@@ -122,6 +129,8 @@ export interface AutoEvent {
   result?: CommandResult;
 }
 export interface AppState {
+  saveChatHistory?: boolean;
+  autoSummarize?: boolean;
   language?: import("./i18n/languages").Language;
   autoCommandLimit?: number;
   autoAllowChanges?: boolean;
@@ -145,11 +154,13 @@ export interface HostChallenge {
   changed: boolean;
 }
 export interface ConnectResult {
+  conversationId?: string;
   ref: Ref;
   home: string;
   challenge?: HostChallenge;
 }
 export interface ChatRequest {
+  requestId?: string;
   ref: Ref;
   profileId: string;
   text: string;
@@ -169,4 +180,67 @@ export interface APIRequest {
   profile: APIProfile;
   key: string;
   memoryOnly: boolean;
+}
+
+export interface Conversation {
+  id: string;
+  serverKey: string;
+  sessionId: string;
+  title: string;
+  titleManual: boolean;
+  summary: string;
+  summaryThroughSeq: number;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ConversationMessage {
+  id: string;
+  conversationId: string;
+  seq: number;
+  role: "user" | "assistant" | "tool";
+  content: string;
+  toolCalls?: unknown[];
+  toolCallId?: string;
+  display?: { command?: string; result?: CommandResult };
+  status: string;
+  createdAt: string;
+}
+export interface ConversationCursor {
+  updatedAt: string;
+  id: string;
+}
+export interface ConversationList {
+  items: Conversation[];
+  nextCursor: ConversationCursor | null;
+}
+export interface ConversationRun {
+  id: string;
+  conversationId: string;
+  kind: string;
+  status: string;
+  ownerRef: Ref;
+}
+export interface ConversationPage {
+  conversation: Conversation;
+  messages: ConversationMessage[];
+  beforeSeq: number;
+  hasMore: boolean;
+  run: ConversationRun | null;
+  eventSeq: number;
+}
+export interface ConversationEvent {
+  selectionRevision?: number;
+  selectedRefs?: Record<string, Ref>;
+  eventId: string;
+  eventSeq: number;
+  serverKey: string;
+  conversationId: string;
+  kind: string;
+  revision: number;
+  run: ConversationRun | null;
+  message?: ConversationMessage;
+  conversation?: Conversation;
+  selectedByTab?: Record<string, string>;
+  status?: string;
 }

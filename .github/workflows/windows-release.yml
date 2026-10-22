@@ -23,7 +23,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate and set build version
         shell: pwsh
         run: |
@@ -37,7 +37,7 @@ jobs:
           $config = Get-Content wails.json -Raw | ConvertFrom-Json
           $config.info.productVersion = $version
           $config | ConvertTo-Json -Depth 20 | Set-Content wails.json -Encoding utf8
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: false
@@ -47,13 +47,13 @@ jobs:
         run: |
           "path=$(go env GOMODCACHE)" >> $env:GITHUB_OUTPUT
       - name: Cache Go modules only
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ steps.go-mod-cache.outputs.path }}
           key: windows-go-modules-v1-${{ hashFiles('go.sum') }}-wails-v2.17.0
           restore-keys: |
             windows-go-modules-v1-
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -129,7 +129,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Publish build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: OpenShell-windows-x64-${{ github.run_id }}
           path: |
