@@ -113,7 +113,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	}
 	if err := domain.ValidateSession(s); err != nil { return ref, err }
 	address := Address(s.Host, s.Port)
-	methods, closeAuth, err := authenticationMethods(s.AuthType, s.PrivateKeyPath, auth)
+	methods, closeAuth, err := authenticationMethods(ctx, s.AuthType, s.PrivateKeyPath, auth)
 	if err != nil { return ref, domain.Error("authentication", err.Error()) }
 	defer closeAuth()
 	hops, err := parseProxyJump(s.ProxyJump, s.Username)
