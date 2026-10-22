@@ -28,3 +28,18 @@ export function parseOsc1337Directory(payload: string): string | null {
     return null;
   }
 }
+
+/**
+ * Xshell-style terminal titles commonly use "user@host:/absolute/path" or
+ * "user@host:~/relative/to/home". Ignore unrelated titles completely.
+ * The SSH host's SFTP subsystem validates any resulting directory.
+ */
+export function parseOscTitleDirectory(title: string, home?: string): string | null {
+  if (title.length > 4096 || /[\x00-\x1f\x7f]/.test(title)) return null;
+  const match = /^.{1,256}:\s*(\/.*|~(?:\/.*)?)$/.exec(title);
+  if (!match) return null;
+  const path = match[1];
+  if (!path.startsWith("~")) return normalizeRemoteDirectory(path);
+  if (!home || !home.startsWith("/")) return null;
+  return normalizeRemoteDirectory(home.replace(/\/$/, "") + path.slice(1));
+}
