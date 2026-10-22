@@ -714,7 +714,7 @@ func (a *App) SFTPCancel(taskID string) error {
 }
 
 func (a *App) SFTPChooseDirectory() (string, error) {
- return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title:"Select local folder"})
+ return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title:a.dialogTitle("Select local folder", "选择本地文件夹")})
 }
 
 func (a *App) SFTPReadRemoteText(ref domain.ConnectionRef, name string) (files.RemoteDocument,error) {
