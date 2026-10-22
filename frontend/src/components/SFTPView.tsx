@@ -49,6 +49,7 @@ function FilePanel(p: PanelProps) {
         <strong><span className="sftp-panel-dot" />{t(remote ? "sftp:remote" : "sftp:local")}</strong>
         <div className="sftp-actions">
           {p.onChooseDirectory && <button title={t("sftp:chooseFolder")} onClick={p.onChooseDirectory}><FolderOpen size={14}/></button>}
+          <button title={t("sftp:chmod")} disabled={p.selected.length===0} onClick={()=>p.onOperate("chmod")}><Shield size={14}/></button>
           <button title={t("sftp:newFolder")} onClick={() => p.onOperate("mkdir")}><FolderPlus size={14}/></button>
           <button title={t(p.showHidden ? "sftp:hideHidden" : "sftp:showHidden")} onClick={p.onToggleHidden}>{p.showHidden ? <EyeOff size={14}/> : <Eye size={14}/>}</button>
           <button title={t("sftp:refresh")} onClick={p.onReload}><RefreshCw size={14}/></button>

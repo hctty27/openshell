@@ -3075,3 +3075,7 @@ select.mode-select {
 .sftp-editor footer .sftp-editor-save {background:var(--accent-fill);color:var(--on-accent);border-color:transparent}
 .sftp-editor footer button:disabled {opacity:.5}
 @media (max-width:800px){.sftp-sync-controls {gap:3px;padding:0 6px}.sftp-sync-controls button {font-size:10px;padding:4px}.sftp-sync-controls > span {font-size:0}}
+
+.sftp-actions button:disabled {opacity:.3;cursor:default}
+.sftp-task {grid-template-columns:14px minmax(80px,1fr) minmax(70px,130px) 110px 100px 56px}
+@media (max-width:1150px){.sftp-task {grid-template-columns:14px minmax(80px,1fr) 90px 60px 56px}}
