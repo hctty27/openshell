@@ -218,5 +218,6 @@
   "folderParentNotFound": "父文件夹不存在",
   "memoryMessageIdRequired": "缺少消息 ID",
   "memoryUnsupportedMutation": "不支持的对话修改操作",
-  "backupInvalidConnection": "连接配置无效"
+  "backupInvalidConnection": "连接配置无效",
+  "memoryHistoryUnavailable": "无法获取会话历史记录"
 }
