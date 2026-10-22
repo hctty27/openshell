@@ -45,11 +45,13 @@ import SessionTree from "./components/SessionTree";
 import SessionPicker from "./components/SessionPicker";
 import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
+import SFTPView from "./components/SFTPView";
 import AISidebar from "./components/AISidebar";
 import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
+import { quickCommandTerminalInput } from "./quickCommands";
 import { DialogProvider, useDialogs } from "./components/DialogProvider";
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.26";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.27";
 const initial: AppState = {
   sessions: [],
   groups: [],
@@ -182,6 +184,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       truncated: boolean;
     } | null>(null),
     [attachments, setAttachments] = useState<Record<string, string>>({});
+  const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
   const tabsRef = useRef(tabs),
     streamIDs = useRef<Record<string, string>>({}),
     selections = useRef<Record<string, string>>({});
@@ -194,6 +197,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const activeIDRef = useRef(activeID);
   activeIDRef.current = activeID;
   const active = tabs.find((t) => t.id === activeID);
+  const showSFTP = Boolean(active?.ref && fileViews[activeID]);
   const update = (tabID: string, fn: (tab: Tab) => Tab) =>
     setTabs((old) => old.map((t) => (t.id === tabID ? fn(t) : t)));
   const notify = (error: unknown) => setToast(error);
@@ -358,9 +362,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
       return;
     }
     const risky =
-      /(?:^|[;&| ]+)(?:rm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)|mkfs(?:\.[\w]+)?|dd\s+|shutdown\b|reboot\b|poweroff\b|systemctl\s+(?:stop|restart|disable)\b)/i.test(
+      /(?:^|[;&|\s]+)(?:rm\s+-(?:[a-zA-Z]*r[a-zA-Z]*f|[a-zA-Z]*f[a-zA-Z]*r)|mkfs(?:\.[\w]+)?|dd\s+|shutdown\b|reboot\b|poweroff\b|systemctl\s+(?:stop|restart|disable)\b)/i.test(
         command.command,
       );
+    const willRun = /[\r\n]/.test(command.command);
     if (command.confirm || risky) {
       const accepted = await dialogs.confirm({
         title: risky
@@ -368,17 +373,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
           : message("common:confirmQuickCommand"),
         description: message("common:targetTheFollowingCommand", {
           name: tab.session.name,
-          action:
-            command.mode === "run"
-              ? tr("common:runAction")
-              : tr("common:insertAction"),
+          action: willRun
+            ? tr("common:runAction")
+            : tr("common:insertAction"),
         }),
         preview: command.command,
         tone: risky ? "warning" : "default",
-        confirmLabel:
-          command.mode === "run"
-            ? message("common:runCommand")
-            : message("common:insertCommand"),
+        confirmLabel: willRun
+          ? message("common:runCommand")
+          : message("common:insertCommand"),
       });
       if (!accepted) return;
     }
@@ -394,7 +397,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       return;
     }
     try {
-      const source = command.command + (command.mode === "run" ? "\r" : "");
+      const source = quickCommandTerminalInput(command.command);
       const bytes = new TextEncoder().encode(source);
       let binary = "";
       for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -1017,6 +1020,13 @@ function Workspace({ initialState }: { initialState: AppState }) {
               </span>
               <div>
                 <button
+                  title={tr(showSFTP ? "sftp:terminal" : "sftp:openFileManager")}
+                  disabled={active?.status !== "connected"}
+                  onClick={() => active && setFileViews(old => ({...old, [active.id]: !old[active.id]}))}
+                >
+                  {showSFTP ? <Terminal size={14} /> : <FolderOpen size={14} />}
+                </button>
+                <button
                   title={tr("common:reauthenticate")}
                   disabled={active?.status === "connecting"}
                   onClick={() =>
@@ -1044,7 +1054,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </button>
               </div>
             </div>
-            <div className="terminal-container">
+            <div className="terminal-container" style={showSFTP ? { display: "none" } : undefined}>
               {tabs.map((tab) => (
                 <TerminalPane
                   key={tab.id}
@@ -1095,13 +1105,16 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   </div>
                 )}
             </div>
-            <QuickCommandBar
-              tab={active}
-              commands={state.quickCommands ?? []}
-              layout={quickCommandLayout}
-              onManage={() => setShowQuickCommandManager(true)}
-              onRun={runQuickCommand}
-            />
+            {showSFTP && active?.ref && <SFTPView refID={active.ref} onNotice={notify} />}
+            {!showSFTP && (
+              <QuickCommandBar
+                tab={active}
+                commands={state.quickCommands ?? []}
+                layout={quickCommandLayout}
+                onManage={() => setShowQuickCommandManager(true)}
+                onRun={runQuickCommand}
+              />
+            )}
           </>
         )}
         <footer className="workspace-status">
