@@ -49,6 +49,7 @@ type App struct {
 	chatCancels  map[string]context.CancelFunc
 	pending      map[string]string
 	tabRefs      map[string]domain.ConnectionRef
+	localTerminals map[string]*localTerminalSession
 }
 type QuickCommand struct {
 	ID       string `json:"id"`
@@ -79,6 +80,9 @@ type AppState struct {
 	AutoReconnect          bool                `json:"autoReconnect"`
 	MaxReconnectAttempts   int                 `json:"maxReconnectAttempts"`
 	ShowDisconnectReason   bool                `json:"showDisconnectReason"`
+	DisconnectBehavior string `json:"disconnectBehavior"`
+	LocalShell string `json:"localShell"`
+	PreserveTerminalHistory bool `json:"preserveTerminalHistory"`
 	ConfirmActiveDisconnect bool              `json:"confirmActiveDisconnect"`
 	SplitRatio             int                 `json:"splitRatio"`
 	FontSize              string              `json:"fontSize"`
@@ -140,7 +144,7 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 	if emit == nil {
 		emit = func(string, any) {}
 	}
-	a := &App{ctx: context.Background(), store: db, secrets: secrets, provider: ai.NewProvider(), executions: map[string]*conversationExecution{}, closing: map[string]domain.ConnectionRef{}, proposalRuns: map[string]string{}, emit: emit, transient: map[string]string{}, challenges: map[string]*sshclient.HostKeyError{}, chatCancels: map[string]context.CancelFunc{}, pending: map[string]string{}, tabRefs: map[string]domain.ConnectionRef{}}
+	a := &App{ctx: context.Background(), store: db, secrets: secrets, provider: ai.NewProvider(), executions: map[string]*conversationExecution{}, closing: map[string]domain.ConnectionRef{}, proposalRuns: map[string]string{}, emit: emit, transient: map[string]string{}, challenges: map[string]*sshclient.HostKeyError{}, chatCancels: map[string]context.CancelFunc{}, pending: map[string]string{}, tabRefs: map[string]domain.ConnectionRef{}, localTerminals: map[string]*localTerminalSession{}}
 	a.memory = conversation.NewService(db, func(event domain.ConversationEvent) { a.emit("conversation:event", event) })
 	saved, e := db.GetPreference(a.ctx, "saveChatHistory")
 	if e != nil {
@@ -186,6 +190,7 @@ func (a *App) shutdown(context.Context) {
 	for _, ref := range refs {
 		a.cancelExecution(ref, true)
 	}
+	a.closeAllLocalTerminals()
 	a.ssh.Close()
 	a.memory.Close()
 	a.store.Close()
@@ -304,6 +309,14 @@ func (a *App) State() (AppState, error) {
 	if e != nil { return AppState{}, e }
 	showReason, e := a.store.GetPreference(a.ctx, "showDisconnectReason")
 	if e != nil { return AppState{}, e }
+	disconnectBehavior, e := a.store.GetPreference(a.ctx, "disconnectBehavior")
+	if e != nil { return AppState{}, e }
+	if disconnectBehavior != "local" && disconnectBehavior != "retain" && disconnectBehavior != "close" { disconnectBehavior = "local" }
+	localShell, e := a.store.GetPreference(a.ctx, "localShell")
+	if e != nil { return AppState{}, e }
+	if localShell != "powershell" && localShell != "pwsh" && localShell != "cmd" && localShell != "wsl" { localShell = "powershell" }
+	preserveHistory, e := a.store.GetPreference(a.ctx, "preserveTerminalHistory")
+	if e != nil { return AppState{}, e }
 	confirmDisconnect, e := a.store.GetPreference(a.ctx, "confirmActiveDisconnect")
 	if e != nil { return AppState{}, e }
 	return AppState{
@@ -311,6 +324,9 @@ func (a *App) State() (AppState, error) {
 		AutoReconnect: autoReconnect != "false",
 		MaxReconnectAttempts: maxRetries,
 		ShowDisconnectReason: showReason != "false",
+		DisconnectBehavior: disconnectBehavior,
+		LocalShell: localShell,
+		PreserveTerminalHistory: preserveHistory != "false",
 		ConfirmActiveDisconnect: confirmDisconnect != "false",
 		SaveChatHistory: saveChat != "false", AutoSummarize: autoSummary != "false",
 		Language: language, AutoCommandLimit: limit, AutoAllowChanges: allow,
@@ -449,6 +465,10 @@ func (a *App) SavePreference(key, value string) error {
 		if value != "follow" && value != "classic" && value != "dark" && value != "light" {
 			return apperror.New("unsupportedTheme", nil)
 		}
+	case "disconnectBehavior":
+		if value != "local" && value != "retain" && value != "close" { return apperror.New("unsupportedPreference", nil) }
+	case "localShell":
+		if value != "powershell" && value != "pwsh" && value != "cmd" && value != "wsl" { return apperror.New("unsupportedPreference", nil) }
 	case "quickCommandLayout":
 		if value != "single" && value != "multi" {
 			return apperror.New("unsupportedCommandBarLayout", nil)
@@ -458,7 +478,7 @@ func (a *App) SavePreference(key, value string) error {
 		if e != nil || n < 1 || n > 100 {
 			return apperror.New("commandLimitMustBeBetween1And100", nil)
 		}
-	case "autoCopySelection", "rightClickPaste", "middleClickPaste", "logHighlights", "confirmMultilinePaste", "autoAllowChanges", "saveChatHistory", "autoSummarize", "autoReconnect", "showDisconnectReason", "confirmActiveDisconnect":
+	case "autoCopySelection", "rightClickPaste", "middleClickPaste", "logHighlights", "confirmMultilinePaste", "autoAllowChanges", "saveChatHistory", "autoSummarize", "autoReconnect", "showDisconnectReason", "confirmActiveDisconnect", "preserveTerminalHistory":
 		if value != "true" && value != "false" {
 			return apperror.New("booleanSettingsMustBeTrueOrFalse", nil)
 		}
@@ -654,6 +674,7 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 		if secret == "" { secret = a.transient["session:"+sessionID] }
 	}
 	a.mu.Unlock()
+	a.stopLocalTerminal(tabID, "")
 	if exists {
 		a.cancelExecution(old, true)
 	}
@@ -784,6 +805,7 @@ func (a *App) Disconnect(ref domain.ConnectionRef) error {
 	return nil
 }
 func (a *App) CloseTab(tabID string) error {
+	a.stopLocalTerminal(tabID, "")
 	a.mu.Lock()
 	ref := a.tabRefs[tabID]
 	a.mu.Unlock()

@@ -3,6 +3,7 @@ module github.com/hctty27/openshell
 go 1.26.0
 
 require (
+	github.com/UserExistsError/conpty v0.1.4
 	github.com/pkg/sftp v1.13.10
 	github.com/trzsz/trzsz-go v1.2.1-0.20261010161529-351cf747d8f9
 	github.com/wailsapp/wails/v2 v2.17.0
@@ -15,7 +16,6 @@ require (
 require (
 	charm.land/lipgloss/v2 v2.0.6 // indirect
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
-	github.com/UserExistsError/conpty v0.1.4 // indirect
 	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/alexflint/go-scalar v1.2.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
