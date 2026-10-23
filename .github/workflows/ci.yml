@@ -80,16 +80,23 @@ jobs:
       - name: Run frontend unit tests
         working-directory: frontend
         run: npm test -- --run
-      - name: Cache Playwright browser binaries
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json') }}
-      - name: Verify terminal background and compact layout in Chromium
-        working-directory: frontend
+      # ubuntu-24.04 runners already include Google Chrome and OS libraries.
+      # Using it avoids the slow apt download from playwright install --with-deps.
+      # playwright.config.ts accepts PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH.
+      - name: Select runner-installed Chrome for Playwright
+        shell: bash
         run: |
-          npx playwright install --with-deps chromium
-          npx playwright test --grep "terminal backdrop fills its pane|compact sidebar removes detail actions|AI header aligns with SSH title bar|bilingual"
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || true)"
+          if [[ -z "$chrome" || ! -x "$chrome" ]]; then
+            echo "::error::Google Chrome is missing from the ubuntu-24.04 runner image."
+            exit 1
+          fi
+          "$chrome" --version
+          echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$chrome" >> "$GITHUB_ENV"
+      - name: Verify terminal background and compact layout in Chrome
+        working-directory: frontend
+        run: npx playwright test --grep "terminal backdrop fills its pane|compact sidebar removes detail actions|AI header aligns with SSH title bar|bilingual"
 
   release:
     name: Windows release after CI
