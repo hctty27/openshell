@@ -43,10 +43,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
+        id: setup-go
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
+      - name: Locate Wails CLI binary
+        id: wails-path
+        shell: pwsh
+        run: |
+          $goPath = (go env GOPATH).Trim()
+          $wails = Join-Path $goPath "bin/wails.exe"
+          "binary=$wails" >> $env:GITHUB_OUTPUT
+      - name: Restore cached Wails CLI
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.wails-path.outputs.binary }}
+          key: windows-wails-cli-v2.17.0-go${{ steps.setup-go.outputs.go-version }}-${{ runner.arch }}
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -61,15 +74,40 @@ jobs:
         run: go test ./...
       - name: Stress SSH command execution on Windows
         run: go test ./internal/ssh -run "TestExec(ExitCode|RepeatedCommandRoundTrips|StdinClosed|TimeoutDoesNotDisconnectInteractiveSSH)" -count=3 -timeout=3m
-      - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
-      - name: Generate app icons
+      - name: Ensure cached Wails CLI
+        shell: pwsh
+        run: |
+          $wails = Join-Path (go env GOPATH) "bin/wails.exe"
+          if (!(Test-Path $wails)) {
+            go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            Write-Host "Using cached Wails CLI: $wails"
+          }
+          if (!(Test-Path $wails)) { throw "Wails CLI missing after installation/cache restore" }
+      - name: Restore generated app icons
+        id: icon-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            build/appicon.png
+            build/windows/icon.ico
+            frontend/public/app-icon.png
+          key: windows-app-icons-v1-${{ hashFiles('build/appicon.png', 'scripts/generate_app_icons.py') }}
+      - name: Generate app icons on cache miss
+        if: steps.icon-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check "Pillow==11.3.0"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/generate_app_icons.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Validate generated app icons
+        shell: pwsh
+        run: |
+          foreach ($file in @("build/appicon.png", "build/windows/icon.ico", "frontend/public/app-icon.png")) {
+            if (!(Test-Path $file)) { throw "Required icon asset missing: $file" }
+          }
       - name: Compile Windows executable (no release)
         shell: pwsh
         run: |
