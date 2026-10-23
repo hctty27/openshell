@@ -69,10 +69,17 @@ jobs:
           key: windows-go-modules-v1-${{ hashFiles('go.sum') }}-wails-v2.17.0
           restore-keys: |
             windows-go-modules-v1-
+      - name: Locate Wails CLI binary
+        id: wails-path
+        shell: pwsh
+        run: |
+          $goPath = (go env GOPATH).Trim()
+          $wails = Join-Path $goPath "bin/wails.exe"
+          "binary=$wails" >> $env:GITHUB_OUTPUT
       - name: Restore cached Wails CLI
         uses: actions/cache@v6
         with:
-          path: ${{ steps.setup-go.outputs.go-bin-path }}/wails.exe
+          path: ${{ steps.wails-path.outputs.binary }}
           key: windows-wails-cli-v2.17.0-go${{ steps.setup-go.outputs.go-version }}-${{ runner.arch }}
       - uses: actions/setup-node@v7
         with:
