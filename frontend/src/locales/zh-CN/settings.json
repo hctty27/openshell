@@ -23,6 +23,8 @@
   "deleteThisApiProfileAndItsSavedKey": "确定删除此 API 配置及保存的密钥？此操作无法撤销。",
   "deleteProfile": "删除配置",
   "openaiCompatibleApi": "OpenAI 兼容接口",
+  "anthropicNativeApi": "Anthropic 原生 Messages API",
+  "apiProtocol": "API 协议",
   "profileName": "配置名称",
   "enterApiProfileName": "请输入配置名称",
   "enterApiBaseUrl": "请输入 API 地址",
