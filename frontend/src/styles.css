@@ -1,66 +1,66 @@
 :root {
   --chrome-bar-height: 30px;
-  --surface: #272B32;
-  --panel: #30353D;
-  --raised: #363B44;
-  --field-bg: #252A31;
-  --border: #464D58;
-  --text-primary: #E2E6ED;
-  --text-secondary: #B9C3D0;
-  --text-muted: #96A4B7;
-  --accent: #83B6EE;
-  --accent-fill: #548FD5;
+  --surface: #20242B;
+  --panel: #272C34;
+  --raised: #303640;
+  --field-bg: #1E232B;
+  --border: #3D4652;
+  --text-primary: #E5E9F0;
+  --text-secondary: #C1CAD6;
+  --text-muted: #98A7BA;
+  --accent: #98BEF2;
+  --accent-fill: #4B86C6;
   --on-accent: #FFFFFF;
-  --accent-soft: #548FD525;
-  --accent-border: #548FD58A;
-  --info: #9CC5F3;
-  --info-soft: #548FD51A;
-  --info-border: #548FD566;
-  --warning: #E5BF72;
-  --danger: #F4A0A6;
+  --accent-soft: #4B86C626;
+  --accent-border: #4B86C68A;
+  --info: #A9CDF6;
+  --info-soft: #4B86C61F;
+  --info-border: #4B86C666;
+  --warning: #E6BF74;
+  --danger: #EE9499;
   --danger-soft: #C5545C20;
   --danger-border: #C5545C88;
-  --hover: #FFFFFF11;
+  --hover: #FFFFFF0D;
   --overlay: #0D1015B5;
-  --terminal-overlay: #171A1FEB;
-  --scrollbar: #7A8799;
-  --terminal-scroll-track: #7A879918;
-  --terminal-scroll-thumb: #7A879970;
-  --terminal-scroll-thumb-hover: #A5B2C4;
-  --terminal-scroll-thumb-active: #CAD4E0;
-  --terminal-workspace: #171A1F;
+  --terminal-overlay: #1E2228EB;
+  --scrollbar: #8794A6;
+  --terminal-scroll-track: #8794A612;
+  --terminal-scroll-thumb: #8794A65C;
+  --terminal-scroll-thumb-hover: #A4AFBD;
+  --terminal-scroll-thumb-active: #C1CBD7;
+  --terminal-workspace: #1E2228;
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --surface: #F2F3F5;
-  --panel: #E7EAEE;
+  --surface: #F6F8FA;
+  --panel: #EEF1F5;
   --raised: #FFFFFF;
   --field-bg: #FFFFFF;
-  --border: #CED4DD;
-  --text-primary: #252A32;
-  --text-secondary: #4E5A6B;
-  --text-muted: #647183;
-  --accent: #2878D0;
-  --accent-fill: #2878D0;
+  --border: #D4DCE6;
+  --text-primary: #273445;
+  --text-secondary: #526175;
+  --text-muted: #68778A;
+  --accent: #2869B5;
+  --accent-fill: #2869B5;
   --on-accent: #FFFFFF;
-  --accent-soft: #2878D018;
-  --accent-border: #2878D063;
-  --info: #2468B4;
-  --info-soft: #2878D014;
-  --info-border: #2878D04F;
-  --warning: #845A0B;
+  --accent-soft: #2869B51A;
+  --accent-border: #2869B563;
+  --info: #245E9F;
+  --info-soft: #2869B514;
+  --info-border: #2869B54F;
+  --warning: #865B12;
   --danger: #AC3445;
   --danger-soft: #B63D4D14;
   --danger-border: #B63D4D55;
-  --hover: #1729400C;
+  --hover: #1729400B;
   --overlay: #DDE2E9A3;
-  --terminal-overlay: #FFFFFFEB;
-  --scrollbar: #8591A0;
-  --terminal-scroll-track: #52647E14;
-  --terminal-scroll-thumb: #8591A080;
-  --terminal-scroll-thumb-hover: #66768B;
-  --terminal-scroll-thumb-active: #43566D;
-  --terminal-workspace: #FFFFFF;
+  --terminal-overlay: #F8FAFCEB;
+  --scrollbar: #718197;
+  --terminal-scroll-track: #71819712;
+  --terminal-scroll-thumb: #71819770;
+  --terminal-scroll-thumb-hover: #617188;
+  --terminal-scroll-thumb-active: #485B73;
+  --terminal-workspace: #F8FAFC;
 }
 :root {
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
@@ -124,7 +124,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--accent-border);
-  box-shadow: 0 0 0 2px #5ab69a0b;
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 textarea {
   resize: vertical;
@@ -135,7 +135,7 @@ textarea::placeholder {
   color: var(--text-muted);
 }
 input[type="checkbox"] {
-  accent-color: #69c9ac;
+  accent-color: var(--accent-fill);
   width: 14px;
   height: 14px;
 }
@@ -2788,11 +2788,11 @@ select.mode-select {
 }
 
 .settings-theme-preview--light {
-  background: #E1E5EB;
+  background: #EEF1F5;
 }
 
 .settings-theme-preview--dark {
-  background: #363B44;
+  background: #272C34;
 }
 
 .settings-theme-preview-sidebar {
@@ -2801,11 +2801,11 @@ select.mode-select {
 }
 
 .settings-theme-preview--light .settings-theme-preview-sidebar {
-  background: #CED4DD;
+  background: #D4DCE6;
 }
 
 .settings-theme-preview--dark .settings-theme-preview-sidebar {
-  background: #515B6B;
+  background: #3D4652;
 }
 
 .settings-theme-preview-main {
@@ -2830,15 +2830,15 @@ select.mode-select {
 }
 
 .settings-theme-preview--dark .settings-theme-preview-main span {
-  background: #171A1F;
+  background: #1E2228;
 }
 
 .settings-theme-preview--dark .settings-theme-preview-main span:first-child {
-  background: #515B6B;
+  background: #3D4652;
 }
 
 .settings-theme-preview--light .settings-theme-preview-main span:first-child {
-  background: #CED4DD;
+  background: #D4DCE6;
 }
 
 .terminal-palette-preview {
