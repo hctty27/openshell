@@ -240,3 +240,86 @@ func TestZmodemLocalExitIgnoresNormalTerminalText(t *testing.T) {
     if _, err := closer.Write([]byte("Success!!\r\nclient exit with 1\r\n")); err != nil { t.Fatal(err) }
     if len(events) != 0 { t.Fatal("normal terminal text was treated as ZMODEM exit") }
 }
+
+
+func TestTerminalWriterBackpressureWaitsForRenderAcknowledgement(t *testing.T) {
+	events := make(chan uint64, 32)
+	ref := domain.ConnectionRef{TabID: "tab", SessionID: "session", Generation: 1}
+	m := NewManager(nil, func(name string, payload any) {
+		if name == "ssh:output" {
+			events <- payload.(map[string]any)["sequence"].(uint64)
+		}
+	})
+	c := &connection{ref: ref, history: NewHistory(1024 * 1024)}
+	writer := &terminalWriter{m: m, c: c}
+	c.writer = writer
+	m.connections[ref.TabID] = c
+	done := make(chan error, 1)
+	go func() {
+		_, err := writer.Write([]byte(strings.Repeat("x", terminalOutputWindowBytes+terminalOutputChunkSize)))
+		done <- err
+	}()
+	for i := 1; i <= terminalOutputWindowBytes/terminalOutputChunkSize; i++ {
+		select {
+		case sequence := <-events:
+			if sequence != uint64(i) { t.Fatalf("sequence %d, expected %d", sequence, i) }
+		case <-time.After(2 * time.Second):
+			t.Fatal("output did not reach high watermark")
+		}
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("writer completed without acknowledgement: %v", err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	stale := ref
+	stale.Generation++
+	m.AcknowledgeOutput(stale, 1)
+	select {
+	case err := <-done:
+		t.Fatalf("stale acknowledgement released writer: %v", err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	m.AcknowledgeOutput(ref, 1)
+	select {
+	case err := <-done:
+		if err != nil { t.Fatal(err) }
+	case <-time.After(2 * time.Second):
+		t.Fatal("writer did not resume after acknowledgement")
+	}
+	select {
+	case sequence := <-events:
+		if sequence != uint64(terminalOutputWindowBytes/terminalOutputChunkSize+1) {
+			t.Fatalf("wrong resumed sequence %d", sequence)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("resumed chunk was not emitted")
+	}
+	writer.Close()
+}
+
+func TestTerminalWriterCloseReleasesBlockedOutput(t *testing.T) {
+	events := make(chan struct{}, 32)
+	writer := &terminalWriter{
+		m: NewManager(nil, func(name string, _ any) {
+			if name == "ssh:output" { events <- struct{}{} }
+		}),
+		c: &connection{history: NewHistory(1024 * 1024)},
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = writer.Write([]byte(strings.Repeat("x", terminalOutputWindowBytes+terminalOutputChunkSize)))
+	}()
+	for i := 0; i < terminalOutputWindowBytes/terminalOutputChunkSize; i++ {
+		select {
+		case <-events:
+		case <-time.After(2 * time.Second): t.Fatal("window was not filled")
+		}
+	}
+	writer.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second): t.Fatal("close left writer blocked")
+	}
+}
