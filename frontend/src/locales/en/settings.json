@@ -23,6 +23,8 @@
   "deleteThisApiProfileAndItsSavedKey": "Delete this API profile and its saved key? This cannot be undone.",
   "deleteProfile": "Delete profile",
   "openaiCompatibleApi": "OpenAI-compatible API",
+  "anthropicNativeApi": "Anthropic Messages API",
+  "apiProtocol": "API protocol",
   "profileName": "Profile name",
   "enterApiProfileName": "Enter a profile name",
   "enterApiBaseUrl": "Enter an API base URL",
