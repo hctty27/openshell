@@ -458,7 +458,7 @@ test("terminal backdrop fills its pane across mixed application and terminal pal
   });
 
   await expect.poll(async () => (await snapshot()).backgrounds)
-    .toEqual(Array(4).fill("rgb(8, 9, 12)"));
+    .toEqual(Array(4).fill("rgb(15, 17, 21)"));
   const dark = await snapshot();
   for (const gap of [dark.leftGap, dark.topGap, dark.rightGap, dark.bottomGap]) {
     expect(Math.abs(gap)).toBeLessThan(1);
@@ -475,13 +475,13 @@ test("terminal backdrop fills its pane across mixed application and terminal pal
   await page.getByRole("button", { name: "保存设置" }).click();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
   await expect.poll(async () => (await snapshot()).backgrounds)
-    .toEqual(Array(4).fill("rgb(255, 255, 255)"));
+    .toEqual(Array(4).fill("rgb(248, 250, 252)"));
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "深色", exact: true }).click();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
   await expect.poll(async () => (await snapshot()).backgrounds)
-    .toEqual(Array(4).fill("rgb(255, 255, 255)"));
+    .toEqual(Array(4).fill("rgb(248, 250, 252)"));
 });
 
 test("compact sidebar removes detail actions and aligns single-row footer heights", async ({
