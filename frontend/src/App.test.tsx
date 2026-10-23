@@ -140,7 +140,14 @@ test("API settings expose custom endpoint key and model fields", async () => {
   expect(screen.getByRole("alert").textContent).toBe("请输入 API 地址");
   expect(screen.getByLabelText("API Key")).toBeTruthy();
   expect(screen.getByLabelText("模型名称")).toBeTruthy();
-  await waitFor(() => expect(screen.getByText("OpenAI 兼容接口")).toBeTruthy());
+  const provider = screen.getByRole("combobox", { name: "API 协议" }) as HTMLSelectElement;
+  expect(provider.value).toBe("openai");
+  await waitFor(() => expect(screen.getAllByText("OpenAI 兼容接口").length).toBeGreaterThan(0));
+  fireEvent.change(provider, { target: { value: "anthropic" } });
+  expect(provider.value).toBe("anthropic");
+  expect(baseUrl.placeholder).toBe("https://api.anthropic.com/v1");
+  fireEvent.change(provider, { target: { value: "openai" } });
+  expect(baseUrl.placeholder).toBe("https://api.example.com/v1");
 });
 
 test("shows the OpenShell product name", async () => {
