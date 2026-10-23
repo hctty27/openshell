@@ -20,7 +20,8 @@ permissions:
 
 concurrency:
   group: openshell-windows-release-${{ github.event.pull_request.number || 'main' }}
-  cancel-in-progress: false
+  # Supersede outdated PR dry runs, but never cancel a production release.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   windows-x64:
