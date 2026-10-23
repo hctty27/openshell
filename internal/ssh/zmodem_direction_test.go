@@ -11,7 +11,7 @@ func TestZmodemDirectionWriterPreservesByteStreamAndDetectsSplitHeaders(t *testi
 	var directions []string
 	writer := &zmodemDirectionWriter{
 		dst: &output,
-		onDirection: func(direction string) { directions = append(directions, direction) },
+		onDirection: func(direction string) bool { directions = append(directions, direction); return true },
 	}
 	stream := []string{
 		"before **\x18B01",
@@ -38,7 +38,7 @@ func TestZmodemDirectionWriterIgnoresNormalTerminalOutput(t *testing.T) {
 	called := false
 	writer := &zmodemDirectionWriter{
 		dst: &output,
-		onDirection: func(string) { called = true },
+		onDirection: func(string) bool { called = true; return true },
 	}
 	if _, err := writer.Write([]byte("root@server:~# echo ready\r\nready\r\n")); err != nil {
 		t.Fatal(err)
