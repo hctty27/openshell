@@ -166,7 +166,7 @@ type zmodemDirectionWriter struct {
 	mu          sync.Mutex
 	dst         io.Writer
 	tail        []byte
-	onDirection func(string)
+	onDirection func(string) bool
 }
 
 var zmodemDirectionPattern = regexp.MustCompile(`\*\*\x18B0([01])[0-9a-f]{12}`)
@@ -194,7 +194,9 @@ func (w *zmodemDirectionWriter) Write(p []byte) (int, error) {
 
 	for _, direction := range directions {
 		if w.onDirection != nil {
-			w.onDirection(direction)
+			if !w.onDirection(direction) {
+				return len(p), nil
+			}
 		}
 	}
 	return w.dst.Write(p)
@@ -249,19 +251,15 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
         valid := current == connection && current.ref == ref
         if valid { connection.transferring = transferring }
         m.mu.Unlock()
+        if valid && !transferring { _ = filter.SetDefaultDownloadPath("") }
         if valid { m.emit("ssh:transfer-state", map[string]any{"ref": ref, "active": transferring}) }
     })
 	observedOutput := &zmodemDirectionWriter{
 		dst: remoteOutput,
-		onDirection: func(direction string) {
-			m.mu.Lock()
-			current := m.connections[ref.TabID]
-			valid := current == connection && current.ref == ref
-			m.mu.Unlock()
-			if valid {
-				m.emit("ssh:transfer-details", map[string]any{"ref": ref, "direction": direction})
-			}
-		},
+		onDirection: func(direction string) bool {
+            m.emit("ssh:transfer-details", map[string]any{"ref": ref, "direction": direction})
+            return m.selectZmodemPaths(connection, direction, filter, remoteInput)
+        },
 	}
 	session.Stdout, session.Stderr = observedOutput, observedOutput
 	if err = session.Shell(); err != nil {
@@ -373,7 +371,16 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 func (m *Manager) CancelZmodem(ref domain.ConnectionRef) error {
     m.mu.Lock()
     c := m.connections[ref.TabID]
-    if c == nil || c.ref != ref || c.stdin == nil || !c.transferring {
+    if c == nil || c.ref != ref || c.stdin == nil {
+        m.mu.Unlock()
+        return apperror.New("noActiveFileTransfer", nil)
+    }
+    if c.zmodemSelection != nil {
+        releaseZmodemSelection(c)
+        m.mu.Unlock()
+        return nil
+    }
+    if !c.transferring {
         m.mu.Unlock()
         return apperror.New("noActiveFileTransfer", nil)
     }
