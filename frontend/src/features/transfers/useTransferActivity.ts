@@ -56,7 +56,7 @@ export function useTransferActivity() {
     };
   }, []);
 
-  const hasActiveTransfers = (ref: Ref | undefined) => {
+  const hasActiveTransfers = (ref: Ref | null | undefined) => {
     if (!ref) return false;
     const key = connectionKey(ref);
     return Boolean(sftpJobs.current.get(key)?.size || zmodemActive.current.has(key));
