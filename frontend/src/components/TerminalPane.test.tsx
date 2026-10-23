@@ -611,3 +611,71 @@ test("waits for completed SSH shutdown before starting local ConPTY", async () =
   );
   await waitFor(() => expect(api.StartLocalTerminal).toHaveBeenCalledTimes(1));
 });
+
+
+test("expected local PTY cancellation during reconnect is not reported as an error", async () => {
+  vi.mocked(api.StartLocalTerminal).mockRejectedValueOnce(new Error("terminal connection changed"));
+  const onNotice = vi.fn();
+  renderTerminal({
+    tab: { ...tab, status: "disconnected", everConnected: true },
+    onNotice,
+  });
+  await waitFor(() => expect(api.StartLocalTerminal).toHaveBeenCalledTimes(1));
+  await act(async () => { await Promise.resolve(); });
+  expect(onNotice).not.toHaveBeenCalled();
+  expect(refs.terms[0].write).toHaveBeenCalledTimes(1);
+});
+
+test("history restoration strips unused screen padding without removing blank lines between output", () => {
+  const onNotice = vi.fn();
+  const onError = vi.fn();
+  const pane = (nextTab: Tab) => (
+    <DialogProvider>
+      <TerminalPane tab={nextTab} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={onNotice} onError={onError} onSelection={vi.fn()} />
+    </DialogProvider>
+  );
+  const { rerender } = render(pane(tab));
+  const lines = ["", "", "command output", "", "last prompt", "", "", ""];
+  refs.terms[0].buffer.normal = {
+    length: lines.length,
+    getLine: (index: number) => ({
+      translateToString: () => lines[index],
+    }),
+  };
+  rerender(pane({ ...tab, status: "reconnecting", everConnected: true }));
+  rerender(pane({
+    ...tab,
+    ref: { ...tab.ref!, generation: 2 },
+    status: "connected",
+    everConnected: true,
+  }));
+  expect(refs.terms).toHaveLength(2);
+  expect(refs.terms[1].write).toHaveBeenCalledWith(
+    "command output\r\n\r\nlast prompt\r\n",
+  );
+});
+
+test("late SSH open failure from a disposed pane does not break a new connection", async () => {
+  let rejectOpen: (error: Error) => void = () => {};
+  vi.mocked(api.OpenTerminal).mockImplementationOnce(() => new Promise<void>((_, reject) => {
+    rejectOpen = reject;
+  }));
+  const onError = vi.fn();
+  const pane = (nextTab: Tab) => (
+    <DialogProvider>
+      <TerminalPane tab={nextTab} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={onError} onSelection={vi.fn()} />
+    </DialogProvider>
+  );
+  const { rerender } = render(pane(tab));
+  await waitFor(() => expect(api.OpenTerminal).toHaveBeenCalledTimes(1));
+  rerender(pane({ ...tab, status: "reconnecting", everConnected: true }));
+  await act(async () => {
+    rejectOpen(new Error("stale connection"));
+    await Promise.resolve();
+  });
+  expect(onError).not.toHaveBeenCalled();
+});
