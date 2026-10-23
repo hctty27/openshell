@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-go-cache-benchmark-${{ github.event.pull_request.number }
+  group: windows-go-cache-benchmark-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -32,8 +32,8 @@ jobs:
       - name: Restore existing module-only cache for preparation
         uses: actions/cache/restore@v5
         with:
-          path: ${{ steps.paths.outputs.module_cache }
-          key: windows-go-modules-v1-${{ hashFiles('go.sum') }-wails-v2.17.0
+          path: ${{ steps.paths.outputs.module_cache }}
+          key: windows-go-modules-v1-${{ hashFiles('go.sum') }}-wails-v2.17.0
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -70,7 +70,7 @@ jobs:
           retention-days: 2
 
   benchmark:
-    name: Cache strategy - ${{ matrix.mode }
+    name: Cache strategy - ${{ matrix.mode }}
     needs: prepare
     runs-on: windows-latest
     timeout-minutes: 45
@@ -85,7 +85,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache: ${{ matrix.mode == 'setup-go-combined' }
+          cache: ${{ matrix.mode == 'setup-go-combined' }}
           cache-dependency-path: go.sum
       - name: Locate Go module cache
         if: matrix.mode == 'module-only'
@@ -97,8 +97,8 @@ jobs:
         if: matrix.mode == 'module-only'
         uses: actions/cache/restore@v5
         with:
-          path: ${{ steps.paths.outputs.module_cache }
-          key: windows-go-modules-v1-${{ hashFiles('go.sum') }-wails-v2.17.0
+          path: ${{ steps.paths.outputs.module_cache }}
+          key: windows-go-modules-v1-${{ hashFiles('go.sum') }}-wails-v2.17.0
       - name: Download shared Wails CLI, frontend and icon
         uses: actions/download-artifact@v8
         with:
@@ -113,7 +113,7 @@ jobs:
       - name: Compile Windows OpenShell executable
         shell: pwsh
         env:
-          CACHE_MODE: ${{ matrix.mode }
+          CACHE_MODE: ${{ matrix.mode }}
         run: |
           $ErrorActionPreference = "Stop"
           $timer = [System.Diagnostics.Stopwatch]::StartNew()
