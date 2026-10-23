@@ -43,6 +43,7 @@ type APIProfile struct {
 	Name         string `json:"name"`
 	BaseURL      string `json:"baseUrl"`
 	Model        string `json:"model"`
+	Provider     string `json:"provider,omitempty"`
 	SecretRef    string `json:"secretRef"`
 	ToolsEnabled bool   `json:"toolsEnabled"`
 }

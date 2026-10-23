@@ -97,6 +97,7 @@ const emptyProfile: APIProfile = {
   name: "",
   baseUrl: "",
   model: "",
+  provider: "openai",
   secretRef: "",
   toolsEnabled: true,
 };
@@ -547,8 +548,19 @@ export default function SettingsDialog(p: Props) {
               </div>
               <div className="form-note">
                 <KeyRound size={17} />
-                <span>{t("settings:openaiCompatibleApi")}</span>
+                <span>{t(profile.provider === "anthropic" ? "settings:anthropicNativeApi" : "settings:openaiCompatibleApi")}</span>
               </div>
+              <label>
+                {t("settings:apiProtocol")}
+                <select
+                  aria-label={t("settings:apiProtocol")}
+                  value={profile.provider || "openai"}
+                  onChange={(e) => setProfile({ ...profile, provider: e.target.value as "openai" | "anthropic" })}
+                >
+                  <option value="openai">{t("settings:openaiCompatibleApi")}</option>
+                  <option value="anthropic">{t("settings:anthropicNativeApi")}</option>
+                </select>
+              </label>
               <label>
                 {t("settings:profileName")}
                 <input
@@ -566,7 +578,7 @@ export default function SettingsDialog(p: Props) {
                   onChange={(e) =>
                     setProfile({ ...profile, baseUrl: e.target.value })
                   }
-                  placeholder="https://api.example.com/v1"
+                  placeholder={profile.provider === "anthropic" ? "https://api.anthropic.com/v1" : "https://api.example.com/v1"}
                 />
               </label>
               <label>

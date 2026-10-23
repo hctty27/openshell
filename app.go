@@ -582,9 +582,16 @@ func validateQuickCommands(raw string) error {
 
 func (a *App) SaveAPI(req SaveAPIRequest) (domain.APIProfile, error) {
 	p := req.Profile
-	if _, e := ai.NormalizeEndpoint(p.BaseURL); e != nil {
-		return p, e
+	var endpointErr error
+	switch p.Provider {
+	case "", "openai":
+		_, endpointErr = ai.NormalizeEndpoint(p.BaseURL)
+	case "anthropic":
+		_, endpointErr = ai.NormalizeAnthropicEndpoint(p.BaseURL)
+	default:
+		return p, apperror.New("unsupportedPreference", nil)
 	}
+	if endpointErr != nil { return p, endpointErr }
 	if strings.TrimSpace(p.Model) == "" {
 		return p, apperror.New("enterAModelName", nil)
 	}

@@ -121,9 +121,9 @@ func (m *Manager) update(j *job, fn func(*Task)) {
     m.mu.Unlock()
     m.emit("sftp:transfer",snapshot)
 }
-func (m *Manager) progress(j *job,n int) {
+func (m *Manager) progress(j *job,n int64) {
     m.mu.Lock()
-    j.task.Bytes+=int64(n)
+    j.task.Bytes+=n
     now:=time.Now()
     send:=now.Sub(j.last)>=180*time.Millisecond || j.task.Bytes>=j.task.Total
     if send { j.last=now }
@@ -278,17 +278,26 @@ func (m *Manager) upload(j *job,c *pkg.Client,src,dst string) error {
     if err!=nil{return err}
     if offset>0 {
         if _,err=writer.Seek(offset,io.SeekStart);err!=nil{writer.Close();return err}
-        m.progress(j,int(offset))
+        m.progress(j,offset)
     }
-    err=copyContext(j.ctx,writer,reader,func(n int){m.progress(j,n)})
+    err=copyContext(j.ctx,writer,reader,func(n int){m.progress(j,int64(n))})
     closeErr:=writer.Close()
     if err!=nil{return err}
     if closeErr!=nil{return closeErr}
+    // A clean EOF alone does not guarantee that the remote temporary file
+    // contains all bytes, especially after a server-side short write.
+    uploaded,err:=c.Lstat(temp)
+    if err!=nil{return err}
+    if !uploaded.Mode().IsRegular() || uploaded.Size()!=info.Size(){
+        return io.ErrShortWrite
+    }
+    if err=j.ctx.Err();err!=nil{return err}
     after,err:=os.Stat(src)
     if err!=nil{return err}
     if after.Size()!=info.Size() || !after.ModTime().Equal(info.ModTime()) {return apperror.New("sftpTransferSourceFileChangedDuringUpload",nil)}
     exists,err:=checkTarget(c.Lstat,dst,j.task.Overwrite)
     if err!=nil{return err}
+    if err=j.ctx.Err();err!=nil{return err}
     if exists{err=c.PosixRename(temp,dst)}else{err=c.Rename(temp,dst)}
     if err!=nil{return err}
     return c.Chmod(dst,info.Mode().Perm())
@@ -344,16 +353,23 @@ func (m *Manager) download(j *job,c *pkg.Client,src,dst string) error {
     if err!=nil{return err}
     if offset>0{
         if _,err=writer.Seek(offset,io.SeekStart);err!=nil{writer.Close();return err}
-        m.progress(j,int(offset))
+        m.progress(j,offset)
     }
-    err=copyContext(j.ctx,writer,reader,func(n int){m.progress(j,n)})
+    err=copyContext(j.ctx,writer,reader,func(n int){m.progress(j,int64(n))})
     closeErr:=writer.Close()
     if err!=nil{return err}
     if closeErr!=nil{return closeErr}
+    downloaded,err:=os.Lstat(temp)
+    if err!=nil{return err}
+    if !downloaded.Mode().IsRegular() || downloaded.Size()!=info.Size(){
+        return io.ErrUnexpectedEOF
+    }
+    if err=j.ctx.Err();err!=nil{return err}
     after,err:=c.Lstat(src)
     if err!=nil{return err}
     if info.Size()!=after.Size() || !info.ModTime().Equal(after.ModTime()) {return apperror.New("sftpTransferSourceFileChangedDuringDownload",nil)}
     if _,err=checkTarget(os.Lstat,dst,j.task.Overwrite);err!=nil{return err}
+    if err=j.ctx.Err();err!=nil{return err}
     if err=os.Rename(temp,dst);err!=nil{return err}
     return os.Chmod(dst,info.Mode().Perm())
 }

@@ -90,3 +90,29 @@ func TestConfigNeverExecutesProxyCommandOrMatchExec(t *testing.T) {
  if got.HostName != "safe.internal" || got.User != "" { t.Fatalf("unsafe config resolution: %+v", got) }
  if _, err := os.Stat(marker); !os.IsNotExist(err) { t.Fatalf("config executed commands or marker unexpectedly exists: %v", err) }
 }
+
+
+func TestOpenSSHConfigConnectionTokens(t *testing.T) {
+ dir := t.TempDir()
+ configPath := filepath.Join(dir, "config")
+ contents := "Host prod\n  HostName host.example.net\n  User deploy\n  Port 2222\n  IdentityFile ~/.ssh/%n-%h-%r-%p-%%.key\n  ProxyJump relay-%r@jump.example.net:22\n"
+ if err := os.WriteFile(configPath, []byte(contents), 0600); err != nil { t.Fatal(err) }
+ cfg, err := readOpenSSHConfig(configPath, "prod")
+ if err != nil { t.Fatal(err) }
+ host, user, port, key, jump := ApplySSHConfig("prod", "root", 22, "", "", cfg)
+ if host != "host.example.net" || user != "deploy" || port != 2222 {
+  t.Fatalf("unexpected resolved connection: %s %s %d", host, user, port)
+ }
+ if want := filepath.Join(".ssh", "prod-host.example.net-deploy-2222-%.key"); !strings.HasSuffix(key, want) {
+  t.Fatalf("IdentityFile token expansion: %q (want suffix %q)", key, want)
+ }
+ if jump != "relay-deploy@jump.example.net:22" { t.Fatalf("ProxyJump expansion: %q", jump) }
+}
+
+func TestOpenSSHConfigExplicitIdentityOverridesConfiguredPath(t *testing.T) {
+ cfg := SSHConfig{HostName: "remote.example.net", User: "deploy", Port: 2022, IdentityFile: "%d/.ssh/%r", ProxyJump: "relay-%h"}
+ _, _, _, key, jump := ApplySSHConfig("alias", "root", 22, "/custom/private-key", "explicit-jump", cfg)
+ if key != "/custom/private-key" || jump != "explicit-jump" {
+  t.Fatalf("explicit user settings should take precedence: %q %q", key, jump)
+ }
+}
