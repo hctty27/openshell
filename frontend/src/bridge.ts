@@ -84,6 +84,7 @@ type Backend = {
   ResizeLocalTerminal(tabID: string, terminalID: string, cols: number, rows: number): Promise<void>;
   CloseLocalTerminal(tabID: string, terminalID: string): Promise<void>;
   WriteTerminal(ref: Ref, data: string): Promise<void>;
+  AcknowledgeTerminalOutput(ref: Ref, sequence: number): Promise<void>;
   CancelZmodem(ref: Ref): Promise<void>;
   ResizeTerminal(ref: Ref, cols: number, rows: number): Promise<void>;
   CancelConnecting(tabID: string): Promise<void>;
