@@ -86,6 +86,8 @@ type Backend = {
   WriteTerminal(ref: Ref, data: string): Promise<void>;
   AcknowledgeTerminalOutput(ref: Ref, sequence: number): Promise<void>;
   CancelZmodem(ref: Ref): Promise<void>;
+  ZmodemLocalPlaces(): Promise<{ home: string; roots: string[] }>;
+  SubmitZmodemSelection(ref: Ref, id: number, paths: string[]): Promise<void>;
   ResizeTerminal(ref: Ref, cols: number, rows: number): Promise<void>;
   CancelConnecting(tabID: string): Promise<void>;
   Reconnect(tabID: string, sessionID: string): Promise<ConnectResult>;
