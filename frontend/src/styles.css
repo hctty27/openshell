@@ -3361,25 +3361,21 @@ select.mode-select {
 
 
 /* In-workspace ZMODEM progress dialog. Opens only after transfer data starts. */
-.zmodem-progress-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 135;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: var(--overlay);
-  backdrop-filter: blur(2px);
-}
 .zmodem-progress-dialog {
-  width: min(460px, 100%);
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(90vh, 620px);
+  overflow-y: auto;
+  margin: auto;
   padding: 0;
   background: var(--raised);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 25px 70px #0006;
   color: var(--text-primary);
+}
+.zmodem-progress-dialog::backdrop {
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
 }
 .zmodem-progress-dialog > header {
   display: flex;
@@ -3415,7 +3411,7 @@ select.mode-select {
   border-radius: 5px;
   animation: zmodem-working 1.7s ease-in-out infinite alternate;
 }
-.zmodem-progress-track--ended > div { animation: none; width: 100%; opacity: .7; }
+.zmodem-progress-track--ended > div { animation: none; opacity: .5; }
 @keyframes zmodem-working {
   from { transform: translateX(-100%); }
   to { transform: translateX(285%); }

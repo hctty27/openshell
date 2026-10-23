@@ -42,6 +42,7 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [autoClose, setAutoClose] = useState(true);
   const dismissed = useRef(new Set<string>());
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const offDetails = listen("ssh:transfer-details", (payload: {
@@ -113,9 +114,19 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
 
   const key = activeRef ? transferKey(activeRef) : undefined;
   const transfer = key ? transfers[key] : undefined;
-  if (!key || !transfer?.hasProgress) return null;
+  const showDialog = Boolean(key && transfer?.hasProgress && openKey === key);
 
-  const showDialog = openKey === key;
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!showDialog || !dialog) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+    return () => {
+      if (typeof dialog.close === "function" && dialog.open) dialog.close();
+    };
+  }, [showDialog, key]);
+
+  if (!key || !transfer?.hasProgress) return null;
   const isActive = ["waiting", "running", "cancelling"].includes(transfer.status);
   const close = () => {
     dismissed.current.add(key);
@@ -162,9 +173,9 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
         </button>
       )}
       {showDialog && (
-        <div className="zmodem-progress-backdrop">
-          <section className="zmodem-progress-dialog" role="dialog" aria-modal="true"
-            aria-labelledby="zmodem-progress-title">
+          <dialog ref={dialogRef} className="zmodem-progress-dialog"
+            aria-labelledby="zmodem-progress-title"
+            onCancel={event => { event.preventDefault(); close(); }}>
             <header>
               {transfer.direction === "download"
                 ? <ArrowDownToLine size={18} aria-hidden="true" />
@@ -208,8 +219,7 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
                 {isActive ? t("terminal:cancelZmodem") : t("sftp:zmodemDialogCheck")}
               </button>
             </footer>
-          </section>
-        </div>
+          </dialog>
       )}
     </>
   );
