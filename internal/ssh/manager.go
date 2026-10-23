@@ -47,6 +47,7 @@ type connection struct {
 	filter   interface { Close(); SetTerminalColumns(int32); IsTransferringFiles() bool; StopTransferringFiles(bool) }
 	writer   *terminalWriter
 	transferring bool
+	zmodemSelection *zmodemSelection
 	history  *History
 	sequence uint64
 	keepaliveCancel context.CancelFunc
@@ -58,6 +59,7 @@ type Manager struct {
 	emit        EmitFunc
 	connections map[string]*connection
 	generations map[string]uint64
+	nextZmodemSelectionID uint64
 	connecting  map[string]context.CancelFunc
 	keepaliveInterval time.Duration
 	closed      bool
@@ -222,6 +224,7 @@ func (m *Manager) Disconnect(ref domain.ConnectionRef) error {
 		return nil
 	}
 	delete(m.connections, ref.TabID)
+	releaseZmodemSelection(c)
 	if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	m.mu.Unlock()
 	closeForwardListeners(c)
@@ -238,6 +241,7 @@ func (m *Manager) Close() {
 	m.connecting = map[string]context.CancelFunc{}
 	m.connections = map[string]*connection{}
 	for _, c := range live {
+		releaseZmodemSelection(c)
 		if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	}
 	m.mu.Unlock()
@@ -274,6 +278,7 @@ func (m *Manager) CancelTab(tab string) {
 	c := m.connections[tab]
 	if c != nil {
 		delete(m.connections, tab)
+		releaseZmodemSelection(c)
 		if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	}
 	m.mu.Unlock()

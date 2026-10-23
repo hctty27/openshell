@@ -1,66 +1,66 @@
 :root {
   --chrome-bar-height: 30px;
-  --surface: #20242B;
-  --panel: #272C34;
-  --raised: #303640;
-  --field-bg: #1E232B;
-  --border: #3D4652;
-  --text-primary: #E5E9F0;
-  --text-secondary: #C1CAD6;
-  --text-muted: #98A7BA;
-  --accent: #98BEF2;
-  --accent-fill: #4B86C6;
+  --surface: #272B32;
+  --panel: #30353D;
+  --raised: #363B44;
+  --field-bg: #252A31;
+  --border: #464D58;
+  --text-primary: #E2E6ED;
+  --text-secondary: #B9C3D0;
+  --text-muted: #96A4B7;
+  --accent: #83B6EE;
+  --accent-fill: #548FD5;
   --on-accent: #FFFFFF;
-  --accent-soft: #4B86C626;
-  --accent-border: #4B86C68A;
-  --info: #A9CDF6;
-  --info-soft: #4B86C61F;
-  --info-border: #4B86C666;
-  --warning: #E6BF74;
-  --danger: #EE9499;
+  --accent-soft: #548FD525;
+  --accent-border: #548FD58A;
+  --info: #9CC5F3;
+  --info-soft: #548FD51A;
+  --info-border: #548FD566;
+  --warning: #E5BF72;
+  --danger: #F4A0A6;
   --danger-soft: #C5545C20;
   --danger-border: #C5545C88;
-  --hover: #FFFFFF0D;
+  --hover: #FFFFFF11;
   --overlay: #0D1015B5;
-  --terminal-overlay: #1E2228EB;
-  --scrollbar: #8794A6;
-  --terminal-scroll-track: #8794A612;
-  --terminal-scroll-thumb: #8794A65C;
-  --terminal-scroll-thumb-hover: #A4AFBD;
-  --terminal-scroll-thumb-active: #C1CBD7;
-  --terminal-workspace: #1E2228;
+  --terminal-overlay: #171A1FEB;
+  --scrollbar: #7A8799;
+  --terminal-scroll-track: #7A879918;
+  --terminal-scroll-thumb: #7A879970;
+  --terminal-scroll-thumb-hover: #A5B2C4;
+  --terminal-scroll-thumb-active: #CAD4E0;
+  --terminal-workspace: #171A1F;
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --surface: #F6F8FA;
-  --panel: #EEF1F5;
+  --surface: #F2F3F5;
+  --panel: #E7EAEE;
   --raised: #FFFFFF;
   --field-bg: #FFFFFF;
-  --border: #D4DCE6;
-  --text-primary: #273445;
-  --text-secondary: #526175;
-  --text-muted: #68778A;
-  --accent: #2869B5;
-  --accent-fill: #2869B5;
+  --border: #CED4DD;
+  --text-primary: #252A32;
+  --text-secondary: #4E5A6B;
+  --text-muted: #647183;
+  --accent: #2878D0;
+  --accent-fill: #2878D0;
   --on-accent: #FFFFFF;
-  --accent-soft: #2869B51A;
-  --accent-border: #2869B563;
-  --info: #245E9F;
-  --info-soft: #2869B514;
-  --info-border: #2869B54F;
-  --warning: #865B12;
+  --accent-soft: #2878D018;
+  --accent-border: #2878D063;
+  --info: #2468B4;
+  --info-soft: #2878D014;
+  --info-border: #2878D04F;
+  --warning: #845A0B;
   --danger: #AC3445;
   --danger-soft: #B63D4D14;
   --danger-border: #B63D4D55;
-  --hover: #1729400B;
+  --hover: #1729400C;
   --overlay: #DDE2E9A3;
-  --terminal-overlay: #F8FAFCEB;
-  --scrollbar: #718197;
-  --terminal-scroll-track: #71819712;
-  --terminal-scroll-thumb: #71819770;
-  --terminal-scroll-thumb-hover: #617188;
-  --terminal-scroll-thumb-active: #485B73;
-  --terminal-workspace: #F8FAFC;
+  --terminal-overlay: #FFFFFFEB;
+  --scrollbar: #8591A0;
+  --terminal-scroll-track: #52647E14;
+  --terminal-scroll-thumb: #8591A080;
+  --terminal-scroll-thumb-hover: #66768B;
+  --terminal-scroll-thumb-active: #43566D;
+  --terminal-workspace: #FFFFFF;
 }
 :root {
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
@@ -124,7 +124,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--accent-border);
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  box-shadow: 0 0 0 2px #5ab69a0b;
 }
 textarea {
   resize: vertical;
@@ -135,7 +135,7 @@ textarea::placeholder {
   color: var(--text-muted);
 }
 input[type="checkbox"] {
-  accent-color: var(--accent-fill);
+  accent-color: #69c9ac;
   width: 14px;
   height: 14px;
 }
@@ -2788,11 +2788,11 @@ select.mode-select {
 }
 
 .settings-theme-preview--light {
-  background: #EEF1F5;
+  background: #E1E5EB;
 }
 
 .settings-theme-preview--dark {
-  background: #272C34;
+  background: #363B44;
 }
 
 .settings-theme-preview-sidebar {
@@ -2801,11 +2801,11 @@ select.mode-select {
 }
 
 .settings-theme-preview--light .settings-theme-preview-sidebar {
-  background: #D4DCE6;
+  background: #CED4DD;
 }
 
 .settings-theme-preview--dark .settings-theme-preview-sidebar {
-  background: #3D4652;
+  background: #515B6B;
 }
 
 .settings-theme-preview-main {
@@ -2830,15 +2830,15 @@ select.mode-select {
 }
 
 .settings-theme-preview--dark .settings-theme-preview-main span {
-  background: #1E2228;
+  background: #171A1F;
 }
 
 .settings-theme-preview--dark .settings-theme-preview-main span:first-child {
-  background: #3D4652;
+  background: #515B6B;
 }
 
 .settings-theme-preview--light .settings-theme-preview-main span:first-child {
-  background: #D4DCE6;
+  background: #CED4DD;
 }
 
 .terminal-palette-preview {
@@ -3451,3 +3451,70 @@ select.mode-select {
   min-height: 32px;
 }
 .zmodem-progress-dialog > footer button:hover { background: var(--hover); }
+
+/* ZMODEM file browsing stays inside the Wails window, not a native picker. */
+.zmodem-picker-dialog {
+  width: min(720px, calc(100vw - 32px));
+  height: min(660px, calc(100vh - 48px));
+  max-height: calc(100vh - 48px);
+  margin: auto;
+  padding: 0;
+  color: var(--text-primary);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 25px 70px #0006;
+  overflow: hidden;
+}
+.zmodem-picker-dialog[open] { display: flex; flex-direction: column; }
+.zmodem-picker-dialog::backdrop { background: var(--overlay); backdrop-filter: blur(2px); }
+.zmodem-picker-header, .zmodem-picker-toolbar, .zmodem-picker-footer { display: flex; align-items: center; gap: 10px; padding: 12px 18px; }
+.zmodem-picker-header { border-bottom: 1px solid var(--border); }
+.zmodem-picker-header h2 { flex: 1; margin: 0; font-size: 15px; font-weight: 600; }
+.zmodem-picker-header > svg { color: var(--accent); }
+.zmodem-picker-toolbar { padding-bottom: 8px; }
+.zmodem-picker-dialog button { display: inline-flex; gap: 6px; align-items: center; justify-content: center; }
+.zmodem-picker-toolbar > button, .zmodem-picker-header > button {
+  padding: 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
+}
+.zmodem-picker-toolbar form { flex: 1; min-width: 0; }
+.zmodem-picker-toolbar input {
+  width: 100%; min-width: 0; padding: 8px 10px; background: var(--field-bg);
+  border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);
+}
+.zmodem-picker-roots { display: flex; gap: 7px; padding: 0 18px 10px; overflow-x: auto; }
+.zmodem-picker-roots button {
+  flex-shrink: 0; padding: 6px 10px; font-size: 12px;
+  border: 1px solid var(--border); background: var(--panel); border-radius: 6px;
+}
+.zmodem-picker-list {
+  overflow-y: auto; min-height: 0; flex: 1; margin: 0 18px 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
+}
+.zmodem-picker-entry {
+  display: flex; width: 100%; min-height: 37px; align-items: center; gap: 10px;
+  text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--border);
+  font-size: 13px; color: var(--text-primary);
+}
+.zmodem-picker-entry:hover { background: var(--hover); }
+.zmodem-picker-entry.selected { background: var(--accent-soft); }
+.zmodem-picker-entry > svg { flex-shrink: 0; color: var(--info); }
+.zmodem-picker-entry > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zmodem-picker-entry > small { color: var(--text-secondary); font-size: 11px; }
+.zmodem-picker-entry > input { pointer-events: none; }
+.zmodem-picker-placeholder { padding: 24px; text-align: center; font-size: 13px; color: var(--text-secondary); }
+.zmodem-picker-error { color: var(--danger); }
+.zmodem-picker-footer { border-top: 1px solid var(--border); flex-wrap: wrap; }
+.zmodem-picker-footer label { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12px; }
+.zmodem-picker-count { flex: 1; text-align: right; color: var(--text-secondary); font-size: 12px; }
+.zmodem-picker-footer button {
+  flex-shrink: 0; min-height: 32px; padding: 7px 12px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
+}
+.zmodem-picker-footer .zmodem-picker-primary { border-color: var(--accent); background: var(--accent-fill); color: #fff; }
+.zmodem-picker-dialog button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 580px) {
+  .zmodem-picker-dialog { width: calc(100vw - 20px); }
+  .zmodem-picker-footer { gap: 7px; }
+  .zmodem-picker-count { flex-basis: 100%; text-align: left; }
+}

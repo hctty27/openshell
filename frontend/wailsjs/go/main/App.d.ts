@@ -47,6 +47,10 @@ export function Disconnect(arg1:domain.ConnectionRef):Promise<void>;
 
 export function CancelZmodem(arg1:domain.ConnectionRef):Promise<void>;
 
+export function ZmodemLocalPlaces():Promise<{home:string,roots:string[]}>;
+
+export function SubmitZmodemSelection(arg1:domain.ConnectionRef,arg2:number,arg3:string[]):Promise<void>;
+
 export function AcknowledgeTerminalOutput(arg1:domain.ConnectionRef,arg2:number):Promise<void>;
 
 export function OpenTerminal(arg1:domain.ConnectionRef,arg2:number,arg3:number):Promise<void>;

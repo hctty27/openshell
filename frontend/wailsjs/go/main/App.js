@@ -86,6 +86,14 @@ export function CancelZmodem(arg1) {
   return window['go']['main']['App']['CancelZmodem'](arg1);
 }
 
+export function ZmodemLocalPlaces() {
+  return window['go']['main']['App']['ZmodemLocalPlaces']();
+}
+
+export function SubmitZmodemSelection(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SubmitZmodemSelection'](arg1, arg2, arg3);
+}
+
 export function AcknowledgeTerminalOutput(arg1, arg2) {
   return window['go']['main']['App']['AcknowledgeTerminalOutput'](arg1, arg2);
 }
