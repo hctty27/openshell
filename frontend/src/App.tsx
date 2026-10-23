@@ -4,7 +4,7 @@ import { t as tr } from "./i18n";
 import { useTranslation } from "react-i18next";
 import { initializeI18n, i18n } from "./i18n";
 import { normalizeLanguage, type Language } from "./i18n/languages";
-import { useState, useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useState, useEffect, useRef, type CSSProperties } from "react";
 import {
   Terminal,
   Plus,
@@ -47,7 +47,6 @@ import type {
   QuickCommand,
   QuickCommandLayout,
   XshellImportPreview,
-  SFTPTask,
 } from "./types";
 import SessionTree from "./components/SessionTree";
 import SessionPicker from "./components/SessionPicker";
@@ -59,6 +58,9 @@ import TransferDock from "./components/TransferDock";
 import ZmodemProgressDialog from "./components/ZmodemProgressDialog";
 import AISidebar from "./components/AISidebar";
 import { useConversations } from "./useConversations";
+import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
+import { useSplitWorkspace } from "./features/terminal/useSplitWorkspace";
+import { useTransferActivity } from "./features/transfers/useTransferActivity";
 import { toChatMessages } from "./conversations";
 import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
@@ -144,9 +146,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
     }
   };
   const dialogs = useDialogs();
+  const { tabs, setTabs, tabsRef, activeID, setActiveID, activeIDRef, update } = useWorkspaceTabs();
+  const { hasActiveTransfers } = useTransferActivity();
   const [state, setState] = useState(initialState),
-    [tabs, setTabs] = useState<Tab[]>([]),
-    [activeID, setActiveID] = useState(""),
     [showAI, setShowAI] = useState(true),
     [showSessions, setShowSessions] = useState(true),
     [showSessionPicker, setShowSessionPicker] = useState(false),
@@ -175,9 +177,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     [showQuickCommandManager, setShowQuickCommandManager] = useState(false),
     [quickCommandFocus, setQuickCommandFocus] = useState(0),
     [terminalSearchFocus, setTerminalSearchFocus] = useState(0),
-    [splitPair, setSplitPair] = useState<[string, string] | null>(null),
-    [splitDirection, setSplitDirection] = useState<"columns" | "rows">("columns"),
-    [splitRatio, setSplitRatio] = useState(Math.min(80, Math.max(20, initialState.splitRatio ?? 50))),
     [middleClickPaste, setMiddleClickPaste] = useState(initialState.middleClickPaste === true),
     [logHighlights, setLogHighlights] = useState(initialState.logHighlights === true),
     [profileID, setProfileID] = useState(
@@ -209,32 +208,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
     [attachments, setAttachments] = useState<Record<string, string>>({});
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
   const remoteUploadDirs = useRef<Record<string, string>>({});
-  const splitContainerRef = useRef<HTMLDivElement>(null);
-  const splitDragCleanup = useRef<(() => void) | null>(null);
-  useEffect(() => () => splitDragCleanup.current?.(), []);
-  const tabsRef = useRef(tabs),
-    streamIDs = useRef<Record<string, string>>({}),
-    selections = useRef<Record<string, string>>({});
-  tabsRef.current = tabs;
-  const activeTransferIds = useRef(new Map<string, Set<string>>());
-  const activeZmodemTabs = useRef(new Set<string>());
-  useEffect(() => {
-    const sftp = listen("sftp:transfer", (task: SFTPTask) => {
-      const set = activeTransferIds.current.get(task.ref.tabId) ?? new Set<string>();
-      if (task.status === "queued" || task.status === "running") set.add(task.id);
-      else set.delete(task.id);
-      if (set.size) activeTransferIds.current.set(task.ref.tabId, set);
-      else activeTransferIds.current.delete(task.ref.tabId);
-    });
-    const zmodem = listen("ssh:transfer-state", (payload: { ref: Ref; active: boolean }) => {
-      if (payload.active) activeZmodemTabs.current.add(payload.ref.tabId);
-      else activeZmodemTabs.current.delete(payload.ref.tabId);
-    });
-    const zmodemFinished = listen("ssh:transfer-finished", (payload: { ref: Ref }) => {
-      if (payload?.ref) activeZmodemTabs.current.delete(payload.ref.tabId);
-    });
-    return () => { sftp(); zmodem(); zmodemFinished(); };
-  }, []);
+  const streamIDs = useRef<Record<string, string>>({});
+  const selections = useRef<Record<string, string>>({});
   const reconnectTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const reconnectInFlight = useRef(new Set<string>());
   const autoReconnectRef = useRef(state.autoReconnect !== false);
@@ -255,8 +230,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     const timer = window.setTimeout(() => setNotice(""), 5000);
     return () => window.clearTimeout(timer);
   }, [notice]);
-  const activeIDRef = useRef(activeID);
-  activeIDRef.current = activeID;
   const memory = useConversations();
   const rawActive = tabs.find((t) => t.id === activeID);
   const activeConversationID = rawActive
@@ -285,63 +258,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
     : undefined;
   const activeTerminalBackground = resolveTerminalTheme(theme, terminalTheme, active?.session.terminalTheme).background;
   const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
-  const splitReady = Boolean(
-    !showSFTP && splitPair?.includes(activeID) &&
-    splitPair.every((id) => tabs.some((tab) => tab.id === id && tab.status === "connected")),
-  );
-  const splitPartnerID = splitReady ? (splitPair?.find((id) => id !== activeID) ?? "") : "";
-  const splitChoices = tabs.filter((tab) => tab.id !== activeID && tab.status === "connected");
-  const setSplitRatioAndSave = (next: number) => {
-    const ratio = Math.round(Math.max(20, Math.min(80, next)));
-    setSplitRatio(ratio);
-    void api.SavePreference("splitRatio", String(ratio)).catch(notify);
-  };
-  const startSplitResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !splitReady) return;
-    const element = splitContainerRef.current;
-    if (!element) return;
-    event.preventDefault();
-    splitDragCleanup.current?.();
-    const pointerId = event.pointerId;
-    const ratioFromEvent = (e: PointerEvent) => {
-      const rect = element.getBoundingClientRect();
-      const length = splitDirection === "columns" ? rect.width : rect.height;
-      if (length <= 0) return null;
-      const position = splitDirection === "columns" ? e.clientX - rect.left : e.clientY - rect.top;
-      return Math.round(Math.max(20, Math.min(80, position * 100 / length)));
-    };
-    let latest = splitRatio;
-    const move = (e: PointerEvent) => {
-      if (e.pointerId !== pointerId) return;
-      const next = ratioFromEvent(e);
-      if (next === null) return;
-      latest = next;
-      setSplitRatio(next);
-    };
-    const cleanup = () => {
-      document.removeEventListener("pointermove", move);
-      document.removeEventListener("pointerup", stop);
-      document.removeEventListener("pointercancel", cancel);
-      splitDragCleanup.current = null;
-    };
-    const stop = (e: PointerEvent) => {
-      if (e.pointerId !== pointerId) return;
-      cleanup();
-      setSplitRatioAndSave(latest);
-    };
-    const cancel = (e: PointerEvent) => {
-      if (e.pointerId !== pointerId) return;
-      cleanup();
-      setSplitRatio(splitRatio);
-    };
-    document.addEventListener("pointermove", move);
-    document.addEventListener("pointerup", stop);
-    document.addEventListener("pointercancel", cancel);
-    splitDragCleanup.current = cleanup;
-  };
-  const update = (tabID: string, fn: (tab: Tab) => Tab) =>
-    setTabs((old) => old.map((t) => (t.id === tabID ? fn(t) : t)));
   const notify = (error: unknown) => setToast(error);
+  const {
+    splitPair, setSplitPair, splitDirection, setSplitDirection,
+    splitRatio, splitContainerRef, splitReady, splitPartnerID, splitChoices,
+    setSplitRatioAndSave, startSplitResize,
+  } = useSplitWorkspace({
+    tabs, activeID, showSFTP, initialRatio: initialState.splitRatio, onError: notify,
+  });
   const dropDialogs = useRef(dialogs);
   dropDialogs.current = dialogs;
   useEffect(() => {
@@ -802,8 +726,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
   };
   const disconnectTab = async (tab: Tab) => {
     if (!tab.ref && tab.status !== "connecting") return;
-    const hasTransfers = Boolean(activeTransferIds.current.get(tab.id)?.size) ||
-      activeZmodemTabs.current.has(tab.id);
+    const hasTransfers = hasActiveTransfers(tab.ref);
     if (state.confirmActiveDisconnect !== false && (tab.chatBusy || tab.executing || hasTransfers)) {
       if (!(await dialogs.confirm({
         title: message("common:disconnectRunningTitle"),
