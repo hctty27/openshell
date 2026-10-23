@@ -364,8 +364,17 @@ export default function TerminalPane(p: Props) {
           if (callbacks.current.active) term.focus();
         })
         .catch((e) => {
+          // A reconnect can cancel a pending ConPTY launch or SSH open.
+          // The old pane must never report that expected cancellation as a failure.
+          if (disposed) return;
           if (local) {
-            term.write(`\r\n${t("terminal:localShellStartFailed")}: ${String(e)}\r\n`);
+            const reason = errorText(e);
+            if (
+              reason.includes("terminal connection changed") ||
+              reason.includes("terminal tab no longer exists") ||
+              reason.includes("SSH must disconnect before starting the local terminal")
+            ) return;
+            term.write(`\r\n${t("terminal:localShellStartFailed")}: ${reason}\r\n`);
             callbacks.current.onNotice(e);
           } else callbacks.current.onError(e);
         });
@@ -395,7 +404,16 @@ export default function TerminalPane(p: Props) {
           const line = buffer.getLine(index);
           if (line) lines.push(line.translateToString(true));
         }
-        scrollbackSnapshot.current = p.preserveHistory !== false ? lines.join("\r\n").slice(-1048576) : "";
+        // xterm includes unused screen rows in the normal buffer. Restoring
+        // those rows on every reconnect would push the next prompt far below
+        // the last meaningful output.
+        let start = 0;
+        let end = lines.length;
+        while (start < end && !lines[start].trim()) start++;
+        while (end > start && !lines[end - 1].trim()) end--;
+        scrollbackSnapshot.current = p.preserveHistory !== false
+          ? lines.slice(start, end).join("\r\n").slice(-1048576)
+          : "";
       }
       term.dispose();
       logAddons.current = [];
