@@ -41,6 +41,7 @@ export interface APIProfile {
   name: string;
   baseUrl: string;
   model: string;
+  provider?: "openai" | "anthropic";
   secretRef: string;
   toolsEnabled: boolean;
 }
