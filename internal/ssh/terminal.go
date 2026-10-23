@@ -127,8 +127,11 @@ func (w *terminalWriter) Write(p []byte) (int, error) {
 	w.c.history.Write(p)
 	w.buffer = append(w.buffer, p...)
 	for len(w.buffer) >= terminalOutputChunkSize {
-		w.emitLocked(w.buffer[:terminalOutputChunkSize])
+		// Consume the chunk before emitLocked can wait and release w.mu.
+		// Close may otherwise flush or clear w.buffer while this write is paused.
+		chunk := append([]byte(nil), w.buffer[:terminalOutputChunkSize]...)
 		w.buffer = w.buffer[terminalOutputChunkSize:]
+		w.emitLocked(chunk)
 	}
 	if len(w.buffer) > 0 && w.timer == nil {
 		w.timer = time.AfterFunc(terminalOutputFlushDelay, func() {
