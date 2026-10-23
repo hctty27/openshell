@@ -73,9 +73,21 @@ export default function TerminalPane(p: Props) {
     const local = terminalMode === "local";
     const localID = `${p.tab.id}:${++localSequence.current}`;
     let pastePending = false;
-    let disposed = false,
-      pending = 0,
-      overloaded = false;
+    let disposed = false;
+    let lastReceivedSequence = 0;
+    let lastProcessedSequence = 0;
+    let lastAcknowledgedSequence = 0;
+    let acknowledgementScheduled = false;
+    const acknowledge = () => {
+      if (acknowledgementScheduled || local || !ref) return;
+      acknowledgementScheduled = true;
+      queueMicrotask(() => {
+        acknowledgementScheduled = false;
+        if (lastProcessedSequence <= lastAcknowledgedSequence) return;
+        lastAcknowledgedSequence = lastProcessedSequence;
+        void api.AcknowledgeTerminalOutput(ref, lastAcknowledgedSequence).catch(() => {});
+      });
+    };
     const term = new Terminal({
       fontFamily: 'Cascadia Mono,Consolas,"Microsoft YaHei",monospace',
       fontSize: p.fontSize,
@@ -132,20 +144,13 @@ export default function TerminalPane(p: Props) {
       if (disposed || terminalMode === "offline") return;
       if (local ? (payload.tabId !== p.tab.id || payload.terminalId !== localID) : !same(payload.ref)) return;
       const bytes = Uint8Array.from(atob(payload.data), (c) => c.charCodeAt(0));
-      pending += bytes.length;
-      if (pending > 2 * 1024 * 1024) {
-        // Discard overloaded render output, never the SSH transport.
-        pending -= bytes.length;
-        if (!overloaded) {
-          overloaded = true;
-          callbacks.current.onNotice(
-            message("terminal:terminalOutputExceededTheProcessingLimitDisconnectedLimit"),
-          );
-        }
-        return;
-      }
+      const sequence = !local && typeof payload.sequence === "number" ? payload.sequence : 0;
+      lastReceivedSequence = Math.max(lastReceivedSequence, sequence);
+      // Go pauses reading at the high watermark and resumes only when
+      // xterm.js has actually parsed the acknowledged bytes.
       term.write(bytes, () => {
-        pending -= bytes.length;
+        lastProcessedSequence = Math.max(lastProcessedSequence, sequence);
+        acknowledge();
       });
     });
     const encoder = new TextEncoder();
@@ -367,6 +372,10 @@ export default function TerminalPane(p: Props) {
     });
     return () => {
       disposed = true;
+      // Unmounting intentionally discards any remaining terminal render buffer.
+      // Release its backend credits so the SSH reader cannot remain blocked.
+      lastProcessedSequence = lastReceivedSequence;
+      acknowledge();
       inputQueue.length = 0;
       observer.disconnect();
       off();
@@ -435,9 +444,13 @@ export default function TerminalPane(p: Props) {
     const term = terminal.current;
     if (!term) return;
     if (!(p.visible ?? p.active)) {
-      webglAddon.current?.dispose();
-      webglAddon.current = null;
-      return;
+      // Avoid repeatedly destroying GPU contexts during quick tab and split changes.
+      // Long-idle tabs still free the context to respect WebView2's GPU limits.
+      const timer = window.setTimeout(() => {
+        webglAddon.current?.dispose();
+        webglAddon.current = null;
+      }, 1500);
+      return () => window.clearTimeout(timer);
     }
     if (webglAddon.current || webglFailed.current) return;
     let addon: WebglAddon | null = null;
