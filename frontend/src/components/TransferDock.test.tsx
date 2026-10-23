@@ -85,8 +85,8 @@ test("ZMODEM status stops on local child exit without waiting for a remote callb
   expect(screen.queryByText("21.8 MB · 11.4 MB/s")).toBeNull();
   expect(screen.queryByText("传输流程已退出")).toBeNull();
   act(() => events.callbacks.get("ssh:transfer-state")?.({ ref, active: true }));
-  expect(screen.queryByText("正在传输")).toBeNull();
+  expect(screen.queryByText("ZMODEM 文件传输中 · 等待传输完成")).toBeNull();
   act(() => events.callbacks.get("ssh:transfer-details")?.({ ref, direction: "upload" }));
   act(() => events.callbacks.get("ssh:transfer-state")?.({ ref, active: true }));
-  expect(screen.getByText("正在传输")).toBeTruthy();
+  expect(screen.getByText("ZMODEM 文件传输中 · 等待传输完成")).toBeTruthy();
 });
