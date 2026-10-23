@@ -53,23 +53,14 @@ jobs:
           $config = Get-Content wails.json -Raw | ConvertFrom-Json
           $config.info.productVersion = $version
           $config | ConvertTo-Json -Depth 20 | Set-Content wails.json -Encoding utf8
+      # Combined module + compiler cache was faster than module-only in
+      # Windows Wails A/B tests. The cache is keyed by go.sum and Go version.
       - uses: actions/setup-go@v7
         id: setup-go
         with:
           go-version-file: go.mod
-          cache: false
-      - name: Locate Go modules cache
-        id: go-mod-cache
-        shell: pwsh
-        run: |
-          "path=$(go env GOMODCACHE)" >> $env:GITHUB_OUTPUT
-      - name: Cache Go modules only
-        uses: actions/cache@v6
-        with:
-          path: ${{ steps.go-mod-cache.outputs.path }}
-          key: windows-go-modules-v1-${{ hashFiles('go.sum') }}-wails-v2.17.0
-          restore-keys: |
-            windows-go-modules-v1-
+          cache: true
+          cache-dependency-path: go.sum
       - name: Locate Wails CLI binary
         id: wails-path
         shell: pwsh
