@@ -23,6 +23,7 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
   const [zmodemCancelling, setZmodemCancelling] = useState(false);
   const [zmodemStats, setZmodemStats] = useState<ZmodemStats | null>(null);
   const seenZmodem = useRef(false);
+  const finishedZmodem = useRef(false);
   useEffect(() => {
     let disposed = false;
     setTasks([]);
@@ -30,6 +31,7 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
     setZmodemCancelling(false);
     setZmodemStats(null);
     seenZmodem.current = false;
+    finishedZmodem.current = false;
     if (!refID) return;
     // Browser fixtures can emulate SSH without exposing the SFTP backend.
     // Check the actual Wails binding before calling through the API proxy.
@@ -48,8 +50,13 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
       setTasks(old => [...old.filter(item => item.id !== task.id), task].sort((a, b) => a.created - b.created));
       if (task.status === "running" || task.status === "failed") setExpanded(true);
     });
+    const offDetails = listen("ssh:transfer-details", (payload: { ref: Ref }) => {
+      if (sameRef(payload?.ref, refID)) finishedZmodem.current = false;
+    });
     const offState = listen("ssh:transfer-state", (payload: { ref: Ref; active: boolean }) => {
       if (!sameRef(payload?.ref, refID)) return;
+      if (payload.active && finishedZmodem.current) return;
+      if (!payload.active) finishedZmodem.current = true;
       setZmodemActive(payload.active);
       setZmodemCancelling(false);
       setZmodemStats(null);
@@ -61,13 +68,14 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
       }
     });
     const offProgress = listen("ssh:transfer-progress", (payload: { ref: Ref; transferred: string; speed: string }) => {
-      if (!sameRef(payload?.ref, refID)) return;
+      if (!sameRef(payload?.ref, refID) || finishedZmodem.current) return;
       setZmodemStats({ transferred: payload.transferred, speed: payload.speed });
     });
     // Upstream legacy ZMODEM may delay its transfer-state(false) callback
     // until more remote output arrives after the local child has already exited.
     const offFinished = listen("ssh:transfer-finished", (payload: { ref: Ref }) => {
-      if (!sameRef(payload?.ref, refID) || !seenZmodem.current) return;
+      if (!sameRef(payload?.ref, refID)) return;
+      finishedZmodem.current = true;
       seenZmodem.current = false;
       setZmodemActive(false);
       setZmodemCancelling(false);
@@ -76,6 +84,7 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
     return () => {
       disposed = true;
       offTasks();
+      offDetails();
       offState();
       offProgress();
       offFinished();
