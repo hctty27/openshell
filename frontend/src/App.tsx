@@ -261,7 +261,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const notify = (error: unknown) => setToast(error);
   const {
     splitPair, setSplitPair, splitDirection, setSplitDirection,
-    splitRatio, splitContainerRef, splitReady, splitPartnerID, splitChoices,
+    splitRatio, setSplitRatio, splitContainerRef, splitReady, splitPartnerID, splitChoices,
     setSplitRatioAndSave, startSplitResize,
   } = useSplitWorkspace({
     tabs, activeID, showSFTP, initialRatio: initialState.splitRatio, onError: notify,
