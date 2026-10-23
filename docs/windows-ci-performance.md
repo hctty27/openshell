@@ -10,7 +10,7 @@ publishing semantics just to reduce build time.
 | --- | --- | --- |
 | `windows-wails-cli-v2.17.0-go<version>-<arch>` | `$(go env GOPATH)/bin/wails.exe` | Wails CLI version, effective Go version, Windows architecture |
 | `windows-app-icons-v1-<hash>` | Resized `build/appicon.png`, `build/windows/icon.ico`, `frontend/public/app-icon.png` | Source `build/appicon.png` or `scripts/generate_app_icons.py` |
-| Existing `windows-go-modules-v1-...` | Go module cache only | `go.sum` |
+| `setup-go@v7` combined cache | `GOMODCACHE` + `GOCACHE` | Go version and `go.sum` |
 
 The Wails CLI cache is optional. If it is missing, the workflow executes the
 pinned `go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0` and checks
@@ -25,10 +25,19 @@ embedded into the built Windows binaries*. To regenerate an updated icon
 locally, install Pillow and run that script; the cache will invalidate when
 either the source icon or the generation script changes.
 
-The Go module cache is deliberately **not** expanded to include `GOCACHE`
-yet. Its last published release restore transferred approximately 367 MiB and
-took 38 seconds. Adding compiler outputs could make the transfer larger; do
-not change caching without measuring both cold and warm runs.
+A separate [three-way Windows benchmark](https://github.com/hctty27/openshell/pull/52)
+compared the legacy module-only cache, setup-go's combined module/build cache,
+and no cache. The legacy module-only archive was about 367 MB, restored in
+38 seconds and took 37 seconds to compile. A warm setup-go combined cache
+restored about 258 MB in 47 seconds, but compiled in just 4 seconds, yielding
+a total job time of 1m06s versus 1m49s for module-only. The combined strategy
+now powers the release job; it can be cold on the first run after merging
+because pull-request caches are scoped to the PR. Subsequent runs can benefit
+from that cache. Do not assume every runner has identical network or CPU
+performance.
+
+It is important that setup-go uses `cache-dependency-path: go.sum` and that
+the Go toolchain stays pinned by `go.mod`.
 
 ## Release dry-run safety
 
@@ -58,3 +67,21 @@ PR #51 first (cold cache) Windows release dry run: 3m52s; Wails CLI install
 establish meaningful acceleration. Evaluate a second run after the Wails and
 icon caches have been populated. Ensure the resulting Release remains
 unchanged: `v0.1.49` until the user explicitly requests a new release.
+
+## Go cache A/B benchmark (PR #52)
+
+| Strategy | Cache state | Windows Wails compile | Job duration |
+| --- | --- | ---: | ---: |
+| Existing module-only | hit; 367 MB | 37s | 1m49s |
+| setup-go combined | cold miss | 55s | 1m37s |
+| no cache | no restore | 59s | 1m37s |
+| setup-go combined | warm hit; 258 MB | **4s** | **1m06s** |
+
+All options successfully produced an EXE with verified embedded icons.
+Benchmark job time includes Go setup and restore; input asset preparation ran in
+a separate shared job. The warm combined-cache result was obtained by
+re-running its workflow job, not by modifying the source tree.
+
+Benchmark links:
+- https://github.com/hctty27/openshell/actions/runs/39895191378
+- https://github.com/hctty27/openshell/actions/runs/39895191378/attempts/2
