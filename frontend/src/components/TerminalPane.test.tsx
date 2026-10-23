@@ -99,6 +99,7 @@ vi.mock("@xterm/addon-fit", () => ({
 vi.mock("../bridge", () => ({
   api: {
     WriteTerminal: vi.fn(async () => {}),
+    AcknowledgeTerminalOutput: vi.fn(async () => {}),
     ResizeTerminal: vi.fn(async () => {}),
     OpenTerminal: vi.fn(async () => {}),
     StartLocalTerminal: vi.fn(async () => {}),
