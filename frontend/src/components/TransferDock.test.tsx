@@ -60,8 +60,9 @@ test("ZMODEM progress and cancellation do not claim unverified success", async (
   fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
   await waitFor(() => expect(api.CancelZmodem).toHaveBeenCalledWith(ref));
   act(() => events.callbacks.get("ssh:transfer-state")?.({ ref, active: false }));
-  expect(screen.getByText("传输流程已退出")).toBeTruthy();
-  expect(screen.getByText("请查看终端确认结果")).toBeTruthy();
+  expect(screen.queryByText("传输流程已退出")).toBeNull();
+  expect(screen.queryByText("请查看终端确认结果")).toBeNull();
+  expect(screen.queryByRole("region")).toBeNull();
 });
 
 test("empty SFTP sidebar reserves only the collapsed transfer footer", () => {
@@ -82,5 +83,10 @@ test("ZMODEM status stops on local child exit without waiting for a remote callb
   expect(screen.getByText("21.8 MB · 11.4 MB/s")).toBeTruthy();
   act(() => events.callbacks.get("ssh:transfer-finished")?.({ ref }));
   expect(screen.queryByText("21.8 MB · 11.4 MB/s")).toBeNull();
-  expect(screen.getByText("传输流程已退出")).toBeTruthy();
+  expect(screen.queryByText("传输流程已退出")).toBeNull();
+  act(() => events.callbacks.get("ssh:transfer-state")?.({ ref, active: true }));
+  expect(screen.queryByText("正在传输")).toBeNull();
+  act(() => events.callbacks.get("ssh:transfer-details")?.({ ref, direction: "upload" }));
+  act(() => events.callbacks.get("ssh:transfer-state")?.({ ref, active: true }));
+  expect(screen.getByText("正在传输")).toBeTruthy();
 });
