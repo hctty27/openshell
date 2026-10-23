@@ -104,7 +104,7 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
         {expanded ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
       </button>
       {expanded && <div className="transfer-dock-items">
-        {tasks.length === 0 && !zmodemActive && !zmodemEnded && (
+        {tasks.length === 0 && !zmodemActive  && (
           <div className="transfer-dock-empty">{t("sftp:noTransfers")}</div>
         )}
         {zmodemActive && (
