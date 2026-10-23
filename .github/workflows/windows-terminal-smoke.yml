@@ -19,6 +19,9 @@ on:
       - "frontend/package.json"
       - "frontend/package-lock.json"
       - "internal/ssh/**"
+      - "cmd/zmodem-launcher/**"
+      - "scripts/prepare_zmodem_windows.ps1"
+      - "scripts/verify_zmodem_windows.ps1"
       - "internal/sftp/**"
       - "sftp_ai.go"
       - "sftp_ai_test.go"
@@ -120,9 +123,10 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/prepare_zmodem_windows.ps1
-          foreach ($file in @("rz.exe", "sz.exe", "msys-2.0.dll", "lrzsz-win32-source.zip", "COPYING-lrzsz.txt")) {
+          foreach ($file in @("rz.exe", "sz.exe", "native/rz.exe", "native/sz.exe", "native/msys-2.0.dll", "lrzsz-win32-source.zip", "COPYING-lrzsz.txt")) {
             if (!(Test-Path "build/bin/zmodem/$file")) { throw "Missing bundled helper: $file" }
           }
+          ./scripts/verify_zmodem_windows.ps1
       - name: Package test executable
         shell: pwsh
         run: |

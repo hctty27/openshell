@@ -142,7 +142,7 @@ fi
 
 ### ZMODEM：`rz` / `sz`
 
-在远程终端运行 `rz`，选择本地文件上传；运行 `sz /path/to/file`，选择本地下载位置。远程服务器需要安装 `lrzsz`。官方 Windows 包已包含 `rz.exe`、`sz.exe`、`msys-2.0.dll`、许可证声明及对应源码包，无需设置 Windows PATH。
+在远程终端运行 `rz`，选择本地文件上传；运行 `sz /path/to/file`，选择本地下载位置。远程服务器需要安装 `lrzsz`。官方 Windows 包已内置 `rz/sz` 的无控制台窗口启动器，原版工具与 `msys-2.0.dll` 存放于 `zmodem/native/`，并附许可证和源码，无需配置 Windows PATH。
 
 传输状态显示在侧边栏的传输区域，可通过传输控件或 Ctrl+C 取消。下载遇到同名文件时使用 `rz -E` 重命名策略。协议数据在进入终端历史与 AI 上下文前过滤。ZMODEM 在 tmux/screen 中可能不稳定；目录与断点续传请使用 SFTP。
 

@@ -131,6 +131,10 @@ jobs:
       - name: Prepare bundled ZMODEM utilities
         shell: pwsh
         run: ./scripts/prepare_zmodem_windows.ps1
+      - name: Verify ZMODEM console-free launchers
+        shell: pwsh
+        run: ./scripts/verify_zmodem_windows.ps1
+
       - name: Validate OpenShell EXE icon
         shell: pwsh
         run: |

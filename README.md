@@ -142,7 +142,7 @@ Reconnect to apply the change. Each new prompt reports the current directory; op
 
 ### ZMODEM: `rz` / `sz`
 
-Run `rz` on the remote host to choose local files to upload, or `sz /path/to/file` to choose a local destination for downloads. The remote host must have `lrzsz` installed. Official Windows packages include `rz.exe`, `sz.exe`, `msys-2.0.dll`, license notices, and corresponding source archives; no Windows PATH setup is needed.
+Run `rz` on the remote host to choose local files to upload, or `sz /path/to/file` to choose a local destination for downloads. The remote host must have `lrzsz` installed. Official Windows packages include headless `rz.exe` / `sz.exe` launchers, with unmodified lrzsz binaries and `msys-2.0.dll` in `zmodem/native/`, as well as the original source and license notices. No Windows PATH setup is needed; the bundled launchers avoid opening an extra console window.
 
 Transfer status appears in the sidebar's transfer area. Cancel through the transfer controls or Ctrl+C. Downloads use the `rz -E` rename strategy for existing filenames. Protocol payloads are filtered before terminal history and AI context. ZMODEM can be unreliable inside tmux/screen; use SFTP for directories and resumable transfers.
 

@@ -38,13 +38,29 @@ try {
     if ($null -eq $copying) { throw "GPL COPYING missing from upstream source archive" }
 
     New-Item -ItemType Directory -Path $target -Force | Out-Null
+    $native = Join-Path $target "native"
+    New-Item -ItemType Directory -Path $native -Force | Out-Null
     foreach ($file in @("rz.exe", "sz.exe", "msys-2.0.dll")) {
-        Copy-Item -LiteralPath (Join-Path $sourceBinDir $file) -Destination (Join-Path $target $file) -Force
+        Copy-Item -LiteralPath (Join-Path $sourceBinDir $file) -Destination (Join-Path $native $file) -Force
     }
+
+    # rz/sz are console programs. trzsz-go starts them without CREATE_NO_WINDOW;
+    # a Windows GUI-subsystem launcher forwards stdio and starts the unmodified
+    # tools with CREATE_NO_WINDOW. The native filenames remain rz.exe / sz.exe,
+    # which is significant to lrzsz protocol selection.
+    $launcher = Join-Path $target "openshell-zmodem-launcher.exe"
+    & go build -trimpath -ldflags '-s -w -H windowsgui' -o $launcher ./cmd/zmodem-launcher
+    if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $launcher)) {
+        throw "Unable to build headless ZMODEM launcher"
+    }
+    foreach ($name in @("rz.exe", "sz.exe")) {
+        Copy-Item -LiteralPath $launcher -Destination (Join-Path $target $name) -Force
+    }
+    Remove-Item -LiteralPath $launcher -Force
     Copy-Item -LiteralPath $copying.FullName -Destination (Join-Path $target "COPYING-lrzsz.txt") -Force
     Copy-Item -LiteralPath $sourceArchive -Destination (Join-Path $target "lrzsz-win32-source.zip") -Force
     @"
-Bundled ZMODEM helper tools (separate GPL-2.0 program)
+Bundled ZMODEM helper tools (separate GPL-2.0 program) and OpenShell MIT-licensed Windows launchers
 Upstream: https://github.com/trzsz/lrzsz-win32
 Release: $version
 Upstream source commit: 2e46d4258035cea45262244f59c34d0db4fae2a7
@@ -54,7 +70,11 @@ Includes msys-2.0.dll from upstream binary release.
 MSYS2 runtime source and licensing: https://github.com/msys2/msys2-runtime
 Upstream binary ZIP SHA-256: $expectedSha256
 
-These tools execute as separate child processes from OpenShell.
+The unmodified upstream binaries are in native/. The top-level rz.exe and sz.exe
+are OpenShell GUI-subsystem launchers that run those original programs without
+opening a new console and forward standard input/output/error unchanged.
+
+The OpenShell launcher source is cmd/zmodem-launcher/ (MIT).
 "@ | Set-Content -LiteralPath (Join-Path $target "THIRD_PARTY_NOTICES.txt") -Encoding UTF8
     Write-Host "Bundled verified ZMODEM helpers in $target"
 } finally {

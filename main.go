@@ -21,7 +21,7 @@ func main() {
     // Prefer checked-in release helper binaries next to the application.
     if executable, err := os.Executable(); err == nil {
         helperDir := filepath.Join(filepath.Dir(executable), "zmodem")
-        helpers := []string{"rz.exe", "sz.exe", "msys-2.0.dll"}
+        helpers := []string{"rz.exe", "sz.exe", filepath.Join("native", "rz.exe"), filepath.Join("native", "sz.exe"), filepath.Join("native", "msys-2.0.dll")}
         complete := true
         for _, name := range helpers {
             info, err := os.Stat(filepath.Join(helperDir, name))
