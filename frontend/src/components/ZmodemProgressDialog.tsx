@@ -42,6 +42,7 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [autoClose, setAutoClose] = useState(true);
   const dismissed = useRef(new Set<string>());
+  const cancelling = useRef(new Set<string>());
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -68,6 +69,7 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
       const key = transferKey(payload.ref);
       if (payload.active) {
         dismissed.current.delete(key);
+        cancelling.current.delete(key);
         setTransfers(current => ({
           ...current,
           [key]: { ...initialTransfer(payload.ref), direction: current[key]?.direction },
@@ -84,7 +86,8 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
             },
           };
         });
-        if (autoClose) setOpenKey(current => current === key ? null : current);
+        const wasCancelled = cancelling.current.delete(key);
+        if (autoClose && !wasCancelled) setOpenKey(current => current === key ? null : current);
       }
     });
 
@@ -134,11 +137,13 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
   };
   const cancel = () => {
     if (!activeRef || !isActive || transfer.status === "cancelling") return;
+    cancelling.current.add(key);
     setTransfers(current => ({
       ...current,
       [key]: { ...current[key], status: "cancelling" },
     }));
     void api.CancelZmodem(activeRef).catch(error => {
+      cancelling.current.delete(key);
       setTransfers(current => ({
         ...current,
         [key]: { ...current[key], status: "running" },
