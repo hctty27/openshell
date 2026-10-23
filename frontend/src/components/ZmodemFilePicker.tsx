@@ -68,8 +68,14 @@ export default function ZmodemFilePicker({ activeRef, onNotice }: Props) {
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!activeRequest || !dialog) return;
-    if (!dialog.open) dialog.showModal();
-    return () => { if (dialog.open) dialog.close(); };
+    if (!dialog.open) {
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+    }
+    return () => {
+      if (dialog.open && typeof dialog.close === "function") dialog.close();
+      else dialog.removeAttribute("open");
+    };
   }, [requestKey]);
 
   useEffect(() => {
@@ -171,13 +177,15 @@ export default function ZmodemFilePicker({ activeRef, onNotice }: Props) {
               className={`zmodem-picker-entry ${selected.includes(entry.path) ? "selected" : ""}`}
               disabled={busy || entry.isSymlink}
               onClick={() => {
-                if (entry.isDir) { goTo(entry.path); return; }
-                if (download) return;
+                if (entry.isDir || download) return;
                 setSelected(previous => previous.includes(entry.path)
                   ? previous.filter(file => file !== entry.path)
                   : [...previous, entry.path]);
               }}
-              onDoubleClick={() => { if (entry.isDir) goTo(entry.path); }}>
+              onDoubleClick={() => {
+                if (entry.isDir) goTo(entry.path);
+                else if (!download) setSelected(previous => previous.includes(entry.path) ? previous : [...previous, entry.path]);
+              }}>
               {entry.isDir ? <Folder size={16} /> : <File size={16} />}
               <span title={entry.path}>{entry.name}</span>
               <small>{entry.isDir ? t("sftp:zmodemPickFolder") : niceSize(entry.size)}</small>
