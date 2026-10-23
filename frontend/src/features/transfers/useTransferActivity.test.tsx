@@ -20,7 +20,7 @@ function emit(name: string, payload: unknown) {
     for (const callback of events.listeners.get(name) ?? []) callback(payload);
   });
 }
-let activity: ReturnType<typeof useTransferActivity>;
+let activity!: ReturnType<typeof useTransferActivity>;
 function Probe() {
   activity = useTransferActivity();
   return <span data-testid="activity">ready</span>;
