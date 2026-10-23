@@ -22,7 +22,6 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
   const [zmodemActive, setZmodemActive] = useState(false);
   const [zmodemCancelling, setZmodemCancelling] = useState(false);
   const [zmodemStats, setZmodemStats] = useState<ZmodemStats | null>(null);
-  const [zmodemEnded, setZmodemEnded] = useState(false);
   const seenZmodem = useRef(false);
   useEffect(() => {
     let disposed = false;
@@ -30,7 +29,6 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
     setZmodemActive(false);
     setZmodemCancelling(false);
     setZmodemStats(null);
-    setZmodemEnded(false);
     seenZmodem.current = false;
     if (!refID) return;
     // Browser fixtures can emulate SSH without exposing the SFTP backend.
@@ -57,11 +55,9 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
       setZmodemStats(null);
       if (payload.active) {
         seenZmodem.current = true;
-        setZmodemEnded(false);
         setExpanded(true);
       } else if (seenZmodem.current) {
         seenZmodem.current = false;
-        setZmodemEnded(true);
       }
     });
     const offProgress = listen("ssh:transfer-progress", (payload: { ref: Ref; transferred: string; speed: string }) => {
@@ -76,7 +72,6 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
       setZmodemActive(false);
       setZmodemCancelling(false);
       setZmodemStats(null);
-      setZmodemEnded(true);
     });
     return () => {
       disposed = true;
@@ -87,7 +82,7 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
     };
   }, [refID?.tabId, refID?.sessionId, refID?.generation]);
 
-  if (!refID || (!alwaysVisible && tasks.length === 0 && !zmodemActive && !zmodemEnded)) return null;
+  if (!refID || (!alwaysVisible && tasks.length === 0 && !zmodemActive)) return null;
   const running = tasks.filter(task => task.status === "running" || task.status === "queued").length + Number(zmodemActive);
   const retry = (task: SFTPTask, resume: boolean) => {
     void api.SFTPTransfer(refID, task.direction, task.source, task.destination, task.overwrite, resume).catch(onNotice);
@@ -96,7 +91,7 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
     <section className="transfer-dock" aria-label={t("sftp:transferQueue")}>
       <button type="button" className="transfer-dock-heading" aria-expanded={expanded}
         onClick={() => setExpanded(value => !value)}>
-        <span>{t("sftp:transferQueue")} ({running ? `${running} / ${tasks.length + Number(zmodemActive)}` : tasks.length + Number(zmodemEnded)})</span>
+        <span>{t("sftp:transferQueue")} ({running ? `${running} / ${tasks.length + Number(zmodemActive)}` : tasks.length})</span>
         {expanded ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
       </button>
       {expanded && <div className="transfer-dock-items">
@@ -116,14 +111,6 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
                   onNotice(error);
                 });
               }}><X size={13} /></button>
-          </div>
-        )}
-        {!zmodemActive && zmodemEnded && (
-          <div className="transfer-dock-item">
-            <span>ZMODEM</span>
-            <span>{t("sftp:zmodemEnded")}</span>
-            <span>{t("sftp:checkTerminalResult")}</span>
-            <button type="button" aria-label={t("sftp:dismissZmodem")} onClick={() => setZmodemEnded(false)}><X size={13} /></button>
           </div>
         )}
         {[...tasks].reverse().slice(0, 40).map(task => (
