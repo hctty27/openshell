@@ -324,44 +324,48 @@ test("keyboard clipboard shortcuts preserve normal Ctrl+C and ordered writes", a
   expect(api.WriteTerminal).toHaveBeenCalledWith(tab.ref, btoa("firstsecond"));
 });
 
-test("only the active tab uses a WebGL context and context loss falls back", () => {
+test("short tab switches retain the WebGL renderer and context loss falls back", () => {
   const { rerender } = renderTerminal();
   expect(refs.webgl).toHaveLength(1);
   const first = refs.webgl[0];
-  rerender(
+  const pane = (active: boolean) => (
     <DialogProvider>
-      <TerminalPane tab={tab} active={false} fontSize={14} theme="dark"
+      <TerminalPane tab={tab} active={active} fontSize={14} theme="dark"
         autoCopySelection rightClickPaste confirmMultilinePaste
         onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
-    </DialogProvider>,
+    </DialogProvider>
   );
+  rerender(pane(false));
+  expect(first.dispose).not.toHaveBeenCalled();
+  rerender(pane(true));
+  expect(refs.webgl).toHaveLength(1);
+  first.lossHandler();
   expect(first.dispose).toHaveBeenCalledTimes(1);
-  rerender(
-    <DialogProvider>
-      <TerminalPane tab={tab} active fontSize={14} theme="dark"
-        autoCopySelection rightClickPaste confirmMultilinePaste
-        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
-    </DialogProvider>,
+  rerender(pane(false));
+  rerender(pane(true));
+  expect(refs.webgl).toHaveLength(1);
+});
+
+test("terminal output is never dropped and acknowledged only after parsing", async () => {
+  renderTerminal();
+  const terminal = refs.terms[0];
+  const receive = events.listeners.get("ssh:output");
+  expect(receive).toBeDefined();
+  const encoded = btoa("x".repeat(32 * 1024));
+  act(() => {
+    for (let sequence = 1; sequence <= 70; sequence++) {
+      receive!({ ref: tab.ref, sequence, data: encoded });
+    }
+  });
+  expect(terminal.write).toHaveBeenCalledTimes(70);
+  expect(api.AcknowledgeTerminalOutput).not.toHaveBeenCalled();
+  await act(async () => {
+    for (const [, callback] of terminal.write.mock.calls) callback?.();
+    await Promise.resolve();
+  });
+  await waitFor(() =>
+    expect(api.AcknowledgeTerminalOutput).toHaveBeenCalledWith(tab.ref, 70),
   );
-  expect(refs.webgl).toHaveLength(2);
-  const current = refs.webgl[1];
-  current.lossHandler();
-  expect(current.dispose).toHaveBeenCalledTimes(1);
-  rerender(
-    <DialogProvider>
-      <TerminalPane tab={tab} active={false} fontSize={14} theme="dark"
-        autoCopySelection rightClickPaste confirmMultilinePaste
-        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
-    </DialogProvider>,
-  );
-  rerender(
-    <DialogProvider>
-      <TerminalPane tab={tab} active fontSize={14} theme="dark"
-        autoCopySelection rightClickPaste confirmMultilinePaste
-        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
-    </DialogProvider>,
-  );
-  expect(refs.webgl).toHaveLength(2);
 });
 
 test("right click in terminal search does not paste into shell", async () => {
