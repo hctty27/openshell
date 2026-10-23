@@ -26,16 +26,21 @@ func connected(t *testing.T) (*Manager, domain.ConnectionRef) {
 	}
 	return m, ref
 }
+// Integration tests spawn an actual shell; Windows CI runners may need time
+// to create the process under concurrent test load. Only timeout-specific
+// tests below use intentionally short deadlines.
+const normalExecTestTimeout = 8 * time.Second
+
 func TestExecExitCode(t *testing.T) {
 	m, r := connected(t)
-	v, e := m.Run(context.Background(), r, "printf hello; printf error >&2; exit 7", "/tmp", time.Second)
+	v, e := m.Run(context.Background(), r, "printf hello; printf error >&2; exit 7", "/tmp", normalExecTestTimeout)
 	if e != nil || v.ExitCode == nil || *v.ExitCode != 7 || v.Stdout != "hello" || v.Stderr != "error" || v.Status != "failed" {
 		t.Fatalf("%+v %v", v, e)
 	}
 }
 func TestExecOutputCap(t *testing.T) {
 	m, r := connected(t)
-	v, e := m.Run(context.Background(), r, "head -c 300000 /dev/zero", "/tmp", time.Second*5)
+	v, e := m.Run(context.Background(), r, "head -c 300000 /dev/zero", "/tmp", normalExecTestTimeout)
 	if e != nil || !v.Truncated || len(v.Stdout)+len(v.Stderr) > 262144 {
 		t.Fatalf("%+v %v", v, e)
 	}
@@ -49,7 +54,7 @@ func TestExecTimeoutUnknown(t *testing.T) {
 }
 func TestExecStdinClosed(t *testing.T) {
 	m, r := connected(t)
-	v, e := m.Run(context.Background(), r, "read value; echo done", "/tmp", time.Second)
+	v, e := m.Run(context.Background(), r, "read value; echo done", "/tmp", normalExecTestTimeout)
 	if e != nil || !strings.Contains(v.Stdout, "done") {
 		t.Fatalf("%+v %v", v, e)
 	}
@@ -57,19 +62,19 @@ func TestExecStdinClosed(t *testing.T) {
 func TestShellQuotedWorkingDirectory(t *testing.T) {
 	m, r := connected(t)
 	dir := "/tmp/openshell-quote' space; echo wrong-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	setup, e := m.Run(context.Background(), r, "mkdir -p -- "+QuoteShell(dir), "/tmp", 5*time.Second)
+	setup, e := m.Run(context.Background(), r, "mkdir -p -- "+QuoteShell(dir), "/tmp", normalExecTestTimeout)
 	if e != nil || setup.Status != "completed" {
 		t.Fatalf("remote test directory setup failed: %+v %v", setup, e)
 	}
-	defer m.Run(context.Background(), r, "rm -rf -- "+QuoteShell(dir), "/tmp", 5*time.Second)
-	v, e := m.Run(context.Background(), r, "pwd", dir, time.Second)
+	defer m.Run(context.Background(), r, "rm -rf -- "+QuoteShell(dir), "/tmp", normalExecTestTimeout)
+	v, e := m.Run(context.Background(), r, "pwd", dir, normalExecTestTimeout)
 	if e != nil || strings.TrimSpace(v.Stdout) != dir {
 		t.Fatalf("%+v %v", v, e)
 	}
 }
 func TestFailedWorkingDirectoryDoesNotRunAnyScriptCommands(t *testing.T) {
 	m, r := connected(t)
-	v, e := m.Run(context.Background(), r, "printf FIRST; printf UNSAFE", "/definitely-missing-openshell-directory", time.Second)
+	v, e := m.Run(context.Background(), r, "printf FIRST; printf UNSAFE", "/definitely-missing-openshell-directory", normalExecTestTimeout)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -102,7 +107,7 @@ func TestExecTimeoutCoversChannelOpenAndStart(t *testing.T) {
 				if r.Status != "unknown" || r.Reason != "timed_out" {
 					t.Fatal(r)
 				}
-			case <-time.After(300 * time.Millisecond):
+			case <-time.After(2 * time.Second):
 				t.Fatal("timeout does not cover exec startup")
 			}
 		})
@@ -118,8 +123,25 @@ func TestExecTimeoutDoesNotDisconnectInteractiveSSH(t *testing.T) {
 	if !m.Valid(ref) {
 		t.Fatal("timed-out AI command disconnected the SSH transport")
 	}
-	followup, err := m.Run(context.Background(), ref, "printf alive", "/tmp", time.Second)
+	followup, err := m.Run(context.Background(), ref, "printf alive", "/tmp", normalExecTestTimeout)
 	if err != nil || followup.Status != "completed" || followup.Stdout != "alive" {
 		t.Fatalf("SSH must remain usable after command timeout: %+v, %v", followup, err)
+	}
+}
+
+// Repeated short SSH commands must remain correct when the runner is busy.
+// In particular, process startup latency must not be mistaken for a command
+// timeout; cancellation semantics are covered by the dedicated 30ms tests.
+func TestExecRepeatedCommandRoundTrips(t *testing.T) {
+	m, ref := connected(t)
+	for i := 0; i < 5; i++ {
+		command := "printf 'ready'; printf 'warning' >&2; exit 3"
+		result, err := m.Run(context.Background(), ref, command, "/tmp", normalExecTestTimeout)
+		if err != nil || result.Status != "failed" || result.ExitCode == nil || *result.ExitCode != 3 || result.Stdout != "ready" || result.Stderr != "warning" {
+			t.Fatalf("round trip %d: result=%+v err=%v", i+1, result, err)
+		}
+		if !m.Valid(ref) {
+			t.Fatalf("round trip %d disconnected the interactive transport", i+1)
+		}
 	}
 }

@@ -903,6 +903,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
           previous.username !== saved.username ||
           previous.authType !== saved.authType ||
           previous.privateKeyPath !== saved.privateKeyPath ||
+          previous.useSSHConfig !== saved.useSSHConfig ||
+          (previous.proxyJump ?? "") !== (saved.proxyJump ?? "") ||
+          JSON.stringify(previous.localForwards ?? []) !== JSON.stringify(saved.localForwards ?? []) ||
           req.secret !== "" ||
           (previous.credentialRef !== "" && !req.saveSecret));
       const connected = tabsRef.current.some(

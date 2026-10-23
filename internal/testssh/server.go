@@ -9,6 +9,8 @@ import (
 	"io"
 	"net"
 	"os/exec"
+	"strconv"
+	"time"
 	"sync"
 	"testing"
 )
@@ -55,6 +57,40 @@ func StartWithMode(t testing.TB, mode string) *Server {
 				defer conn.Close()
 				go ssh.DiscardRequests(reqs)
 				for ch := range chans {
+					if ch.ChannelType() == "direct-tcpip" {
+						var p struct {
+							Host string
+							Port uint32
+							OriginHost string
+							OriginPort uint32
+						}
+						if e := ssh.Unmarshal(ch.ExtraData(), &p); e != nil {
+							ch.Reject(ssh.ConnectionFailed, "invalid forward destination")
+							continue
+						}
+						remote, e := net.DialTimeout("tcp", net.JoinHostPort(p.Host, strconv.Itoa(int(p.Port))), 3*time.Second)
+						if e != nil {
+							ch.Reject(ssh.ConnectionFailed, e.Error())
+							continue
+						}
+						channel, requests, e := ch.Accept()
+						if e != nil { remote.Close(); continue }
+						go ssh.DiscardRequests(requests)
+						go func(){
+							defer channel.Close()
+							defer remote.Close()
+							done := make(chan struct{})
+							go func(){
+								_,_ = io.Copy(remote,channel)
+								if tcp,ok := remote.(*net.TCPConn); ok { _ = tcp.CloseWrite() }
+								close(done)
+							}()
+							_,_ = io.Copy(channel,remote)
+							_ = channel.Close()
+							<-done
+						}()
+						continue
+					}
 					if ch.ChannelType() != "session" {
 						ch.Reject(ssh.UnknownChannelType, "session only")
 						continue

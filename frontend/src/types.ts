@@ -7,10 +7,19 @@ export interface Session {
   username: string;
   authType: string;
   privateKeyPath: string;
+  useSSHConfig?: boolean;
+  proxyJump?: string;
+  localForwards?: LocalForward[];
   credentialRef: string;
   terminalTheme?: TerminalTheme;
   createdAt?: string;
   updatedAt?: string;
+}
+export interface LocalForward {
+  bindHost: string;
+  bindPort: number;
+  targetHost: string;
+  targetPort: number;
 }
 export interface Group {
   id: string;
