@@ -71,3 +71,16 @@ test("empty SFTP sidebar reserves only the collapsed transfer footer", () => {
   fireEvent.click(heading);
   expect(screen.getByText("暂无传输任务")).toBeTruthy();
 });
+
+
+test("ZMODEM status stops on local child exit without waiting for a remote callback", () => {
+  render(<TransferDock refID={ref} onNotice={vi.fn()} />);
+  act(() => events.callbacks.get("ssh:transfer-state")?.({ ref, active: true }));
+  act(() => events.callbacks.get("ssh:transfer-progress")?.({
+    ref, transferred: "21.8 MB", speed: "11.4 MB/s",
+  }));
+  expect(screen.getByText("21.8 MB · 11.4 MB/s")).toBeTruthy();
+  act(() => events.callbacks.get("ssh:transfer-finished")?.({ ref }));
+  expect(screen.queryByText("21.8 MB · 11.4 MB/s")).toBeNull();
+  expect(screen.getByText("传输流程已退出")).toBeTruthy();
+});
