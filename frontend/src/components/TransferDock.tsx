@@ -68,11 +68,22 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
       if (!sameRef(payload?.ref, refID)) return;
       setZmodemStats({ transferred: payload.transferred, speed: payload.speed });
     });
+    // Upstream legacy ZMODEM may delay its transfer-state(false) callback
+    // until more remote output arrives after the local child has already exited.
+    const offFinished = listen("ssh:transfer-finished", (payload: { ref: Ref }) => {
+      if (!sameRef(payload?.ref, refID) || !seenZmodem.current) return;
+      seenZmodem.current = false;
+      setZmodemActive(false);
+      setZmodemCancelling(false);
+      setZmodemStats(null);
+      setZmodemEnded(true);
+    });
     return () => {
       disposed = true;
       offTasks();
       offState();
       offProgress();
+      offFinished();
     };
   }, [refID?.tabId, refID?.sessionId, refID?.generation]);
 

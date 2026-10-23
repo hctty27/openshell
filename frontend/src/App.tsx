@@ -230,7 +230,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
       if (payload.active) activeZmodemTabs.current.add(payload.ref.tabId);
       else activeZmodemTabs.current.delete(payload.ref.tabId);
     });
-    return () => { sftp(); zmodem(); };
+    const zmodemFinished = listen("ssh:transfer-finished", (payload: { ref: Ref }) => {
+      if (payload?.ref) activeZmodemTabs.current.delete(payload.ref.tabId);
+    });
+    return () => { sftp(); zmodem(); zmodemFinished(); };
   }, []);
   const reconnectTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const reconnectInFlight = useRef(new Set<string>());

@@ -266,10 +266,23 @@ type terminalOutputCloser struct {
     lastProgress time.Time
 }
 var zmodemProgressPattern = regexp.MustCompile(`Transferred ([0-9.]+[[:space:]]*[KMGTPE]?B), Speed ((?:[0-9.]+[[:space:]]*[KMGTPE]?B/s)|N/A)`)
+
+// trzsz-go emits these messages immediately after the local rz/sz child exits.
+// Its transfer-state callback can be delayed until further remote SSH output.
+// Observe the exact local protocol message to close the progress UI promptly.
+var zmodemLocalExitPattern = regexp.MustCompile(`\r\x1b\[2K(?:\x1b\[1;32mSuccess!!\x1b\[0m|client exit with [0-9]+)\r\n`)
 func (o *terminalOutputCloser) Write(p []byte) (int, error) {
     o.mu.Lock()
+    oldTailSize := len(o.tail)
     data := append(append([]byte(nil), o.tail...), p...)
     matches := zmodemProgressPattern.FindAllSubmatch(data, -1)
+    locallyExited := false
+    for _, loc := range zmodemLocalExitPattern.FindAllIndex(data, -1) {
+        if loc[1] > oldTailSize {
+            locallyExited = true
+            break
+        }
+    }
     if len(data) > 256 { data = data[len(data)-256:] }
     o.tail = append(o.tail[:0], data...)
     if len(matches) != 0 && time.Since(o.lastProgress) >= 180*time.Millisecond {
@@ -279,6 +292,11 @@ func (o *terminalOutputCloser) Write(p []byte) (int, error) {
             "ref": o.writer.c.ref,
             "transferred": string(last[1]),
             "speed": string(last[2]),
+        })
+    }
+    if locallyExited {
+        o.writer.m.emit("ssh:transfer-finished", map[string]any{
+            "ref": o.writer.c.ref,
         })
     }
     o.mu.Unlock()

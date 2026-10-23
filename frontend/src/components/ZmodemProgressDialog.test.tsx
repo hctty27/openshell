@@ -39,14 +39,14 @@ test("native file picker is not obscured before real transfer progress", () => {
   expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBeNull();
 });
 
-test("window can be hidden and reopened without cancelling the transfer", () => {
+test("hiding the window never creates a floating progress chip", () => {
   render(<ZmodemProgressDialog activeRef={ref} onNotice={vi.fn()} />);
   emit("ssh:transfer-state", { ref, active: true });
   emit("ssh:transfer-progress", { ref, transferred: "3 MB", speed: "1 MB/s" });
   fireEvent.click(screen.getByRole("button", { name: "隐藏进度窗口" }));
+  emit("ssh:transfer-progress", { ref, transferred: "4 MB", speed: "2 MB/s" });
   expect(screen.queryByRole("dialog")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "显示 ZMODEM 传输进度" }));
-  expect(screen.getByRole("dialog")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "显示 ZMODEM 传输进度" })).toBeNull();
   expect(api.CancelZmodem).not.toHaveBeenCalled();
 });
 
@@ -73,4 +73,43 @@ test("other tab events never open this tab's dialog", () => {
   emit("ssh:transfer-state", { ref: other, active: true });
   emit("ssh:transfer-progress", { ref: other, transferred: "1 MB", speed: "1 MB/s" });
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+
+test("local lrzsz completion closes dialog without needing a delayed transfer-state callback", () => {
+  render(<ZmodemProgressDialog activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:transfer-details", { ref, direction: "upload" });
+  emit("ssh:transfer-state", { ref, active: true });
+  emit("ssh:transfer-progress", { ref, transferred: "21.8 MB", speed: "11.4 MB/s" });
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  emit("ssh:transfer-finished", { ref });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  emit("ssh:transfer-progress", { ref, transferred: "22.0 MB", speed: "0.4 MB/s" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  emit("ssh:transfer-state", { ref, active: false });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  emit("ssh:transfer-state", { ref, active: true });
+  emit("ssh:transfer-progress", { ref, transferred: "22.1 MB", speed: "0.4 MB/s" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+test("a new ZMODEM handshake can open the next transfer after the previous one finished", () => {
+  render(<ZmodemProgressDialog activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:transfer-details", { ref, direction: "upload" });
+  emit("ssh:transfer-state", { ref, active: true });
+  emit("ssh:transfer-progress", { ref, transferred: "3 MB", speed: "1 MB/s" });
+  emit("ssh:transfer-finished", { ref });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  emit("ssh:transfer-details", { ref, direction: "download" });
+  emit("ssh:transfer-state", { ref, active: true });
+  emit("ssh:transfer-progress", { ref, transferred: "1 MB", speed: "2 MB/s" });
+  expect(screen.getByRole("dialog", { name: "ZMODEM 接收" })).toBeTruthy();
+});
+
+test("other tab finish event must not dismiss the current tab", () => {
+  render(<ZmodemProgressDialog activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:transfer-state", { ref, active: true });
+  emit("ssh:transfer-progress", { ref, transferred: "2 MB", speed: "1 MB/s" });
+  emit("ssh:transfer-finished", { ref: other });
+  expect(screen.getByRole("dialog")).toBeTruthy();
 });
