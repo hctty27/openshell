@@ -30,7 +30,7 @@ OpenShell 是面向开发者和服务器管理者的轻量 SSH / SFTP 桌面客�
 | 连接控制 | 配置 SSH 保活与异常重连，主动断开连接，断开后返回 Windows 本地终端。 |
 | SFTP 文件管理 | 浏览本地与远程文件，上传下载文件和目录、断点续传、远程文本编辑、单向目录同步预览、权限管理。 |
 | 终端文件传输 | 支持 `rz` / `sz`，Windows 包内置 ZMODEM 工具，侧边栏展示传输状态。 |
-| AI 助手 | 自定义 OpenAI 兼容接口、流式对话、确认执行与自动执行命令，同一已保存服务器的标签共享对话历史。 |
+| AI 助手 | 支持 OpenAI 兼容接口与 Anthropic 原生 Messages API、流式对话、确认执行和自动执行命令，同一服务器的标签共享对话历史。 |
 | 快速命令 | 支持分类、排序及全局 / 文件夹 / 会话作用范围，通过换行控制是否执行。 |
 | 外观与语言 | 英文与简体中文切换，浅色 / 深色应用主题，独立的经典黑色、深灰和白色终端配色。 |
 
@@ -72,12 +72,12 @@ OpenShell 是面向开发者和服务器管理者的轻量 SSH / SFTP 桌面客�
 
 | 配置项 | 填写内容 |
 | --- | --- |
-| Base URL | 服务商提供的 Chat Completions 兼容接口地址，例如 `https://api.example.com/v1`。 |
+| API 协议 | 选择 **OpenAI 兼容接口**（旧配置默认）或 **Anthropic 原生 Messages API**。 |\n| Base URL | Chat Completions 兼容接口示例：`https://api.example.com/v1`；Anthropic 原生接口示例：`https://api.anthropic.com/v1`。 |
 | API Key | 服务商分配的密钥；本机无需认证的服务可以留空。 |
 | 模型名称 | 服务商支持的准确模型 ID。 |
 | 工具调用 | 仅在接口和模型都支持时启用；AI 执行命令需要此能力。 |
 
-远程接口必须使用 HTTPS；本机回环地址（如 `127.0.0.1`、`::1`）可以使用 HTTP。暂不直接支持 Anthropic 原生 Messages 或 OpenAI Responses API，需要使用 Chat Completions 兼容接口。
+远程接口必须使用 HTTPS；本机回环地址（如 `127.0.0.1`、`::1`）可以使用 HTTP。Anthropic Messages 使用原生 SSE 和 `x-api-key` 认证，已有配置保持 OpenAI Chat Completions 行为。OpenAI Responses API 暂未直接支持。Anthropic 原生协议已覆盖模拟测试，但真实 API 凭据及工具调用仍需实机验收。
 
 ### 选择命令执行方式
 
