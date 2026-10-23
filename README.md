@@ -30,7 +30,7 @@ OpenShell is a lightweight SSH and SFTP desktop client for developers and server
 | Connection controls | Configure SSH keepalive and reconnection, disconnect manually, and return to a local Windows shell after disconnecting. |
 | SFTP | Browse local and remote files, upload and download files or directories, resume transfers, edit remote text, preview one-way directory sync, and manage permissions. |
 | Terminal file transfers | Use `rz` / `sz` with bundled Windows ZMODEM utilities; view transfer status in the sidebar. |
-| AI assistant | Stream responses from a custom OpenAI-compatible API, review or automate remote commands, and keep conversation history shared across tabs for the same saved server. |
+| AI assistant | Stream from OpenAI-compatible or native Anthropic Messages APIs, review or automate remote commands, and share conversation history across tabs for the same server. |
 | Quick commands | Save reusable commands with categories, ordering, and global, folder, or session scope. Line breaks control when commands execute. |
 | Appearance and language | Switch between English and Simplified Chinese, light and dark application themes, and independent classic, dark, or light terminal palettes. |
 
@@ -72,12 +72,12 @@ The interface defaults to English; switch to Simplified Chinese in Settings → 
 
 | Setting | Value |
 | --- | --- |
-| Base URL | Your provider's Chat Completions-compatible base URL, for example `https://api.example.com/v1`. |
+| API protocol | Choose **OpenAI-compatible API** (existing/default profiles) or **Anthropic Messages API**. |\n| Base URL | Use a Chat Completions base URL such as `https://api.example.com/v1`, or an Anthropic Messages base URL such as `https://api.anthropic.com/v1`. |
 | API key | Your provider's key; it may be empty for a local service that does not require authentication. |
 | Model name | The exact model ID accepted by your provider. |
 | Tool calls | Enable only when both the provider and model support tools. Required for AI command execution. |
 
-Remote endpoints require HTTPS. Local services can use HTTP on loopback addresses such as `127.0.0.1` or `::1`. Native Anthropic Messages and OpenAI Responses APIs are not supported directly; use a Chat Completions-compatible endpoint.
+Remote endpoints require HTTPS. Local services can use HTTP on loopback addresses such as `127.0.0.1` or `::1`. Anthropic Messages uses native SSE and `x-api-key` authentication, while existing profiles retain OpenAI Chat Completions behavior. OpenAI Responses API is not yet supported directly. Native Anthropic integration is covered by simulated protocol tests; verify real API credentials and model tool-call behavior before relying on automatic execution.
 
 ### Choose how commands run
 
