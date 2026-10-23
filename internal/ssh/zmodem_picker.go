@@ -25,9 +25,13 @@ var zmodemCancelSequence = []byte("\x18\x18\x18\x18\x18\x18\x18\x18\x18\x18\x08\
 // supplies validated local paths. No native operating-system dialog is opened.
 func (m *Manager) selectZmodemPaths(c *connection, direction string, filter *trzsz.TrzszFilter, serverIn io.Writer) bool {
     m.mu.Lock()
-    if m.connections[c.ref.TabID] != c || c.zmodemSelection != nil || c.transferring {
+    if m.connections[c.ref.TabID] != c {
         m.mu.Unlock()
         return false
+    }
+    if c.zmodemSelection != nil || c.transferring {
+        m.mu.Unlock()
+        return true
     }
     m.nextZmodemSelectionID++
     request := &zmodemSelection{
