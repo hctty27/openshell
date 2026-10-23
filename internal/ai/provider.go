@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hctty27/openshell/internal/domain"
 )
@@ -37,21 +38,41 @@ type Adapter interface {
 }
 
 type Provider struct {
-	adapter Adapter
+	adapter   Adapter
+	anthropic Adapter
 }
 
 func NewProvider() *Provider {
-	return NewProviderWithAdapter(NewChatCompletionsAdapter())
+	return &Provider{
+		adapter: NewChatCompletionsAdapter(),
+		anthropic: NewAnthropicAdapter(),
+	}
 }
 
 func NewProviderWithAdapter(adapter Adapter) *Provider {
 	return &Provider{adapter: adapter}
 }
 
+func (p *Provider) selectAdapter(profile domain.APIProfile) (Adapter, error) {
+	switch profile.Provider {
+	case "", "openai":
+		return p.adapter, nil
+	case "anthropic":
+		if p.anthropic != nil {
+			return p.anthropic, nil
+		}
+	}
+	return nil, fmt.Errorf("unsupported API provider %q", profile.Provider)
+}
+
 func (p *Provider) Stream(ctx context.Context, profile domain.APIProfile, key string, messages []Message, emit func(Delta)) (Reply, error) {
-	return p.adapter.Stream(ctx, profile, key, messages, emit)
+	adapter, err := p.selectAdapter(profile)
+	if err != nil { return Reply{}, err }
+	return adapter.Stream(ctx, profile, key, messages, emit)
 }
 
 func (p *Provider) RequestSize(profile domain.APIProfile, messages []Message) (int, error) {
-	return p.adapter.RequestSize(profile, messages)
+	adapter, err := p.selectAdapter(profile)
+	if err != nil { return 0, err }
+	return adapter.RequestSize(profile, messages)
 }
