@@ -176,3 +176,40 @@ func TestSFTPTransferDestinationIsReserved(t *testing.T) {
         t.Fatalf("queued job not cancelled: %+v",result)
     }
 }
+
+
+func TestSFTPLargeFileResumeAndAtomicPromotion(t *testing.T) {
+ client := newFixture(t)
+ ref := domain.ConnectionRef{TabID:"large-tab",SessionID:"large-server",Generation:1}
+ manager := NewManager(func(domain.ConnectionRef)(*ssh.Client,error){return client,nil},func(string,any){})
+ t.Cleanup(manager.Close)
+
+ root := t.TempDir()
+ source := filepath.Join(root,"large-source.dat")
+ remote := filepath.Join(t.TempDir(),"large-remote.dat")
+ downloaded := filepath.Join(root,"downloaded.dat")
+ content := []byte(strings.Repeat("OpenShell-large-transfer-0123456789-", 160000))
+ if err := os.WriteFile(source,content,0600);err!=nil{t.Fatal(err)}
+ prefix := 1<<20
+ uploadPart := partialName(source,remote)
+ if err := os.WriteFile(uploadPart,content[:prefix],0600);err!=nil{t.Fatal(err)}
+ upload,err := manager.Start(ref,"upload",source,remote,false,true)
+ if err!=nil{t.Fatal(err)}
+ if result:=awaitTransfer(t,manager,upload);result.Status!="completed" || result.Bytes!=int64(len(content)){
+  t.Fatalf("large resumed upload: %+v",result)
+ }
+ got,err:=os.ReadFile(remote)
+ if err!=nil || !bytes.Equal(got,content){t.Fatalf("uploaded file corrupted: %v",err)}
+ if _,err:=os.Lstat(uploadPart);!errors.Is(err,os.ErrNotExist){t.Fatalf("upload temporary file remains: %v",err)}
+
+ downloadPart := partialName(remote,downloaded)
+ if err:=os.WriteFile(downloadPart,content[:prefix],0600);err!=nil{t.Fatal(err)}
+ download,err:=manager.Start(ref,"download",remote,downloaded,false,true)
+ if err!=nil{t.Fatal(err)}
+ if result:=awaitTransfer(t,manager,download);result.Status!="completed" || result.Bytes!=int64(len(content)){
+  t.Fatalf("large resumed download: %+v",result)
+ }
+ got,err=os.ReadFile(downloaded)
+ if err!=nil || !bytes.Equal(got,content){t.Fatalf("downloaded file corrupted: %v",err)}
+ if _,err:=os.Lstat(downloadPart);!errors.Is(err,os.ErrNotExist){t.Fatalf("download temporary file remains: %v",err)}
+}
