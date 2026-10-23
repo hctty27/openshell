@@ -144,7 +144,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice }: Props) {
       <header className="zmodem-picker-header">
         <Folder size={18} aria-hidden="true" />
         <h2>{t(download ? "sftp:zmodemPickDownload" : "sftp:zmodemPickUpload")}</h2>
-        <button type="button" aria-label={t("sftp:zmodemPickCancel")} disabled={busy}
+        <button type="button" aria-label={t("sftp:zmodemPickClose")} disabled={busy}
           onClick={() => void submit([])}><X size={17} /></button>
       </header>
       <div className="zmodem-picker-toolbar">
