@@ -116,6 +116,46 @@ func (w *terminalWriter) Close() {
 	w.flushLocked()
 }
 
+// zmodemDirectionWriter passively observes the remote ZMODEM start header.
+// It forwards the byte stream unchanged and does not parse file payloads.
+type zmodemDirectionWriter struct {
+	mu          sync.Mutex
+	dst         io.Writer
+	tail        []byte
+	onDirection func(string)
+}
+
+var zmodemDirectionPattern = regexp.MustCompile(`\*\*\x18B0([01])[0-9a-f]{12}`)
+
+func (w *zmodemDirectionWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	oldLen := len(w.tail)
+	data := append(append([]byte(nil), w.tail...), p...)
+	var directions []string
+	for _, loc := range zmodemDirectionPattern.FindAllSubmatchIndex(data, -1) {
+		if loc[1] <= oldLen {
+			continue
+		}
+		if data[loc[2]] == '1' {
+			directions = append(directions, "upload")
+		} else {
+			directions = append(directions, "download")
+		}
+	}
+	if len(data) > 32 {
+		data = data[len(data)-32:]
+	}
+	w.tail = append(w.tail[:0], data...)
+	w.mu.Unlock()
+
+	for _, direction := range directions {
+		if w.onDirection != nil {
+			w.onDirection(direction)
+		}
+	}
+	return w.dst.Write(p)
+}
+
 // OpenTerminal connects the existing SSH PTY to an isolated binary-safe transfer
 // filter. Only filtered, printable output reaches history and the renderer.
 func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
@@ -166,7 +206,19 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
         m.mu.Unlock()
         if valid { m.emit("ssh:transfer-state", map[string]any{"ref": ref, "active": transferring}) }
     })
-	session.Stdout, session.Stderr = remoteOutput, remoteOutput
+	observedOutput := &zmodemDirectionWriter{
+		dst: remoteOutput,
+		onDirection: func(direction string) {
+			m.mu.Lock()
+			current := m.connections[ref.TabID]
+			valid := current == connection && current.ref == ref
+			m.mu.Unlock()
+			if valid {
+				m.emit("ssh:transfer-details", map[string]any{"ref": ref, "direction": direction})
+			}
+		},
+	}
+	session.Stdout, session.Stderr = observedOutput, observedOutput
 	if err = session.Shell(); err != nil {
 		filter.Close()
 		_ = filterInput.Close()
