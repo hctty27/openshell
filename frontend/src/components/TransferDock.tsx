@@ -22,16 +22,16 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
   const [zmodemActive, setZmodemActive] = useState(false);
   const [zmodemCancelling, setZmodemCancelling] = useState(false);
   const [zmodemStats, setZmodemStats] = useState<ZmodemStats | null>(null);
-  const [zmodemEnded, setZmodemEnded] = useState(false);
   const seenZmodem = useRef(false);
+  const finishedZmodem = useRef(false);
   useEffect(() => {
     let disposed = false;
     setTasks([]);
     setZmodemActive(false);
     setZmodemCancelling(false);
     setZmodemStats(null);
-    setZmodemEnded(false);
     seenZmodem.current = false;
+    finishedZmodem.current = false;
     if (!refID) return;
     // Browser fixtures can emulate SSH without exposing the SFTP backend.
     // Check the actual Wails binding before calling through the API proxy.
@@ -50,44 +50,48 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
       setTasks(old => [...old.filter(item => item.id !== task.id), task].sort((a, b) => a.created - b.created));
       if (task.status === "running" || task.status === "failed") setExpanded(true);
     });
+    const offDetails = listen("ssh:transfer-details", (payload: { ref: Ref }) => {
+      if (sameRef(payload?.ref, refID)) finishedZmodem.current = false;
+    });
     const offState = listen("ssh:transfer-state", (payload: { ref: Ref; active: boolean }) => {
       if (!sameRef(payload?.ref, refID)) return;
+      if (payload.active && finishedZmodem.current) return;
+      if (!payload.active) finishedZmodem.current = true;
       setZmodemActive(payload.active);
       setZmodemCancelling(false);
       setZmodemStats(null);
       if (payload.active) {
         seenZmodem.current = true;
-        setZmodemEnded(false);
         setExpanded(true);
       } else if (seenZmodem.current) {
         seenZmodem.current = false;
-        setZmodemEnded(true);
       }
     });
     const offProgress = listen("ssh:transfer-progress", (payload: { ref: Ref; transferred: string; speed: string }) => {
-      if (!sameRef(payload?.ref, refID)) return;
+      if (!sameRef(payload?.ref, refID) || finishedZmodem.current) return;
       setZmodemStats({ transferred: payload.transferred, speed: payload.speed });
     });
     // Upstream legacy ZMODEM may delay its transfer-state(false) callback
     // until more remote output arrives after the local child has already exited.
     const offFinished = listen("ssh:transfer-finished", (payload: { ref: Ref }) => {
-      if (!sameRef(payload?.ref, refID) || !seenZmodem.current) return;
+      if (!sameRef(payload?.ref, refID)) return;
+      finishedZmodem.current = true;
       seenZmodem.current = false;
       setZmodemActive(false);
       setZmodemCancelling(false);
       setZmodemStats(null);
-      setZmodemEnded(true);
     });
     return () => {
       disposed = true;
       offTasks();
+      offDetails();
       offState();
       offProgress();
       offFinished();
     };
   }, [refID?.tabId, refID?.sessionId, refID?.generation]);
 
-  if (!refID || (!alwaysVisible && tasks.length === 0 && !zmodemActive && !zmodemEnded)) return null;
+  if (!refID || (!alwaysVisible && tasks.length === 0 && !zmodemActive)) return null;
   const running = tasks.filter(task => task.status === "running" || task.status === "queued").length + Number(zmodemActive);
   const retry = (task: SFTPTask, resume: boolean) => {
     void api.SFTPTransfer(refID, task.direction, task.source, task.destination, task.overwrite, resume).catch(onNotice);
@@ -96,11 +100,11 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
     <section className="transfer-dock" aria-label={t("sftp:transferQueue")}>
       <button type="button" className="transfer-dock-heading" aria-expanded={expanded}
         onClick={() => setExpanded(value => !value)}>
-        <span>{t("sftp:transferQueue")} ({running ? `${running} / ${tasks.length + Number(zmodemActive)}` : tasks.length + Number(zmodemEnded)})</span>
+        <span>{t("sftp:transferQueue")} ({running ? `${running} / ${tasks.length + Number(zmodemActive)}` : tasks.length})</span>
         {expanded ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
       </button>
       {expanded && <div className="transfer-dock-items">
-        {tasks.length === 0 && !zmodemActive && !zmodemEnded && (
+        {tasks.length === 0 && !zmodemActive  && (
           <div className="transfer-dock-empty">{t("sftp:noTransfers")}</div>
         )}
         {zmodemActive && (
@@ -116,14 +120,6 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
                   onNotice(error);
                 });
               }}><X size={13} /></button>
-          </div>
-        )}
-        {!zmodemActive && zmodemEnded && (
-          <div className="transfer-dock-item">
-            <span>ZMODEM</span>
-            <span>{t("sftp:zmodemEnded")}</span>
-            <span>{t("sftp:checkTerminalResult")}</span>
-            <button type="button" aria-label={t("sftp:dismissZmodem")} onClick={() => setZmodemEnded(false)}><X size={13} /></button>
           </div>
         )}
         {[...tasks].reverse().slice(0, 40).map(task => (

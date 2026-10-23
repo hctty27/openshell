@@ -770,6 +770,9 @@ func (a *App) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 func (a *App) WriteTerminal(ref domain.ConnectionRef, data string) error {
     return a.ssh.Write(ref, data)
 }
+func (a *App) AcknowledgeTerminalOutput(ref domain.ConnectionRef, sequence uint64) {
+    a.ssh.AcknowledgeOutput(ref, sequence)
+}
 func (a *App) CancelZmodem(ref domain.ConnectionRef) error {
     return a.ssh.CancelZmodem(ref)
 }
