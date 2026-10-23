@@ -43,6 +43,7 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
   const [autoClose, setAutoClose] = useState(true);
   const dismissed = useRef(new Set<string>());
   const cancelling = useRef(new Set<string>());
+  const finished = useRef(new Set<string>());
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -52,12 +53,11 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
     }) => {
       if (!payload?.ref || !["upload", "download"].includes(payload.direction)) return;
       const key = transferKey(payload.ref);
+      // A fresh ZMODEM handshake starts a new transfer on the same SSH tab.
+      finished.current.delete(key);
       setTransfers(current => ({
         ...current,
-        [key]: {
-          ...(current[key] ?? initialTransfer(payload.ref)),
-          direction: payload.direction,
-        },
+        [key]: { ...initialTransfer(payload.ref), direction: payload.direction },
       }));
     });
 
@@ -68,6 +68,8 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
       if (!payload?.ref) return;
       const key = transferKey(payload.ref);
       if (payload.active) {
+        // Ignore a delayed start callback from an already-ended transfer.
+        if (finished.current.has(key)) return;
         dismissed.current.delete(key);
         cancelling.current.delete(key);
         setTransfers(current => ({
@@ -75,6 +77,7 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
           [key]: { ...initialTransfer(payload.ref), direction: current[key]?.direction },
         }));
       } else {
+        finished.current.add(key);
         setTransfers(current => {
           const transfer = current[key];
           if (!transfer) return current;
@@ -98,6 +101,7 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
     }) => {
       if (!payload?.ref) return;
       const key = transferKey(payload.ref);
+      if (finished.current.has(key)) return;
       setTransfers(current => ({
         ...current,
         [key]: {
@@ -112,7 +116,25 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
       if (!dismissed.current.has(key)) setOpenKey(key);
     });
 
-    return () => { offDetails(); offState(); offProgress(); };
+    // Local lrzsz can exit before trzsz-go's cleanup callback receives more
+    // server bytes. Treat the local exit signal as the UI lifecycle boundary.
+    const offFinished = listen("ssh:transfer-finished", (payload: { ref: Ref }) => {
+      if (!payload?.ref) return;
+      const key = transferKey(payload.ref);
+      finished.current.add(key);
+      setTransfers(current => {
+        const transfer = current[key];
+        if (!transfer) return current;
+        return {
+          ...current,
+          [key]: { ...transfer, status: transfer.status === "cancelling" ? "cancelled" : "ended" },
+        };
+      });
+      const wasCancelled = cancelling.current.delete(key);
+      if (autoClose && !wasCancelled) setOpenKey(current => current === key ? null : current);
+    });
+
+    return () => { offDetails(); offState(); offProgress(); offFinished(); };
   }, [autoClose]);
 
   const key = activeRef ? transferKey(activeRef) : undefined;
@@ -167,16 +189,6 @@ export default function ZmodemProgressDialog({ activeRef, onNotice }: Props) {
 
   return (
     <>
-      {isActive && !showDialog && (
-        <button className="zmodem-progress-chip"
-          type="button" onClick={() => {
-            dismissed.current.delete(key);
-            setOpenKey(key);
-          }}
-          aria-label={t("sftp:zmodemDialogReopen")}>
-          <FileArchive size={15} /> {t("sftp:zmodemDialogReopen")}
-        </button>
-      )}
       {showDialog && (
           <dialog ref={dialogRef} className="zmodem-progress-dialog"
             aria-labelledby="zmodem-progress-title"

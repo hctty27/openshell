@@ -3443,21 +3443,11 @@ select.mode-select {
   color: var(--text-secondary);
   font-size: 12px;
 }
-.zmodem-progress-dialog > footer button,
-.zmodem-progress-chip {
+.zmodem-progress-dialog > footer button {
   border: 1px solid var(--border);
   background: var(--panel);
   border-radius: 6px;
   padding: 8px 13px;
   min-height: 32px;
 }
-.zmodem-progress-dialog > footer button:hover,
-.zmodem-progress-chip:hover { background: var(--hover); }
-.zmodem-progress-chip {
-  position: fixed;
-  z-index: 95;
-  right: 18px;
-  bottom: 40px;
-  box-shadow: 0 8px 20px #0003;
-  color: var(--text-primary);
-}
+.zmodem-progress-dialog > footer button:hover { background: var(--hover); }

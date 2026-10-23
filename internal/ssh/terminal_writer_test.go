@@ -197,3 +197,46 @@ func TestCancelZmodemDelegatesToFilterAndPreservesFiles(t *testing.T) {
 
 type testInputWriter struct{}
 func (*testInputWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+
+func TestZmodemLocalExitNotifiesEvenWithoutRemoteOutput(t *testing.T) {
+    for _, tc := range []struct {
+        name, message string
+    }{
+        {"successful child", "\r\x1b[2K\x1b[1;32mSuccess!!\x1b[0m\r\n"},
+        {"failed child", "\r\x1b[2Kclient exit with 1\r\n"},
+    } {
+        t.Run(tc.name, func(t *testing.T) {
+            events := make(chan string, 4)
+            m := NewManager(nil, func(name string, _ any) {
+                if name == "ssh:transfer-finished" { events <- name }
+            })
+            writer := &terminalWriter{m:m, c:&connection{ref:domain.ConnectionRef{TabID:"tab"}, history: NewHistory(8192)}}
+            closer := &terminalOutputCloser{writer:writer, done:make(chan struct{})}
+            defer closer.Close()
+            msg := []byte(tc.message)
+            for _, chunk := range [][]byte{msg[:7], msg[7:len(msg)-2], msg[len(msg)-2:]} {
+                if _, err := closer.Write(chunk); err != nil { t.Fatal(err) }
+            }
+            select {
+            case <-events:
+            default: t.Fatal("local ZMODEM exit was not reported")
+            }
+            if len(events) != 0 { t.Fatal("local ZMODEM exit reported more than once") }
+            if _, err := closer.Write([]byte("shell prompt\r\n")); err != nil { t.Fatal(err) }
+            if len(events) != 0 { t.Fatal("terminal output repeated ZMODEM exit") }
+        })
+    }
+}
+
+func TestZmodemLocalExitIgnoresNormalTerminalText(t *testing.T) {
+    events := make(chan string, 2)
+    m := NewManager(nil, func(name string, _ any) {
+        if name == "ssh:transfer-finished" { events <- name }
+    })
+    writer := &terminalWriter{m:m, c:&connection{ref:domain.ConnectionRef{TabID:"tab"}, history:NewHistory(8192)}}
+    closer := &terminalOutputCloser{writer:writer, done:make(chan struct{})}
+    defer closer.Close()
+    if _, err := closer.Write([]byte("Success!!\r\nclient exit with 1\r\n")); err != nil { t.Fatal(err) }
+    if len(events) != 0 { t.Fatal("normal terminal text was treated as ZMODEM exit") }
+}
