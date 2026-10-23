@@ -54,22 +54,60 @@ func (h *History) Text(lines, bytes int) string {
 
 const terminalOutputChunkSize = 32 * 1024
 const terminalOutputFlushDelay = 8 * time.Millisecond
+// Bound data already sent to Wails but not yet parsed by xterm.js.
+const terminalOutputWindowBytes = 512 * 1024
+
+type outputReceipt struct {
+	sequence uint64
+	size     int
+}
 
 type terminalWriter struct {
-	m      *Manager
-	c      *connection
-	mu     sync.Mutex
-	buffer []byte
-	timer  *time.Timer
-	closed bool
+	m             *Manager
+	c             *connection
+	mu            sync.Mutex
+	ready         *sync.Cond
+	buffer        []byte
+	timer         *time.Timer
+	closed        bool
+	unacknowledged []outputReceipt
+	inflightBytes int
 }
 
 func (w *terminalWriter) emitLocked(p []byte) {
+	if w.ready == nil {
+		w.ready = sync.NewCond(&w.mu)
+	}
+	// Cond.Wait releases w.mu while the UI processes earlier output.
+	// Blocking this writer propagates backpressure to the SSH channel.
+	for !w.closed && w.inflightBytes+len(p) > terminalOutputWindowBytes {
+		w.ready.Wait()
+	}
 	w.c.sequence++
+	w.inflightBytes += len(p)
+	w.unacknowledged = append(w.unacknowledged, outputReceipt{sequence: w.c.sequence, size: len(p)})
 	w.m.emit("ssh:output", map[string]any{
 		"ref": w.c.ref, "sequence": w.c.sequence,
 		"data": base64.StdEncoding.EncodeToString(p),
 	})
+}
+
+// Acknowledge releases all chunks processed through the supplied sequence.
+func (w *terminalWriter) Acknowledge(sequence uint64) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	index := 0
+	for index < len(w.unacknowledged) && w.unacknowledged[index].sequence <= sequence {
+		w.inflightBytes -= w.unacknowledged[index].size
+		index++
+	}
+	if index == 0 {
+		return
+	}
+	w.unacknowledged = w.unacknowledged[index:]
+	if w.ready != nil {
+		w.ready.Broadcast()
+	}
 }
 
 func (w *terminalWriter) flushLocked() {
@@ -109,6 +147,9 @@ func (w *terminalWriter) Close() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.closed = true
+	if w.ready != nil {
+		w.ready.Broadcast()
+	}
 	if w.timer != nil {
 		w.timer.Stop()
 		w.timer = nil
@@ -180,6 +221,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 			current.terminal = nil
 			current.stdin = nil
 			current.filter = nil
+			current.writer = nil
 		}
 		m.mu.Unlock()
 		return err
@@ -237,6 +279,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	}
 	connection.stdin = filterInput
 	connection.filter = filter
+	connection.writer = writer
 	m.mu.Unlock()
 	go func() {
 		err := session.Wait()
@@ -371,4 +414,18 @@ func (m *Manager) History(ref domain.ConnectionRef) string {
 	h := c.history
 	m.mu.Unlock()
 	return h.Text(200, 32768)
+}
+
+// AcknowledgeOutput is a no-op for stale or disconnected terminal generations.
+func (m *Manager) AcknowledgeOutput(ref domain.ConnectionRef, sequence uint64) {
+	m.mu.Lock()
+	c := m.connections[ref.TabID]
+	var writer *terminalWriter
+	if c != nil && c.ref == ref {
+		writer = c.writer
+	}
+	m.mu.Unlock()
+	if writer != nil {
+		writer.Acknowledge(sequence)
+	}
 }
