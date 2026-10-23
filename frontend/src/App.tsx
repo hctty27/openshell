@@ -56,6 +56,7 @@ import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
 import SFTPView from "./components/SFTPView";
 import TransferDock from "./components/TransferDock";
+import ZmodemProgressDialog from "./components/ZmodemProgressDialog";
 import AISidebar from "./components/AISidebar";
 import { useConversations } from "./useConversations";
 import { toChatMessages } from "./conversations";
@@ -2004,6 +2005,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           </section>
         </div>
       )}
+      <ZmodemProgressDialog activeRef={active?.ref ?? undefined} onNotice={notify} />
       {!!notice && !toast && (
         <div className="toast toast--success" role="status">
           <Check size={16} />

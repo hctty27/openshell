@@ -3358,3 +3358,110 @@ select.mode-select {
 .sftp-ai-result small{color:var(--warning)}
 .sftp-ai-result button{color:var(--accent);max-width:100%;overflow-wrap:anywhere;text-align:left}
 @media(max-width:900px){.sftp-ai-controls{flex-wrap:wrap}.sftp-ai-controls input{min-width:120px}}
+
+
+/* In-workspace ZMODEM progress dialog. Opens only after transfer data starts. */
+.zmodem-progress-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 135;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+}
+.zmodem-progress-dialog {
+  width: min(460px, 100%);
+  padding: 0;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 25px 70px #0006;
+  color: var(--text-primary);
+}
+.zmodem-progress-dialog > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 15px 19px;
+}
+.zmodem-progress-dialog h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+}
+.zmodem-progress-dialog > header button { padding: 5px; color: var(--text-muted); }
+.zmodem-progress-body { padding: 20px; display: flex; flex-direction: column; gap: 17px; }
+.zmodem-progress-description { display: flex; align-items: center; gap: 12px; color: var(--text-secondary); }
+.zmodem-progress-description svg { color: var(--accent); flex-shrink: 0; }
+.zmodem-progress-description strong { font-size: 13px; display: block; color: var(--text-primary); }
+.zmodem-progress-description span { display: block; font-size: 12px; margin-top: 3px; }
+.zmodem-progress-track {
+  height: 9px;
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+.zmodem-progress-track > div {
+  width: 35%;
+  height: 100%;
+  background: var(--accent-fill);
+  border-radius: 5px;
+  animation: zmodem-working 1.7s ease-in-out infinite alternate;
+}
+.zmodem-progress-track--ended > div { animation: none; width: 100%; opacity: .7; }
+@keyframes zmodem-working {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(285%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zmodem-progress-track > div { animation: none; width: 100%; opacity: .55; }
+}
+.zmodem-progress-fields {
+  display: grid;
+  grid-template-columns: minmax(90px, 105px) minmax(0, 1fr);
+  gap: 10px 14px;
+  margin: 0;
+  font-size: 12px;
+}
+.zmodem-progress-fields dt { color: var(--text-secondary); }
+.zmodem-progress-fields dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.zmodem-progress-dialog > footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px 19px;
+}
+.zmodem-progress-dialog > footer label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.zmodem-progress-dialog > footer button,
+.zmodem-progress-chip {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 8px 13px;
+  min-height: 32px;
+}
+.zmodem-progress-dialog > footer button:hover,
+.zmodem-progress-chip:hover { background: var(--hover); }
+.zmodem-progress-chip {
+  position: fixed;
+  z-index: 95;
+  right: 18px;
+  bottom: 40px;
+  box-shadow: 0 8px 20px #0003;
+  color: var(--text-primary);
+}
