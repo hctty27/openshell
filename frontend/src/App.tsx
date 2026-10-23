@@ -56,6 +56,7 @@ import TerminalPane from "./components/TerminalPane";
 import SFTPView from "./components/SFTPView";
 import TransferDock from "./components/TransferDock";
 import ZmodemProgressDialog from "./components/ZmodemProgressDialog";
+import ZmodemFilePicker from "./components/ZmodemFilePicker";
 import AISidebar from "./components/AISidebar";
 import { useConversations } from "./useConversations";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
@@ -1931,7 +1932,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
           </section>
         </div>
       )}
-      <ZmodemProgressDialog activeRef={active?.ref ?? undefined} onNotice={notify} />
+      <ZmodemFilePicker activeRef={active?.ref ?? undefined} onNotice={notify} />
+       <ZmodemProgressDialog activeRef={active?.ref ?? undefined} onNotice={notify} />
       {!!notice && !toast && (
         <div className="toast toast--success" role="status">
           <Check size={16} />
