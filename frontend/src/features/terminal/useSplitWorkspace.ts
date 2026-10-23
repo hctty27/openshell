@@ -77,7 +77,7 @@ export function useSplitWorkspace({ tabs, activeID, showSFTP, initialRatio, onEr
 
   return {
     splitPair, setSplitPair, splitDirection, setSplitDirection,
-    splitRatio, splitContainerRef, splitReady, splitPartnerID, splitChoices,
+    splitRatio, setSplitRatio, splitContainerRef, splitReady, splitPartnerID, splitChoices,
     setSplitRatioAndSave, startSplitResize,
   };
 }
