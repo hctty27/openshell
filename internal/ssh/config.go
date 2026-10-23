@@ -59,7 +59,7 @@ func readOpenSSHConfig(path, alias string) (SSHConfig, error) {
    if e != nil || port < 1 || port > 65535 { return cfg, fmt.Errorf("invalid SSH config port %q", value) }
    cfg.Port = port
   case "identityfile":
-   cfg.IdentityFile = expandUserPath(value)
+   cfg.IdentityFile = value
   case "proxyjump":
    cfg.ProxyJump = value
   default:
@@ -153,15 +153,35 @@ func expandUserPath(path string) string {
 }
 
 func expandHostTokens(value, alias string) string {
- return strings.ReplaceAll(value, "%h", alias)
+ return strings.NewReplacer("%%", "%", "%h", alias).Replace(value)
+}
+
+// OpenSSH allows connection tokens in IdentityFile and ProxyJump. Expand
+// them after HostName/User/Port have been resolved, not while parsing.
+func expandConnectionTokens(value, originalHost, remoteHost, remoteUser string, port int) string {
+ home, err := os.UserHomeDir()
+ if err != nil { home = "" }
+ return strings.NewReplacer(
+  "%%", "%",
+  "%n", originalHost,
+  "%h", remoteHost,
+  "%r", remoteUser,
+  "%p", strconv.Itoa(port),
+  "%d", home,
+ ).Replace(value)
 }
 
 // ApplySSHConfig keeps saved sessions unchanged and resolves only at dial time.
 func ApplySSHConfig(sHost, sUser string, sPort int, privateKeyPath, jump string, cfg SSHConfig) (string, string, int, string, string) {
+ originalHost := sHost
  if cfg.HostName != "" { sHost = cfg.HostName }
  if cfg.User != "" { sUser = cfg.User }
  if cfg.Port != 0 { sPort = cfg.Port }
- if privateKeyPath == "" { privateKeyPath = cfg.IdentityFile }
- if jump == "" { jump = cfg.ProxyJump }
+ if privateKeyPath == "" && cfg.IdentityFile != "" {
+  privateKeyPath = expandUserPath(expandConnectionTokens(cfg.IdentityFile, originalHost, sHost, sUser, sPort))
+ }
+ if jump == "" && cfg.ProxyJump != "" {
+  jump = expandConnectionTokens(cfg.ProxyJump, originalHost, sHost, sUser, sPort)
+ }
  return sHost, sUser, sPort, privateKeyPath, jump
 }
