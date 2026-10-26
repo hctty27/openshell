@@ -416,7 +416,18 @@ function dragFirstTabOntoActiveTerminal() {
   };
   fireEvent.dragStart(tab, { dataTransfer: transfer });
   fireEvent.dragOver(target, { dataTransfer: transfer, clientX: 850, clientY: 350 });
-  expect(document.querySelector(".terminal-split-drop-right")).not.toBeNull();
+  if (!document.querySelector(".terminal-split-drop-right")) {
+    throw new Error(JSON.stringify({
+      dragging: tab.className,
+      mime: transfer.getData("application/x-openshell-tab"),
+      effect: transfer.dropEffect,
+      states: Array.from(document.querySelectorAll(".terminal-tab")).map(el => el.innerHTML.slice(0, 350)),
+      panes: Array.from(document.querySelectorAll(".terminal-pane")).map(el => ({
+        id: el.getAttribute("data-tab-id"), active: el.getAttribute("data-active"),
+        visible: el.getAttribute("data-visible"), className: el.className,
+      })),
+    }));
+  }
   fireEvent.drop(target, { dataTransfer: transfer, clientX: 850, clientY: 350 });
   fireEvent.dragEnd(tab, { dataTransfer: transfer });
 }
