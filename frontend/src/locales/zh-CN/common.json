@@ -152,5 +152,13 @@
   "sessionTabs": "已打开的终端标签",
   "sessionTabDescription": "{{name}}。拖动调整顺序，或按 Alt+Shift+左右方向键移动；双击复制会话。",
   "connectionFailed": "连接失败",
-  "localTerminal": "本地终端"
+  "localTerminal": "本地终端",
+  "closeActiveSessionTitle": "关闭 SSH 会话？",
+  "closeActiveSessionDescription": "关闭 {{name}} 将断开 SSH 连接，正在运行的交互式程序可能受到影响。",
+  "closeActiveSessionBusyDescription": "关闭 {{name}} 将断开 SSH，并中断正在进行的 AI 任务或文件传输。远程进程可能继续运行。",
+  "closeSessionAndDisconnect": "断开并关闭",
+  "quitActiveSessionsTitle": "确定退出 OpenShell？",
+  "quitActiveSessionsDescription": "仍有 {{count}} 个活动 SSH 会话。退出时将断开这些连接。",
+  "quitActiveSessionsBusyDescription": "仍有 {{count}} 个活动 SSH 会话。退出将断开连接，并可能中断 AI 任务或文件传输；远程进程可能继续运行。",
+  "quitAndDisconnect": "断开所有连接并退出"
 }
