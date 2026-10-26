@@ -10,6 +10,7 @@
   </p>
   <p><a href="README.md">English</a> · <strong>简体中文</strong></p>
   <p>
+    <a href="https://openshell.testnb.me/">官方网站</a> ·
     <a href="https://github.com/hctty27/openshell/releases/latest">下载</a> ·
     <a href="#快速开始">快速开始</a> ·
     <a href="CHANGELOG.md">更新记录</a> ·
