@@ -699,20 +699,6 @@ kbd {
   height: 25px;
   padding: 4px;
 }
-.terminal-toolbar .terminal-split-select {
-  max-width: 122px;
-  min-width: 88px;
-  height: 24px;
-  padding: 2px 5px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--field-bg);
-  color: var(--text-secondary);
-  font-size: 10px;
-}
-.terminal-toolbar .terminal-split-select:disabled {
-  opacity: 0.5;
-}
 .terminal-container {
   position: relative;
   background: var(--terminal-background, var(--terminal-workspace));
@@ -800,6 +786,37 @@ kbd {
 .terminal-container.terminal-split > .terminal-pane.visible.active {
   box-shadow: inset 0 2px 0 var(--accent);
 }
+.terminal-split-drop-preview {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.terminal-split-drop-preview::before {
+  content: "";
+  position: absolute;
+  border: 2px dashed var(--accent);
+  border-radius: 5px;
+  background: var(--accent-fill);
+  opacity: .2;
+}
+.terminal-split-drop-left::before { left: 0; top: 0; bottom: 0; width: 50%; }
+.terminal-split-drop-right::before { right: 0; top: 0; bottom: 0; width: 50%; }
+.terminal-split-drop-top::before { left: 0; right: 0; top: 0; height: 50%; }
+.terminal-split-drop-bottom::before { left: 0; right: 0; bottom: 0; height: 50%; }
+.terminal-split-drop-preview span {
+  position: relative;
+  padding: 5px 9px;
+  border-radius: 5px;
+  background: var(--panel);
+  box-shadow: 0 2px 8px #0003;
+}
+
 .terminal-split-handle {
   position: absolute;
   z-index: 4;
