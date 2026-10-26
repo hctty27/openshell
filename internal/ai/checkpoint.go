@@ -72,6 +72,15 @@ func clipCheckpoint(s string, max int) string {
 	return string(runes[:max]) + "...[truncated]"
 }
 
+func clipCheckpointTail(s string, max int) string {
+	s = strings.TrimSpace(Redact(s))
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return "[truncated]..." + string(runes[len(runes)-max:])
+}
+
 func checkpointLine(call ToolCall, tool Message) string {
 	var args struct {
 		Command string `json:"command"`
@@ -106,7 +115,7 @@ func checkpointLine(call ToolCall, tool Message) string {
 		if result.Stderr != "" {
 			line += fmt.Sprintf(" stderr=%q", clipCheckpoint(result.Stderr, 240))
 		} else if result.Stdout != "" {
-			line += fmt.Sprintf(" stdout_tail=%q", clipCheckpoint(result.Stdout, 160))
+			line += fmt.Sprintf(" stdout_tail=%q", clipCheckpointTail(result.Stdout, 160))
 		}
 	}
 	return line
