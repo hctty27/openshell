@@ -71,6 +71,7 @@ import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
 import { quickCommandTerminalInput } from "./quickCommands";
 import { DialogProvider, useDialogs } from "./components/DialogProvider";
+import ModalSurface from "./components/ModalSurface";
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.59";
 const initial: AppState = {
   sessions: [],
@@ -1825,8 +1826,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
         />
       )}
       {login && (
-        <div className="modal-backdrop">
-          <section className="compact-dialog" role="dialog" aria-modal="true">
+        <ModalSurface
+          className="compact-dialog"
+          aria-label={tr("common:connect")}
+          onDismiss={() => setLogin(null)}
+        >
             <ShieldCheck className="dialog-icon" size={24} />
             <h2>
               {tr("common:connect")}
@@ -1873,12 +1877,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </button>
               </footer>
             </form>
-          </section>
-        </div>
+        </ModalSurface>
       )}
       {challenge && (
-        <div className="modal-backdrop">
-          <section className="compact-dialog" role="dialog" aria-modal="true">
+        <ModalSurface
+          className="compact-dialog"
+          aria-label={challenge.host.changed ? tr("common:serverFingerprintChanged") : tr("common:verifyServerFingerprint")}
+          onDismiss={() => setChallenge(null)}
+          closeOnBackdrop={false}
+        >
             <ShieldCheck className="dialog-icon" size={25} />
             <h2>
               {challenge.host.changed
@@ -1916,12 +1923,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </button>
               )}
             </footer>
-          </section>
-        </div>
+        </ModalSurface>
       )}
       {preview && (
-        <div className="modal-backdrop">
-          <section className="context-dialog" role="dialog" aria-modal="true">
+        <ModalSurface
+          className="context-dialog"
+          aria-label={tr("common:sendTerminalTextToAi")}
+          onDismiss={() => setPreview(null)}
+        >
             <header>
               <div>
                 <span className="eyebrow">{tr("common:contextPreview")}</span>
@@ -1961,8 +1970,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 {tr("common:attachToChat")}
               </button>
             </footer>
-          </section>
-        </div>
+        </ModalSurface>
       )}
       <ZmodemFilePicker activeRef={active?.ref ?? undefined} onNotice={notify} />
        <ZmodemProgressDialog activeRef={active?.ref ?? undefined} onNotice={notify} />
