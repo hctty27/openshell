@@ -249,6 +249,53 @@ test("mouse reporting in interactive applications is not overridden", async () =
   expect(ClipboardGetText).not.toHaveBeenCalled();
 });
 
+test("Shift-drag copies in TUI mouse tracking mode", async () => {
+  const { container } = renderTerminal();
+  const pane = container.querySelector(".terminal-pane")!;
+  refs.terms[0].modes.mouseTrackingMode = "vt200";
+  refs.terms[0].selected = "selected TUI output";
+
+  fireEvent.mouseDown(pane, { button: 0 });
+  fireEvent.mouseUp(document, { button: 0 });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+  expect(ClipboardSetText).not.toHaveBeenCalled();
+
+  fireEvent.mouseDown(pane, { button: 0, shiftKey: true });
+  fireEvent.mouseUp(document, { button: 0 });
+  await waitFor(() => expect(ClipboardSetText).toHaveBeenCalledWith("selected TUI output"));
+});
+
+test("right-click paste overrides TUI mouse capture when enabled", async () => {
+  const { container } = renderTerminal();
+  const pane = container.querySelector(".terminal-pane")!;
+  refs.terms[0].modes.mouseTrackingMode = "vt200";
+
+  const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 2 });
+  expect(pane.dispatchEvent(down)).toBe(false);
+  const up = new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 2 });
+  expect(pane.dispatchEvent(up)).toBe(false);
+
+  fireEvent.contextMenu(pane);
+  await waitFor(() => expect(refs.terms[0].paste).toHaveBeenCalledWith("echo hello"));
+  expect(api.WriteTerminal).toHaveBeenCalled();
+});
+
+test("multiline confirmation restores terminal focus before and after paste", async () => {
+  vi.mocked(ClipboardGetText).mockResolvedValueOnce("first\\nsecond");
+  const { container } = renderTerminal();
+  const term = refs.terms[0];
+  fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
+  expect(await screen.findByRole("dialog", { name: "确认粘贴多行命令" })).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "确认粘贴" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  await waitFor(() => expect(term.paste).toHaveBeenCalledWith("first\\nsecond"));
+  expect(term.focus.mock.invocationCallOrder.at(-1)).toBeGreaterThan(
+    term.paste.mock.invocationCallOrder[0],
+  );
+  expect(api.WriteTerminal).toHaveBeenCalled();
+});
+
 test("multiline confirmation only pastes to the original connected tab", async () => {
   vi.mocked(ClipboardGetText).mockResolvedValueOnce("pwd\nwhoami");
   const { container, rerender } = renderTerminal();
