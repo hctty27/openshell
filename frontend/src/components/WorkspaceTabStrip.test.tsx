@@ -35,19 +35,19 @@ describe("WorkspaceTabStrip", () => {
   });
 
   it("publishes a typed drag payload and releases a split tab on the empty strip", () => {
-    const { container } = setup();
+    setup();
     const onTabDragStart = vi.fn();
     const onTabDragEnd = vi.fn();
     const onDropOnStrip = vi.fn();
     const tabs = [makeTab("A"), makeTab("B")];
-    const { rerender } = render(
+    const { container } = render(
       <WorkspaceTabStrip tabs={tabs} activeID="A" disconnectBehavior="local"
         onActivate={vi.fn()} onDuplicate={vi.fn()} onClose={vi.fn()}
         onNewTab={vi.fn()} onReorder={vi.fn()}
         onTabDragStart={onTabDragStart} onTabDragEnd={onTabDragEnd}
         onDropOnStrip={onDropOnStrip} />,
     );
-    const strip = container.parentElement!.querySelectorAll<HTMLElement>(".tab-strip")[1];
+    const strip = container.querySelector<HTMLElement>(".tab-strip")!;
     const tab = strip.querySelector<HTMLElement>(".terminal-tab")!;
     const transfer = { setData: vi.fn(), effectAllowed: "none", dropEffect: "none" };
     fireEvent.dragStart(tab, { dataTransfer: transfer });
@@ -57,7 +57,6 @@ describe("WorkspaceTabStrip", () => {
     fireEvent.drop(strip, { dataTransfer: transfer });
     expect(onDropOnStrip).toHaveBeenCalledWith("A");
     expect(onTabDragEnd).toHaveBeenCalled();
-    rerender(<></>);
   });
 
   it("keeps double click duplication and keyboard reordering", () => {
