@@ -215,7 +215,7 @@ export default function TerminalPane(p: Props) {
       if (callbacks.current.visible ?? callbacks.current.active) callbacks.current.onActivate?.();
       // Clipboard gestures take priority over TUI mouse reporting when enabled.
       // Capture the button press before xterm.js sends it to the remote app.
-      if (callbacks.current.active && (
+      if (callbacks.current.active && !event.altKey && (
         (event.button === 1 && callbacks.current.middleClickPaste) ||
         (event.button === 2 && callbacks.current.rightClickPaste)
       )) {
@@ -232,7 +232,7 @@ export default function TerminalPane(p: Props) {
     const onMouseUp = (event: MouseEvent) => {
       // xterm.js can listen for mouseup on document while mouse tracking is on.
       // Suppress the release corresponding to a clipboard gesture as well.
-      if (callbacks.current.active && paneElement.contains(event.target as Node) && (
+      if (callbacks.current.active && !event.altKey && paneElement.contains(event.target as Node) && (
         (event.button === 1 && callbacks.current.middleClickPaste) ||
         (event.button === 2 && callbacks.current.rightClickPaste)
       )) {
@@ -332,7 +332,7 @@ export default function TerminalPane(p: Props) {
       }
     });
     const onContextMenu = (event: MouseEvent) => {
-      if (!callbacks.current.active || !callbacks.current.rightClickPaste) return;
+      if (!callbacks.current.active || !callbacks.current.rightClickPaste || event.altKey) return;
       if ((event.target as HTMLElement).closest(".terminal-find, .terminal-transfer-indicator")) return;
       event.preventDefault();
       event.stopPropagation();
@@ -341,7 +341,7 @@ export default function TerminalPane(p: Props) {
     const onAuxClick = (event: MouseEvent) => {
       if (
         event.button === 1 && callbacks.current.middleClickPaste &&
-        callbacks.current.active &&
+        callbacks.current.active && !event.altKey &&
         !(event.target as HTMLElement).closest(".terminal-find, .terminal-transfer-indicator")
       ) event.preventDefault();
     };
