@@ -96,7 +96,7 @@ jobs:
           echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$chrome" >> "$GITHUB_ENV"
       - name: Verify terminal background and compact layout in Chrome
         working-directory: frontend
-        run: npx playwright test --grep "terminal backdrop fills its pane|compact sidebar removes detail actions|AI header aligns with SSH title bar|bilingual"
+        run: npx playwright test --grep "terminal backdrop fills its pane|compact sidebar removes detail actions|AI header aligns with SSH title bar|bilingual|dragging a connected tab splits"
 
   release:
     name: Windows release after CI
