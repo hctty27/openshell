@@ -118,3 +118,49 @@ test("selected row can connect with the bottom button", () => {
   fireEvent.click(connect);
   expect(onConnect).toHaveBeenCalledWith(us);
 });
+
+test("only backdrop clicks dismiss the session picker", () => {
+  const { onClose } = setup();
+  const dialog = screen.getByRole("dialog");
+  vi.spyOn(dialog, "getBoundingClientRect").mockReturnValue({
+    left: 100,
+    top: 100,
+    right: 820,
+    bottom: 580,
+  } as DOMRect);
+
+  fireEvent.click(dialog, { clientX: 400, clientY: 300 });
+  expect(onClose).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "选择会话 us" }), {
+    clientX: 400,
+    clientY: 300,
+  });
+  expect(onClose).not.toHaveBeenCalled();
+
+  fireEvent.click(dialog, { clientX: 99, clientY: 300 });
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
+test("clicking empty dialog space dismisses the context menu, not the picker", () => {
+  const { onClose } = setup();
+  const dialog = screen.getByRole("dialog");
+  vi.spyOn(dialog, "getBoundingClientRect").mockReturnValue({
+    left: 100,
+    top: 100,
+    right: 820,
+    bottom: 580,
+  } as DOMRect);
+
+  fireEvent.contextMenu(screen.getByRole("button", { name: "选择会话 us" }));
+  expect(screen.getByRole("menu")).toBeTruthy();
+  fireEvent.click(dialog, { clientX: 400, clientY: 300 });
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(onClose).not.toHaveBeenCalled();
+});
+
+test("Escape cancels the session picker", () => {
+  const { onClose } = setup();
+  fireEvent(screen.getByRole("dialog"), new Event("cancel", { cancelable: true }));
+  expect(onClose).toHaveBeenCalledOnce();
+});
