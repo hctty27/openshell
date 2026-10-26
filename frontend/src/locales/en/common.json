@@ -152,5 +152,13 @@
   "sessionTabs": "Open terminal tabs",
   "sessionTabDescription": "{{name}}. Drag to reorder, or press Alt+Shift+Left/Right to move; double-click to duplicate.",
   "connectionFailed": "Connection failed",
-  "localTerminal": "Local terminal"
+  "localTerminal": "Local terminal",
+  "closeActiveSessionTitle": "Close active SSH session?",
+  "closeActiveSessionDescription": "Closing {{name}} disconnects its SSH connection. Interactive programs may be interrupted.",
+  "closeActiveSessionBusyDescription": "Closing {{name}} disconnects SSH and interrupts active AI tasks or file transfers. Remote processes may continue running.",
+  "closeSessionAndDisconnect": "Disconnect and close",
+  "quitActiveSessionsTitle": "Exit OpenShell?",
+  "quitActiveSessionsDescription": "{{count}} SSH connection(s) will be disconnected when OpenShell exits.",
+  "quitActiveSessionsBusyDescription": "{{count}} SSH connection(s) will be disconnected, and running AI tasks or file transfers may be interrupted. Remote processes may continue running.",
+  "quitAndDisconnect": "Disconnect all and exit"
 }
