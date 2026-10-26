@@ -400,7 +400,7 @@ test("double-clicking a terminal tab opens an independent SSH session beside it 
   expect(calls[2][0]).not.toBe(calls[0][0]);
 });
 
-function dragFirstTabOntoActiveTerminal() {
+async function dragFirstTabOntoActiveTerminal() {
   const tab = document.querySelector<HTMLElement>(".terminal-tab")!;
   const target = document.querySelector<HTMLElement>(".terminal-pane.visible[data-active='true']")!;
   vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
@@ -416,20 +416,10 @@ function dragFirstTabOntoActiveTerminal() {
   };
   fireEvent.dragStart(tab, { dataTransfer: transfer });
   fireEvent.dragOver(target, { dataTransfer: transfer, clientX: 850, clientY: 350 });
-  if (!document.querySelector(".terminal-split-drop-right")) {
-    throw new Error(JSON.stringify({
-      dragging: tab.className,
-      mime: transfer.getData("application/x-openshell-tab"),
-      effect: transfer.dropEffect,
-      states: Array.from(document.querySelectorAll(".terminal-tab")).map(el => el.innerHTML.slice(0, 350)),
-      panes: Array.from(document.querySelectorAll(".terminal-pane")).map(el => ({
-        id: el.getAttribute("data-tab-id"), active: el.getAttribute("data-active"),
-        visible: el.getAttribute("data-visible"), className: el.className,
-      })),
-    }));
-  }
+  await waitFor(() => expect(document.querySelector(".terminal-split-drop-right")).not.toBeNull());
   fireEvent.drop(target, { dataTransfer: transfer, clientX: 850, clientY: 350 });
   fireEvent.dragEnd(tab, { dataTransfer: transfer });
+  await waitFor(() => expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split")).toBe(true));
 }
 
 test("two connected sessions can split, rotate, focus and close without extra SSH connections", async () => {
@@ -456,7 +446,7 @@ test("two connected sessions can split, rotate, focus and close without extra SS
   fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 eu" }));
   await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
   expect(screen.queryByRole("combobox", { name: "分屏选择…" })).toBeNull();
-  dragFirstTabOntoActiveTerminal();
+  await dragFirstTabOntoActiveTerminal();
   expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split-columns")).toBe(true);
   const panes = screen.getAllByTestId("terminal-pane-stub");
   expect(panes.filter((pane) => pane.getAttribute("data-visible") === "true")).toHaveLength(2);
