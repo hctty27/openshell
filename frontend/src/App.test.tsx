@@ -550,7 +550,7 @@ test("closing a connected tab requires confirmation and cancelling preserves it"
 
   fireEvent.click(screen.getByTitle("关闭 Live Server"));
   expect(screen.getByText("关闭 SSH 会话？")).toBeTruthy();
-  expect(screen.getByText(/root@example\.test:22/)).toBeTruthy();
+  expect(screen.getAllByText(/root@example\.test:22/).length).toBeGreaterThan(0);
   fireEvent.click(screen.getByRole("button", {name:"取消"}));
   expect(screen.getByTitle("关闭 Live Server")).toBeTruthy();
   expect(api.CloseTab).not.toHaveBeenCalled();
@@ -568,7 +568,7 @@ test("closing an already disconnected tab needs no SSH confirmation", async () =
     sessions: [{id:"offline-id",groupId:"",name:"Offline",host:"example.test",port:22,
       username:"root",authType:"key",privateKeyPath:"",credentialRef:"saved"}],
     groups: [], profiles: [], fontSize:"14", language:"zh-CN",
-    activeProfile:"", version:"0.1.58",
+    activeProfile:"", autoReconnect:false, version:"0.1.58",
   });
   await act(async () => { render(<App />); });
   fireEvent.doubleClick(screen.getByRole("button", {name:"选中会话 Offline"}));
@@ -605,6 +605,7 @@ test("native quit request asks once for live sessions, cancellation is safe", as
   fireEvent.click(screen.getByRole("button", {name:"取消"}));
   expect(api.QuitConfirmed).not.toHaveBeenCalled();
   expect(screen.getByTitle("关闭 Quit Server")).toBeTruthy();
+  await act(async () => { await Promise.resolve(); });
   act(() => {
     for (const listener of transferEvents.listeners.get("app:quit-requested") ?? []) listener(null);
   });
