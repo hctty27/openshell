@@ -29,6 +29,7 @@ jobs:
             @xterm/addon-search@beta \
             @xterm/addon-web-links@beta \
             @xterm/addon-webgl@beta
+      # Validate API changes after upgrading beta packages.
       - name: Validate frontend build
         working-directory: frontend
         run: npm run build
