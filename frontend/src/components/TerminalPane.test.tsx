@@ -259,6 +259,7 @@ test("xterm 6.1 selects and copies in TUIs by default, Alt enables app mouse con
   const pane = container.querySelector(".terminal-pane")!;
   const term = refs.terms[0];
   expect(term.options.mouseEventsRequireAlt).toBe(true);
+  expect(term.options.scrollbar).toEqual({ width: 14 });
   term.modes.mouseTrackingMode = "vt200";
   term.selected = "selected TUI output";
 
