@@ -23,6 +23,8 @@ import (
 )
 
 type App struct {
+	closeGuardReady bool
+	quitApproved bool
 	connectEpoch map[string]uint64
 	ctx          context.Context
 	store        *store.Store
@@ -179,6 +181,28 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 	return a, nil
 }
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+
+// Before native shutdown, let the frontend decide whether to prompt for live SSH sessions.
+func (a *App) beforeClose(context.Context) bool {
+ a.mu.Lock()
+ prevent := a.closeGuardReady && !a.quitApproved
+ a.mu.Unlock()
+ if prevent { a.emit("app:quit-requested", nil) }
+ return prevent
+}
+
+func (a *App) SetCloseGuardReady(ready bool) {
+ a.mu.Lock()
+ a.closeGuardReady = ready
+ a.mu.Unlock()
+}
+
+func (a *App) QuitConfirmed() {
+ a.mu.Lock()
+ a.quitApproved = true
+ a.mu.Unlock()
+ runtime.Quit(a.ctx)
+}
 func (a *App) shutdown(context.Context) {
 	a.mu.Lock()
 	for _, cancel := range a.chatCancels {
