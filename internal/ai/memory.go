@@ -10,12 +10,12 @@ import (
 )
 
 type ContextPolicy struct {
-	MaxRequestBytes, SummaryBytes, SummaryInputBytes, KeepTurns, TriggerTurns int
+	MaxRequestBytes, TriggerBytes, SummaryBytes, SummaryInputBytes, KeepTurns, TriggerTurns, KeepToolCycles int
 	SummaryTimeout                                                            time.Duration
 }
 
 func DefaultContextPolicy() ContextPolicy {
-	return ContextPolicy{48 * 1024, 8 * 1024, 32 * 1024, 6, 20, 30 * time.Second}
+	return ContextPolicy{128 * 1024, 96 * 1024, 8 * 1024, 32 * 1024, 6, 20, 3, 30 * time.Second}
 }
 
 type ContextResult struct {
@@ -82,7 +82,7 @@ func BuildContext(ctx context.Context, system Message, history []domain.Conversa
 	if summary != "" {
 		result.Status = "summary"
 	}
-	trigger := len(turns)-1 > policy.TriggerTurns || n > policy.MaxRequestBytes
+	trigger := len(turns)-1 > policy.TriggerTurns || n > policy.TriggerBytes
 	if trigger && summarize != nil && len(turns) > 1 {
 		keep := policy.KeepTurns
 		if keep < 1 {
@@ -156,6 +156,30 @@ func BuildContext(ctx context.Context, system Message, history []domain.Conversa
 		n, e = size(messages)
 		if e != nil {
 			return result, e
+		}
+		threshold := policy.TriggerBytes
+		if threshold <= 0 || threshold > policy.MaxRequestBytes {
+			threshold = policy.MaxRequestBytes
+		}
+		if n > threshold {
+			original := messages
+			for keep := policy.KeepToolCycles; keep >= 0; keep-- {
+				candidate, ok := CompactToolHistory(original, keep)
+				if !ok {
+					continue
+				}
+				candidateSize, sizeErr := size(candidate)
+				if sizeErr != nil {
+					return result, sizeErr
+				}
+				if candidateSize < n {
+					messages, n = candidate, candidateSize
+					result.Status = "recent"
+				}
+				if n <= threshold {
+					break
+				}
+			}
 		}
 		if n <= policy.MaxRequestBytes {
 			break

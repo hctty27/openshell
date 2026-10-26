@@ -42,6 +42,31 @@ func BuildPreview(text string, maxLines, maxBytes int) Preview {
 	return p
 }
 
+// BuildOutputPreview keeps both the beginning and end of long command output.
+// The first lines often identify the operation; the tail usually contains errors.
+func BuildOutputPreview(text string, maxBytes int) Preview {
+	text = strings.ToValidUTF8(ansi.ReplaceAllString(Redact(text), ""), "�")
+	if len(text) <= maxBytes {
+		return Preview{Text: text}
+	}
+	if maxBytes <= 0 {
+		return Preview{Truncated: true}
+	}
+	const marker = "\n...[truncated]...\n"
+	if maxBytes <= len(marker)+8 {
+		return BuildPreview(text, 10000, maxBytes)
+	}
+	headEnd := (maxBytes - len(marker)) / 3
+	for headEnd > 0 && !utf8.RuneStart(text[headEnd]) {
+		headEnd--
+	}
+	tailStart := len(text) - (maxBytes - len(marker) - headEnd)
+	for tailStart < len(text) && !utf8.RuneStart(text[tailStart]) {
+		tailStart++
+	}
+	return Preview{Text: text[:headEnd] + marker + text[tailStart:], Truncated: true}
+}
+
 type ConversationStore struct {
 	mu       sync.Mutex
 	messages map[string][]Message
@@ -78,14 +103,15 @@ func BuildToolResult(command, cwd string, result domain.CommandResult) string {
 		Stderr         string `json:"stderr"`
 		Truncated      bool   `json:"truncated"`
 	}
-	cmd := BuildPreview(Redact(command), 10000, 4096)
-	dir := BuildPreview(cwd, 10000, 1024)
-	limit := 12000
+	cmd := BuildPreview(Redact(command), 10000, 1200)
+	dir := BuildPreview(cwd, 10000, 512)
+	limit := 3072
 	for {
-		out := BuildPreview(Redact(result.Stdout), 10000, limit)
-		errout := BuildPreview(Redact(result.Stderr), 10000, limit)
-		data, _ := json.Marshal(payload{cmd.Text, dir.Text, result.Status, result.Reason, result.ExitCode, result.DurationMillis, out.Text, errout.Text, result.Truncated || cmd.Truncated || dir.Truncated || out.Truncated || errout.Truncated})
-		if len(data) <= 32768 {
+		out := BuildOutputPreview(result.Stdout, limit)
+		errout := BuildOutputPreview(result.Stderr, limit)
+		reason := BuildPreview(Redact(result.Reason), 10000, 1024)
+		data, _ := json.Marshal(payload{cmd.Text, dir.Text, result.Status, reason.Text, result.ExitCode, result.DurationMillis, out.Text, errout.Text, result.Truncated || cmd.Truncated || dir.Truncated || reason.Truncated || out.Truncated || errout.Truncated})
+		if len(data) <= 8192 {
 			return string(data)
 		}
 		limit /= 2
