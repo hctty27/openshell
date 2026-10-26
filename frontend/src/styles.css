@@ -928,24 +928,24 @@ kbd {
 .terminal-surface .xterm .xterm-viewport {
   background-color: var(--terminal-background, var(--terminal-workspace));
 }
-.terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical {
+.terminal-surface .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical {
   opacity: 1;
   border: 0;
   outline: 0;
   box-shadow: none;
   background: var(--terminal-scroll-track);
 }
-.terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical > .slider {
+.terminal-surface .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical > .xterm-slider {
   box-sizing: border-box;
   border-left: 8px solid transparent;
   border-radius: 9px;
   background-clip: padding-box;
   background-color: var(--terminal-scroll-thumb) !important;
 }
-.terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical:hover > .slider {
+.terminal-surface .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical:hover > .xterm-slider {
   background-color: var(--terminal-scroll-thumb-hover) !important;
 }
-.terminal-surface .xterm .xterm-scrollable-element > .scrollbar.vertical:active > .slider {
+.terminal-surface .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical:active > .xterm-slider {
   background-color: var(--terminal-scroll-thumb-active) !important;
 }
 .terminal-overlay {
