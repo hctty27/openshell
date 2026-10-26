@@ -4,7 +4,7 @@ import { t as tr } from "./i18n";
 import { useTranslation } from "react-i18next";
 import { initializeI18n, i18n } from "./i18n";
 import { normalizeLanguage, type Language } from "./i18n/languages";
-import { useState, useEffect, useRef, type CSSProperties } from "react";
+import { useState, useEffect, useRef, type CSSProperties, type DragEvent as ReactDragEvent } from "react";
 import {
   Terminal,
   Plus,
@@ -65,6 +65,7 @@ import AISidebar from "./components/AISidebar";
 import { useConversations } from "./useConversations";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
 import { useSplitWorkspace } from "./features/terminal/useSplitWorkspace";
+import { TAB_DRAG_MIME, getSplitDropZone, splitLayoutFromDrop, type SplitDropZone } from "./features/terminal/splitDrop";
 import { useTransferActivity } from "./features/transfers/useTransferActivity";
 import { toChatMessages } from "./conversations";
 import QuickCommandBar from "./components/QuickCommandBar";
@@ -306,11 +307,66 @@ function Workspace({ initialState }: { initialState: AppState }) {
 
   const {
     splitPair, setSplitPair, splitDirection, setSplitDirection,
-    splitRatio, setSplitRatio, splitContainerRef, splitReady, splitPartnerID, splitChoices,
+    splitRatio, setSplitRatio, splitContainerRef, splitReady,
     setSplitRatioAndSave, startSplitResize,
   } = useSplitWorkspace({
     tabs, activeID, showSFTP, initialRatio: initialState.splitRatio, onError: notify,
   });
+  const [draggedTabID, setDraggedTabID] = useState("");
+  const [splitDropPreview, setSplitDropPreview] = useState<{
+    targetID: string;
+    zone: SplitDropZone;
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  const resolveSplitDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!draggedTabID || showSFTP || !event.dataTransfer.types.includes(TAB_DRAG_MIME)) return null;
+    const source = tabs.find(tab => tab.id === draggedTabID && tab.status === "connected");
+    const targetNode = (event.target as HTMLElement).closest<HTMLElement>(".terminal-pane.visible");
+    if (!source || !targetNode) return null;
+    const targetID = targetNode.dataset.tabId ?? "";
+    const target = tabs.find(tab => tab.id === targetID && tab.status === "connected");
+    if (!target || targetID === draggedTabID) return null;
+    const bounds = targetNode.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return null;
+    return { targetID, zone: getSplitDropZone(bounds, event.clientX, event.clientY), bounds };
+  };
+
+  const onSplitDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    const target = resolveSplitDrop(event);
+    const container = splitContainerRef.current;
+    if (!target || !container) {
+      setSplitDropPreview(null);
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const outer = container.getBoundingClientRect();
+    const next = {
+      targetID: target.targetID, zone: target.zone,
+      left: target.bounds.left - outer.left, top: target.bounds.top - outer.top,
+      width: target.bounds.width, height: target.bounds.height,
+    };
+    setSplitDropPreview(previous =>
+      previous && Object.keys(next).every(key =>
+        previous[key as keyof typeof next] === next[key as keyof typeof next]) ? previous : next);
+  };
+
+  const onSplitDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    const target = resolveSplitDrop(event);
+    setSplitDropPreview(null);
+    if (!target || event.dataTransfer.getData(TAB_DRAG_MIME) !== draggedTabID) return;
+    const layout = splitLayoutFromDrop(draggedTabID, target.targetID, target.zone);
+    if (!layout) return;
+    event.preventDefault();
+    setSplitPair(layout.pair);
+    setSplitDirection(layout.direction);
+    setActiveID(target.targetID);
+  };
+
   const dropDialogs = useRef(dialogs);
   dropDialogs.current = dialogs;
   useEffect(() => {
@@ -1329,6 +1385,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onDuplicate={tab => open(tab.session, tab.id)}
           onClose={tab => { void close(tab); }}
           onNewTab={() => setShowSessionPicker(true)}
+          onTabDragStart={setDraggedTabID}
+          onTabDragEnd={() => { setDraggedTabID(""); setSplitDropPreview(null); }}
+          onDropOnStrip={tabID => {
+            if (splitPair?.includes(tabID)) setSplitPair(null);
+          }}
           onReorder={(sourceID, targetID, placement) =>
             setTabs(current => reorderTabs(current, sourceID, targetID, placement))} />
         {!tabs.length ? (
@@ -1384,22 +1445,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 {active?.session.port}
               </span>
               <div>
-                <select
-                  className="terminal-split-select"
-                  aria-label={tr("terminal:splitWith")}
-                  title={splitChoices.length ? tr("terminal:splitWith") : tr("terminal:splitNeedsTwo")}
-                  disabled={active?.status !== "connected" || showSFTP || !splitChoices.length}
-                  value={splitPartnerID}
-                  onChange={(event) => {
-                    const other = event.target.value;
-                    setSplitPair(other ? [activeID, other] : null);
-                  }}
-                >
-                  <option value="">{tr("terminal:splitWith")}</option>
-                  {splitChoices.map((tab) => (
-                    <option key={tab.id} value={tab.id}>{tab.session.name}</option>
-                  ))}
-                </select>
                 {splitReady && (
                   <>
                     <button title={tr("terminal:rotateSplit")} aria-label={tr("terminal:rotateSplit")}
@@ -1462,6 +1507,13 @@ function Workspace({ initialState }: { initialState: AppState }) {
             </div>
             <div className={`workspace-workarea ${showSFTP ? "with-sftp" : ""}`}>
             <div ref={splitContainerRef}
+              onDragOver={onSplitDragOver}
+              onDrop={onSplitDrop}
+              onDragLeave={event => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                if (event.clientX <= rect.left || event.clientX >= rect.right ||
+                    event.clientY <= rect.top || event.clientY >= rect.bottom) setSplitDropPreview(null);
+              }}
               className={`terminal-container ${splitReady ? `terminal-split terminal-split-${splitDirection}` : ""}`}
               style={{
                 "--split-ratio": `${splitRatio}%`,
@@ -1477,6 +1529,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   showDisconnectReason={state.showDisconnectReason !== false}
                   active={tab.id === activeID}
                   visible={tab.id === activeID || Boolean(splitReady && splitPair?.includes(tab.id))}
+                  splitOrder={splitReady ? splitPair?.indexOf(tab.id) : undefined}
                   onActivate={() => setActiveID(tab.id)}
                   onDirectoryChange={(ref, directory) => {
                     update(ref.tabId, current =>
@@ -1511,6 +1564,18 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   }}
                 />
               ))}
+              {splitDropPreview && (
+                <div className={`terminal-split-drop-preview terminal-split-drop-${splitDropPreview.zone}`}
+                  style={{
+                    left: splitDropPreview.left, top: splitDropPreview.top,
+                    width: splitDropPreview.width, height: splitDropPreview.height,
+                  }} aria-hidden="true">
+                  <span>{tr(({
+                    left: "terminal:dropSplitLeft", right: "terminal:dropSplitRight",
+                    top: "terminal:dropSplitTop", bottom: "terminal:dropSplitBottom",
+                  } as const)[splitDropPreview.zone])}</span>
+                </div>
+              )}
               {splitReady && (
                 <div className="terminal-split-handle"
                   role="separator"

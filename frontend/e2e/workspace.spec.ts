@@ -332,6 +332,41 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   await expect(page.getByText("AI 助手", { exact: true })).toHaveCount(0);
 });
 
+test("dragging a connected tab splits a terminal without reconnecting", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  for (const [name, host] of [["server-a", "127.0.0.1"], ["server-b", "127.0.0.2"]]) {
+    await page.getByTitle("新建会话", { exact: true }).first().click();
+    await page.getByLabel("会话名称", { exact: true }).fill(name);
+    await page.getByLabel("主机地址").fill(host);
+    await page.getByLabel("登录密码").fill("fixture-password");
+    await page.getByText("保存到 Windows 凭据管理器").click();
+    await page.getByRole("button", { name: "保存会话", exact: true }).click();
+    await page.getByText(name, { exact: true }).dblclick();
+    if (name === "server-a") await page.getByRole("button", { name: "信任并连接" }).click();
+  }
+  await expect(page.locator(".terminal-tab .connection-state-connected")).toHaveCount(2);
+  await expect(page.locator(".terminal-split-select")).toHaveCount(0);
+  const destination = page.locator(".terminal-pane.visible");
+  const bounds = await destination.boundingBox();
+  expect(bounds).not.toBeNull();
+  await destination.evaluate(el => {
+    (window as any).__originalSplitTerminal = el.querySelector(".xterm");
+  });
+  await page.locator(".terminal-tab").first().dragTo(destination, {
+    targetPosition: { x: bounds!.width - 25, y: bounds!.height / 2 },
+  });
+  await expect(page.locator(".terminal-container")).toHaveClass(/terminal-split-columns/);
+  await expect(page.locator(".terminal-pane.visible")).toHaveCount(2);
+  await expect(page.getByRole("separator", { name: "调整终端分屏比例" })).toBeVisible();
+  expect(await page.locator(".terminal-pane.active .xterm").evaluate(el =>
+    el === (window as any).__originalSplitTerminal)).toBe(true);
+  await page.getByRole("button", { name: "关闭分屏" }).click();
+  await expect(page.locator(".terminal-container")).not.toHaveClass(/terminal-split/);
+  await expect(page.locator(".terminal-pane.visible")).toHaveCount(1);
+  await expect(page.locator(".terminal-tab .connection-state-connected")).toHaveCount(2);
+});
+
 test("terminal stays within its viewport with stable scrollbar and both themes", async ({
   page,
 }) => {

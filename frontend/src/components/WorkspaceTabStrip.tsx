@@ -3,6 +3,7 @@ import { Plus, X } from "lucide-react";
 import { t } from "../i18n";
 import type { DisconnectBehavior, Tab } from "../types";
 import ConnectionStatusIcon from "./ConnectionStatusIcon";
+import { TAB_DRAG_MIME } from "../features/terminal/splitDrop";
 
 type Placement = "before" | "after";
 
@@ -15,6 +16,9 @@ interface Props {
   onClose(tab: Tab): void;
   onNewTab(): void;
   onReorder(sourceID: string, targetID: string, placement: Placement): void;
+  onTabDragStart?(tabID: string): void;
+  onTabDragEnd?(): void;
+  onDropOnStrip?(tabID: string): void;
 }
 
 export default function WorkspaceTabStrip(p: Props) {
@@ -26,6 +30,7 @@ export default function WorkspaceTabStrip(p: Props) {
     dragging.current = "";
     setDraggedID("");
     setDropTarget(null);
+    p.onTabDragEnd?.();
   };
 
   const startDrag = (tabID: string, event: DragEvent<HTMLDivElement>) => {
@@ -36,7 +41,9 @@ export default function WorkspaceTabStrip(p: Props) {
     dragging.current = tabID;
     setDraggedID(tabID);
     event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(TAB_DRAG_MIME, tabID);
     event.dataTransfer.setData("text/plain", tabID);
+    p.onTabDragStart?.(tabID);
   };
 
   const overTab = (tabID: string, event: DragEvent<HTMLDivElement>) => {
@@ -73,9 +80,16 @@ export default function WorkspaceTabStrip(p: Props) {
     <div className="tab-strip" role="group" aria-label={t("common:sessionTabs")}
       onDragOver={event => {
         if (!dragging.current) return;
+        event.preventDefault();
         const bounds = event.currentTarget.getBoundingClientRect();
         if (event.clientX < bounds.left + 28) event.currentTarget.scrollLeft -= 14;
         if (event.clientX > bounds.right - 28) event.currentTarget.scrollLeft += 14;
+      }}
+      onDrop={event => {
+        if (!dragging.current || (event.target as HTMLElement).closest(".terminal-tab")) return;
+        event.preventDefault();
+        p.onDropOnStrip?.(dragging.current);
+        clearDrag();
       }}>
       {p.tabs.map((tab, index) => (
         <div key={tab.id} draggable

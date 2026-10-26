@@ -52,8 +52,6 @@
   "previousMatch": "Previous match",
   "nextMatch": "Next match",
   "closeSearch": "Close search",
-  "splitWith": "Split with…",
-  "splitNeedsTwo": "Connect another terminal to split",
   "rotateSplit": "Switch split direction",
   "closeSplit": "Close split view",
   "regexSearch": "Use regular expression",
@@ -66,5 +64,9 @@
   "zmodemCancelling": "Cancelling…",
   "localShellStatus": "Local terminal · {{name}}",
   "remoteConnectionClosed": "SSH disconnected. Switched to local terminal",
-  "localShellStartFailed": "Failed to launch local terminal"
+  "localShellStartFailed": "Failed to launch local terminal",
+  "dropSplitLeft": "Drop to split left",
+  "dropSplitRight": "Drop to split right",
+  "dropSplitTop": "Drop to split above",
+  "dropSplitBottom": "Drop to split below"
 }

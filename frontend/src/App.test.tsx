@@ -25,6 +25,7 @@ vi.mock("./components/TerminalPane", () => ({
   }) => (
     <div
       data-testid="terminal-pane-stub"
+      className={`terminal-pane ${props.visible ? "visible" : ""}`}
       data-tab-id={props.tab.id}
       data-active={props.active}
       data-visible={props.visible}
@@ -399,6 +400,28 @@ test("double-clicking a terminal tab opens an independent SSH session beside it 
   expect(calls[2][0]).not.toBe(calls[0][0]);
 });
 
+async function dragFirstTabOntoActiveTerminal() {
+  const tab = document.querySelector<HTMLElement>(".terminal-tab")!;
+  const target = document.querySelector<HTMLElement>(".terminal-pane.visible[data-active='true']")!;
+  vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
+    left: 100, top: 100, width: 800, height: 500, right: 900, bottom: 600,
+    x: 100, y: 100, toJSON: () => ({}),
+  });
+  const values = new Map<string, string>();
+  const transfer = {
+    types: ["application/x-openshell-tab", "text/plain"],
+    setData: (type: string, value: string) => values.set(type, value),
+    getData: (type: string) => values.get(type) ?? "",
+    effectAllowed: "none", dropEffect: "none",
+  };
+  fireEvent.dragStart(tab, { dataTransfer: transfer });
+  fireEvent.dragOver(target, { dataTransfer: transfer, clientX: 850, clientY: 350 });
+  expect(transfer.dropEffect).toBe("move");
+  fireEvent.drop(target, { dataTransfer: transfer, clientX: 850, clientY: 350 });
+  fireEvent.dragEnd(tab, { dataTransfer: transfer });
+  await waitFor(() => expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split")).toBe(true));
+}
+
 test("two connected sessions can split, rotate, focus and close without extra SSH connections", async () => {
   vi.mocked(api.Connect).mockClear();
   vi.mocked(api.State).mockResolvedValueOnce({
@@ -422,10 +445,8 @@ test("two connected sessions can split, rotate, focus and close without extra SS
   fireEvent.click(screen.getByTitle("打开会话列表"));
   fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 eu" }));
   await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
-  const selector = screen.getByRole("combobox", { name: "分屏选择…" }) as HTMLSelectElement;
-  const partner = Array.from(selector.options).find((item) => item.value);
-  expect(partner).toBeTruthy();
-  fireEvent.change(selector, { target: { value: partner!.value } });
+  expect(screen.queryByRole("combobox", { name: "分屏选择…" })).toBeNull();
+  await dragFirstTabOntoActiveTerminal();
   expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split-columns")).toBe(true);
   const panes = screen.getAllByTestId("terminal-pane-stub");
   expect(panes.filter((pane) => pane.getAttribute("data-visible") === "true")).toHaveLength(2);
@@ -459,8 +480,7 @@ test("split gutter accepts keyboard, drag, and reset with persistent bounds", as
   fireEvent.click(screen.getByTitle("打开会话列表"));
   fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 eu" }));
   await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
-  const selector = screen.getByRole("combobox", { name: "分屏选择…" }) as HTMLSelectElement;
-  fireEvent.change(selector, { target: { value: selector.options[1].value } });
+  dragFirstTabOntoActiveTerminal();
   const separator = screen.getByRole("separator", { name: "调整终端分屏比例" });
   expect(separator.getAttribute("aria-valuenow")).toBe("60");
   fireEvent.keyDown(separator, { key: "ArrowRight" });
