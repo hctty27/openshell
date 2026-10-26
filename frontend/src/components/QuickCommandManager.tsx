@@ -7,6 +7,7 @@ import { ArrowDown, ArrowUp, Plus, Save, Trash2, X } from "lucide-react";
 import type { Group, QuickCommand, Session } from "../types";
 import { errorText } from "../bridge";
 import { useDialogs } from "./DialogProvider";
+import ModalSurface from "./ModalSurface";
 
 interface Props {
   commands: QuickCommand[];
@@ -130,18 +131,12 @@ export default function QuickCommandManager(p: Props) {
     await persist(next, message("terminal:orderUpdated"));
   };
   return (
-    <div
-      className="modal-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) p.onClose();
-      }}
+    <ModalSurface
+      className="quick-manager"
+      aria-label={t("terminal:manageQuickCommands")}
+      onDismiss={p.onClose}
+      locked={busy}
     >
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("terminal:manageQuickCommands")}
-        className="quick-manager"
-      >
         <header className="quick-manager-header">
           <div>
             <span className="eyebrow">{t("terminal:quickCommandsLabel")}</span>
@@ -366,7 +361,6 @@ export default function QuickCommandManager(p: Props) {
             </div>
           </div>
         </div>
-      </section>
-    </div>
+    </ModalSurface>
   );
 }
