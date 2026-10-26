@@ -242,10 +242,14 @@ test("right click pastes via terminal input, multi-line paste requires confirmat
   expect(refs.terms[0].paste).toHaveBeenCalledTimes(1);
 });
 
-test("mouse reporting in interactive applications is not overridden", async () => {
-  const { container } = renderTerminal();
+test("TUI mouse handling is preserved when right-click paste is disabled", () => {
+  const { container } = renderTerminal({ rightClickPaste: false });
   refs.terms[0].modes.mouseTrackingMode = "vt200";
-  fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
+  const pane = container.querySelector(".terminal-pane")!;
+
+  const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 2 });
+  expect(pane.dispatchEvent(down)).toBe(true);
+  fireEvent.contextMenu(pane);
   expect(ClipboardGetText).not.toHaveBeenCalled();
 });
 
