@@ -3571,3 +3571,77 @@ select.mode-select {
   .zmodem-picker-footer { gap: 7px; }
   .zmodem-picker-count { flex-basis: 100%; text-align: left; }
 }
+
+
+/* Shared Fluent-inspired native modal surface. */
+.modal-surface {
+  margin: auto;
+  padding: 0;
+  color: var(--text-primary);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 24px 72px #0006, 0 2px 12px #0002;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+}
+.modal-surface:not([open]) { display: none !important; }
+.modal-surface::backdrop {
+  background: var(--overlay);
+  backdrop-filter: blur(3px);
+}
+.modal-surface[open] {
+  animation: modal-appear 140ms ease-out;
+}
+@keyframes modal-appear {
+  from { opacity: 0; transform: translateY(5px) scale(.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-surface[open] { animation: none; }
+}
+.modal-surface button:focus-visible,
+.modal-surface input:focus-visible,
+.modal-surface select:focus-visible,
+.modal-surface textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.app-dialog {
+  width: min(420px, calc(100vw - 32px));
+  overflow: hidden;
+}
+.app-dialog form {
+  display: flex;
+  flex-direction: column;
+  max-height: min(85vh, 680px);
+  padding: 0;
+}
+.app-dialog__header {
+  flex: none;
+  padding: 22px 22px 0;
+}
+.app-dialog__body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 22px;
+  overscroll-behavior: contain;
+}
+.app-dialog__actions {
+  flex: none;
+  padding: 18px 22px 22px;
+  margin: 0;
+}
+.app-dialog__description { margin-top: 14px; }
+.app-dialog__field { margin-top: 18px; }
+.app-dialog__preview { margin-top: 16px; margin-bottom: 4px; }
+.app-dialog__actions button {
+  min-height: 35px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+.app-dialog__primary--danger:focus-visible { outline-color: var(--danger); }
+/* Keep long editor and picker content scrollable under fixed chrome. */
+.modal-surface.settings-dialog--settings,
+.modal-surface.quick-manager,
+.modal-surface.xshell-import-dialog { overflow: hidden; }
