@@ -405,6 +405,10 @@ test("four sessions support nested splits, independent handles and undocking", a
   await expect(page.locator(".terminal-pane.visible")).toHaveCount(3);
   await expect(page.getByRole("separator", { name: "调整终端分屏比例" })).toHaveCount(2);
   await expect(page.locator(".terminal-tab .connection-state-connected")).toHaveCount(4);
+  await page.locator(".terminal-pane.active .terminal-pane-undock").click();
+  await expect(page.locator(".terminal-pane.visible")).toHaveCount(2);
+  await expect(page.getByRole("separator", { name: "调整终端分屏比例" })).toHaveCount(1);
+  await expect(page.locator(".terminal-tab .connection-state-connected")).toHaveCount(4);
 });
 
 test("terminal stays within its viewport with stable scrollbar and both themes", async ({
