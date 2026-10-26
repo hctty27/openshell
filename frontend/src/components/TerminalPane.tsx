@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { X } from "lucide-react";
 import { message, type DisplayText } from "../i18n/message";
 import { t } from "../i18n";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
@@ -27,6 +28,7 @@ interface Props {
   active: boolean;
   visible?: boolean;
   paneBounds?: { left: number; top: number; width: number; height: number };
+  onUndock?: () => void;
   onActivate?: () => void;
   fontSize: number;
   theme: Theme;
@@ -578,6 +580,12 @@ export default function TerminalPane(p: Props) {
           width: p.paneBounds.width, height: p.paneBounds.height } : {}),
       } as CSSProperties}>
       <div className="terminal-surface" ref={container} />
+      {p.paneBounds && p.onUndock && (
+        <button type="button" className="terminal-pane-undock"
+          title={t("terminal:undockPane")} aria-label={t("terminal:undockPane")}
+          onMouseDown={event => event.stopPropagation()}
+          onClick={p.onUndock}><X size={13}/></button>
+      )}
       {p.active && searchOpen && (
         <div className="terminal-find">
           <input
