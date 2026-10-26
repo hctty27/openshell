@@ -99,6 +99,8 @@ export default function TerminalPane(p: Props) {
       overviewRuler: { width: 14 },
       minimumContrastRatio: 4.5,
       cursorBlink: true,
+      // Prefer text selection in mouse-aware TUIs; Alt forwards mouse actions.
+      mouseEventsRequireAlt: true,
       scrollback: 10000,
       allowProposedApi: false,
     });
@@ -225,8 +227,7 @@ export default function TerminalPane(p: Props) {
       selectingWithMouse =
         event.button === 0 &&
         callbacks.current.active &&
-        (term.modes.mouseTrackingMode === "none" ||
-          event.shiftKey);
+        (term.modes.mouseTrackingMode === "none" || !event.altKey);
     };
     const onMouseUp = (event: MouseEvent) => {
       // xterm.js can listen for mouseup on document while mouse tracking is on.
