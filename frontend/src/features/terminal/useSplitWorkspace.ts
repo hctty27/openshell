@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { api } from "../../bridge";
 import type { Tab } from "../../types";
-
-type SplitDirection = "columns" | "rows";
+import type { SplitDropZone } from "./splitDrop";
+import {
+  addSplitPane, clampRatio, pane, paneIDs, removePane, retainPanes, rotateActiveBranch,
+  setSplitNodeRatio, splitGeometry, type SplitHandle, type SplitNode,
+} from "./splitTree";
 
 interface Options {
   tabs: Tab[];
@@ -13,71 +16,117 @@ interface Options {
 }
 
 export function useSplitWorkspace({ tabs, activeID, showSFTP, initialRatio, onError }: Options) {
-  const [splitPair, setSplitPair] = useState<[string, string] | null>(null);
-  const [splitDirection, setSplitDirection] = useState<SplitDirection>("columns");
-  const [splitRatio, setSplitRatio] = useState(Math.min(80, Math.max(20, initialRatio ?? 50)));
+  const [layout, setLayout] = useState<SplitNode | null>(null);
+  const [defaultRatio, setDefaultRatio] = useState(clampRatio(initialRatio ?? 50));
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const splitContainerRef = useRef<HTMLDivElement>(null);
-  const splitDragCleanup = useRef<(() => void) | null>(null);
-  useEffect(() => () => splitDragCleanup.current?.(), []);
+  const dragCleanup = useRef<(() => void) | null>(null);
+  const branchSerial = useRef(0);
 
-  const splitReady = Boolean(
-    !showSFTP && splitPair?.includes(activeID) &&
-    splitPair.every((id) => tabs.some((tab) => tab.id === id && tab.status === "connected")),
-  );
-  const splitPartnerID = splitReady ? (splitPair?.find((id) => id !== activeID) ?? "") : "";
-  const splitChoices = tabs.filter((tab) => tab.id !== activeID && tab.status === "connected");
-  const setSplitRatioAndSave = (next: number) => {
-    const ratio = Math.round(Math.max(20, Math.min(80, next)));
-    setSplitRatio(ratio);
-    void api.SavePreference("splitRatio", String(ratio)).catch(onError);
+  useEffect(() => () => dragCleanup.current?.(), []);
+  useEffect(() => {
+    const el = splitContainerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const width = el.clientWidth;
+      const height = el.clientHeight;
+      setSize(previous => previous.width === width && previous.height === height
+        ? previous : { width, height });
+    });
+    observer.observe(el);
+    setSize({ width: el.clientWidth, height: el.clientHeight });
+    return () => observer.disconnect();
+  }, [tabs.length > 0]);
+
+  useEffect(() => {
+    const valid = new Set(tabs.map(tab => tab.id));
+    setLayout(previous => retainPanes(previous, valid));
+  }, [tabs]);
+
+  const ids = paneIDs(layout);
+  const connected = ids.every(id => tabs.some(tab => tab.id === id && tab.status === "connected"));
+  const splitReady = Boolean(layout?.type === "split" && ids.includes(activeID) && connected && !showSFTP);
+  const displayLayout = splitReady ? layout : activeID ? pane(activeID) : null;
+  const visibleTabIDs = paneIDs(displayLayout);
+  const geometry = useMemo(() => splitGeometry(displayLayout, size.width, size.height),
+    [displayLayout, size.width, size.height]);
+  const splitDirection = layout?.type === "split" ? layout.direction : "columns";
+
+  const applyDrop = (sourceID: string, targetID: string, zone: SplitDropZone) => {
+    if (showSFTP) return;
+    const source = tabs.find(tab => tab.id === sourceID && tab.status === "connected");
+    const target = tabs.find(tab => tab.id === targetID && tab.status === "connected");
+    if (!source || !target) return;
+    const id = `branch-${++branchSerial.current}`;
+    setLayout(current => {
+      const currentIds = paneIDs(current);
+      const base = currentIds.includes(targetID) && currentIds.includes(activeID) && !showSFTP
+        ? current : pane(targetID);
+      return addSplitPane(base, sourceID, targetID, zone, id, defaultRatio);
+    });
   };
-  const startSplitResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const undockPane = (tabID: string) => setLayout(current => removePane(current, tabID));
+  const closeSplit = () => setLayout(null);
+  const rotateActiveSplit = () => setLayout(current =>
+    current ? rotateActiveBranch(current, activeID) : current);
+  const setSplitRatio = (next: number) => setDefaultRatio(clampRatio(next));
+
+  const resizeNodeAndSave = (nodeID: string, value: number) => {
+    const ratio = clampRatio(value);
+    setLayout(current => current ? setSplitNodeRatio(current, nodeID, ratio) : current);
+    if (layout?.type === "split" && layout.id === nodeID) {
+      setDefaultRatio(ratio);
+      void api.SavePreference("splitRatio", String(ratio)).catch(onError);
+    }
+  };
+  const startSplitResize = (event: ReactPointerEvent<HTMLDivElement>, handle: SplitHandle) => {
     if (event.button !== 0 || !splitReady) return;
-    const element = splitContainerRef.current;
-    if (!element) return;
+    const container = splitContainerRef.current;
+    if (!container) return;
     event.preventDefault();
-    splitDragCleanup.current?.();
-    const pointerId = event.pointerId;
-    const ratioFromEvent = (e: PointerEvent) => {
-      const rect = element.getBoundingClientRect();
-      const length = splitDirection === "columns" ? rect.width : rect.height;
-      if (length <= 0) return null;
-      const position = splitDirection === "columns" ? e.clientX - rect.left : e.clientY - rect.top;
-      return Math.round(Math.max(20, Math.min(80, position * 100 / length)));
+    dragCleanup.current?.();
+    const pointerID = event.pointerId;
+    const origin = container.getBoundingClientRect();
+    const getRatio = (e: PointerEvent) => {
+      const columns = handle.direction === "columns";
+      const start = columns ? handle.parent.left + origin.left : handle.parent.top + origin.top;
+      const length = (columns ? handle.parent.width : handle.parent.height) - 6;
+      if (length <= 0) return handle.ratio;
+      const position = (columns ? e.clientX : e.clientY) - start;
+      return clampRatio(position * 100 / length);
     };
-    let latest = splitRatio;
+    let latest = handle.ratio;
     const move = (e: PointerEvent) => {
-      if (e.pointerId !== pointerId) return;
-      const next = ratioFromEvent(e);
-      if (next === null) return;
-      latest = next;
-      setSplitRatio(next);
+      if (e.pointerId !== pointerID) return;
+      latest = getRatio(e);
+      setLayout(current => current ? setSplitNodeRatio(current, handle.id, latest) : current);
     };
     const cleanup = () => {
       document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerup", stop);
       document.removeEventListener("pointercancel", cancel);
-      splitDragCleanup.current = null;
+      dragCleanup.current = null;
     };
     const stop = (e: PointerEvent) => {
-      if (e.pointerId !== pointerId) return;
+      if (e.pointerId !== pointerID) return;
       cleanup();
-      setSplitRatioAndSave(latest);
+      resizeNodeAndSave(handle.id, latest);
     };
     const cancel = (e: PointerEvent) => {
-      if (e.pointerId !== pointerId) return;
+      if (e.pointerId !== pointerID) return;
       cleanup();
-      setSplitRatio(splitRatio);
+      setLayout(current => current ? setSplitNodeRatio(current, handle.id, handle.ratio) : current);
     };
     document.addEventListener("pointermove", move);
     document.addEventListener("pointerup", stop);
     document.addEventListener("pointercancel", cancel);
-    splitDragCleanup.current = cleanup;
+    dragCleanup.current = cleanup;
   };
 
   return {
-    splitPair, setSplitPair, splitDirection, setSplitDirection,
-    splitRatio, setSplitRatio, splitContainerRef, splitReady, splitPartnerID, splitChoices,
-    setSplitRatioAndSave, startSplitResize,
+    layout, setLayout, splitDirection, splitContainerRef, splitReady,
+    visibleTabIDs, paneBoxes: geometry.panes, splitHandles: geometry.handles,
+    applyDrop, undockPane, closeSplit, rotateActiveSplit,
+    setSplitRatio, resizeNodeAndSave, startSplitResize,
   };
 }
