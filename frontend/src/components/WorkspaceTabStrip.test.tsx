@@ -34,6 +34,32 @@ describe("WorkspaceTabStrip", () => {
     expect(onReorder).toHaveBeenCalledWith("first", "third", "after");
   });
 
+  it("publishes a typed drag payload and releases a split tab on the empty strip", () => {
+    const { container } = setup();
+    const onTabDragStart = vi.fn();
+    const onTabDragEnd = vi.fn();
+    const onDropOnStrip = vi.fn();
+    const tabs = [makeTab("A"), makeTab("B")];
+    const { rerender } = render(
+      <WorkspaceTabStrip tabs={tabs} activeID="A" disconnectBehavior="local"
+        onActivate={vi.fn()} onDuplicate={vi.fn()} onClose={vi.fn()}
+        onNewTab={vi.fn()} onReorder={vi.fn()}
+        onTabDragStart={onTabDragStart} onTabDragEnd={onTabDragEnd}
+        onDropOnStrip={onDropOnStrip} />,
+    );
+    const strip = container.parentElement!.querySelectorAll<HTMLElement>(".tab-strip")[1];
+    const tab = strip.querySelector<HTMLElement>(".terminal-tab")!;
+    const transfer = { setData: vi.fn(), effectAllowed: "none", dropEffect: "none" };
+    fireEvent.dragStart(tab, { dataTransfer: transfer });
+    expect(transfer.setData).toHaveBeenCalledWith("application/x-openshell-tab", "A");
+    expect(onTabDragStart).toHaveBeenCalledWith("A");
+    fireEvent.dragOver(strip, { dataTransfer: transfer });
+    fireEvent.drop(strip, { dataTransfer: transfer });
+    expect(onDropOnStrip).toHaveBeenCalledWith("A");
+    expect(onTabDragEnd).toHaveBeenCalled();
+    rerender(<></>);
+  });
+
   it("keeps double click duplication and keyboard reordering", () => {
     const { onReorder, onDuplicate, tabs } = setup();
     const button = screen.getAllByTitle(/双击|Double-click/)[0];
