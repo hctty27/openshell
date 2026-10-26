@@ -214,7 +214,7 @@ export default function TerminalPane(p: Props) {
     let selectingWithMouse = false;
     const paneElement = container.current.parentElement ?? container.current;
     const onMouseDown = (event: MouseEvent) => {
-      if ((event.target as HTMLElement).closest(".terminal-find, .terminal-transfer-indicator")) return;
+      if ((event.target as HTMLElement).closest(".terminal-find, .terminal-transfer-indicator, .terminal-pane-undock")) return;
       if (callbacks.current.visible ?? callbacks.current.active) callbacks.current.onActivate?.();
       // Clipboard gestures take priority over TUI mouse reporting when enabled.
       // Capture the button press before xterm.js sends it to the remote app.
