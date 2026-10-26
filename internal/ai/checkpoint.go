@@ -17,7 +17,16 @@ type toolCycle struct {
 // or unmatched tool calls must remain untouched so a later step cannot infer success.
 func completedToolCycles(messages []Message) []toolCycle {
 	var cycles []toolCycle
-	for i := 0; i < len(messages); i++ {
+	lastUser := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			lastUser = i
+			break
+		}
+	}
+	// Only compact the current user task. Older turns are handled by
+	// conversation summarization, so checkpoint ordering stays chronological.
+	for i := lastUser + 1; i < len(messages); i++ {
 		m := messages[i]
 		if m.Role != "assistant" || len(m.ToolCalls) == 0 {
 			continue
@@ -118,8 +127,13 @@ func CompactToolHistory(messages []Message, keepRecent int) ([]Message, bool) {
 	entries := make([]string, 0, len(drop))
 	for _, c := range drop {
 		assistant := messages[c.first]
-		for j, call := range assistant.ToolCalls {
-			entries = append(entries, checkpointLine(call, messages[c.first+1+j]))
+		for _, call := range assistant.ToolCalls {
+			for i := c.first + 1; i <= c.last; i++ {
+				if messages[i].ToolCallID == call.ID {
+					entries = append(entries, checkpointLine(call, messages[i]))
+					break
+				}
+			}
 		}
 	}
 	// The newest evidence is most useful; preserve older failures and unknowns
@@ -128,13 +142,22 @@ func CompactToolHistory(messages []Message, keepRecent int) ([]Message, bool) {
 	if len(body) > checkpointMaxBytes {
 		kept := make([]string, 0, len(entries))
 		used := 0
-		for i := len(entries)-1; i >= 0; i-- {
-			entry := entries[i]
-			if used+len(entry)+1 > checkpointMaxBytes-128 {
-				continue
+		selected := make([]bool, len(entries))
+		for pass := 0; pass < 2; pass++ {
+			for i := len(entries)-1; i >= 0; i-- {
+				entry := entries[i]
+				critical := strings.Contains(entry, "unknown") || strings.Contains(entry, "nonzero") || strings.Contains(entry, "not verified successful")
+				if selected[i] || (pass == 0) != critical || used+len(entry)+1 > checkpointMaxBytes-128 {
+					continue
+				}
+				selected[i] = true
+				used += len(entry) + 1
 			}
-			kept = append(kept, entry)
-			used += len(entry) + 1
+		}
+		for i, entry := range entries {
+			if selected[i] {
+				kept = append(kept, entry)
+			}
 		}
 		for i, j := 0, len(kept)-1; i < j; i, j = i+1, j-1 {
 			kept[i], kept[j] = kept[j], kept[i]
