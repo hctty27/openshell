@@ -211,12 +211,15 @@ export default function TerminalPane(p: Props) {
     const onMouseDown = (event: MouseEvent) => {
       if ((event.target as HTMLElement).closest(".terminal-find, .terminal-transfer-indicator")) return;
       if (callbacks.current.visible ?? callbacks.current.active) callbacks.current.onActivate?.();
-      if (
-        event.button === 1 && callbacks.current.middleClickPaste &&
-        callbacks.current.active && term.modes.mouseTrackingMode === "none"
-      ) {
+      // Clipboard gestures take priority over TUI mouse reporting when enabled.
+      // Capture the button press before xterm.js sends it to the remote app.
+      if (callbacks.current.active && (
+        (event.button === 1 && callbacks.current.middleClickPaste) ||
+        (event.button === 2 && callbacks.current.rightClickPaste)
+      )) {
         event.preventDefault();
-        void pasteFromClipboard();
+        event.stopPropagation();
+        if (event.button === 1) void pasteFromClipboard();
         return;
       }
       selectingWithMouse =
@@ -226,6 +229,16 @@ export default function TerminalPane(p: Props) {
           event.shiftKey);
     };
     const onMouseUp = (event: MouseEvent) => {
+      // xterm.js can listen for mouseup on document while mouse tracking is on.
+      // Suppress the release corresponding to a clipboard gesture as well.
+      if (callbacks.current.active && paneElement.contains(event.target as Node) && (
+        (event.button === 1 && callbacks.current.middleClickPaste) ||
+        (event.button === 2 && callbacks.current.rightClickPaste)
+      )) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (event.button !== 0 || !selectingWithMouse) return;
       selectingWithMouse = false;
       setTimeout(() => {
@@ -264,7 +277,13 @@ export default function TerminalPane(p: Props) {
             tone: "warning",
             confirmLabel: message("terminal:paste"),
           });
-          if (!accepted) return;
+          // The dialog owns focus until React has actually removed it.
+          // Focusing xterm in the same microtask would leave the cursor unfocused.
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          if (!accepted) {
+            if (!disposed && callbacks.current.active) term.focus();
+            return;
+          }
         }
         const currentRef = callbacks.current.tab.ref;
         if (
@@ -277,6 +296,10 @@ export default function TerminalPane(p: Props) {
         ) return;
         term.focus();
         term.paste(text);
+        // Keep typing in the same terminal after the paste and the TUI redraw.
+        requestAnimationFrame(() => {
+          if (!disposed && callbacks.current.active && terminal.current === term) term.focus();
+        });
       } catch (error) {
         if (!disposed) callbacks.current.onNotice(error);
       } finally {
@@ -309,8 +332,7 @@ export default function TerminalPane(p: Props) {
     });
     const onContextMenu = (event: MouseEvent) => {
       if (!callbacks.current.active || !callbacks.current.rightClickPaste) return;
-      if ((event.target as HTMLElement).closest(".terminal-find")) return;
-      if (term.modes.mouseTrackingMode !== "none") return;
+      if ((event.target as HTMLElement).closest(".terminal-find, .terminal-transfer-indicator")) return;
       event.preventDefault();
       event.stopPropagation();
       void pasteFromClipboard();
@@ -318,8 +340,8 @@ export default function TerminalPane(p: Props) {
     const onAuxClick = (event: MouseEvent) => {
       if (
         event.button === 1 && callbacks.current.middleClickPaste &&
-        callbacks.current.active && term.modes.mouseTrackingMode === "none" &&
-        !(event.target as HTMLElement).closest(".terminal-find")
+        callbacks.current.active &&
+        !(event.target as HTMLElement).closest(".terminal-find, .terminal-transfer-indicator")
       ) event.preventDefault();
     };
     paneElement.addEventListener("mousedown", onMouseDown, true);
