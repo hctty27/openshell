@@ -21,6 +21,18 @@ OpenShell 是面向开发者与服务器管理员的轻量 Windows SSH/SFTP 客�
 
 **项目状态：** 正在积极开发，尚未达到 1.0 正式版。已提供 Windows x64 安装版与便携版，各版本改动和实际签名状态见 [发布说明](https://github.com/hctty27/openshell/releases)。
 
+## 界面预览
+
+**主界面**：统一管理 SSH 会话，在终端旁随时调用 AI 助手。
+
+![OpenShell 主界面：SSH 会话树、工作空间与 AI 助手](docs/screenshots/01-main-workspace.webp)
+
+| SSH 终端 + SFTP 文件管理 | SSH 终端 + SFTP + AI 助手 |
+| :---: | :---: |
+| [![OpenShell SSH 终端与本地、远程 SFTP 文件管理界面](docs/screenshots/02-ssh-sftp.webp)](docs/screenshots/02-ssh-sftp.webp) | [![OpenShell SSH 终端、SFTP 文件管理与 AI 服务器分析界面](docs/screenshots/03-ssh-sftp-ai.webp)](docs/screenshots/03-ssh-sftp-ai.webp) |
+
+_点击预览图可以查看原尺寸截图。_
+
 ## 为什么选择 OpenShell
 
 - **熟悉的终端操作。** 集中管理 SSH 会话，自由调整标签顺序、使用分屏，并在断线后保持工作空间。

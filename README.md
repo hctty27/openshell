@@ -21,6 +21,18 @@ OpenShell is a lightweight Windows SSH/SFTP client for developers and server adm
 
 **Status:** actively developed, pre-1.0 software. Windows x64 installers and portable packages are available. See the [release notes](https://github.com/hctty27/openshell/releases) for the changes and signing status of each build.
 
+## Screenshots
+
+**Main workspace** — organize SSH sessions and keep an AI assistant alongside your terminals.
+
+![OpenShell main workspace, SSH session tree and AI assistant](docs/screenshots/01-main-workspace.webp)
+
+| SSH terminal + SFTP file manager | SSH terminal + SFTP + AI assistant |
+| :---: | :---: |
+| [![OpenShell SSH terminal with local and remote SFTP file manager](docs/screenshots/02-ssh-sftp.webp)](docs/screenshots/02-ssh-sftp.webp) | [![OpenShell SSH terminal, SFTP file manager and AI server analysis](docs/screenshots/03-ssh-sftp-ai.webp)](docs/screenshots/03-ssh-sftp-ai.webp) |
+
+_Click either preview to open the full-size screenshot._
+
 ## Why OpenShell
 
 - **Work like a terminal power user.** Organize SSH sessions, rearrange tabs, split terminals, and reconnect without rebuilding your workspace.
