@@ -108,8 +108,19 @@ export default function SessionPicker(p: Props) {
         p.onClose();
       }}
       onClick={(event) => {
-        if (event.target === event.currentTarget) p.onClose();
-        else if (
+        if (event.target === event.currentTarget) {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          const outside =
+            event.clientX < bounds.left ||
+            event.clientX > bounds.right ||
+            event.clientY < bounds.top ||
+            event.clientY > bounds.bottom;
+          if (outside) {
+            p.onClose();
+            return;
+          }
+        }
+        if (
           contextMenu &&
           !(event.target as HTMLElement).closest(".session-picker__menu")
         ) {
