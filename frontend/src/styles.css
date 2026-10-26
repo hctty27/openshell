@@ -763,25 +763,7 @@ kbd {
   visibility: visible;
 }
 .terminal-container.terminal-split {
-  display: grid;
-  gap: 6px;
   background: var(--border);
-}
-.terminal-container.terminal-split-columns {
-  grid-template-columns: minmax(0, calc(var(--split-ratio) - 3px)) minmax(0, calc(100% - var(--split-ratio) - 3px));
-  grid-template-rows: minmax(0, 1fr);
-}
-.terminal-container.terminal-split-rows {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, calc(var(--split-ratio) - 3px)) minmax(0, calc(100% - var(--split-ratio) - 3px));
-}
-.terminal-container.terminal-split > .terminal-pane.visible {
-  position: relative;
-  inset: auto;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  background: var(--terminal-background, var(--terminal-workspace));
 }
 .terminal-container.terminal-split > .terminal-pane.visible.active {
   box-shadow: inset 0 2px 0 var(--accent);
@@ -828,20 +810,8 @@ kbd {
   background: var(--accent);
   outline: none;
 }
-.terminal-split-columns > .terminal-split-handle {
-  top: 0;
-  bottom: 0;
-  left: calc(var(--split-ratio) - 3px);
-  width: 6px;
-  cursor: col-resize;
-}
-.terminal-split-rows > .terminal-split-handle {
-  left: 0;
-  right: 0;
-  top: calc(var(--split-ratio) - 3px);
-  height: 6px;
-  cursor: row-resize;
-}
+.terminal-split-handle[aria-orientation="vertical"] { cursor: col-resize; }
+.terminal-split-handle[aria-orientation="horizontal"] { cursor: row-resize; }
 .terminal-container.terminal-split > .terminal-pane:not(.visible) {
   position: absolute;
   visibility: hidden;
