@@ -77,6 +77,7 @@ vi.mock("./bridge", async () => ({
       return failed;
     },
     SavePreference: async () => {},
+    SetCloseGuardReady: async () => {},
   },
 }));
 afterEach(cleanup);

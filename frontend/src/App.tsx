@@ -30,6 +30,10 @@ import {
 import { api, desktop, listen, errorText } from "./bridge";
 import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime";
 import { normalizeTerminalTheme, resolveTerminalTheme } from "./terminalThemes";
+import { reorderTabs } from "./features/sessions/tabOrder";
+import { hasInterruptibleWork, isActiveRemoteSession, sessionLabel } from "./features/sessions/closeProtection";
+import WorkspaceTabStrip from "./components/WorkspaceTabStrip";
+import ConnectionStatusIcon from "./components/ConnectionStatusIcon";
 import type {
   Session,
   Group,
@@ -260,6 +264,45 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const activeTerminalBackground = resolveTerminalTheme(theme, terminalTheme, active?.session.terminalTheme).background;
   const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
   const notify = (error: unknown) => setToast(error);
+  const quitPromptInProgress = useRef(false);
+  const onQuitRequested = useRef<() => void>(() => {});
+  onQuitRequested.current = () => {
+    if (quitPromptInProgress.current) return;
+    quitPromptInProgress.current = true;
+    void (async () => {
+      try {
+        const activeTabs = tabsRef.current.filter(isActiveRemoteSession);
+        if (activeTabs.length) {
+          const busy = activeTabs.some(tab => hasInterruptibleWork(tab, hasActiveTransfers));
+          const confirmed = await dialogs.confirm({
+            title: message("common:quitActiveSessionsTitle"),
+            description: message(busy
+              ? "common:quitActiveSessionsBusyDescription"
+              : "common:quitActiveSessionsDescription", { count: activeTabs.length }),
+            preview: activeTabs.map(sessionLabel).join("\n"),
+            tone: "warning",
+            confirmLabel: message("common:quitAndDisconnect"),
+          });
+          if (!confirmed) return;
+        }
+        await api.QuitConfirmed();
+      } catch (error) {
+        notify(error);
+      } finally {
+        quitPromptInProgress.current = false;
+      }
+    })();
+  };
+  useEffect(() => {
+    if (!desktop) return;
+    const off = listen("app:quit-requested", () => onQuitRequested.current());
+    void api.SetCloseGuardReady(true).catch(notify);
+    return () => {
+      off();
+      void api.SetCloseGuardReady(false).catch(() => {});
+    };
+  }, []);
+
   const {
     splitPair, setSplitPair, splitDirection, setSplitDirection,
     splitRatio, setSplitRatio, splitContainerRef, splitReady, splitPartnerID, splitChoices,
@@ -754,24 +797,37 @@ function Workspace({ initialState }: { initialState: AppState }) {
         ? { ...t, localFallbackPending: false } : t);
     } catch (error) { notify(error); }
   };
+  const closingTabs = useRef(new Set<string>());
   const close = async (tab: Tab) => {
-    stopRetryTimer(tab.id);
-    if (tab.chatBusy || tab.executing || tab.proposal) {
-      if (
-        !(await dialogs.confirm({
-          title: message("common:closeRunningTask"),
-          description: message("common:thisTabHasAnAiTaskOrPending"),
-          tone: "warning",
-          confirmLabel: message("common:closeAnyway"),
-        }))
-      )
-        return;
-    }
+    if (closingTabs.current.has(tab.id)) return;
+    const initial = tabsRef.current.find(item => item.id === tab.id);
+    if (!initial) return;
+    closingTabs.current.add(tab.id);
     try {
+      const active = isActiveRemoteSession(initial);
+      const busy = hasInterruptibleWork(initial, hasActiveTransfers);
+      if (active || busy) {
+        const accepted = await dialogs.confirm({
+          title: message(active ? "common:closeActiveSessionTitle" : "common:closeRunningTask"),
+          description: message(active
+            ? busy ? "common:closeActiveSessionBusyDescription" : "common:closeActiveSessionDescription"
+            : "common:thisTabHasAnAiTaskOrPending", { name: initial.session.name }),
+          preview: sessionLabel(initial),
+          tone: "warning",
+          confirmLabel: message(active ? "common:closeSessionAndDisconnect" : "common:closeAnyway"),
+        });
+        if (!accepted) return;
+      }
+      const current = tabsRef.current.find(item => item.id === tab.id);
+      if (!current) return;
+      // Do not close a new SSH connection using approval for an older generation.
+      if (current.ref?.generation !== initial.ref?.generation ||
+        (!active && isActiveRemoteSession(current))) return;
+      stopRetryTimer(tab.id);
       await api.CloseTab(tab.id);
       memory.forget(tab.id);
       setTabs((old) => old.filter((t) => t.id !== tab.id));
-      if (activeID === tab.id) {
+      if (activeIDRef.current === tab.id) {
         const rest = tabsRef.current.filter((t) => t.id !== tab.id);
         setActiveID(rest.at(-1)?.id ?? "");
       }
@@ -784,6 +840,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
       });
     } catch (e) {
       notify(e);
+    } finally {
+      closingTabs.current.delete(tab.id);
     }
   };
   const removeSession = async (s: Session) => {
@@ -1264,41 +1322,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
             )}
           </div>
         </header>
-        <div className="tab-strip">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              className={`terminal-tab ${activeID === tab.id ? "active" : ""}`}
-            >
-              <button
-                title={tr("common:doubleClickToDuplicateSession")}
-                onClick={() => setActiveID(tab.id)}
-                onDoubleClick={() => open(tab.session, tab.id)}
-              >
-                <span
-                  className={`status-dot ${tab.status === "connected" ? "" : tab.status === "connecting" ? "connecting" : "offline"}`}
-                />
-                <span>{tab.session.name}</span>
-                {tab.status === "connecting" && (
-                  <LoaderCircle size={12} className="spin" />
-                )}
-              </button>
-              <button
-                title={tr("common:closeTab", { name: tab.session.name })}
-                onClick={() => close(tab)}
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
-          <button
-            className="new-tab"
-            title={tr("common:openSessionList")}
-            onClick={() => setShowSessionPicker(true)}
-          >
-            <Plus size={16} />
-          </button>
-        </div>
+        <WorkspaceTabStrip tabs={tabs} activeID={activeID}
+          disconnectBehavior={state.disconnectBehavior ?? "local"}
+          onActivate={setActiveID}
+          onDuplicate={tab => open(tab.session, tab.id)}
+          onClose={tab => { void close(tab); }}
+          onNewTab={() => setShowSessionPicker(true)}
+          onReorder={(sourceID, targetID, placement) =>
+            setTabs(current => reorderTabs(current, sourceID, targetID, placement))} />
         {!tabs.length ? (
           <div className="workspace-empty">
             <div className="terminal-emblem">
@@ -1549,9 +1580,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
             OpenShell <span className="status-sep" />v{APP_VERSION}
           </span>
           <span className="workspace-connection">
-            <i
-              className={`status-dot ${active?.status === "connected" ? "" : "offline"}`}
-            />
+            <ConnectionStatusIcon status={active?.status ?? "disconnected"}
+              localShell={!!active?.ref && !!active.everConnected &&
+                (state.disconnectBehavior ?? "local") === "local" &&
+                !active.localFallbackPending} />
             {active?.status === "connected"
               ? tr("common:sshConnected")
               : active?.status === "connecting"

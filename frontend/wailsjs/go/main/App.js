@@ -245,3 +245,11 @@ export function ResizeLocalTerminal(arg1, arg2, arg3, arg4) {
 export function CloseLocalTerminal(arg1, arg2) {
   return window['go']['main']['App']['CloseLocalTerminal'](arg1, arg2);
 }
+
+export function SetCloseGuardReady(arg1) {
+  return window['go']['main']['App']['SetCloseGuardReady'](arg1);
+}
+
+export function QuitConfirmed() {
+  return window['go']['main']['App']['QuitConfirmed']();
+}

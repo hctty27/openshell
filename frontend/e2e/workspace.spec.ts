@@ -29,10 +29,19 @@ test.beforeEach(async ({ page }) => {
     };
     (window as any).__executions = [];
     (window as any).__resizes = [];
+    (window as any).__quitConfirmed = 0;
+    (window as any).__closeGuardReady = false;
+    (window as any).__requestQuit = () => emit("app:quit-requested", null);
     (window as any).go = {
       main: {
         App: {
           State: async () => structuredClone(state),
+          SetCloseGuardReady: async (ready: boolean) => {
+            (window as any).__closeGuardReady = ready;
+          },
+          QuitConfirmed: async () => {
+            (window as any).__quitConfirmed++;
+          },
           SaveSession: async (req: any) => {
             const s = {
               ...req.session,

@@ -58,6 +58,8 @@ type Backend = {
   ): Promise<AutoSnapshot>;
   StopAutomatic(ref: Ref, taskID: string): Promise<void>;
   State(): Promise<AppState>;
+  SetCloseGuardReady(ready: boolean): Promise<void>;
+  QuitConfirmed(): Promise<void>;
   PreviewXshellImport(): Promise<XshellImportPreview>;
   PreviewSessionBackup(): Promise<XshellImportPreview>;
   ExportSessionBackup(): Promise<string>;
