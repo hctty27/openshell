@@ -24,6 +24,7 @@ import {
 import { api, errorText } from "../bridge";
 import { resolveTerminalTheme } from "../terminalThemes";
 import { useDialogs } from "./DialogProvider";
+import ModalSurface from "./ModalSurface";
 import type {
   Session,
   LocalForward,
@@ -173,13 +174,12 @@ export default function SettingsDialog(p: Props) {
   };
   const apiRequest = (): APIRequest => ({ profile, key, memoryOnly });
   return (
-    <div
-      className="modal-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) p.onClose();
-      }}
+    <ModalSurface
+      className={`settings-dialog settings-dialog--${p.kind}`}
+      aria-label={p.kind === "session" ? t(p.session ? "common:editSession" : "common:newSshSession") : t("settings:settingsTitle")}
+      onDismiss={p.onClose}
+      locked={busy}
     >
-      <section role="dialog" aria-modal="true" className={`settings-dialog settings-dialog--${p.kind}`}>
         <header>
           <div>
             <h2>
@@ -1111,7 +1111,6 @@ export default function SettingsDialog(p: Props) {
             )}
           </div>
         </footer>
-      </section>
-    </div>
+    </ModalSurface>
   );
 }

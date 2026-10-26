@@ -1,11 +1,11 @@
 import { renderMessage, type DisplayText } from "../i18n/message";
+import ModalSurface from "./ModalSurface";
 import { useTranslation } from "react-i18next";
 import { t } from "../i18n";
 import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useId,
   useRef,
   useState,
@@ -75,7 +75,6 @@ function DialogContent({
   onDone(result: boolean | string | null): void;
 }) {
   useTranslation();
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const finished = useRef(false);
@@ -105,17 +104,6 @@ function DialogContent({
     onDone(result);
   };
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (typeof dialog.showModal === "function") dialog.showModal();
-    else dialog.setAttribute("open", "");
-    (isInput ? inputRef.current : cancelRef.current)?.focus();
-    return () => {
-      if (typeof dialog.close === "function" && dialog.open) dialog.close();
-    };
-  }, [isInput]);
-
   const cancel = () => complete(isInput ? null : false);
   const confirm = () => {
     if (request.kind === "input") {
@@ -133,20 +121,14 @@ function DialogContent({
     : undefined;
 
   return (
-    <dialog
-      ref={dialogRef}
+    <ModalSurface
       className={`app-dialog app-dialog--${tone}`}
       role={tone === "danger" ? "alertdialog" : "dialog"}
-      aria-modal="true"
       aria-labelledby={titleID}
       aria-describedby={description ? descriptionID : undefined}
-      onCancel={(event) => {
-        event.preventDefault();
-        cancel();
-      }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) cancel();
-      }}
+      onDismiss={cancel}
+      closeOnBackdrop={tone !== "danger"}
+      onOpen={() => (isInput ? inputRef.current : cancelRef.current)?.focus()}
     >
       <form
         onSubmit={(event) => {
@@ -168,6 +150,7 @@ function DialogContent({
             <X size={18} />
           </button>
         </div>
+        <div className="app-dialog__body">
         {description && (
           <p id={descriptionID} className="app-dialog__description">
             {description}
@@ -205,6 +188,7 @@ function DialogContent({
             )}
           </div>
         ) : null}
+        </div>
         <div className="app-dialog__actions">
           <button
             type="button"
@@ -227,7 +211,7 @@ function DialogContent({
           </button>
         </div>
       </form>
-    </dialog>
+    </ModalSurface>
   );
 }
 

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { t } from "../i18n";
 import { errorText } from "../bridge";
 import { importIssueText } from "../i18n/errors";
+import ModalSurface from "./ModalSurface";
 import type { XshellImportPreview } from "../types";
 
 interface Props {
@@ -26,10 +27,12 @@ export default function XshellImportDialog({ preview, onClose, onImport }: Props
   );
 
   return (
-    <div className="modal-backdrop" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !busy) onClose();
-    }}>
-      <section className="xshell-import-dialog" role="dialog" aria-modal="true" aria-label={title}>
+    <ModalSurface
+      className="xshell-import-dialog"
+      aria-label={title}
+      onDismiss={onClose}
+      locked={busy}
+    >
         <header className="xshell-import-header">
           <div><h2><FileArchive size={19} /> {title}</h2>
             <p>{t(native ? "sessions:importBackupDescription" : "sessions:importXshellDescription")}</p>
@@ -82,7 +85,6 @@ export default function XshellImportDialog({ preview, onClose, onImport }: Props
             {busy ? t("sessions:importingXshell") : t("sessions:importSelectedXshell")}
           </button>
         </footer>
-      </section>
-    </div>
+    </ModalSurface>
   );
 }
