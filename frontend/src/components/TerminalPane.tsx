@@ -96,7 +96,7 @@ export default function TerminalPane(p: Props) {
         callbacks.current.terminalTheme,
         callbacks.current.tab.session.terminalTheme,
       ),
-      overviewRuler: { width: 14 },
+      scrollbar: { width: 14 },
       minimumContrastRatio: 4.5,
       cursorBlink: true,
       // Prefer text selection in mouse-aware TUIs; Alt forwards mouse actions.
