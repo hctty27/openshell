@@ -26,7 +26,7 @@ interface Props {
   showDisconnectReason?: boolean;
   active: boolean;
   visible?: boolean;
-  splitOrder?: number;
+  paneBounds?: { left: number; top: number; width: number; height: number };
   onActivate?: () => void;
   fontSize: number;
   theme: Theme;
@@ -573,7 +573,10 @@ export default function TerminalPane(p: Props) {
   return (
     <div data-tab-id={p.tab.id} className={`terminal-pane ${(p.visible ?? p.active) ? "visible" : ""} ${p.active ? "active" : ""}`}
       aria-label={t("terminal:terminal", { name: p.tab.session.name })}
-      style={{ "--terminal-background": resolvedTheme.background, order: p.splitOrder } as CSSProperties}>
+      style={{ "--terminal-background": resolvedTheme.background,
+        ...(p.paneBounds ? { left: p.paneBounds.left, top: p.paneBounds.top,
+          width: p.paneBounds.width, height: p.paneBounds.height } : {}),
+      } as CSSProperties}>
       <div className="terminal-surface" ref={container} />
       {p.active && searchOpen && (
         <div className="terminal-find">
