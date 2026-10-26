@@ -20,7 +20,7 @@ func memoryTurns(n int) []domain.ConversationMessage {
 func jsonSize(messages []Message) (int, error) { b, e := json.Marshal(messages); return len(b), e }
 func TestContextDefaultPolicy(t *testing.T) {
 	p := DefaultContextPolicy()
-	if p.MaxRequestBytes != 48*1024 || p.SummaryBytes != 8*1024 || p.SummaryInputBytes != 32*1024 || p.KeepTurns != 6 || p.TriggerTurns != 20 || p.SummaryTimeout != 30*time.Second {
+	if p.MaxRequestBytes != 128*1024 || p.TriggerBytes != 96*1024 || p.SummaryBytes != 8*1024 || p.SummaryInputBytes != 32*1024 || p.KeepTurns != 6 || p.TriggerTurns != 20 || p.KeepToolCycles != 3 || p.SummaryTimeout != 30*time.Second {
 		t.Fatal(p)
 	}
 }
@@ -46,7 +46,7 @@ func TestSummaryCancelledSkipsMainRequest(t *testing.T) {
 	}
 }
 func TestOversizedCurrentTurnReturnsError(t *testing.T) {
-	_, e := BuildContext(context.Background(), Message{Role: "system"}, []domain.ConversationMessage{{Role: "user", Content: strings.Repeat("x", 49*1024)}}, "", 0, DefaultContextPolicy(), nil, jsonSize)
+	_, e := BuildContext(context.Background(), Message{Role: "system"}, []domain.ConversationMessage{{Role: "user", Content: strings.Repeat("x", 129*1024)}}, "", 0, DefaultContextPolicy(), nil, jsonSize)
 	if e == nil {
 		t.Fatal("oversized current turn accepted")
 	}
