@@ -52,8 +52,6 @@
   "previousMatch": "上一个匹配项",
   "nextMatch": "下一个匹配项",
   "closeSearch": "关闭搜索",
-  "splitWith": "分屏选择…",
-  "splitNeedsTwo": "至少连接两个终端才能分屏",
   "rotateSplit": "切换分屏方向",
   "closeSplit": "关闭分屏",
   "regexSearch": "使用正则表达式",
@@ -66,5 +64,9 @@
   "zmodemCancelling": "正在取消…",
   "localShellStatus": "本地终端 · {{name}}",
   "remoteConnectionClosed": "SSH 已断开，已切换本地终端",
-  "localShellStartFailed": "启动本地终端失败"
+  "localShellStartFailed": "启动本地终端失败",
+  "dropSplitLeft": "释放以在左侧分屏",
+  "dropSplitRight": "释放以在右侧分屏",
+  "dropSplitTop": "释放以在上方分屏",
+  "dropSplitBottom": "释放以在下方分屏"
 }
