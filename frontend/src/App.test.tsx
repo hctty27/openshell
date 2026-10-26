@@ -416,7 +416,7 @@ async function dragFirstTabOntoActiveTerminal() {
   };
   fireEvent.dragStart(tab, { dataTransfer: transfer });
   fireEvent.dragOver(target, { dataTransfer: transfer, clientX: 850, clientY: 350 });
-  await waitFor(() => expect(document.querySelector(".terminal-split-drop-right")).not.toBeNull());
+  expect(transfer.dropEffect).toBe("move");
   fireEvent.drop(target, { dataTransfer: transfer, clientX: 850, clientY: 350 });
   fireEvent.dragEnd(tab, { dataTransfer: transfer });
   await waitFor(() => expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split")).toBe(true));
