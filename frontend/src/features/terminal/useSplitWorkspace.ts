@@ -90,7 +90,9 @@ export function useSplitWorkspace({ tabs, activeID, showSFTP, initialRatio, onEr
     const getRatio = (e: PointerEvent) => {
       const columns = handle.direction === "columns";
       const start = columns ? handle.parent.left + origin.left : handle.parent.top + origin.top;
-      const length = (columns ? handle.parent.width : handle.parent.height) - 6;
+      const parentLength = columns ? handle.parent.width : handle.parent.height;
+      const measuredLength = columns ? origin.width : origin.height;
+      const length = Math.max(0, (parentLength || measuredLength) - 6);
       if (length <= 0) return handle.ratio;
       const position = (columns ? e.clientX : e.clientY) - start;
       return clampRatio(position * 100 / length);
