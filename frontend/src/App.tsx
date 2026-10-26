@@ -71,7 +71,7 @@ import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
 import { quickCommandTerminalInput } from "./quickCommands";
 import { DialogProvider, useDialogs } from "./components/DialogProvider";
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.54";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.59";
 const initial: AppState = {
   sessions: [],
   groups: [],
