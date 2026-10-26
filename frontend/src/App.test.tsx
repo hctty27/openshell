@@ -554,6 +554,7 @@ test("closing a connected tab requires confirmation and cancelling preserves it"
   fireEvent.click(screen.getByRole("button", {name:"取消"}));
   expect(screen.getByTitle("关闭 Live Server")).toBeTruthy();
   expect(api.CloseTab).not.toHaveBeenCalled();
+  await act(async () => { await Promise.resolve(); });
 
   fireEvent.click(screen.getByTitle("关闭 Live Server"));
   fireEvent.click(screen.getByRole("button", {name:"断开并关闭"}));
