@@ -148,5 +148,9 @@
   "connectionLostReasonKeepaliveFailed": "SSH keepalive failed",
   "connectionLostReasonNetworkTimeout": "Network timeout",
   "connectionLostReasonRemoteClosed": "Remote server closed the connection",
-  "connectionLostReasonConnectionLost": "Network connection lost"
+  "connectionLostReasonConnectionLost": "Network connection lost",
+  "sessionTabs": "Open terminal tabs",
+  "sessionTabDescription": "{{name}}. Drag to reorder, or press Alt+Shift+Left/Right to move; double-click to duplicate.",
+  "connectionFailed": "Connection failed",
+  "localTerminal": "Local terminal"
 }

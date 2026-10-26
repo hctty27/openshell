@@ -30,6 +30,9 @@ import {
 import { api, desktop, listen, errorText } from "./bridge";
 import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime";
 import { normalizeTerminalTheme, resolveTerminalTheme } from "./terminalThemes";
+import { reorderTabs } from "./features/sessions/tabOrder";
+import WorkspaceTabStrip from "./components/WorkspaceTabStrip";
+import ConnectionStatusIcon from "./components/ConnectionStatusIcon";
 import type {
   Session,
   Group,
@@ -1264,41 +1267,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
             )}
           </div>
         </header>
-        <div className="tab-strip">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              className={`terminal-tab ${activeID === tab.id ? "active" : ""}`}
-            >
-              <button
-                title={tr("common:doubleClickToDuplicateSession")}
-                onClick={() => setActiveID(tab.id)}
-                onDoubleClick={() => open(tab.session, tab.id)}
-              >
-                <span
-                  className={`status-dot ${tab.status === "connected" ? "" : tab.status === "connecting" ? "connecting" : "offline"}`}
-                />
-                <span>{tab.session.name}</span>
-                {tab.status === "connecting" && (
-                  <LoaderCircle size={12} className="spin" />
-                )}
-              </button>
-              <button
-                title={tr("common:closeTab", { name: tab.session.name })}
-                onClick={() => close(tab)}
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
-          <button
-            className="new-tab"
-            title={tr("common:openSessionList")}
-            onClick={() => setShowSessionPicker(true)}
-          >
-            <Plus size={16} />
-          </button>
-        </div>
+        <WorkspaceTabStrip tabs={tabs} activeID={activeID}
+          disconnectBehavior={state.disconnectBehavior ?? "local"}
+          onActivate={setActiveID}
+          onDuplicate={tab => open(tab.session, tab.id)}
+          onClose={tab => { void close(tab); }}
+          onNewTab={() => setShowSessionPicker(true)}
+          onReorder={(sourceID, targetID, placement) =>
+            setTabs(current => reorderTabs(current, sourceID, targetID, placement))} />
         {!tabs.length ? (
           <div className="workspace-empty">
             <div className="terminal-emblem">
@@ -1549,9 +1525,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
             OpenShell <span className="status-sep" />v{APP_VERSION}
           </span>
           <span className="workspace-connection">
-            <i
-              className={`status-dot ${active?.status === "connected" ? "" : "offline"}`}
-            />
+            <ConnectionStatusIcon status={active?.status ?? "disconnected"}
+              localShell={!!active?.ref && !!active.everConnected &&
+                (state.disconnectBehavior ?? "local") === "local" &&
+                !active.localFallbackPending} />
             {active?.status === "connected"
               ? tr("common:sshConnected")
               : active?.status === "connecting"

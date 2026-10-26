@@ -148,5 +148,9 @@
   "connectionLostReasonKeepaliveFailed": "SSH 心跳失败",
   "connectionLostReasonNetworkTimeout": "网络连接超时",
   "connectionLostReasonRemoteClosed": "服务器主动关闭连接",
-  "connectionLostReasonConnectionLost": "网络连接中断"
+  "connectionLostReasonConnectionLost": "网络连接中断",
+  "sessionTabs": "已打开的终端标签",
+  "sessionTabDescription": "{{name}}。拖动调整顺序，或按 Alt+Shift+左右方向键移动；双击复制会话。",
+  "connectionFailed": "连接失败",
+  "localTerminal": "本地终端"
 }

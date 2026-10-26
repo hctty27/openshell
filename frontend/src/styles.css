@@ -1,19 +1,19 @@
 :root {
   --chrome-bar-height: 30px;
-  --surface: #272B32;
-  --panel: #30353D;
-  --raised: #363B44;
-  --field-bg: #252A31;
-  --border: #464D58;
-  --text-primary: #E2E6ED;
-  --text-secondary: #B9C3D0;
-  --text-muted: #96A4B7;
-  --accent: #83B6EE;
-  --accent-fill: #548FD5;
+  --surface: #1B2028;
+  --panel: #222933;
+  --raised: #2D3642;
+  --field-bg: #1F2630;
+  --border: #394553;
+  --text-primary: #E6EAF0;
+  --text-secondary: #B6C0CE;
+  --text-muted: #91A0B2;
+  --accent: #8DBAF3;
+  --accent-fill: #5D9CEC;
   --on-accent: #FFFFFF;
   --accent-soft: #548FD525;
   --accent-border: #548FD58A;
-  --info: #9CC5F3;
+  --info: #8DBAF3;
   --info-soft: #548FD51A;
   --info-border: #548FD566;
   --warning: #E5BF72;
@@ -28,24 +28,29 @@
   --terminal-scroll-thumb: #7A879970;
   --terminal-scroll-thumb-hover: #A5B2C4;
   --terminal-scroll-thumb-active: #CAD4E0;
-  --terminal-workspace: #171A1F;
+  --terminal-workspace: #1E2228;
+  --connected: #49C391;
+  --connecting: #E5BE6B;
+  --reconnecting: #EDA969;
+  --connection-error: #F28C92;
+  --disconnected: #91A0B2;
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --surface: #F2F3F5;
-  --panel: #E7EAEE;
-  --raised: #FFFFFF;
+  --surface: #F5F7FA;
+  --panel: #FFFFFF;
+  --raised: #F0F4F9;
   --field-bg: #FFFFFF;
-  --border: #CED4DD;
-  --text-primary: #252A32;
-  --text-secondary: #4E5A6B;
-  --text-muted: #647183;
-  --accent: #2878D0;
-  --accent-fill: #2878D0;
+  --border: #D7DEE8;
+  --text-primary: #1F2937;
+  --text-secondary: #4B5A6C;
+  --text-muted: #65758A;
+  --accent: #2563EB;
+  --accent-fill: #2563EB;
   --on-accent: #FFFFFF;
   --accent-soft: #2878D018;
   --accent-border: #2878D063;
-  --info: #2468B4;
+  --info: #2563EB;
   --info-soft: #2878D014;
   --info-border: #2878D04F;
   --warning: #845A0B;
@@ -61,6 +66,11 @@
   --terminal-scroll-thumb-hover: #66768B;
   --terminal-scroll-thumb-active: #43566D;
   --terminal-workspace: #FFFFFF;
+  --connected: #168657;
+  --connecting: #AE781B;
+  --reconnecting: #AC620F;
+  --connection-error: #B93B50;
+  --disconnected: #65758A;
 }
 :root {
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
@@ -381,6 +391,20 @@ kbd {
   background: var(--warning);
   animation: pulse 1.2s infinite;
 }
+.connection-state {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.connection-state-connected { color: var(--connected); }
+.connection-state-connecting { color: var(--connecting); }
+.connection-state-reconnecting { color: var(--reconnecting); }
+.connection-state-error { color: var(--connection-error); }
+.connection-state-disconnected { color: var(--disconnected); }
+.connection-state-local { color: var(--text-secondary); }
 .workspace {
   min-width: 0;
   flex: 1;
@@ -441,18 +465,46 @@ kbd {
   border-right: 1px solid var(--border);
   min-width: 125px;
   max-width: 200px;
-  font-size: 11px;
+  font-size: 12px;
   position: relative;
   color: var(--text-muted);
+  user-select: none;
+  cursor: grab;
 }
+.terminal-tab:active { cursor: grabbing; }
+.terminal-tab:not(.active):hover {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+.terminal-tab.dragging { opacity: .5; }
+.terminal-tab.drag-before::after,
+.terminal-tab.drag-after::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent-fill);
+  pointer-events: none;
+}
+.terminal-tab.drag-before::after { left: 0; }
+.terminal-tab.drag-after::after { right: 0; }
 .terminal-tab > button:first-child {
-  gap: 8px;
+  gap: 7px;
   justify-content: start;
   flex: 1;
   min-width: 0;
   height: 100%;
-  padding: 4px 12px;
+  padding: 4px 10px;
   border-radius: 0;
+  cursor: grab;
+}
+.terminal-tab > button:first-child:active { cursor: grabbing; }
+.terminal-tab > button:first-child:focus-visible {
+  outline: 2px solid var(--accent-fill);
+  outline-offset: -2px;
 }
 .terminal-tab > button:first-child > span:nth-child(2) {
   overflow: hidden;
@@ -467,7 +519,8 @@ kbd {
 }
 .terminal-tab.active {
   background: var(--surface);
-  color: var(--info);
+  color: var(--text-primary);
+  font-weight: 600;
 }
 .terminal-tab.active:before {
   position: absolute;
