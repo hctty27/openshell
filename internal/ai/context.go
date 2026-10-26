@@ -109,7 +109,8 @@ func BuildToolResult(command, cwd string, result domain.CommandResult) string {
 	for {
 		out := BuildOutputPreview(result.Stdout, limit)
 		errout := BuildOutputPreview(result.Stderr, limit)
-		data, _ := json.Marshal(payload{cmd.Text, dir.Text, result.Status, result.Reason, result.ExitCode, result.DurationMillis, out.Text, errout.Text, result.Truncated || cmd.Truncated || dir.Truncated || out.Truncated || errout.Truncated})
+		reason := BuildPreview(Redact(result.Reason), 10000, 1024)
+		data, _ := json.Marshal(payload{cmd.Text, dir.Text, result.Status, reason.Text, result.ExitCode, result.DurationMillis, out.Text, errout.Text, result.Truncated || cmd.Truncated || dir.Truncated || reason.Truncated || out.Truncated || errout.Truncated})
 		if len(data) <= 8192 {
 			return string(data)
 		}
