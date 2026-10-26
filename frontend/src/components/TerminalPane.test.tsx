@@ -60,7 +60,8 @@ vi.mock("@xterm/xterm", () => ({
       return { dispose: vi.fn() };
     });
     onSelectionChange = vi.fn(() => ({ dispose: vi.fn() }));
-    constructor() {
+    constructor(options: Record<string, unknown> = {}) {
+      Object.assign(this.options, options);
       refs.terms.push(this);
     }
   },
@@ -253,16 +254,23 @@ test("TUI mouse handling is preserved when right-click paste is disabled", () =>
   expect(ClipboardGetText).not.toHaveBeenCalled();
 });
 
-test("Shift-drag copies in TUI mouse tracking mode", async () => {
+test("xterm 6.1 selects and copies in TUIs by default, Alt enables app mouse control", async () => {
   const { container } = renderTerminal();
   const pane = container.querySelector(".terminal-pane")!;
-  refs.terms[0].modes.mouseTrackingMode = "vt200";
-  refs.terms[0].selected = "selected TUI output";
+  const term = refs.terms[0];
+  expect(term.options.mouseEventsRequireAlt).toBe(true);
+  term.modes.mouseTrackingMode = "vt200";
+  term.selected = "selected TUI output";
 
-  fireEvent.mouseDown(pane, { button: 0 });
+  fireEvent.mouseDown(pane, { button: 0, altKey: true });
   fireEvent.mouseUp(document, { button: 0 });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
   expect(ClipboardSetText).not.toHaveBeenCalled();
+
+  fireEvent.mouseDown(pane, { button: 0 });
+  fireEvent.mouseUp(document, { button: 0 });
+  await waitFor(() => expect(ClipboardSetText).toHaveBeenCalledWith("selected TUI output"));
+  vi.mocked(ClipboardSetText).mockClear();
 
   fireEvent.mouseDown(pane, { button: 0, shiftKey: true });
   fireEvent.mouseUp(document, { button: 0 });
