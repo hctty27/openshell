@@ -111,3 +111,6 @@ export function StartLocalTerminal(arg1:string,arg2:string,arg3:string,arg4:numb
 export function WriteLocalTerminal(arg1:string,arg2:string,arg3:string):Promise<void>;
 export function ResizeLocalTerminal(arg1:string,arg2:string,arg3:number,arg4:number):Promise<void>;
 export function CloseLocalTerminal(arg1:string,arg2:string):Promise<void>;
+
+export function SetCloseGuardReady(arg1:boolean):Promise<void>;
+export function QuitConfirmed():Promise<void>;
