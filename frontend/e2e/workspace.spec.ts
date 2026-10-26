@@ -343,8 +343,7 @@ test("dragging a connected tab splits a terminal without reconnecting", async ({
     await page.getByText("保存到 Windows 凭据管理器").click();
     await page.getByRole("button", { name: "保存会话", exact: true }).click();
     await page.getByText(name, { exact: true }).dblclick();
-    const trust = page.getByRole("button", { name: "信任并连接" });
-    if (await trust.isVisible()) await trust.click();
+    if (name === "server-a") await page.getByRole("button", { name: "信任并连接" }).click();
   }
   await expect(page.locator(".terminal-tab .connection-state-connected")).toHaveCount(2);
   await expect(page.locator(".terminal-split-select")).toHaveCount(0);
