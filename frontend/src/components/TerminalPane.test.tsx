@@ -60,7 +60,8 @@ vi.mock("@xterm/xterm", () => ({
       return { dispose: vi.fn() };
     });
     onSelectionChange = vi.fn(() => ({ dispose: vi.fn() }));
-    constructor() {
+    constructor(options: Record<string, unknown> = {}) {
+      Object.assign(this.options, options);
       refs.terms.push(this);
     }
   },
@@ -242,11 +243,87 @@ test("right click pastes via terminal input, multi-line paste requires confirmat
   expect(refs.terms[0].paste).toHaveBeenCalledTimes(1);
 });
 
-test("mouse reporting in interactive applications is not overridden", async () => {
-  const { container } = renderTerminal();
+test("TUI mouse handling is preserved when right-click paste is disabled", () => {
+  const { container } = renderTerminal({ rightClickPaste: false });
   refs.terms[0].modes.mouseTrackingMode = "vt200";
-  fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
+  const pane = container.querySelector(".terminal-pane")!;
+
+  const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 2 });
+  expect(pane.dispatchEvent(down)).toBe(true);
+  fireEvent.contextMenu(pane);
   expect(ClipboardGetText).not.toHaveBeenCalled();
+});
+
+test("xterm 6.1 selects and copies in TUIs by default, Alt enables app mouse control", async () => {
+  const { container } = renderTerminal();
+  const pane = container.querySelector(".terminal-pane")!;
+  const term = refs.terms[0];
+  expect(term.options.mouseEventsRequireAlt).toBe(true);
+  expect(term.options.scrollbar).toEqual({ width: 14 });
+  term.modes.mouseTrackingMode = "vt200";
+  term.selected = "selected TUI output";
+
+  fireEvent.mouseDown(pane, { button: 0, altKey: true });
+  fireEvent.mouseUp(document, { button: 0 });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+  expect(ClipboardSetText).not.toHaveBeenCalled();
+
+  fireEvent.mouseDown(pane, { button: 0 });
+  fireEvent.mouseUp(document, { button: 0 });
+  await waitFor(() => expect(ClipboardSetText).toHaveBeenCalledWith("selected TUI output"));
+  vi.mocked(ClipboardSetText).mockClear();
+
+  fireEvent.mouseDown(pane, { button: 0, shiftKey: true });
+  fireEvent.mouseUp(document, { button: 0 });
+  await waitFor(() => expect(ClipboardSetText).toHaveBeenCalledWith("selected TUI output"));
+});
+
+test("right-click paste overrides TUI mouse capture when enabled", async () => {
+  const { container } = renderTerminal();
+  const pane = container.querySelector(".terminal-pane")!;
+  refs.terms[0].modes.mouseTrackingMode = "vt200";
+
+  const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 2 });
+  expect(pane.dispatchEvent(down)).toBe(false);
+  const up = new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 2 });
+  expect(pane.dispatchEvent(up)).toBe(false);
+
+  fireEvent.contextMenu(pane);
+  await waitFor(() => expect(refs.terms[0].paste).toHaveBeenCalledWith("echo hello"));
+  expect(api.WriteTerminal).toHaveBeenCalled();
+});
+
+test("Alt+right mouse remains available to TUIs and does not paste", () => {
+  const { container } = renderTerminal();
+  const pane = container.querySelector(".terminal-pane")!;
+  refs.terms[0].modes.mouseTrackingMode = "vt200";
+
+  const down = new MouseEvent("mousedown", {
+    bubbles: true, cancelable: true, button: 2, altKey: true,
+  });
+  expect(pane.dispatchEvent(down)).toBe(true);
+  const up = new MouseEvent("mouseup", {
+    bubbles: true, cancelable: true, button: 2, altKey: true,
+  });
+  expect(pane.dispatchEvent(up)).toBe(true);
+  fireEvent.contextMenu(pane, { altKey: true });
+  expect(ClipboardGetText).not.toHaveBeenCalled();
+});
+
+test("multiline confirmation restores terminal focus before and after paste", async () => {
+  vi.mocked(ClipboardGetText).mockResolvedValueOnce("first\nsecond");
+  const { container } = renderTerminal();
+  const term = refs.terms[0];
+  fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
+  expect(await screen.findByRole("dialog", { name: "确认粘贴多行命令" })).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "确认粘贴" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  await waitFor(() => expect(term.paste).toHaveBeenCalledWith("first\nsecond"));
+  expect(term.focus.mock.invocationCallOrder.at(-1)).toBeGreaterThan(
+    term.paste.mock.invocationCallOrder[0],
+  );
+  expect(api.WriteTerminal).toHaveBeenCalled();
 });
 
 test("multiline confirmation only pastes to the original connected tab", async () => {
@@ -530,14 +607,17 @@ test("live severity highlighting survives closing manual search and updates inde
   expect(refs.terms).toHaveLength(1);
 });
 
-test("middle click pastes only when enabled and no TUI mouse tracking", async () => {
+test("middle click pastes when enabled, including with TUI mouse tracking", async () => {
   const { container } = renderTerminal({ middleClickPaste: true });
-  fireEvent.mouseDown(container.querySelector(".terminal-pane")!, { button: 1 });
+  const pane = container.querySelector(".terminal-pane")!;
+  fireEvent.mouseDown(pane, { button: 1 });
   await waitFor(() => expect(refs.terms[0].paste).toHaveBeenCalledWith("echo hello"));
+
   vi.mocked(ClipboardGetText).mockClear();
   refs.terms[0].modes.mouseTrackingMode = "vt200";
-  fireEvent.mouseDown(container.querySelector(".terminal-pane")!, { button: 1 });
-  expect(ClipboardGetText).not.toHaveBeenCalled();
+  const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 1 });
+  expect(pane.dispatchEvent(event)).toBe(false);
+  await waitFor(() => expect(ClipboardGetText).toHaveBeenCalledTimes(1));
 });
 
 

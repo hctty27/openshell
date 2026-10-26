@@ -436,7 +436,7 @@ test("terminal backdrop fills its pane across mixed application and terminal pal
     const xterm = pane.querySelector(".xterm")!;
     const viewport = pane.querySelector(".xterm-viewport")!;
     const screen = pane.querySelector(".xterm-screen")!;
-    const scrollbar = pane.querySelector(".scrollbar.vertical")!;
+    const scrollbar = pane.querySelector(".xterm-scrollbar.xterm-vertical")!;
     const outer = container.getBoundingClientRect();
     const inner = pane.getBoundingClientRect();
     const glyphs = screen.getBoundingClientRect();
