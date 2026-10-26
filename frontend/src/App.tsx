@@ -1523,6 +1523,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   active={tab.id === activeID}
                   visible={visibleTabIDs.includes(tab.id)}
                   paneBounds={splitReady ? paneBoxes[tab.id] : undefined}
+                  onUndock={splitReady ? () => undockPane(tab.id) : undefined}
                   onActivate={() => setActiveID(tab.id)}
                   onDirectoryChange={(ref, directory) => {
                     update(ref.tabId, current =>
