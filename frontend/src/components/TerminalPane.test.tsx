@@ -281,7 +281,7 @@ test("right-click paste overrides TUI mouse capture when enabled", async () => {
 });
 
 test("multiline confirmation restores terminal focus before and after paste", async () => {
-  vi.mocked(ClipboardGetText).mockResolvedValueOnce("first\\nsecond");
+  vi.mocked(ClipboardGetText).mockResolvedValueOnce("first\nsecond");
   const { container } = renderTerminal();
   const term = refs.terms[0];
   fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
@@ -289,7 +289,7 @@ test("multiline confirmation restores terminal focus before and after paste", as
 
   fireEvent.click(screen.getByRole("button", { name: "确认粘贴" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-  await waitFor(() => expect(term.paste).toHaveBeenCalledWith("first\\nsecond"));
+  await waitFor(() => expect(term.paste).toHaveBeenCalledWith("first\nsecond"));
   expect(term.focus.mock.invocationCallOrder.at(-1)).toBeGreaterThan(
     term.paste.mock.invocationCallOrder[0],
   );
