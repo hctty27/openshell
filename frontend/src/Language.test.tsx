@@ -13,7 +13,7 @@ import { initializeI18n, i18n } from "./i18n";
 vi.mock("./components/TerminalPane", () => ({ default: () => null }));
 vi.mock("./bridge", () => ({
   desktop: true,
-  api: { State: vi.fn(), SavePreference: vi.fn() },
+  api: { State: vi.fn(), SavePreference: vi.fn(), SetCloseGuardReady: vi.fn(async () => {}) },
   listen: () => () => {},
   errorText: (e: unknown) =>
     typeof e === "object" && e && "key" in e
