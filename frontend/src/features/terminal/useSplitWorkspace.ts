@@ -94,7 +94,7 @@ export function useSplitWorkspace({ tabs, activeID, showSFTP, initialRatio, onEr
       const measuredLength = columns ? origin.width : origin.height;
       const length = Math.max(0, (parentLength || measuredLength) - 6);
       if (length <= 0) return handle.ratio;
-      const position = (columns ? e.clientX : e.clientY) - start;
+      const position = (columns ? e.clientX : e.clientY) - start - 3;
       return clampRatio(position * 100 / length);
     };
     let latest = handle.ratio;
