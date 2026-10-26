@@ -73,7 +73,7 @@ import QuickCommandManager from "./components/QuickCommandManager";
 import { quickCommandTerminalInput } from "./quickCommands";
 import { DialogProvider, useDialogs } from "./components/DialogProvider";
 import ModalSurface from "./components/ModalSurface";
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.61";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.63";
 const initial: AppState = {
   sessions: [],
   groups: [],
