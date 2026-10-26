@@ -60,7 +60,7 @@ func main() {
 		title := app.dialogTitle("Choose SSH private key", "选择 SSH 私钥")
 		return runtime.OpenFileDialog(app.ctx, runtime.OpenDialogOptions{Title: title})
 	}
-	e = wails.Run(&options.App{Title: branding.Name, Width: 1440, Height: 900, MinWidth: 1000, MinHeight: 640, AssetServer: &assetserver.Options{Assets: assets}, BackgroundColour: &options.RGBA{R: 11, G: 16, B: 23, A: 255}, DragAndDrop: &options.DragAndDrop{EnableFileDrop: true, DisableWebViewDrop: true}, OnStartup: app.startup, OnShutdown: app.shutdown, Bind: []interface{}{app}})
+	e = wails.Run(&options.App{Title: branding.Name, Width: 1440, Height: 900, MinWidth: 1000, MinHeight: 640, AssetServer: &assetserver.Options{Assets: assets}, BackgroundColour: &options.RGBA{R: 11, G: 16, B: 23, A: 255}, DragAndDrop: &options.DragAndDrop{EnableFileDrop: true, DisableWebViewDrop: true}, OnStartup: app.startup, OnBeforeClose: app.beforeClose, OnShutdown: app.shutdown, Bind: []interface{}{app}})
 	if e != nil {
 		log.Fatal(e)
 	}
