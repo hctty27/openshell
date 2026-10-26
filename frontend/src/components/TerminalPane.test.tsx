@@ -293,6 +293,23 @@ test("right-click paste overrides TUI mouse capture when enabled", async () => {
   expect(api.WriteTerminal).toHaveBeenCalled();
 });
 
+test("Alt+right mouse remains available to TUIs and does not paste", () => {
+  const { container } = renderTerminal();
+  const pane = container.querySelector(".terminal-pane")!;
+  refs.terms[0].modes.mouseTrackingMode = "vt200";
+
+  const down = new MouseEvent("mousedown", {
+    bubbles: true, cancelable: true, button: 2, altKey: true,
+  });
+  expect(pane.dispatchEvent(down)).toBe(true);
+  const up = new MouseEvent("mouseup", {
+    bubbles: true, cancelable: true, button: 2, altKey: true,
+  });
+  expect(pane.dispatchEvent(up)).toBe(true);
+  fireEvent.contextMenu(pane, { altKey: true });
+  expect(ClipboardGetText).not.toHaveBeenCalled();
+});
+
 test("multiline confirmation restores terminal focus before and after paste", async () => {
   vi.mocked(ClipboardGetText).mockResolvedValueOnce("first\nsecond");
   const { container } = renderTerminal();
