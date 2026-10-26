@@ -36,7 +36,7 @@ describe("WorkspaceTabStrip", () => {
 
   it("keeps double click duplication and keyboard reordering", () => {
     const { onReorder, onDuplicate, tabs } = setup();
-    const button = screen.getByRole("button", { name: /first.*drag/i });
+    const button = screen.getAllByTitle(/双击|Double-click/)[0];
     fireEvent.doubleClick(button);
     expect(onDuplicate).toHaveBeenCalledWith(tabs[0]);
     fireEvent.keyDown(button, { key: "ArrowRight", altKey: true, shiftKey: true });
