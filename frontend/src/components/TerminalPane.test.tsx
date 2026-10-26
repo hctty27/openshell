@@ -581,14 +581,17 @@ test("live severity highlighting survives closing manual search and updates inde
   expect(refs.terms).toHaveLength(1);
 });
 
-test("middle click pastes only when enabled and no TUI mouse tracking", async () => {
+test("middle click pastes when enabled, including with TUI mouse tracking", async () => {
   const { container } = renderTerminal({ middleClickPaste: true });
-  fireEvent.mouseDown(container.querySelector(".terminal-pane")!, { button: 1 });
+  const pane = container.querySelector(".terminal-pane")!;
+  fireEvent.mouseDown(pane, { button: 1 });
   await waitFor(() => expect(refs.terms[0].paste).toHaveBeenCalledWith("echo hello"));
+
   vi.mocked(ClipboardGetText).mockClear();
   refs.terms[0].modes.mouseTrackingMode = "vt200";
-  fireEvent.mouseDown(container.querySelector(".terminal-pane")!, { button: 1 });
-  expect(ClipboardGetText).not.toHaveBeenCalled();
+  const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 1 });
+  expect(pane.dispatchEvent(event)).toBe(false);
+  await waitFor(() => expect(ClipboardGetText).toHaveBeenCalledTimes(1));
 });
 
 
