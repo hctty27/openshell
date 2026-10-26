@@ -1,7 +1,7 @@
 <div align="center">
   <img src="build/openshell-icon.svg" alt="OpenShell" width="88" height="88" />
   <h1>OpenShell</h1>
-  <p><strong>把 SSH 终端、文件传输和你的 AI 助手，放进一个 Windows 应用。</strong></p>
+  <p><strong>Windows 轻量 AI SSH 工作空间：终端、SFTP 文件传输与可控远程命令执行。</strong></p>
   <p>
     <a href="https://github.com/hctty27/openshell/releases/latest"><img src="https://img.shields.io/github/v/release/hctty27/openshell?label=release" alt="最新版本" /></a>
     <a href="https://github.com/hctty27/openshell/actions/workflows/ci.yml"><img src="https://github.com/hctty27/openshell/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
@@ -17,19 +17,25 @@
   </p>
 </div>
 
-OpenShell 是面向开发者和服务器管理者的轻量 SSH / SFTP 桌面客户端。集中管理服务器连接，在多标签和分屏终端中工作、传输文件，并使用自己选择的 API 和模型调用 AI 助手。
+OpenShell 是面向开发者与服务器管理员的轻量 Windows SSH/SFTP 客户端。它将多标签与分屏终端、文件传输和 AI 远程协助整合到一个工作空间；支持自定义模型和 API，并可选择命令确认执行或受控自动执行。
 
 **项目状态：** 正在积极开发，尚未达到 1.0 正式版。已提供 Windows x64 安装版与便携版，各版本改动和实际签名状态见 [发布说明](https://github.com/hctty27/openshell/releases)。
+
+## 为什么选择 OpenShell
+
+- **熟悉的终端操作。** 集中管理 SSH 会话，自由调整标签顺序、使用分屏，并在断线后保持工作空间。
+- **文件传输无需切换软件。** 内置 SFTP 文件管理器，也支持通过 `rz` / `sz` 在应用内选取文件、查看进度。
+- **AI 模型与执行权限由你控制。** 支持 OpenAI 兼容接口和 Anthropic 原生 Messages API，可自由选择普通对话、确认执行或受控自动执行；SSH/SFTP 无需配置 AI。
 
 ## 功能亮点
 
 | 功能 | 可以做什么 |
 | --- | --- |
-| SSH 工作空间 | 多标签、复制连接、左右或上下双终端分屏、输出搜索，支持 vim、top 等交互式程序。 |
+| SSH 工作空间 | 多标签、复制连接、拖拽排序、左右或上下分屏及输出搜索，支持 vim、top 等交互式程序。 |
 | 会话管理 | 多级文件夹、搜索与编辑会话、密码与本地私钥认证、Xshell 会话导入、会话备份与恢复。 |
-| 连接控制 | 配置 SSH 保活与异常重连，主动断开连接，断开后返回 Windows 本地终端。 |
+| 连接控制 | 支持 SSH 保活、异常重连、主动断开、断线返回本地终端，关闭活动连接或退出应用前进行确认。 |
 | SFTP 文件管理 | 浏览本地与远程文件，上传下载文件和目录、断点续传、远程文本编辑、单向目录同步预览、权限管理。 |
-| 终端文件传输 | 支持 `rz` / `sz`，Windows 包内置 ZMODEM 工具，侧边栏展示传输状态。 |
+| 终端文件传输 | 支持 `rz` / `sz` 和内置 ZMODEM 工具，通过应用内文件选择器与进度弹窗完成传输，无需弹出资源管理器或额外 CMD 窗口。 |
 | AI 助手 | 支持 OpenAI 兼容接口与 Anthropic 原生 Messages API、流式对话、确认执行和自动执行命令，同一服务器的标签共享对话历史。 |
 | 快速命令 | 支持分类、排序及全局 / 文件夹 / 会话作用范围，通过换行控制是否执行。 |
 | 外观与语言 | 英文与简体中文切换，浅色 / 深色应用主题，独立的经典黑色、深灰和白色终端配色。 |
@@ -59,11 +65,11 @@ OpenShell 是面向开发者和服务器管理者的轻量 SSH / SFTP 桌面客�
 
 ### 终端常用操作
 
-- 双击已连接标签，使用相同会话名称新开一个独立连接；顶部 `+` 打开会话选择窗口。
+- 双击已连接标签，以相同名称新开独立连接；拖拽标签可调整顺序，也可使用 Alt+Shift+左右方向键。顶部 `+` 打开会话选择窗口。
 - 连接两个会话后选择分屏对象，可切换左右 / 上下布局，并拖动分隔线调整比例。
 - 可在设置中启用「选中自动复制」「鼠标右键粘贴」及多行粘贴确认。
 - 终端配色支持全局设置与单会话覆盖，无需重连即可生效；快速命令栏可选择单行横向滚动或多行布局。
-- 断开后可返回本地终端、保留已断开的标签或自动关闭标签。本地 Shell 支持 Windows PowerShell、PowerShell 7、CMD、WSL。自动重连只针对异常断线，主动断开不会自动连接。
+- 断开后可返回本地终端、保留已断开的标签或自动关闭标签。本地 Shell 支持 Windows PowerShell、PowerShell 7、CMD、WSL。自动重连只针对异常断线，主动断开不会自动连接。关闭活动 SSH 标签或退出仍有连接的应用时需要确认。
 - 点击快速命令栏的「管理」添加命令。每个换行对应一次 Enter；末尾不换行，最后一行只输入、不执行。使用前请确认终端处于可接收 Shell 命令的状态。
 
 ## AI 助手
@@ -72,7 +78,8 @@ OpenShell 是面向开发者和服务器管理者的轻量 SSH / SFTP 桌面客�
 
 | 配置项 | 填写内容 |
 | --- | --- |
-| API 协议 | 选择 **OpenAI 兼容接口**（旧配置默认）或 **Anthropic 原生 Messages API**。 |\n| Base URL | Chat Completions 兼容接口示例：`https://api.example.com/v1`；Anthropic 原生接口示例：`https://api.anthropic.com/v1`。 |
+| API 协议 | 选择 **OpenAI 兼容接口**（旧配置默认）或 **Anthropic 原生 Messages API**。 |
+| Base URL | Chat Completions 兼容接口示例：`https://api.example.com/v1`；Anthropic 原生接口示例：`https://api.anthropic.com/v1`。 |
 | API Key | 服务商分配的密钥；本机无需认证的服务可以留空。 |
 | 模型名称 | 服务商支持的准确模型 ID。 |
 | 工具调用 | 仅在接口和模型都支持时启用；AI 执行命令需要此能力。 |
@@ -144,7 +151,7 @@ fi
 
 在远程终端运行 `rz`，选择本地文件上传；运行 `sz /path/to/file`，选择本地下载位置。远程服务器需要安装 `lrzsz`。官方 Windows 包已内置 `rz/sz` 的无控制台窗口启动器，原版工具与 `msys-2.0.dll` 存放于 `zmodem/native/`，并附许可证和源码，无需配置 Windows PATH。
 
-传输状态显示在侧边栏的传输区域，可通过传输控件或 Ctrl+C 取消。下载遇到同名文件时使用 `rz -E` 重命名策略。协议数据在进入终端历史与 AI 上下文前过滤。ZMODEM 在 tmux/screen 中可能不稳定；目录与断点续传请使用 SFTP。
+OpenShell 内嵌文件选择器可直接选择上传文件或下载目录，不会弹出 Windows 资源管理器。传输进度在应用内弹窗展示，完成后自动收起；可通过传输控件或 Ctrl+C 取消。内置启动器不会额外弹出 CMD 窗口，下载遇到同名文件时使用 `rz -E` 重命名策略。协议数据在进入终端历史与 AI 上下文前过滤。ZMODEM 在 tmux/screen 中可能不稳定；目录与断点续传请使用 SFTP。
 
 ## 会话导入与备份
 

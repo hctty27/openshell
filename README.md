@@ -1,7 +1,7 @@
 <div align="center">
   <img src="build/openshell-icon.svg" alt="OpenShell" width="88" height="88" />
   <h1>OpenShell</h1>
-  <p><strong>SSH terminals, file transfers, and your own AI assistant — in one Windows app.</strong></p>
+  <p><strong>AI-powered SSH workspace for Windows — terminals, SFTP, and controlled remote commands in one app.</strong></p>
   <p>
     <a href="https://github.com/hctty27/openshell/releases/latest"><img src="https://img.shields.io/github/v/release/hctty27/openshell?label=release" alt="Latest release" /></a>
     <a href="https://github.com/hctty27/openshell/actions/workflows/ci.yml"><img src="https://github.com/hctty27/openshell/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
@@ -17,19 +17,25 @@
   </p>
 </div>
 
-OpenShell is a lightweight SSH and SFTP desktop client for developers and server administrators. Organize connections, work across terminal tabs and split panes, transfer files, and use an AI assistant with the API and model you choose.
+OpenShell is a lightweight Windows SSH/SFTP client for developers and server administrators. Manage servers in a tabbed, split-terminal workspace, transfer files without leaving the app, and troubleshoot with an AI assistant powered by your own model and API. Review AI commands before execution or use a controlled automatic mode.
 
 **Status:** actively developed, pre-1.0 software. Windows x64 installers and portable packages are available. See the [release notes](https://github.com/hctty27/openshell/releases) for the changes and signing status of each build.
+
+## Why OpenShell
+
+- **Work like a terminal power user.** Organize SSH sessions, rearrange tabs, split terminals, and reconnect without rebuilding your workspace.
+- **Move files in the same window.** Use the integrated SFTP manager or familiar `rz` / `sz` commands with an in-app file picker and transfer progress.
+- **Bring your own AI.** Use OpenAI-compatible or native Anthropic Messages APIs for chat, reviewed commands, and controlled automatic operations. SSH and SFTP work without AI configuration.
 
 ## Highlights
 
 | Area | What you can do |
 | --- | --- |
-| SSH workspace | Open multiple tabs, duplicate a connection, split two terminals side by side or vertically, search output, and use interactive programs such as vim and top. |
+| SSH workspace | Open, duplicate, drag-reorder, and split terminal tabs; search output and use interactive programs such as vim and top. |
 | Session management | Organize connections in nested folders, search and edit sessions, authenticate with a password or local private key, import Xshell sessions, and export session backups. |
-| Connection controls | Configure SSH keepalive and reconnection, disconnect manually, and return to a local Windows shell after disconnecting. |
+| Connection controls | Configure keepalive and reconnection, disconnect manually, return to a local Windows shell, and confirm before closing live connections. |
 | SFTP | Browse local and remote files, upload and download files or directories, resume transfers, edit remote text, preview one-way directory sync, and manage permissions. |
-| Terminal file transfers | Use `rz` / `sz` with bundled Windows ZMODEM utilities; view transfer status in the sidebar. |
+| Terminal file transfers | Use `rz` / `sz` with bundled ZMODEM utilities, an embedded file picker, and a transfer-progress dialog—without opening Explorer or an extra CMD window. |
 | AI assistant | Stream from OpenAI-compatible or native Anthropic Messages APIs, review or automate remote commands, and share conversation history across tabs for the same server. |
 | Quick commands | Save reusable commands with categories, ordering, and global, folder, or session scope. Line breaks control when commands execute. |
 | Appearance and language | Switch between English and Simplified Chinese, light and dark application themes, and independent classic, dark, or light terminal palettes. |
@@ -59,11 +65,11 @@ The interface defaults to English; switch to Simplified Chinese in Settings → 
 
 ### Terminal workflow
 
-- Double-click a connected tab to open another independent connection with the same session name. The `+` button opens the session picker.
+- Double-click a connected tab to open another independent connection with the same session name. Drag tabs to reorder them, or use Alt+Shift+Left/Right Arrow. The `+` button opens the session picker.
 - Connect two sessions, select the split partner, and switch between horizontal and vertical layouts. Drag the divider to resize the panes.
 - Enable selection-to-copy and right-click paste in Settings if desired. Multiline paste can require confirmation.
 - Choose a global terminal palette or override it per session; changes apply without reconnecting. The quick-command bar supports a single scrolling row or multiple rows.
-- Configure disconnect behavior to return to a local shell, keep the disconnected tab, or close it. Local choices include Windows PowerShell, PowerShell 7, CMD, and WSL. Automatic reconnection applies to unexpected disconnects, not a manual disconnect.
+- Configure disconnect behavior to return to a local shell, keep the disconnected tab, or close it. Local choices include Windows PowerShell, PowerShell 7, CMD, and WSL. Automatic reconnection applies to unexpected disconnects, not a manual disconnect. Closing an active SSH tab or exiting while connections are live requires confirmation.
 - Use **Manage** in the quick-command bar to add commands. Each line break sends Enter; without a final line break, the last line is inserted without executing. Run these only when the terminal is ready to receive shell input.
 
 ## AI assistant
@@ -72,7 +78,8 @@ The interface defaults to English; switch to Simplified Chinese in Settings → 
 
 | Setting | Value |
 | --- | --- |
-| API protocol | Choose **OpenAI-compatible API** (existing/default profiles) or **Anthropic Messages API**. |\n| Base URL | Use a Chat Completions base URL such as `https://api.example.com/v1`, or an Anthropic Messages base URL such as `https://api.anthropic.com/v1`. |
+| API protocol | Choose **OpenAI-compatible API** (existing/default profiles) or **Anthropic Messages API**. |
+| Base URL | Use a Chat Completions base URL such as `https://api.example.com/v1`, or an Anthropic Messages base URL such as `https://api.anthropic.com/v1`. |
 | API key | Your provider's key; it may be empty for a local service that does not require authentication. |
 | Model name | The exact model ID accepted by your provider. |
 | Tool calls | Enable only when both the provider and model support tools. Required for AI command execution. |
@@ -144,7 +151,7 @@ Reconnect to apply the change. Each new prompt reports the current directory; op
 
 Run `rz` on the remote host to choose local files to upload, or `sz /path/to/file` to choose a local destination for downloads. The remote host must have `lrzsz` installed. Official Windows packages include headless `rz.exe` / `sz.exe` launchers, with unmodified lrzsz binaries and `msys-2.0.dll` in `zmodem/native/`, as well as the original source and license notices. No Windows PATH setup is needed; the bundled launchers avoid opening an extra console window.
 
-Transfer status appears in the sidebar's transfer area. Cancel through the transfer controls or Ctrl+C. Downloads use the `rz -E` rename strategy for existing filenames. Protocol payloads are filtered before terminal history and AI context. ZMODEM can be unreliable inside tmux/screen; use SFTP for directories and resumable transfers.
+OpenShell's embedded file picker handles local file and destination selection without opening Windows Explorer. Transfer progress appears in an in-app dialog and closes when the operation finishes; cancel using the transfer controls or Ctrl+C. The bundled launcher avoids a separate CMD window. Downloads use the `rz -E` rename strategy for existing filenames. Protocol payloads are filtered before terminal history and AI context. ZMODEM can be unreliable inside tmux/screen; use SFTP for directories and resumable transfers.
 
 ## Import and backup
 
