@@ -40,8 +40,11 @@ vi.mock("./components/SFTPView", () => ({
 }));
 vi.mock("./bridge", async () => ({
   ...(await vi.importActual<typeof import("./bridge")>("./bridge")),
-  desktop: false,
+  desktop: true,
   api: {
+    SetCloseGuardReady: vi.fn(async () => {}),
+    QuitConfirmed: vi.fn(async () => {}),
+    CloseTab: vi.fn(async () => {}),
     SavePreference: vi.fn(async () => {}),
     SFTPTransfers: vi.fn(async () => []),
     CancelZmodem: vi.fn(async () => {}),
@@ -529,4 +532,92 @@ test("SFTP opens beside the existing terminal and can close without reconnecting
   expect(screen.getByText("ZMODEM")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
   await waitFor(() => expect(api.CancelZmodem).toHaveBeenCalledWith(ref));
+});
+
+test("closing a connected tab requires confirmation and cancelling preserves it", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.CloseTab).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{id:"live-id",groupId:"",name:"Live Server",host:"example.test",port:22,
+      username:"root",authType:"key",privateKeyPath:"",credentialRef:"saved"}],
+    groups: [], profiles: [], fontSize:"14", language:"zh-CN",
+    activeProfile:"", version:"0.1.58",
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.doubleClick(screen.getByRole("button", {name:"选中会话 Live Server"}));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(document.querySelector(".connection-state-connected")).not.toBeNull());
+
+  fireEvent.click(screen.getByTitle("关闭 Live Server"));
+  expect(screen.getByText("关闭 SSH 会话？")).toBeTruthy();
+  expect(screen.getByText(/root@example\.test:22/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", {name:"取消"}));
+  expect(screen.getByTitle("关闭 Live Server")).toBeTruthy();
+  expect(api.CloseTab).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByTitle("关闭 Live Server"));
+  fireEvent.click(screen.getByRole("button", {name:"断开并关闭"}));
+  await waitFor(() => expect(api.CloseTab).toHaveBeenCalledTimes(1));
+  expect(screen.queryByTitle("关闭 Live Server")).toBeNull();
+});
+
+test("closing an already disconnected tab needs no SSH confirmation", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.CloseTab).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{id:"offline-id",groupId:"",name:"Offline",host:"example.test",port:22,
+      username:"root",authType:"key",privateKeyPath:"",credentialRef:"saved"}],
+    groups: [], profiles: [], fontSize:"14", language:"zh-CN",
+    activeProfile:"", version:"0.1.58",
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.doubleClick(screen.getByRole("button", {name:"选中会话 Offline"}));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  const id = screen.getByTestId("terminal-pane-stub").getAttribute("data-tab-id");
+  act(() => {
+    for (const listener of transferEvents.listeners.get("ssh:disconnected") ?? [])
+      listener({tabId:id,sessionId:"offline-id",generation:1});
+  });
+  await waitFor(() => expect(document.querySelector(".connection-state-local")).not.toBeNull());
+  fireEvent.click(screen.getByTitle("关闭 Offline"));
+  await waitFor(() => expect(api.CloseTab).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText("关闭 SSH 会话？")).toBeNull();
+});
+
+test("native quit request asks once for live sessions, cancellation is safe", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.QuitConfirmed).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{id:"quit-id",groupId:"",name:"Quit Server",host:"example.test",port:22,
+      username:"root",authType:"key",privateKeyPath:"",credentialRef:"saved"}],
+    groups: [], profiles: [], fontSize:"14", language:"zh-CN",
+    activeProfile:"", version:"0.1.58",
+  });
+  await act(async () => { render(<App />); });
+  await waitFor(() => expect(api.SetCloseGuardReady).toHaveBeenCalledWith(true));
+  fireEvent.doubleClick(screen.getByRole("button", {name:"选中会话 Quit Server"}));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  act(() => {
+    for (const listener of transferEvents.listeners.get("app:quit-requested") ?? []) listener(null);
+    for (const listener of transferEvents.listeners.get("app:quit-requested") ?? []) listener(null);
+  });
+  expect(screen.getAllByText("确定退出 OpenShell？")).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", {name:"取消"}));
+  expect(api.QuitConfirmed).not.toHaveBeenCalled();
+  expect(screen.getByTitle("关闭 Quit Server")).toBeTruthy();
+  act(() => {
+    for (const listener of transferEvents.listeners.get("app:quit-requested") ?? []) listener(null);
+  });
+  fireEvent.click(screen.getByRole("button", {name:"断开所有连接并退出"}));
+  await waitFor(() => expect(api.QuitConfirmed).toHaveBeenCalledTimes(1));
+});
+
+test("native quit request exits directly when there are no active SSH sessions", async () => {
+  vi.mocked(api.QuitConfirmed).mockClear();
+  await act(async () => { render(<App />); });
+  act(() => {
+    for (const listener of transferEvents.listeners.get("app:quit-requested") ?? []) listener(null);
+  });
+  await waitFor(() => expect(api.QuitConfirmed).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText("确定退出 OpenShell？")).toBeNull();
 });
