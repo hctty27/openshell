@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { X } from "lucide-react";
 import { message, type DisplayText } from "../i18n/message";
 import { t } from "../i18n";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
@@ -26,7 +27,8 @@ interface Props {
   showDisconnectReason?: boolean;
   active: boolean;
   visible?: boolean;
-  splitOrder?: number;
+  paneBounds?: { left: number; top: number; width: number; height: number };
+  onUndock?: () => void;
   onActivate?: () => void;
   fontSize: number;
   theme: Theme;
@@ -212,7 +214,7 @@ export default function TerminalPane(p: Props) {
     let selectingWithMouse = false;
     const paneElement = container.current.parentElement ?? container.current;
     const onMouseDown = (event: MouseEvent) => {
-      if ((event.target as HTMLElement).closest(".terminal-find, .terminal-transfer-indicator")) return;
+      if ((event.target as HTMLElement).closest(".terminal-find, .terminal-transfer-indicator, .terminal-pane-undock")) return;
       if (callbacks.current.visible ?? callbacks.current.active) callbacks.current.onActivate?.();
       // Clipboard gestures take priority over TUI mouse reporting when enabled.
       // Capture the button press before xterm.js sends it to the remote app.
@@ -573,8 +575,17 @@ export default function TerminalPane(p: Props) {
   return (
     <div data-tab-id={p.tab.id} className={`terminal-pane ${(p.visible ?? p.active) ? "visible" : ""} ${p.active ? "active" : ""}`}
       aria-label={t("terminal:terminal", { name: p.tab.session.name })}
-      style={{ "--terminal-background": resolvedTheme.background, order: p.splitOrder } as CSSProperties}>
+      style={{ "--terminal-background": resolvedTheme.background,
+        ...(p.paneBounds ? { left: p.paneBounds.left, top: p.paneBounds.top,
+          width: p.paneBounds.width, height: p.paneBounds.height } : {}),
+      } as CSSProperties}>
       <div className="terminal-surface" ref={container} />
+      {p.paneBounds && p.onUndock && (
+        <button type="button" className="terminal-pane-undock"
+          title={t("terminal:undockPane")} aria-label={t("terminal:undockPane")}
+          onMouseDown={event => event.stopPropagation()}
+          onClick={p.onUndock}><X size={13}/></button>
+      )}
       {p.active && searchOpen && (
         <div className="terminal-find">
           <input

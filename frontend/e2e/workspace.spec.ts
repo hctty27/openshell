@@ -367,6 +367,50 @@ test("dragging a connected tab splits a terminal without reconnecting", async ({
   await expect(page.locator(".terminal-tab .connection-state-connected")).toHaveCount(2);
 });
 
+test("four sessions support nested splits, independent handles and undocking", async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 900 });
+  await page.goto("/");
+  for (const name of ["pane-a", "pane-b", "pane-c", "pane-d"]) {
+    await page.getByTitle("新建会话", { exact: true }).first().click();
+    await page.getByLabel("会话名称", { exact: true }).fill(name);
+    await page.getByLabel("主机地址").fill("127.0.0.1");
+    await page.getByLabel("登录密码").fill("fixture-password");
+    await page.getByText("保存到 Windows 凭据管理器").click();
+    await page.getByRole("button", { name: "保存会话", exact: true }).click();
+    await page.getByText(name, { exact: true }).dblclick();
+    if (name === "pane-a") await page.getByRole("button", { name: "信任并连接" }).click();
+  }
+  await expect(page.locator(".terminal-tab .connection-state-connected")).toHaveCount(4);
+  const drag = async (source: string, zone: "right" | "bottom") => {
+    const tab = page.locator(".terminal-tab").filter({ hasText: source });
+    const target = page.locator(".terminal-pane.active");
+    const box = await target.boundingBox();
+    expect(box).not.toBeNull();
+    await tab.dragTo(target, { targetPosition: zone === "right"
+      ? { x: box!.width - 15, y: box!.height / 2 }
+      : { x: box!.width / 2, y: box!.height - 15 } });
+  };
+  await drag("pane-a", "right");
+  await drag("pane-b", "bottom");
+  await drag("pane-c", "right");
+  await expect(page.locator(".terminal-pane.visible")).toHaveCount(4);
+  await expect(page.getByRole("separator", { name: "调整终端分屏比例" })).toHaveCount(3);
+  for (const pane of await page.locator(".terminal-pane.visible").all()) {
+    expect((await pane.boundingBox())!.width).toBeGreaterThan(0);
+    expect((await pane.boundingBox())!.height).toBeGreaterThan(0);
+  }
+  await page.locator(".terminal-tab").filter({ hasText: "pane-a" }).dragTo(page.locator(".tab-strip"), {
+    targetPosition: { x: (await page.locator(".tab-strip").boundingBox())!.width - 15, y: 15 },
+  });
+  await expect(page.locator(".terminal-pane.visible")).toHaveCount(3);
+  await expect(page.getByRole("separator", { name: "调整终端分屏比例" })).toHaveCount(2);
+  await expect(page.locator(".terminal-tab .connection-state-connected")).toHaveCount(4);
+  await page.locator(".terminal-pane.active .terminal-pane-undock").click();
+  await expect(page.locator(".terminal-pane.visible")).toHaveCount(2);
+  await expect(page.getByRole("separator", { name: "调整终端分屏比例" })).toHaveCount(1);
+  await expect(page.locator(".terminal-tab .connection-state-connected")).toHaveCount(4);
+});
+
 test("terminal stays within its viewport with stable scrollbar and both themes", async ({
   page,
 }) => {

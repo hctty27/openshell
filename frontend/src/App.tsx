@@ -65,7 +65,7 @@ import AISidebar from "./components/AISidebar";
 import { useConversations } from "./useConversations";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
 import { useSplitWorkspace } from "./features/terminal/useSplitWorkspace";
-import { TAB_DRAG_MIME, getSplitDropZone, splitLayoutFromDrop, type SplitDropZone } from "./features/terminal/splitDrop";
+import { TAB_DRAG_MIME, getSplitDropZone, type SplitDropZone } from "./features/terminal/splitDrop";
 import { useTransferActivity } from "./features/transfers/useTransferActivity";
 import { toChatMessages } from "./conversations";
 import QuickCommandBar from "./components/QuickCommandBar";
@@ -306,9 +306,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
   }, []);
 
   const {
-    splitPair, setSplitPair, splitDirection, setSplitDirection,
-    splitRatio, setSplitRatio, splitContainerRef, splitReady,
-    setSplitRatioAndSave, startSplitResize,
+    splitDirection, splitContainerRef, splitReady,
+    visibleTabIDs, paneBoxes, splitHandles,
+    applyDrop, undockPane, closeSplit, rotateActiveSplit,
+    setSplitRatio, resizeNodeAndSave, startSplitResize,
   } = useSplitWorkspace({
     tabs, activeID, showSFTP, initialRatio: initialState.splitRatio, onError: notify,
   });
@@ -359,11 +360,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
     const target = resolveSplitDrop(event);
     setSplitDropPreview(null);
     if (!target || event.dataTransfer.getData(TAB_DRAG_MIME) !== draggedTabID) return;
-    const layout = splitLayoutFromDrop(draggedTabID, target.targetID, target.zone);
-    if (!layout) return;
     event.preventDefault();
-    setSplitPair(layout.pair);
-    setSplitDirection(layout.direction);
+    applyDrop(draggedTabID, target.targetID, target.zone);
     setActiveID(target.targetID);
   };
 
@@ -1387,9 +1385,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onNewTab={() => setShowSessionPicker(true)}
           onTabDragStart={setDraggedTabID}
           onTabDragEnd={() => { setDraggedTabID(""); setSplitDropPreview(null); }}
-          onDropOnStrip={tabID => {
-            if (splitPair?.includes(tabID)) setSplitPair(null);
-          }}
+          onDropOnStrip={undockPane}
           onReorder={(sourceID, targetID, placement) =>
             setTabs(current => reorderTabs(current, sourceID, targetID, placement))} />
         {!tabs.length ? (
@@ -1448,11 +1444,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 {splitReady && (
                   <>
                     <button title={tr("terminal:rotateSplit")} aria-label={tr("terminal:rotateSplit")}
-                      onClick={() => setSplitDirection((value) => value === "columns" ? "rows" : "columns")}>
+                      onClick={rotateActiveSplit}>
                       {splitDirection === "columns" ? <Rows2 size={14} /> : <Columns2 size={14} />}
                     </button>
                     <button title={tr("terminal:closeSplit")} aria-label={tr("terminal:closeSplit")}
-                      onClick={() => setSplitPair(null)}><X size={14} /></button>
+                      onClick={closeSplit}><X size={14} /></button>
                   </>
                 )}
                 <button
@@ -1515,10 +1511,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                     event.clientY <= rect.top || event.clientY >= rect.bottom) setSplitDropPreview(null);
               }}
               className={`terminal-container ${splitReady ? `terminal-split terminal-split-${splitDirection}` : ""}`}
-              style={{
-                "--split-ratio": `${splitRatio}%`,
-                "--terminal-background": activeTerminalBackground,
-              } as CSSProperties}>
+              style={{ "--terminal-background": activeTerminalBackground } as CSSProperties}>
               {tabs.map((tab) => (
                 <TerminalPane
                   key={tab.id}
@@ -1528,8 +1521,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   preserveHistory={state.preserveTerminalHistory !== false}
                   showDisconnectReason={state.showDisconnectReason !== false}
                   active={tab.id === activeID}
-                  visible={tab.id === activeID || Boolean(splitReady && splitPair?.includes(tab.id))}
-                  splitOrder={splitReady ? splitPair?.indexOf(tab.id) : undefined}
+                  visible={visibleTabIDs.includes(tab.id)}
+                  paneBounds={splitReady ? paneBoxes[tab.id] : undefined}
+                  onUndock={splitReady ? () => {
+                    undockPane(tab.id);
+                    if (activeID === tab.id) {
+                      setActiveID(visibleTabIDs.find(id => id !== tab.id) ?? activeID);
+                    }
+                  } : undefined}
                   onActivate={() => setActiveID(tab.id)}
                   onDirectoryChange={(ref, directory) => {
                     update(ref.tabId, current =>
@@ -1576,31 +1575,32 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   } as const)[splitDropPreview.zone])}</span>
                 </div>
               )}
-              {splitReady && (
-                <div className="terminal-split-handle"
-                  role="separator"
-                  tabIndex={0}
+              {splitReady && splitHandles.map(handle => (
+                <div key={handle.id} className="terminal-split-handle"
+                  style={{ left: handle.left, top: handle.top, width: handle.width, height: handle.height }}
+                  role="separator" tabIndex={0}
                   aria-label={tr("terminal:resizeSplit")}
-                  aria-orientation={splitDirection === "columns" ? "vertical" : "horizontal"}
-                  aria-valuemin={20} aria-valuemax={80} aria-valuenow={splitRatio}
+                  aria-orientation={handle.direction === "columns" ? "vertical" : "horizontal"}
+                  aria-valuemin={20} aria-valuemax={80} aria-valuenow={handle.ratio}
                   title={tr("terminal:resetSplitRatio")}
-                  onPointerDown={startSplitResize}
-                  onDoubleClick={() => setSplitRatioAndSave(50)}
-                  onKeyDown={(event) => {
+                  onPointerDown={event => startSplitResize(event, handle)}
+                  onDoubleClick={() => resizeNodeAndSave(handle.id, 50)}
+                  onKeyDown={event => {
                     const increment = event.shiftKey ? 10 : 5;
                     if (event.key === "Home" || event.key === "End") {
                       event.preventDefault();
-                      setSplitRatioAndSave(event.key === "Home" ? 20 : 80);
+                      resizeNodeAndSave(handle.id, event.key === "Home" ? 20 : 80);
                     } else if (
-                      (splitDirection === "columns" && ["ArrowLeft", "ArrowRight"].includes(event.key)) ||
-                      (splitDirection === "rows" && ["ArrowUp", "ArrowDown"].includes(event.key))
+                      (handle.direction === "columns" && ["ArrowLeft", "ArrowRight"].includes(event.key)) ||
+                      (handle.direction === "rows" && ["ArrowUp", "ArrowDown"].includes(event.key))
                     ) {
                       event.preventDefault();
-                      setSplitRatioAndSave(splitRatio + (["ArrowRight", "ArrowDown"].includes(event.key) ? increment : -increment));
+                      resizeNodeAndSave(handle.id,
+                        handle.ratio + (["ArrowRight", "ArrowDown"].includes(event.key) ? increment : -increment));
                     }
                   }}
                 />
-              )}
+              ))}
               {(active?.status === "connecting" || active?.status === "reconnecting") && (
                 <div className="terminal-overlay">
                   <LoaderCircle size={23} className="spin" />

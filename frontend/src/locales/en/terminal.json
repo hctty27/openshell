@@ -68,5 +68,6 @@
   "dropSplitLeft": "Drop to split left",
   "dropSplitRight": "Drop to split right",
   "dropSplitTop": "Drop to split above",
-  "dropSplitBottom": "Drop to split below"
+  "dropSplitBottom": "Drop to split below",
+  "undockPane": "Remove pane from split"
 }

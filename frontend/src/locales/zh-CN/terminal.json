@@ -68,5 +68,6 @@
   "dropSplitLeft": "释放以在左侧分屏",
   "dropSplitRight": "释放以在右侧分屏",
   "dropSplitTop": "释放以在上方分屏",
-  "dropSplitBottom": "释放以在下方分屏"
+  "dropSplitBottom": "释放以在下方分屏",
+  "undockPane": "将此终端移出分屏"
 }
