@@ -49,6 +49,11 @@ func ParseTool(name, args string) (ToolInput, error) {
 	return input, nil
 }
 func validate(command, purpose, cwd string) error {
+    // Never propose credentials embedded in a shell command: those appear
+    // in process arguments, screenshots and command/history records.
+    if ai.Redact(command) != command || strings.Contains(strings.ToLower(command), "--password=") {
+        return apperror.New("credentialsInCommandNotAllowed", nil)
+    }
 	if strings.TrimSpace(command) == "" || len(command) > 32768 || strings.ContainsRune(command, 0) || strings.TrimSpace(purpose) == "" || len(purpose) > 4096 || !strings.HasPrefix(cwd, "/") || len(cwd) > 4096 || strings.ContainsAny(cwd, "\x00\r\n") {
 		return apperror.New("provideACommandPurposeAndValidAbsoluteWorking", nil)
 	}
