@@ -103,6 +103,7 @@ func encodeAnthropicRequest(profile domain.APIProfile, messages []Message) ([]by
 			"input_schema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
+					"target_id": map[string]string{"type": "string", "description": "Use the exact authorized tab_id when operating multiple SSH sessions"},
 					"command": map[string]string{"type": "string", "description": "Raw shell command without ssh/scp wrappers"},
 					"purpose": map[string]string{"type": "string"},
 					"cwd": map[string]string{"type": "string", "description": "Absolute remote working directory"},
