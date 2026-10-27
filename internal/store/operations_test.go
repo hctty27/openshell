@@ -61,4 +61,15 @@ func TestOperationJournalTracksVerificationAndPreventsRepeatedEffects(t *testing
     steps, err := db.ListOperationSteps(ctx, c.ID)
     if err != nil || len(steps)!=1 || steps[0].ExitCode == nil || *steps[0].ExitCode != 3 || steps[0].VerificationStatus != "pending" { t.Fatalf("%+v %v", steps, err) }
     if err = db.TransitionOperationStep(ctx, c.ID, step.ID, "running", "completed", "", "", nil); !errors.Is(err, ErrOperationTransition) { t.Fatalf("double execution state accepted: %v", err) }
+    if err = db.MarkOperationChecked(ctx, c.ID, step.ID); err != nil {
+        t.Fatalf("independent verification was not recorded: %v", err)
+    }
+    if err = db.MarkOperationChecked(ctx, c.ID, step.ID); !errors.Is(err, ErrOperationTransition) {
+        t.Fatalf("repeated verification accepted: %v", err)
+    }
+    steps, err = db.ListOperationSteps(ctx, c.ID)
+    if err != nil || steps[0].VerificationStatus != "checked" ||
+        steps[0].Status != "failed" || steps[0].ExitCode == nil || *steps[0].ExitCode != exit {
+        t.Fatalf("post-inspection journal state incorrect: %+v err=%v", steps, err)
+    }
 }
