@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"io"
@@ -83,11 +84,46 @@ func (c *Coordinator) Propose(ref domain.ConnectionRef, command, purpose, cwd st
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, item := range c.items {
-		if item.proposal.Ref.TabID == ref.TabID && (item.proposal.Status == "running" || item.proposal.Status == "awaiting_confirmation") {
+		if (item.proposal.Status == "running" || item.proposal.Status == "awaiting_confirmation") && proposalContains(item.proposal, ref) {
 			return domain.Proposal{}, apperror.New("handleThePendingCommandProposalFirst", nil)
 		}
 	}
 	p := domain.Proposal{ID: domain.NewID(), Ref: ref, Command: command, Purpose: purpose, Cwd: cwd, TimeoutSeconds: seconds, Status: "awaiting_confirmation"}
+	c.items[p.ID] = &entry{proposal: p}
+	return p, nil
+}
+func proposalTargets(p domain.Proposal) []domain.ConnectionRef {
+	if len(p.Targets) > 0 { return p.Targets }
+	return []domain.ConnectionRef{p.Ref}
+}
+func proposalContains(p domain.Proposal, ref domain.ConnectionRef) bool {
+	for _, target := range proposalTargets(p) { if target == ref { return true } }
+	return false
+}
+// ProposeParallel allows only a vetted read-only shell command on each authorized connection.
+func (c *Coordinator) ProposeParallel(refs []domain.ConnectionRef, command, purpose, cwd string, seconds int) (domain.Proposal, error) {
+	if len(refs) < 2 || len(refs) > 8 || !IsInspectionCommand(command) {
+		return domain.Proposal{}, apperror.New("invalidToolArguments", nil)
+	}
+	if err := validate(command, purpose, cwd); err != nil { return domain.Proposal{}, err }
+	if seconds == 0 { seconds = 60 }
+	if seconds < 1 || seconds > 600 { return domain.Proposal{}, apperror.New("timeoutMustBeBetween1And600Seconds", nil) }
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		if ref.TabID == "" || seen[ref.TabID] || c.valid == nil || !c.valid(ref) {
+			return domain.Proposal{}, apperror.New("memoryConnectionChanged", nil)
+		}
+		seen[ref.TabID] = true
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, item := range c.items {
+		if item.proposal.Status != "running" && item.proposal.Status != "awaiting_confirmation" { continue }
+		for _, ref := range refs {
+			if proposalContains(item.proposal, ref) { return domain.Proposal{}, apperror.New("handleThePendingCommandProposalFirst", nil) }
+		}
+	}
+	p := domain.Proposal{ID: domain.NewID(), Ref: refs[0], Targets: append([]domain.ConnectionRef(nil), refs...), Command: command, Purpose: purpose, Cwd: cwd, TimeoutSeconds: seconds, Status: "awaiting_confirmation"}
 	c.items[p.ID] = &entry{proposal: p}
 	return p, nil
 }
@@ -107,10 +143,12 @@ func (c *Coordinator) Confirm(ctx context.Context, id string) (domain.CommandRes
 		c.mu.Unlock()
 		return domain.CommandResult{}, apperror.New("proposalAlreadyHandledOrExpired", nil)
 	}
-	if c.valid == nil || !c.valid(item.proposal.Ref) {
-		item.proposal.Status = "invalidated"
-		c.mu.Unlock()
-		return domain.CommandResult{}, apperror.New("targetConnectionChangedGenerateANewProposal", nil)
+	for _, ref := range proposalTargets(item.proposal) {
+		if c.valid == nil || !c.valid(ref) {
+			item.proposal.Status = "invalidated"
+			c.mu.Unlock()
+			return domain.CommandResult{}, apperror.New("targetConnectionChangedGenerateANewProposal", nil)
+		}
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	item.cancel = cancel
@@ -118,7 +156,13 @@ func (c *Coordinator) Confirm(ctx context.Context, id string) (domain.CommandRes
 	p := item.proposal
 	c.mu.Unlock()
 	defer cancel()
-	result, e := c.run(ctx, p.Ref, p.Command, p.Cwd, time.Duration(p.TimeoutSeconds)*time.Second)
+	var result domain.CommandResult
+	var e error
+	if len(p.Targets) > 0 {
+		result, e = c.runParallel(ctx, p)
+	} else {
+		result, e = c.run(ctx, p.Ref, p.Command, p.Cwd, time.Duration(p.TimeoutSeconds)*time.Second)
+	}
 	c.mu.Lock()
 	if result.Status == "" {
 		result.Status = "unknown"
@@ -127,6 +171,34 @@ func (c *Coordinator) Confirm(ctx context.Context, id string) (domain.CommandRes
 	item.cancel = nil
 	c.mu.Unlock()
 	return result, e
+}
+func (c *Coordinator) runParallel(ctx context.Context, p domain.Proposal) (domain.CommandResult, error) {
+	type outcome struct { result domain.CommandResult; err error }
+	outcomes := make([]outcome, len(p.Targets))
+	var wg sync.WaitGroup
+	for i, ref := range p.Targets {
+		wg.Add(1)
+		go func(index int, target domain.ConnectionRef) {
+			defer wg.Done()
+			outcomes[index].result, outcomes[index].err = c.run(ctx, target, p.Command, p.Cwd, time.Duration(p.TimeoutSeconds)*time.Second)
+		}(i, ref)
+	}
+	wg.Wait()
+	result := domain.CommandResult{Status: "completed", TargetResults: make([]domain.TargetCommandResult, 0, len(p.Targets))}
+	var output strings.Builder
+	var firstErr error
+	for i, ref := range p.Targets {
+		out := outcomes[i]
+		if out.err != nil && firstErr == nil { firstErr = out.err }
+		if out.result.Status == "unknown" || out.result.Status == "" { result.Status = "unknown" } else if out.result.Status != "completed" && result.Status == "completed" { result.Status = "failed" }
+		result.TargetResults = append(result.TargetResults, domain.TargetCommandResult{Ref: ref, Result: out.result})
+		output.WriteString(fmt.Sprintf("Target tab_id=%s status=%s exit=%v\n", ref.TabID, out.result.Status, out.result.ExitCode))
+		output.WriteString("stdout:\n" + out.result.Stdout + "\nstderr:\n" + out.result.Stderr + "\n")
+		result.Truncated = result.Truncated || out.result.Truncated
+		if out.result.DurationMillis > result.DurationMillis { result.DurationMillis = out.result.DurationMillis }
+	}
+	result.Stdout = output.String()
+	return result, firstErr
 }
 func (c *Coordinator) Cancel(id string) error { _, e := c.CancelWithState(id); return e }
 func (c *Coordinator) CancelWithState(id string) (bool, error) {
@@ -150,7 +222,7 @@ func (c *Coordinator) Invalidate(ref domain.ConnectionRef) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, item := range c.items {
-		if item.proposal.Ref == ref {
+		if proposalContains(item.proposal, ref) {
 			if item.cancel != nil {
 				item.cancel()
 			} else if item.proposal.Status == "awaiting_confirmation" {
@@ -163,7 +235,7 @@ func (c *Coordinator) Forget(tab string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for id, item := range c.items {
-		if item.proposal.Ref.TabID == tab {
+		if proposalUsesTab(item.proposal, tab) {
 			if item.cancel != nil {
 				item.cancel()
 			}
@@ -172,6 +244,10 @@ func (c *Coordinator) Forget(tab string) {
 	}
 }
 
+func proposalUsesTab(p domain.Proposal, tab string) bool {
+	for _, ref := range proposalTargets(p) { if ref.TabID == tab { return true } }
+	return false
+}
 func (c *Coordinator) Revise(id, command, cwd string, seconds int) (domain.Proposal, error) {
 	if seconds < 1 || seconds > 600 {
 		return domain.Proposal{}, apperror.New("timeoutMustBeBetween1And600Seconds", nil)
@@ -179,7 +255,7 @@ func (c *Coordinator) Revise(id, command, cwd string, seconds int) (domain.Propo
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	item := c.items[id]
-	if item == nil || item.proposal.Status != "awaiting_confirmation" {
+	if item == nil || item.proposal.Status != "awaiting_confirmation" || len(item.proposal.Targets) > 0 {
 		return domain.Proposal{}, apperror.New("proposalCannotBeEdited", nil)
 	}
 	if e := validate(command, item.proposal.Purpose, cwd); e != nil {
