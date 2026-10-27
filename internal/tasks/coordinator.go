@@ -15,6 +15,7 @@ import (
 
 type RunFunc func(context.Context, domain.ConnectionRef, string, string, time.Duration) (domain.CommandResult, error)
 type ToolInput struct {
+	TargetID string `json:"target_id,omitempty"`
 	Command string `json:"command"`
 	Purpose string `json:"purpose"`
 	Cwd     string `json:"cwd"`
