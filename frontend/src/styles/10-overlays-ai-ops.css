@@ -1,0 +1,113 @@
+/* Shared Fluent-inspired native modal surface. */
+.modal-surface {
+  margin: auto;
+  padding: 0;
+  color: var(--text-primary);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 24px 72px #0006, 0 2px 12px #0002;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+}
+.modal-surface:not([open]) { display: none !important; }
+.modal-surface::backdrop {
+  background: var(--overlay);
+  backdrop-filter: blur(3px);
+}
+.modal-surface[open] {
+  animation: modal-appear 140ms ease-out;
+}
+@keyframes modal-appear {
+  from { opacity: 0; transform: translateY(5px) scale(.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-surface[open] { animation: none; }
+}
+.modal-surface button:focus-visible,
+.modal-surface input:focus-visible,
+.modal-surface select:focus-visible,
+.modal-surface textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.app-dialog {
+  width: min(420px, calc(100vw - 32px));
+  overflow: hidden;
+}
+.app-dialog form {
+  display: flex;
+  flex-direction: column;
+  max-height: min(85vh, 680px);
+  padding: 0;
+}
+.app-dialog__header {
+  flex: none;
+  padding: 22px 22px 0;
+}
+.app-dialog__body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 22px;
+  overscroll-behavior: contain;
+}
+.app-dialog__actions {
+  flex: none;
+  padding: 18px 22px 22px;
+  margin: 0;
+}
+.app-dialog__description { margin-top: 14px; }
+.app-dialog__field { margin-top: 18px; }
+.app-dialog__preview { margin-top: 16px; margin-bottom: 4px; }
+.app-dialog__actions button {
+  min-height: 35px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+.app-dialog__primary--danger:focus-visible { outline-color: var(--danger); }
+/* Keep long editor and picker content scrollable under fixed chrome. */
+.modal-surface.settings-dialog--settings,
+.modal-surface.quick-manager,
+.modal-surface.xshell-import-dialog { overflow: hidden; }
+
+/* AI task scope: display every authorized connected SSH session. */
+.ai-target-picker { padding: 8px 12px 5px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.ai-target-picker__label { font-size: 11px; color: var(--text-muted); }
+.ai-target-picker__chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ai-target-chip { padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-target-chip.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.ai-target-chip:disabled { opacity: .55; cursor: not-allowed; }
+.ai-target-picker > small { font-size: 10px; color: var(--text-muted); }
+
+.ai-parallel-results { display: flex; flex-direction: column; gap: 8px; }
+.ai-parallel-result { border: 1px solid var(--border); border-radius: 6px; padding: 7px; min-width: 0; }
+.ai-parallel-result strong { display: block; font-size: 11px; }
+.ai-parallel-result > span { font-size: 10px; color: var(--text-muted); }
+
+/* High-risk AI operation plans: explicit user preflight acknowledgement. */
+.ops-plan { border: 1px solid var(--warning); border-radius: 7px; padding: 9px; margin: 6px 0; font-size: 11px; }
+.ops-plan > strong { display: block; color: var(--warning); }
+.ops-plan__steps { margin: 6px 0; padding-left: 20px; }
+.ops-plan__steps li { padding: 2px 0; }
+.ops-plan__ack { display: flex; gap: 7px; align-items: flex-start; font-size: 11px; line-height: 1.5; }
+.ops-plan__ack input { width: auto; flex: 0 0 auto; margin: 2px 0 0; }
+.ops-verification-pending { border-left: 2px solid var(--warning); margin: 5px 0; padding: 3px 8px; color: var(--text-secondary); font-size: 11px; }
+.ops-plan__checks { margin: 3px 0 3px; padding-left: 17px; color: var(--text-secondary); }
+
+/* Durable AI operations are read-only UI; no replay action is exposed. */
+.ops-timeline { margin: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 11px; }
+.ops-timeline > summary { cursor: pointer; padding: 9px 11px; color: var(--text-secondary); font-weight: 600; }
+.ops-timeline__items { max-height: 230px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; padding: 3px 9px 9px; }
+.ops-timeline__item { border-top: 1px solid var(--border); padding: 7px 2px 4px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ops-timeline__head { display: flex; gap: 8px; justify-content: space-between; align-items: start; }
+.ops-timeline__item code { overflow-wrap: anywhere; font-size: 10px; }
+.ops-timeline__details { font-size: 10px; color: var(--text-secondary); }
+.ops-timeline__warning { color: var(--warning); }
+
+/* Fixed-command server probes are informative, never proof of deploy readiness. */
+.ops-preflight { margin: 8px 0; display: flex; align-items: flex-start; gap: 6px; flex-direction: column; }
+.ops-preflight > button { padding: 5px 9px; font-size: 11px; }
+.ops-preflight__results { display: flex; flex-direction: column; gap: 3px; padding: 7px 9px; background: var(--raised); border: 1px solid var(--border); border-radius: 6px; width: 100%; font-size: 11px; }
+.ops-preflight__results > div { overflow-wrap: anywhere; }
+.ops-preflight__results small { color: var(--text-secondary); }
