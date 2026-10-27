@@ -14,10 +14,12 @@ function geometry(container: HTMLElement) {
     left: 0, right: 500, top: 0, bottom: 36, width: 500, height: 36,
   } as DOMRect);
   container.querySelectorAll<HTMLElement>(".terminal-tab").forEach((el, i) =>
-    vi.spyOn(el, "getBoundingClientRect").mockReturnValue({
-      left: i * 100, right: (i + 1) * 100, top: 0, bottom: 36,
-      width: 100, height: 36,
-    } as DOMRect));
+    vi.spyOn(el, "getBoundingClientRect").mockImplementation(() => {
+      const match = el.style.transform.match(/translateX\((-?[\d.]+)px\)/);
+      const shift = match ? Number(match[1]) : 0;
+      return { left: i * 100 + shift, right: (i + 1) * 100 + shift,
+        top: 0, bottom: 36, width: 100, height: 36 } as DOMRect;
+    }));
   return strip;
 }
 
