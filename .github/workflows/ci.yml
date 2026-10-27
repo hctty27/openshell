@@ -84,6 +84,11 @@ jobs:
         working-directory: frontend
         continue-on-error: true
         run: npm run audit:unused
+      - name: Audit production code graph with Knip (advisory)
+        if: contains(github.head_ref, 'remove-unused')
+        working-directory: frontend
+        continue-on-error: true
+        run: npx --yes knip@6.43.0 --production
       # ubuntu-24.04 runners already include Google Chrome and OS libraries.
       # Using it avoids the slow apt download from playwright install --with-deps.
       # playwright.config.ts accepts PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH.
