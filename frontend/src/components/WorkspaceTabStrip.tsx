@@ -129,7 +129,7 @@ export default function WorkspaceTabStrip(p: Props) {
       key.preventDefault();
       stop({ pointerId: pointerID } as PointerEvent, true);
     };
-    const onBlur = () => stop(new PointerEvent("pointercancel", { pointerId: pointerID }), true);
+    const onBlur = () => stop({ pointerId: pointerID } as PointerEvent, true);
     const release = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
