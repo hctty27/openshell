@@ -1,0 +1,312 @@
+.settings-dialog,
+.compact-dialog,
+.context-dialog {
+  border: 1px solid var(--border);
+  background: var(--raised);
+  border-radius: 12px;
+  box-shadow: 0 30px 100px #0008;
+  max-height: 94vh;
+  overflow: auto;
+}
+.settings-dialog {
+  width: 560px;
+  display: flex;
+  flex-direction: column;
+}
+.settings-dialog > header,
+.context-dialog > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22px 25px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-dialog h2,
+.compact-dialog h2,
+.context-dialog h2 {
+  font-size: 18px;
+  color: var(--info);
+  font-weight: 500;
+  margin: 8px 0 0;
+}
+.settings-dialog > header > button,
+.context-dialog > header > button {
+  padding: 7px;
+  color: var(--text-muted);
+}
+.settings-body {
+  padding: 20px 25px;
+  overflow: auto;
+}
+.settings-body > label,
+.form-row > label,
+.compact-dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 17px;
+}
+.settings-body label input,
+.settings-body label select {
+  width: 100%;
+  font-size: 12px;
+}
+.form-row {
+  display: flex;
+  gap: 15px;
+}
+.form-row > label {
+  flex: 1;
+  min-width: 0;
+}
+.form-row > .port-field {
+  flex: 0 0 90px;
+}
+.settings-body .checkbox {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+  font-size: 11px;
+}
+.settings-body .checkbox input {
+  width: 14px;
+}
+.form-note {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 11px 12px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 11px;
+  margin-bottom: 20px;
+}
+.input-with-button {
+  display: flex;
+  gap: 6px;
+}
+.input-with-button input {
+  flex: 1;
+}
+.input-with-button button {
+  background: var(--border);
+  width: 38px;
+  flex-shrink: 0;
+}
+.settings-dialog > footer,
+.compact-dialog footer,
+.context-dialog > footer {
+  padding: 17px 25px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.settings-dialog > footer > div {
+  display: flex;
+  gap: 9px;
+}
+.secondary {
+  border: 1px solid var(--border);
+  padding: 9px 13px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-height: 35px;
+}
+.api-presets {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.api-presets > select {
+  flex: 1;
+  font-size: 11px;
+}
+.api-presets > button {
+  width: 31px;
+  border: 1px solid var(--border);
+}
+.muted {
+  color: var(--text-muted);
+}
+.small {
+  font-size: 10px;
+  line-height: 1.75;
+}
+.form-error {
+  color: var(--danger);
+  border: 1px solid var(--danger-border);
+  background: var(--danger-soft);
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.6;
+  margin-top: 14px;
+}
+.form-success {
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  margin-top: 14px;
+}
+.danger-text {
+  color: var(--danger);
+}
+.compact-dialog {
+  width: 440px;
+  padding: 26px;
+}
+.compact-dialog .dialog-icon {
+  color: var(--accent);
+}
+.compact-dialog h2 {
+  margin-top: 15px;
+}
+.compact-dialog > p {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.compact-dialog label {
+  margin-top: 24px;
+}
+.compact-dialog footer {
+  padding: 18px 0 0;
+  border-top: 0;
+  justify-content: end;
+}
+.fingerprint {
+  display: block;
+  word-break: break-all;
+  padding: 12px;
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1.8;
+}
+.context-dialog {
+  width: 650px;
+  padding: 0 24px;
+}
+.context-dialog > header {
+  padding: 22px 0 15px;
+}
+.context-dialog > textarea {
+  width: 100%;
+  height: 340px;
+  font:
+    11px/1.8 Consolas,
+    "Microsoft YaHei",
+    monospace;
+  resize: vertical;
+  margin-top: 6px;
+}
+.context-dialog > footer {
+  padding: 15px 0;
+  justify-content: end;
+  border: 0;
+}
+.toast {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 650px;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  color: var(--info);
+  border-radius: 8px;
+  padding: 13px 15px;
+  box-shadow: 0 8px 40px #0006;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.toast > svg {
+  flex-shrink: 0;
+  color: var(--warning);
+}
+.toast--success > svg {
+  color: var(--accent);
+}
+.toast button {
+  margin-left: 10px;
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 5px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+@media (max-height: 750px) {
+  .ai-welcome {
+    padding-top: 45px;
+  }
+  .workspace-empty {
+    padding-bottom: 40px;
+  }
+  .brand {
+    height: 65px;
+  }
+  .ai-welcome-icon {
+    margin-bottom: 15px;
+  }
+  .suggestions {
+    margin-top: 20px;
+  }
+}
+@media (max-width: 1150px) {
+  .app {
+    --ai-width: 320px !important;
+    --session-width: 200px !important;
+  }
+  .workspace-empty h1 {
+    font-size: 21px;
+  }
+  .welcome-features {
+    gap: 14px;
+  }
+  .session-open strong,
+  .session-open small {
+    max-width: 115px;
+  }
+  .brand {
+    padding: 0 14px;
+  }
+  .ai-conversation {
+    padding-left: 13px;
+    padding-right: 13px;
+  }
+}
+
