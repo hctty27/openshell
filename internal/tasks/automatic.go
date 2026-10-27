@@ -49,7 +49,8 @@ type automaticTask struct {
 	cancel        context.CancelFunc
 	busy, started bool
 	messageID     string
-	seen          map[string]bool
+	seen          map[string]int
+	autoContinue  bool
 }
 type AutomaticRunner struct {
 	mu        sync.Mutex
@@ -85,9 +86,26 @@ func (r *AutomaticRunner) Start(parent context.Context, id string, ref domain.Co
 		}
 	}
 	ctx, cancel := context.WithCancel(parent)
-	r.tasks[id] = &automaticTask{state: AutoSnapshot{ID: id, Ref: ref, Status: "ready", Limit: limit, AllowChanges: allowChanges}, callbacks: cb, ctx: ctx, cancel: cancel, seen: map[string]bool{}}
+	r.tasks[id] = &automaticTask{state: AutoSnapshot{ID: id, Ref: ref, Status: "ready", Limit: limit, AllowChanges: allowChanges}, callbacks: cb, ctx: ctx, cancel: cancel, seen: map[string]int{}}
 	return nil
 }
+// SetAutoContinue enables bounded unattended rounds for newly started tasks.
+func (r *AutomaticRunner) SetAutoContinue(id string, enabled bool) error {
+    t := r.get(id)
+    if t == nil {
+        return apperror.New("automaticTaskNotFound", nil)
+    }
+    t.mu.Lock()
+    defer t.mu.Unlock()
+    if t.busy || t.state.Status != "ready" {
+        return apperror.New("taskIsRunningOrHasAlreadyEnded", nil)
+    }
+    t.autoContinue = enabled
+    return nil
+}
+
+const maxUnattendedCommands = 200
+
 func autoTerminal(status string) bool {
 	return status == "completed" || status == "stopped" || status == "error"
 }
@@ -260,8 +278,15 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 			s = t.snapshot()
 		}
 		if s.RoundSteps >= s.Limit {
-			return t.finish("limit", "roundLimit"), nil
-		}
+            if !t.autoContinue || s.Steps >= maxUnattendedCommands {
+                return t.finish("limit", "roundLimit"), nil
+            }
+            t.mu.Lock()
+            t.state.RoundSteps = 0
+            t.mu.Unlock()
+            t.emit("state", "", nil)
+            s = t.snapshot()
+        }
 		p := *s.Proposal
 		signature := p.Ref.TabID + "\x00" + p.Cwd + "\x00" + strings.TrimSpace(p.Command)
 		reason := ""
@@ -270,9 +295,13 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
         } else if ops.Analyze(p.Command, IsInspectionCommand(p.Command)).RequiresConfirmation {
             reason = "criticalChangeConfirmation"
         }
-		if t.seen[signature] {
-			reason = "repeatedCommand"
-		}
+		if t.seen[signature] > 0 {
+            if !t.autoContinue || !IsInspectionCommand(p.Command) {
+                reason = "repeatedCommand"
+            } else if t.seen[signature] >= 3 {
+                return t.finish("stopped", "repeatedInspectionNoProgress"), nil
+            }
+        }
 		if reason != "" && approvedID != p.ID {
 			return t.finish("awaiting_confirmation", reason), nil
 		}
@@ -285,7 +314,7 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 		}
 		t.state.Steps++
 		t.state.RoundSteps++
-		t.seen[signature] = true
+		t.seen[signature]++
 		t.mu.Unlock()
 		t.emit("executing", "", nil)
 		result, err := t.callbacks.Execute(t.ctx, p)
@@ -330,7 +359,8 @@ var automaticReasons = map[string]string{
 	"roundLimit":             "Round limit reached. Continue when ready.",
 	"inspectionConfirmation": "Unrecognized inspection command. Confirmation required.",
     "criticalChangeConfirmation": "High-risk change. Review the preflight checklist and confirm explicitly.",
-	"repeatedCommand":        "Repeated command. Confirmation required.",
+	"repeatedCommand":        "Repeated change. Confirmation required.",
+    "repeatedInspectionNoProgress": "Repeated inspection made no progress; automatic task stopped.",
 	"remoteResultUnknown":    "Remote result unconfirmed. Automatic task stopped.",
 }
 
