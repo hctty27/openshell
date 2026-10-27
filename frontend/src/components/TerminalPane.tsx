@@ -35,7 +35,6 @@ interface Props {
   terminalTheme?: TerminalTheme;
   autoCopySelection: boolean;
   rightClickPaste: boolean;
-  middleClickPaste?: boolean;
   logHighlights?: boolean;
   confirmMultilinePaste: boolean;
   onNotice(text: unknown): void;
@@ -218,13 +217,9 @@ export default function TerminalPane(p: Props) {
       if (callbacks.current.visible ?? callbacks.current.active) callbacks.current.onActivate?.();
       // Clipboard gestures take priority over TUI mouse reporting when enabled.
       // Capture the button press before xterm.js sends it to the remote app.
-      if (callbacks.current.active && !event.altKey && (
-        (event.button === 1 && callbacks.current.middleClickPaste) ||
-        (event.button === 2 && callbacks.current.rightClickPaste)
-      )) {
+      if (callbacks.current.active && !event.altKey && event.button === 2 && callbacks.current.rightClickPaste) {
         event.preventDefault();
         event.stopPropagation();
-        if (event.button === 1) void pasteFromClipboard();
         return;
       }
       selectingWithMouse =
@@ -235,10 +230,8 @@ export default function TerminalPane(p: Props) {
     const onMouseUp = (event: MouseEvent) => {
       // xterm.js can listen for mouseup on document while mouse tracking is on.
       // Suppress the release corresponding to a clipboard gesture as well.
-      if (callbacks.current.active && !event.altKey && paneElement.contains(event.target as Node) && (
-        (event.button === 1 && callbacks.current.middleClickPaste) ||
-        (event.button === 2 && callbacks.current.rightClickPaste)
-      )) {
+      if (callbacks.current.active && !event.altKey && paneElement.contains(event.target as Node) &&
+        event.button === 2 && callbacks.current.rightClickPaste) {
         event.preventDefault();
         event.stopPropagation();
         return;
@@ -341,15 +334,7 @@ export default function TerminalPane(p: Props) {
       event.stopPropagation();
       void pasteFromClipboard();
     };
-    const onAuxClick = (event: MouseEvent) => {
-      if (
-        event.button === 1 && callbacks.current.middleClickPaste &&
-        callbacks.current.active && !event.altKey &&
-        !(event.target as HTMLElement).closest(".terminal-find, .terminal-transfer-indicator")
-      ) event.preventDefault();
-    };
     paneElement.addEventListener("mousedown", onMouseDown, true);
-    paneElement.addEventListener("auxclick", onAuxClick, true);
     document.addEventListener("mouseup", onMouseUp, true);
     paneElement.addEventListener("contextmenu", onContextMenu, true);
     let resizeScheduled = false;
@@ -416,7 +401,6 @@ export default function TerminalPane(p: Props) {
       off();
       if (local) void api.CloseLocalTerminal(p.tab.id, localID).catch(() => {});
       paneElement.removeEventListener("mousedown", onMouseDown, true);
-      paneElement.removeEventListener("auxclick", onAuxClick, true);
       document.removeEventListener("mouseup", onMouseUp, true);
       paneElement.removeEventListener("contextmenu", onContextMenu, true);
       input.dispose();
