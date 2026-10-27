@@ -59,7 +59,7 @@ export default function AISidebar(p: Props) {
   useTranslation();
   const [input, setInput] = useState("");
   const [modes, setModes] = useState<Record<string, ChatMode>>({});
-  const selectedMode = modes[p.tab?.id ?? ""] ?? "confirm";
+  const selectedMode = modes[p.tab?.id ?? ""] ?? "auto";
   const end = useRef<HTMLDivElement>(null);
   const profile = p.profiles.find((v) => v.id === p.profileID);
   const run = p.tab?.memoryRun;

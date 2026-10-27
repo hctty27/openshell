@@ -247,6 +247,8 @@ func TestAutomaticSSHLoopBudgetAndToolHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.SavePreference("autoCommandLimit", "1")
+	// This test covers the legacy explicit-extension path rather than the new unattended default.
+	a.SavePreference("autoContinueRounds", "false")
 	count := sshServer.Count()
 	state, err := a.StartAutomatic(ChatRequest{Ref: connected.Ref, ProfileID: profile.ID, Text: "检查服务器"}, "auto-task")
 	if err != nil || state.Status != "limit" || state.Steps != 1 || sshServer.Count() != count+1 {

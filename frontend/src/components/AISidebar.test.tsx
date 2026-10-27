@@ -92,7 +92,7 @@ test("automatic mode sends an automatic task and stays per tab", () => {
   expect(p.onSend).toHaveBeenCalledWith("检查磁盘", "auto", "");
   rerender(<AISidebar {...p} tab={{ ...p.tab!, id: "two" }} />);
   expect((screen.getByLabelText("AI 模式") as HTMLSelectElement).value).toBe(
-    "confirm",
+    "auto",
   );
 });
 

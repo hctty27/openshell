@@ -223,7 +223,7 @@ test("automatic execution settings save bounded limit and scope", async () => {
   fireEvent.click(screen.getByRole("button", { name: "自动执行" }));
   expect(
     (screen.getByLabelText("每轮命令上限") as HTMLInputElement).value,
-  ).toBe("10");
+  ).toBe("50");
   fireEvent.change(screen.getByLabelText("每轮命令上限"), {
     target: { value: "3" },
   });
@@ -234,6 +234,7 @@ test("automatic execution settings save bounded limit and scope", async () => {
   await waitFor(() => {
     expect(api.SavePreference).toHaveBeenCalledWith("autoCommandLimit", "3");
     expect(api.SavePreference).toHaveBeenCalledWith("autoAllowChanges", "true");
+    expect(api.SavePreference).toHaveBeenCalledWith("autoContinueRounds", "true");
   });
 });
 

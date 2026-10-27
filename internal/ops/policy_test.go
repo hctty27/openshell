@@ -34,3 +34,44 @@ func TestRiskAssessmentFailsClosed(t *testing.T) {
         })
     }
 }
+
+func TestRoutineOperationAllowlist(t *testing.T) {
+    tests := []struct {
+        command string
+        risk string
+    }{
+        {"mkdir -p /home/server/docker/myapp", "low"},
+        {"mkdir -p /opt/myapp/logs", "low"},
+        {"systemctl restart myapp", "low"},
+        {"supervisorctl restart myapp", "low"},
+        {"docker compose pull myapp", "low"},
+        {"docker compose up -d myapp", "low"},
+        {"systemctl restart sshd", "high"},
+        {"systemctl restart redis", "high"},
+        {"systemctl restart mysql@production.service", "high"},
+        {"docker compose up -d database", "high"},
+        {"supervisorctl stop all", "high"},
+        {"docker compose up -d", "high"},
+        {"docker compose pull", "high"},
+        {"docker compose up -d --remove-orphans myapp", "high"},
+        {"systemctl restart --help", "high"},
+        {"systemctl restart $(touch /tmp/unsafe)", "high"},
+        {"systemctl restart myapp; rm -rf /", "high"},
+        {"systemctl restart myapp > /tmp/output", "high"},
+        {"mkdir -p /etc/myapp", "high"},
+        {"mkdir -p /home/server/../etc", "high"},
+        {"docker compose up -d myapp && rm -rf /", "high"},
+        {"sh -c 'systemctl restart myapp'", "high"},
+    }
+    for _, tc := range tests {
+        t.Run(tc.command, func(t *testing.T) {
+            plan := Analyze(tc.command, false)
+            if plan.Risk != tc.risk {
+                t.Fatalf("command %q: expected risk %q, got %+v", tc.command, tc.risk, plan)
+            }
+            if plan.RequiresConfirmation != (tc.risk == "high") {
+                t.Fatalf("command %q: incorrect confirmation flag %+v", tc.command, plan)
+            }
+        })
+    }
+}

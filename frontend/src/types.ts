@@ -191,6 +191,7 @@ export interface AppState {
   language?: import("./i18n/languages").Language;
   autoCommandLimit?: number;
   autoAllowChanges?: boolean;
+  autoContinueRounds?: boolean;
   quickCommands?: QuickCommand[];
   quickCommandLayout?: QuickCommandLayout;
   autoCopySelection?: boolean;
