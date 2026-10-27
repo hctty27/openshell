@@ -1,5 +1,5 @@
 import packageManifest from "../package.json";
-import { reasonText, decodeAppError } from "./i18n/errors";
+import { reasonText } from "./i18n/errors";
 import { message, renderMessage, type DisplayText } from "./i18n/message";
 import { t as tr } from "./i18n";
 import { useTranslation } from "react-i18next";
@@ -63,6 +63,7 @@ import ZmodemFilePicker from "./components/ZmodemFilePicker";
 import AISidebar from "./components/AISidebar";
 import { useConversations } from "./useConversations";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
+import { useAutoReconnect } from "./features/sessions/useAutoReconnect";
 import { useSplitWorkspace } from "./features/terminal/useSplitWorkspace";
 import { useTabSplitDrop } from "./features/terminal/useTabSplitDrop";
 import { useTransferActivity } from "./features/transfers/useTransferActivity";
@@ -225,23 +226,12 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const remoteUploadDirs = useRef<Record<string, string>>({});
   const streamIDs = useRef<Record<string, string>>({});
   const selections = useRef<Record<string, string>>({});
-  const reconnectTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const reconnectInFlight = useRef(new Set<string>());
   const disconnectInFlight = useRef(new Set<string>());
   const [disconnectingTabs, setDisconnectingTabs] = useState<string[]>([]);
   const autoReconnectRef = useRef(state.autoReconnect !== false);
   autoReconnectRef.current = state.autoReconnect !== false;
   const showDisconnectReasonRef = useRef(state.showDisconnectReason !== false);
   showDisconnectReasonRef.current = state.showDisconnectReason !== false;
-  const stopRetryTimer = (tabID: string) => {
-    const timer = reconnectTimers.current.get(tabID);
-    if (timer !== undefined) clearTimeout(timer);
-    reconnectTimers.current.delete(tabID);
-  };
-  useEffect(() => () => {
-    for (const timer of reconnectTimers.current.values()) clearTimeout(timer);
-    reconnectTimers.current.clear();
-  }, []);
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 5000);
@@ -704,74 +694,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
       setLogin({ tab, secret: "" });
     else setTimeout(() => connect(tab), 0);
   };
-  useEffect(() => {
-    const enabled = state.autoReconnect !== false;
-    for (const tab of tabs) {
-      if (tab.status === "reconnecting" && !enabled) {
-        stopRetryTimer(tab.id);
-        update(tab.id, t => ({ ...t, status: "disconnected", error: message("common:reconnectStopped") }));
-        continue;
-      }
-      if (tab.status !== "reconnecting" || tab.manualDisconnected) {
-        stopRetryTimer(tab.id);
-        continue;
-      }
-      if (reconnectTimers.current.has(tab.id) || reconnectInFlight.current.has(tab.id)) continue;
-      const nextAttempt = (tab.retryCount ?? 0) + 1;
-      const limit = state.maxReconnectAttempts ?? 10;
-      if (limit > 0 && nextAttempt > limit) {
-        update(tab.id, t => ({ ...t, status: "disconnected", error: message("common:reconnectStopped") }));
-        continue;
-      }
-      const expectedGeneration = tab.ref?.generation;
-      const intervals = [1000, 2000, 5000, 10000, 20000, 30000];
-      const timer = setTimeout(async () => {
-        reconnectTimers.current.delete(tab.id);
-        const current = tabsRef.current.find(t => t.id === tab.id);
-        if (!current || current.status !== "reconnecting" ||
-            current.manualDisconnected || current.ref?.generation !== expectedGeneration) return;
-        reconnectInFlight.current.add(tab.id);
-        try {
-          const result = await api.Reconnect(tab.id, tab.session.id);
-          const latest = tabsRef.current.find(t => t.id === tab.id);
-          if (!latest || latest.manualDisconnected || latest.status !== "reconnecting") {
-            await api.Disconnect(result.ref).catch(() => {});
-            return;
-          }
-          if (result.challenge) {
-            update(tab.id, t => ({ ...t, status: "disconnected", error: message("common:reconnectStopped") }));
-            setChallenge({ host: result.challenge, tab: latest, secret: "" });
-            return;
-          }
-          update(tab.id, t => ({
-            ...t, ref: result.ref, conversationID: result.conversationId,
-            status: "connected", everConnected: true, home: result.home, cwd: result.home,
-            retryCount: 0, error: "", manualDisconnected: false,
-          }));
-          if (result.conversationId) await memory.restore(result.ref, result.conversationId);
-        } catch (error) {
-          const code = decodeAppError(error)?.code;
-          const authenticationErrors = new Set([
-            "sshAuthentication", "couldNotReadLoginCredentialsEnterThemAgain",
-            "fingerprintChanged", "fingerprintFirst",
-            "privateKeyInvalid", "privateKeyRead",
-          ]);
-          const requiresAuthentication = (code !== undefined && authenticationErrors.has(code)) ||
-            /authenticat|credential|password|passphrase|fingerprint|private.key/i.test(String(error));
-          update(tab.id, t => t.status !== "reconnecting" || t.manualDisconnected ? t : ({
-            ...t, status: requiresAuthentication ? "disconnected" : "reconnecting",
-            retryCount: nextAttempt, error,
-          }));
-        } finally {
-          reconnectInFlight.current.delete(tab.id);
-        }
-      }, intervals[Math.min(nextAttempt - 1, intervals.length - 1)]);
-      reconnectTimers.current.set(tab.id, timer);
-    }
-    for (const [tabID] of reconnectTimers.current) {
-      if (!tabs.some(t => t.id === tabID && t.status === "reconnecting" && !t.manualDisconnected)) stopRetryTimer(tabID);
-    }
-  }, [tabs, state.autoReconnect, state.maxReconnectAttempts]);
+  const { stopRetryTimer } = useAutoReconnect({
+    tabs,
+    tabsRef,
+    update,
+    enabled: state.autoReconnect !== false,
+    maxReconnectAttempts: state.maxReconnectAttempts ?? 10,
+    onChallenge: (host, tab) => setChallenge({ host, tab, secret: "" }),
+    restoreConversation: memory.restore,
+  });
   const autoClosingTabs = useRef(new Set<string>());
   useEffect(() => {
     if ((state.disconnectBehavior ?? "local") !== "close") {
