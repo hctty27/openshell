@@ -120,7 +120,7 @@
   "opsPreflightProbePassed": "Basic probes completed; review operational prerequisites separately",
   "opsPreflightProbeFailed": "One or more required probes failed; investigate before executing",
   "opsProbeConnection": "SSH connection",
-  "opsProbeIdentity": "Host identity",
+  "opsProbeIdentity": "Hostname query",
   "opsProbeCapacity": "Disk capacity information",
   "opsProbePassed": "Passed",
   "opsProbeFailed": "Failed",
