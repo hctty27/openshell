@@ -251,6 +251,7 @@ export default function AISidebar(p: Props) {
                         <section key={item.ref.tabId} className="ai-parallel-result">
                           <strong>{target ? `${target.session.name} · ${target.session.host}` : item.ref.tabId}</strong>
                           <span>{item.result.status} {item.result.exitCode !== null ? `(${item.result.exitCode})` : ""}</span>
+                          {item.result.reason && <span>{item.result.reason}</span>}
                           <pre className="result-output">{item.result.stdout || t("ai:noStandardOutput")}{item.result.stderr && `\n[stderr]\n${item.result.stderr}`}</pre>
                         </section>
                       );
