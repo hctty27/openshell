@@ -113,5 +113,17 @@
   "opsStepUnknown": "结果未知",
   "opsStepCancelled": "已取消",
   "opsStepSuperseded": "已修改提案",
-  "opsStepExpired": "重启后提案已失效"
+  "opsStepExpired": "重启后提案已失效",
+  "opsPreflightRun": "检查服务器（只读）",
+  "opsPreflightChecking": "正在检查…",
+  "opsPreflightError": "检查未完成，请确认 SSH 连接及任务状态",
+  "opsPreflightProbePassed": "基础探针完成，仍需人工核实业务条件",
+  "opsPreflightProbeFailed": "部分必需探针失败，请检查后再操作",
+  "opsProbeConnection": "SSH 连接",
+  "opsProbeIdentity": "主机名查询",
+  "opsProbeCapacity": "磁盘容量信息",
+  "opsProbePassed": "通过",
+  "opsProbeFailed": "失败",
+  "opsProbeWarning": "无法确认",
+  "opsProbeNotApproval": "探针不能验证备份、配置正确性或回滚条件，不能替代人工批准。"
 }

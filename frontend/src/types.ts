@@ -45,6 +45,17 @@ export interface APIProfile {
   secretRef: string;
   toolsEnabled: boolean;
 }
+export interface PreflightCheck {
+  ref: Ref;
+  key: "connection" | "identity" | "capacity";
+  status: "passed" | "failed" | "warning";
+}
+export interface PreflightReport {
+  proposalId: string;
+  checkedAt: string;
+  ready: boolean;
+  checks: PreflightCheck[];
+}
 export interface OperationStep {
   id: string;
   conversationId: string;

@@ -113,5 +113,17 @@
   "opsStepUnknown": "Unknown outcome",
   "opsStepCancelled": "Cancelled",
   "opsStepSuperseded": "Proposal revised",
-  "opsStepExpired": "Proposal expired after restart"
+  "opsStepExpired": "Proposal expired after restart",
+  "opsPreflightRun": "Inspect server (read-only)",
+  "opsPreflightChecking": "Inspecting…",
+  "opsPreflightError": "Inspection did not finish. Verify SSH connection and task state.",
+  "opsPreflightProbePassed": "Basic probes completed; review operational prerequisites separately",
+  "opsPreflightProbeFailed": "One or more required probes failed; investigate before executing",
+  "opsProbeConnection": "SSH connection",
+  "opsProbeIdentity": "Hostname query",
+  "opsProbeCapacity": "Disk capacity information",
+  "opsProbePassed": "Passed",
+  "opsProbeFailed": "Failed",
+  "opsProbeWarning": "Not verified",
+  "opsProbeNotApproval": "These probes do not validate backups, configuration, or rollback readiness, and are not operational approval."
 }

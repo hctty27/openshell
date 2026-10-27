@@ -1238,6 +1238,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
     if (mode === "auto") return startAutomatic(active, text, context);
     return chat(active, text, mode !== "chat", context);
   };
+  const inspectPreflight = async () => {
+    if (!active?.ref || !active.proposal) throw new Error("No pending command");
+    return api.InspectProposalPreflight(active.ref, active.proposal.id);
+  };
   const confirmCommand = async () => {
     if (active?.autoRun?.status === "awaiting_confirmation")
       return resumeAutomatic(false);
@@ -1841,6 +1845,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
             onClearContext={() =>
               active && setAttachments({ ...attachments, [active.id]: "" })
             }
+            onPreflight={inspectPreflight}
             onConfirm={confirmCommand}
             onCancel={cancelCommand}
             onRevise={async (command, cwd, seconds) => {

@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { t } from "../i18n";
 import { useState } from "react";
 import { Play, Square, ShieldCheck, Check, Clock, Code2 } from "lucide-react";
-import type { Proposal } from "../types";
+import type { Proposal, PreflightReport } from "../types";
 interface Props {
   proposal: Proposal;
   host: string;
@@ -11,6 +11,7 @@ interface Props {
   executing: boolean;
   readOnly?: boolean;
   confirmDisabled?: boolean;
+  onPreflight?(): Promise<PreflightReport>;
   onConfirm(): void;
   onCancel(): void;
   onRevise(command: string, cwd: string, seconds: number): Promise<void>;
@@ -23,6 +24,24 @@ export default function CommandProposal(p: Props) {
   const parallel = !!p.proposal.targets?.length;
   const [preflightAcknowledged, setPreflightAcknowledged] = useState(false);
   const highRisk = p.proposal.plan?.risk === "high";
+  const [preflight, setPreflight] = useState<PreflightReport | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState(false);
+  const inspect = async () => {
+    if (!p.onPreflight || checking || p.executing) return;
+    setChecking(true);
+    setCheckError(false);
+    setPreflight(null);
+    try {
+      const report = await p.onPreflight();
+      if (report.proposalId === p.proposal.id) setPreflight(report);
+      else setCheckError(true);
+    } catch {
+      setCheckError(true);
+    } finally {
+      setChecking(false);
+    }
+  };
   const dirty =
     command !== p.proposal.command ||
     cwd !== p.proposal.cwd ||
@@ -65,6 +84,32 @@ export default function CommandProposal(p: Props) {
             <li>{t("ai:opsStepExecute")}</li>
             {p.proposal.plan.verificationRequired && <li>{t("ai:opsStepVerify")}</li>}
           </ol>
+          {highRisk && p.onPreflight && (
+            <div className="ops-preflight">
+              <button type="button" className="secondary" disabled={checking || p.executing}
+                onClick={() => void inspect()}>
+                {checking ? t("ai:opsPreflightChecking") : t("ai:opsPreflightRun")}
+              </button>
+              {checkError && <span role="alert">{t("ai:opsPreflightError")}</span>}
+              {preflight && (
+                <div role="status" className="ops-preflight__results">
+                  <strong>{preflight.ready ? t("ai:opsPreflightProbePassed") : t("ai:opsPreflightProbeFailed")}</strong>
+                  {preflight.checks.map((check, i) => (
+                    <div key={check.ref.tabId + check.key + i}>
+                      {p.targetNames?.[check.ref.tabId] ?? check.ref.tabId}
+                      {" · "}{check.key === "connection" ? t("ai:opsProbeConnection")
+                        : check.key === "identity" ? t("ai:opsProbeIdentity")
+                        : t("ai:opsProbeCapacity")}
+                      {" · "}{check.status === "passed" ? t("ai:opsProbePassed")
+                        : check.status === "warning" ? t("ai:opsProbeWarning")
+                        : t("ai:opsProbeFailed")}
+                    </div>
+                  ))}
+                  <small>{t("ai:opsProbeNotApproval")}</small>
+                </div>
+              )}
+            </div>
+          )}
           {highRisk && (
             <label className="ops-plan__ack">
               <input type="checkbox" checked={preflightAcknowledged}

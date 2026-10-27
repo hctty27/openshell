@@ -449,3 +449,30 @@ func TestOperationsTimelineTracksRevisionAndRejection(t *testing.T) {
     steps, err = a.ListOperationSteps(owner.Ref, owner.ConversationID)
     if err != nil || steps[0].Status!="cancelled" || remote.Count()!=count { t.Fatalf("rejected command ran: %+v %v",steps,err) }
 }
+
+func TestReadOnlyPreflightRequiresProposalOwnershipAndDoesNotRunProposedCommand(t *testing.T) {
+    a, _, owner, observer, profile, remote := memoryFixture(t, true)
+    reply, err := a.Chat(ChatRequest{Ref:owner.Ref, ProfileID:profile.ID, Text:"inspect", Operate:true})
+    if err!=nil || reply.Proposal==nil { t.Fatal(reply,err) }
+    before:=remote.Count()
+    if _,err=a.InspectProposalPreflight(observer.Ref,reply.Proposal.ID); err==nil {
+        t.Fatal("unowned tab may run proposal preflight")
+    }
+    if remote.Count()!=before { t.Fatal("observer caused a remote command") }
+    report,err:=a.InspectProposalPreflight(owner.Ref,reply.Proposal.ID)
+    if err!=nil || !report.Ready || report.ProposalID!=reply.Proposal.ID || len(report.Checks)!=3 {
+        t.Fatalf("unexpected preflight: %+v %v",report,err)
+    }
+    if remote.Count()!=before+2 { t.Fatal("preflight did not perform two exact probes") }
+    // The fixture's proposer produces 'printf MEMORY'. Verify it was not run
+    // by the preflight endpoint or copied into its redacted report.
+    for _,cmd:=range remote.Commands[before:] {
+        if strings.Contains(cmd,"MEMORY") || (!strings.Contains(cmd,"hostname") && !strings.Contains(cmd,"df -Pk /")) {
+            t.Fatalf("preflight ran a non-probe command: %q",cmd)
+        }
+    }
+    if err=a.CancelCommand(owner.Ref,reply.Proposal.ID); err!=nil { t.Fatal(err) }
+    if _,err=a.InspectProposalPreflight(owner.Ref,reply.Proposal.ID); err==nil {
+        t.Fatal("cancelled proposal may be probed")
+    }
+}
