@@ -193,6 +193,7 @@ export interface ConnectResult {
 export interface ChatRequest {
   requestId?: string;
   ref: Ref;
+  targets?: Ref[];
   profileId: string;
   text: string;
   context: string;
