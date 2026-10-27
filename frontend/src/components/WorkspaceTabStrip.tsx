@@ -114,9 +114,12 @@ export default function WorkspaceTabStrip(p: Props) {
         if (inside) {
           const tabs = Array.from(strip?.querySelectorAll<HTMLElement>(".terminal-tab") ?? []);
           const rightEdge = tabs.length ? tabs[tabs.length - 1].getBoundingClientRect().right : bounds.left;
-          if (up.clientX > rightEdge + 8) p.onDropOnStrip?.(tabID);
-          const move = reorderFromInsertion(p.tabs.map(tab => tab.id), tabID, insertionAt(tabID, up.clientX));
-          if (move) p.onReorder(tabID, move.targetID, move.placement);
+          if (up.clientX > rightEdge + 8) {
+            p.onDropOnStrip?.(tabID);
+          } else {
+            const move = reorderFromInsertion(p.tabs.map(tab => tab.id), tabID, insertionAt(tabID, up.clientX));
+            if (move) p.onReorder(tabID, move.targetID, move.placement);
+          }
         } else {
           p.onTabPointerDrop?.(tabID, up.clientX, up.clientY);
         }
