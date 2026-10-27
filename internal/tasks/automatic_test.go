@@ -255,3 +255,26 @@ func TestAutomaticAutoContinueStopsRepeatedInspectionLoop(t *testing.T) {
         t.Fatalf("unexpected loop guard behavior: %+v err=%v executed=%d models=%d", snapshot, err, executed, models)
     }
 }
+
+func TestAutomaticTotalCapIsEnforcedOnEveryCommand(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    executed := 0
+    if err := r.Start(context.Background(), "budget", ref, 90, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            return AutoReply{Proposal: &domain.Proposal{
+                ID: domain.NewID(), Ref: ref, Command: "pwd", Cwd: "/tmp/" + domain.NewID(),
+            }}, nil
+        },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            executed++
+            return domain.CommandResult{Status: "completed"}, nil
+        },
+    }); err != nil { t.Fatal(err) }
+    if err := r.SetAutoContinue("budget", true); err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("budget", "", false)
+    if err != nil || snapshot.Status != "limit" || snapshot.Steps != maxUnattendedCommands || executed != maxUnattendedCommands {
+        t.Fatalf("unattended cap exceeded: %+v err=%v executions=%d", snapshot, err, executed)
+    }
+}
