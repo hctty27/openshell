@@ -359,11 +359,17 @@ function Workspace({ initialState }: { initialState: AppState }) {
       return;
     }
     const outer = container.getBoundingClientRect();
-    setSplitDropPreview({
+    const next = {
       targetID: target.targetID, intent: target.intent, invalid: target.invalid,
       left: target.bounds.left - outer.left, top: target.bounds.top - outer.top,
       width: target.bounds.width, height: target.bounds.height,
-    });
+    };
+    setSplitDropPreview(previous =>
+      previous && previous.targetID === next.targetID &&
+      previous.intent.zone === next.intent.zone && previous.intent.mode === next.intent.mode &&
+      previous.invalid === next.invalid && previous.left === next.left &&
+      previous.top === next.top && previous.width === next.width && previous.height === next.height
+        ? previous : next);
   };
 
   const onTabPointerDrop = (sourceID: string, x: number, y: number) => {
