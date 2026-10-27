@@ -93,7 +93,7 @@ export default function WorkspaceTabStrip(p: Props) {
       const bounds = stripRef.current?.getBoundingClientRect();
       const inside = !!bounds && move.clientY >= bounds.top && move.clientY <= bounds.bottom &&
         move.clientX >= bounds.left && move.clientX <= bounds.right;
-      const width = stripRef.current?.querySelector<HTMLElement>(\`[data-tab-id="\${tabID}"]\`)
+      const width = stripRef.current?.querySelector<HTMLElement>(`[data-tab-id="${tabID}"]`)
         ?.getBoundingClientRect().width ?? 140;
       setDrag({ id: tabID, x: move.clientX, y: move.clientY,
         insertion: inside ? insertionAt(tabID, move.clientX) : -1, width });
@@ -162,8 +162,8 @@ export default function WorkspaceTabStrip(p: Props) {
           const shift = shiftingLeft ? -drag!.width : shiftingRight ? drag!.width : 0;
           return (
             <div key={tab.id} data-tab-id={tab.id}
-              className={\`terminal-tab \${p.activeID === tab.id ? "active" : ""} \${drag?.id === tab.id ? "dragging" : ""}\`}
-              style={{ transform: shift ? \`translateX(\${shift}px)\` : undefined }}>
+              className={`terminal-tab ${p.activeID === tab.id ? "active" : ""} ${drag?.id === tab.id ? "dragging" : ""}`}
+              style={{ transform: shift ? `translateX(${shift}px)` : undefined }}>
               <button title={t("common:doubleClickToDuplicateSession")}
                 aria-label={t("common:sessionTabDescription", { name: tab.session.name })}
                 aria-keyshortcuts="Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"
