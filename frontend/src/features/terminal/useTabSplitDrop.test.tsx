@@ -47,6 +47,8 @@ test("preview follows pane edge and drops onto the intended connected tab", () =
   act(() => result.current.onTabPointerDrop("B", 105, 250));
   expect(applyDrop).toHaveBeenCalledWith("B", "A", "left");
   expect(setActiveID).toHaveBeenCalledWith("A");
+  act(() => result.current.clearDropPreview());
+  expect(result.current.splitDropPreview).toBeNull();
 });
 
 test("rejects a fifth pane without changing layout", () => {
