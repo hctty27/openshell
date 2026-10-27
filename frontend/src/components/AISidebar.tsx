@@ -23,6 +23,9 @@ import ConversationPicker from "./ConversationPicker";
 import { errorText } from "../bridge";
 interface Props {
   tab: Tab | undefined;
+  availableTabs: Tab[];
+  targetTabIDs: string[];
+  onToggleTarget(tabID: string): void;
   profiles: APIProfile[];
   profileID: string;
   onProfile(id: string): void;
@@ -268,8 +271,8 @@ export default function AISidebar(p: Props) {
           <CommandProposal
             key={p.tab.proposal.id}
             proposal={p.tab.proposal}
-            host={`${p.tab.session.host}:${p.tab.session.port}`}
-            username={p.tab.session.username}
+            host={(() => { const target = p.availableTabs.find(tab => tab.ref?.tabId === p.tab?.proposal?.ref.tabId && tab.ref?.generation === p.tab?.proposal?.ref.generation); return target ? `${target.session.host}:${target.session.port}` : t("ai:targetUnavailable"); })()}
+            username={p.availableTabs.find(tab => tab.ref?.tabId === p.tab?.proposal?.ref.tabId)?.session.username ?? ""}
             executing={p.tab.executing}
             onConfirm={p.onConfirm}
             onCancel={p.onCancel}
@@ -323,6 +326,28 @@ export default function AISidebar(p: Props) {
             <code title={p.tab.cwd}>
               {p.tab.cwd || t("ai:directoryUnavailable")}
             </code>
+          </div>
+        )}
+        {p.tab && p.availableTabs.length > 1 && (
+          <div className="ai-target-picker">
+            <span className="ai-target-picker__label">{t("ai:authorizedTargets")} · {p.targetTabIDs.length}</span>
+            <div className="ai-target-picker__chips">
+              {p.availableTabs.map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`ai-target-chip ${p.targetTabIDs.includes(tab.id) ? "selected" : ""}`}
+                  aria-pressed={p.targetTabIDs.includes(tab.id)}
+                  title={`${tab.session.username}@${tab.session.host}:${tab.session.port}`}
+                  disabled={busy || !!p.tab?.memoryRun || !!p.tab?.proposal || automaticActive}
+                  onClick={() => p.onToggleTarget(tab.id)}
+                >
+                  {p.targetTabIDs.includes(tab.id) && <Check size={11} />}
+                  {tab.session.name}
+                </button>
+              ))}
+            </div>
+            <small>{t("ai:targetSelectionHint")}</small>
           </div>
         )}
         {p.context && (
