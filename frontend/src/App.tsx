@@ -1073,7 +1073,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       const refs = (aiTargetIDs[tab.id] ?? [tab.id]).map(targetID =>
         tabsRef.current.find(t => t.id === targetID && t.status === "connected")?.ref
       ).filter((ref): ref is NonNullable<Tab["ref"]> => Boolean(ref));
-      if (!refs.length) throw new Error("No selected SSH connections are available.");
+      if (refs.length !== (aiTargetIDs[tab.id] ?? [tab.id]).length) throw new Error("A selected SSH connection was disconnected. Please update the target list.");
       return refs;
     })(),
     profileId: profileID,
