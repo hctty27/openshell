@@ -85,6 +85,15 @@ const initial: AppState = {
   version: APP_VERSION,
 };
 const id = () => crypto.randomUUID();
+const connectionActionLabel = (status?: Tab["status"]) => {
+  switch (status) {
+    case "connected": return "common:disconnect";
+    case "connecting": return "common:cancelConnecting";
+    case "reconnecting": return "common:stopReconnecting";
+    case "error": return "common:retryConnection";
+    default: return "common:reconnect";
+  }
+};
 export default function App() {
   useTranslation();
   const [data, setData] = useState<AppState | null>(null);
@@ -222,6 +231,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const selections = useRef<Record<string, string>>({});
   const reconnectTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const reconnectInFlight = useRef(new Set<string>());
+  const disconnectInFlight = useRef(new Set<string>());
+  const [disconnectingTabs, setDisconnectingTabs] = useState<string[]>([]);
   const autoReconnectRef = useRef(state.autoReconnect !== false);
   autoReconnectRef.current = state.autoReconnect !== false;
   const showDisconnectReasonRef = useRef(state.showDisconnectReason !== false);
@@ -861,6 +872,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     }
   };
   const manualConnect = (tab: Tab) => {
+    if (disconnectInFlight.current.has(tab.id)) return;
     stopRetryTimer(tab.id);
     if (tab.session.authType === "password" && !tab.session.credentialRef) {
       setLogin({ tab, secret: "" });
@@ -869,7 +881,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
     }
   };
   const disconnectTab = async (tab: Tab) => {
-    if (!tab.ref && tab.status !== "connecting") return;
+    if (disconnectInFlight.current.has(tab.id)) return;
+    if (!tab.ref && tab.status !== "connecting" && tab.status !== "reconnecting") return;
     const hasTransfers = hasActiveTransfers(tab.ref);
     if (state.confirmActiveDisconnect !== false && (tab.chatBusy || tab.executing || hasTransfers)) {
       if (!(await dialogs.confirm({
@@ -879,7 +892,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
         confirmLabel: message("common:disconnectAnyway"),
       }))) return;
     }
-    stopRetryTimer(tab.id);
+    disconnectInFlight.current.add(tab.id);
+    setDisconnectingTabs([...disconnectInFlight.current]);
+    try {
+      stopRetryTimer(tab.id);
     update(tab.id, t => ({
       ...t, status: "disconnected", manualDisconnected: true,
       localFallbackPending: true,
@@ -896,6 +912,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
         t.ref?.generation === tab.ref?.generation
         ? { ...t, localFallbackPending: false } : t);
     } catch (error) { notify(error); }
+    } finally {
+      disconnectInFlight.current.delete(tab.id);
+      setDisconnectingTabs([...disconnectInFlight.current]);
+    }
   };
   const closingTabs = useRef(new Set<string>());
   const close = async (tab: Tab) => {
@@ -1523,28 +1543,21 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   {showSFTP ? <PanelRightOpen size={14} /> : <FolderOpen size={14} />}
                 </button>
                 <button
-                  title={tr("common:reauthenticate")}
-                  disabled={active?.status === "connecting"}
-                  onClick={() =>
-                    active && setLogin({ tab: active, secret: "" })
-                  }
+                  title={tr(connectionActionLabel(active?.status))}
+                  aria-label={tr(connectionActionLabel(active?.status))}
+                  disabled={!active || disconnectingTabs.includes(active.id)}
+                  onClick={() => {
+                    if (!active) return;
+                    if (["connected", "connecting", "reconnecting"].includes(active.status)) {
+                      void disconnectTab(active);
+                    } else {
+                      manualConnect(active);
+                    }
+                  }}
                 >
-                  <ShieldCheck size={14} />
-                </button>
-                <button
-                  title={tr("common:reconnect")}
-                  disabled={active?.status === "connecting" || active?.status === "reconnecting"}
-                  onClick={() => active && manualConnect(active)}
-                >
-                  <RefreshCw size={14} />
-                </button>
-                <button
-                  title={tr(active?.status === "connecting" ? "common:cancelConnecting"
-                    : active?.status === "reconnecting" ? "common:stopReconnecting" : "common:disconnect")}
-                  disabled={!active || ["disconnected", "error"].includes(active.status)}
-                  onClick={() => active && void disconnectTab(active)}
-                >
-                  <Unplug size={14} />
+                  {active?.status === "connected" ? <Unplug size={14} /> :
+                    active?.status === "connecting" || active?.status === "reconnecting"
+                      ? <X size={14} /> : <RefreshCw size={14} />}
                 </button>
                 <button
                   title={tr("common:sendSelectedTextOrRecentOutputToAi")}
@@ -1672,7 +1685,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   aria-label={tr("sftp:fileManager")} aria-hidden={!visible}
                   style={visible ? undefined : { display: "none" }}>
                   {visible && (
-                    <SFTPView refID={tab.ref!} profileID={profileID} onNotice={notify}
+                    <SFTPView refID={tab.ref!} onNotice={notify}
                       initialRemoteDirectory={active?.cwd}
                       cwdReported={active?.cwdReported === true}
                       onRemoteDirectoryChange={directory => {

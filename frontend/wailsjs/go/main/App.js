@@ -237,10 +237,6 @@ export function SFTPEnsureDirectory(arg1, arg2, arg3) {
   return window['go']['main']['App']['SFTPEnsureDirectory'](arg1, arg2, arg3);
 }
 
-export function SFTPAIAssist(arg1) {
-  return window['go']['main']['App']['SFTPAIAssist'](arg1);
-}
-
 export function StartLocalTerminal(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['StartLocalTerminal'](arg1, arg2, arg3, arg4, arg5);
 }

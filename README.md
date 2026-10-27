@@ -131,7 +131,6 @@ Open the file manager from a connected SSH tab. It reuses the authenticated conn
 - **Remote editing:** UTF-8 text files up to 1 MiB, with a remote-version check before saving.
 - **Directory sync:** preview local-to-remote or remote-to-local changes based on size and modification time. Newer destination files are skipped; the current sync workflow does not delete files.
 - **Permissions:** review and confirm changes for up to 200 selected items.
-- **AI file assistance:** request analysis of selected configuration files, bounded log excerpts, or file differences. Review suggested edits in the editor before saving; upload suggestions still require confirmation.
 
 ### Open SFTP in the terminal's directory
 

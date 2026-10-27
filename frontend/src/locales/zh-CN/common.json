@@ -50,7 +50,6 @@
   "customAi": "自定义 AI",
   "doubleClickASessionOnTheLeftTo": "从左侧双击会话，快速打开连接",
   "interfacePreviewUseTheWindowsAppForSsh": "界面预览 · 真实连接请使用 Windows 桌面应用",
-  "reauthenticate": "重新认证连接",
   "reconnect": "重新连接",
   "sendSelectedTextOrRecentOutputToAi": "发送选中内容或近期输出给 AI",
   "connecting": "正在连接",
@@ -160,5 +159,6 @@
   "quitActiveSessionsTitle": "确定退出 OpenShell？",
   "quitActiveSessionsDescription": "仍有 {{count}} 个活动 SSH 会话。退出时将断开这些连接。",
   "quitActiveSessionsBusyDescription": "仍有 {{count}} 个活动 SSH 会话。退出将断开连接，并可能中断 AI 任务或文件传输；远程进程可能继续运行。",
-  "quitAndDisconnect": "断开所有连接并退出"
+  "quitAndDisconnect": "断开所有连接并退出",
+  "retryConnection": "重试连接"
 }

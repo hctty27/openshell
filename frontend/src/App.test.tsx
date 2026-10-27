@@ -49,6 +49,7 @@ vi.mock("./bridge", async () => ({
     SavePreference: vi.fn(async () => {}),
     SFTPTransfers: vi.fn(async () => []),
     CancelZmodem: vi.fn(async () => {}),
+    Disconnect: vi.fn(async () => {}),
     Connect: vi.fn(async (tabId: string, sessionId: string) => ({
       ref: { tabId, sessionId, generation: 1 },
       home: "/root",
@@ -634,4 +635,28 @@ test("native quit request exits directly when there are no active SSH sessions",
   });
   await waitFor(() => expect(api.QuitConfirmed).toHaveBeenCalledTimes(1));
   expect(screen.queryByText("确定退出 OpenShell？")).toBeNull();
+});
+
+test("terminal toolbar has one context-aware disconnect/reconnect control", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.Disconnect).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{ id: "toggle-id", groupId: "", name: "Toggle", host: "example.test",
+      port: 22, username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved" }],
+    groups: [], profiles: [], fontSize: "14", language: "zh-CN",
+    activeProfile: "", version: "0.1.64",
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选中会话 Toggle" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  expect(screen.getByTitle("断开连接")).toBeTruthy();
+  expect(screen.queryByTitle("重新连接")).toBeNull();
+  expect(screen.queryByTitle("重新认证连接")).toBeNull();
+
+  fireEvent.click(screen.getByTitle("断开连接"));
+  await waitFor(() => expect(api.Disconnect).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.getByTitle("重新连接")).toBeTruthy());
+  fireEvent.click(screen.getByTitle("重新连接"));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
+  expect(screen.getByTitle("断开连接")).toBeTruthy();
 });
