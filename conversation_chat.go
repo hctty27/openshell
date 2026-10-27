@@ -213,9 +213,14 @@ func (a *App) registerProposal(ctx context.Context, run domain.ConversationRun, 
 		p, err = a.coordinator.Propose(target, input.Command, input.Purpose, input.Cwd, 60)
 	}
 	if err != nil {
-		return p, err
-	}
-	a.mu.Lock()
+        return p, err
+    }
+    // The proposal must be durably journaled before it can be approved.
+    if err = a.recordOperation(ctx, run, p); err != nil {
+        _ = a.coordinator.Cancel(p.ID)
+        return domain.Proposal{}, err
+    }
+    a.mu.Lock()
 	a.pending[p.ID] = callID
 	a.proposalRuns[p.ID] = run.ID
 	a.mu.Unlock()
