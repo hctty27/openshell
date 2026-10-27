@@ -103,10 +103,12 @@ func routineService(service string) bool {
         return false
     }
     name := strings.TrimSuffix(strings.ToLower(service), ".service")
-    switch name {
+    base := strings.SplitN(name, "@", 2)[0]
+    switch base {
     case "", "all", "ssh", "sshd", "network", "networking", "networkmanager",
         "firewalld", "ufw", "iptables", "nftables", "docker", "containerd",
-        "mysql", "mysqld", "mariadb", "postgresql", "redis", "redis-server", "dbus":
+        "mysql", "mysqld", "mariadb", "postgres", "postgresql", "redis", "redis-server",
+        "mongodb", "mongo", "etcd", "database", "db", "dbus":
         return false
     }
     if strings.HasPrefix(name, "systemd-") {
