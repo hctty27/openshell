@@ -214,6 +214,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       truncated: boolean;
     } | null>(null),
     [attachments, setAttachments] = useState<Record<string, string>>({});
+  const [aiTargetIDs, setAiTargetIDs] = useState<Record<string, string[]>>({});
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
   const remoteUploadDirs = useRef<Record<string, string>>({});
   const streamIDs = useRef<Record<string, string>>({});
@@ -1068,6 +1069,13 @@ function Workspace({ initialState }: { initialState: AppState }) {
   ): ChatRequest => ({
     requestId: id(),
     ref: tab.ref!,
+    targets: (() => {
+      const refs = (aiTargetIDs[tab.id] ?? [tab.id]).map(targetID =>
+        tabsRef.current.find(t => t.id === targetID && t.status === "connected")?.ref
+      ).filter((ref): ref is NonNullable<Tab["ref"]> => Boolean(ref));
+      if (!refs.length) throw new Error("No selected SSH connections are available.");
+      return refs;
+    })(),
     profileId: profileID,
     text: tab.cwd
       ? tr("common:currentAiWorkingDirectory", { text, cwd: tab.cwd })
@@ -1691,6 +1699,19 @@ function Workspace({ initialState }: { initialState: AppState }) {
           <div className="splitter" onPointerDown={(e) => drag("ai", e)} />
           <AISidebar
             tab={active}
+            availableTabs={tabs.filter(t => t.ref && t.status === "connected")}
+            targetTabIDs={active ? (aiTargetIDs[active.id] ?? [active.id]) : []}
+            onToggleTarget={(targetID) => {
+              if (!active) return;
+              setAiTargetIDs(old => {
+                const selected = old[active.id] ?? [active.id];
+                if (selected.includes(targetID) && selected.length === 1) return old;
+                const next = selected.includes(targetID)
+                  ? selected.filter(id => id !== targetID)
+                  : selected.length < 8 ? [...selected, targetID] : selected;
+                return { ...old, [active.id]: next };
+              });
+            }}
             profiles={state.profiles}
             conversationItems={
               memory.lists[
