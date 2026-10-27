@@ -1,6 +1,7 @@
 import type { ITheme } from "@xterm/xterm";
 import type { TerminalTheme, Theme } from "./types";
 
+/** @internal Theme palette fixture exposed to unit tests. */
 export const terminalThemes: Record<Exclude<TerminalTheme, "follow">, ITheme> = {
   dark: {
     background: "#1E2228",
