@@ -1077,7 +1077,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       return refs;
     })(),
     profileId: profileID,
-    text: tab.cwd
+    text: tab.cwd && (aiTargetIDs[tab.id] ?? [tab.id]).length === 1 && (aiTargetIDs[tab.id] ?? [tab.id])[0] === tab.id
       ? tr("common:currentAiWorkingDirectory", { text, cwd: tab.cwd })
       : text,
     context,
