@@ -86,5 +86,6 @@ export function useTabSplitDrop({
     setActiveID(target.targetID);
   };
 
-  return { splitDropPreview, onTabPointerMove, onTabPointerDrop };
+  const clearDropPreview = () => setSplitDropPreview(null);
+  return { splitDropPreview, onTabPointerMove, onTabPointerDrop, clearDropPreview };
 }
