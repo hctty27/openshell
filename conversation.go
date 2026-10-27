@@ -239,7 +239,7 @@ func (a *App) ClearChat(tabID string) error {
 	return a.memory.Clear(a.ctx, ref)
 }
 func (a *App) toolMessage(id string, p domain.Proposal, result domain.CommandResult) domain.ConversationMessage {
-	display, _ := json.Marshal(map[string]any{"command": p.Command, "result": result})
+	display, _ := json.Marshal(map[string]any{"command": p.Command, "targetRef": p.Ref, "result": result})
 	return domain.ConversationMessage{ID: id, Role: "tool", ToolCallID: p.ToolCallID, Content: ai.BuildToolResult(p.Command, p.Cwd, result), DisplayJSON: display}
 }
 
