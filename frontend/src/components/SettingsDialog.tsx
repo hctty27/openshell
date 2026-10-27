@@ -49,6 +49,7 @@ interface Props {
   fontSize: number;
   autoCommandLimit?: number;
   autoAllowChanges?: boolean;
+  autoContinueRounds?: boolean;
   saveChatHistory?: boolean;
   autoSummarize?: boolean;
   theme: Theme;
@@ -114,7 +115,8 @@ export default function SettingsDialog(p: Props) {
     groupId: p.groupID ?? "",
     ...p.session,
   });
-  const [autoLimit, setAutoLimit] = useState(p.autoCommandLimit ?? 10);
+  const [autoLimit, setAutoLimit] = useState(p.autoCommandLimit ?? 50);
+  const [autoContinueRounds, setAutoContinueRounds] = useState(p.autoContinueRounds !== false);
   const [allowChanges, setAllowChanges] = useState(p.autoAllowChanges ?? false);
   const [keepAliveSeconds, setKeepAliveSeconds] = useState(p.keepAliveSeconds ?? 30);
   const [autoReconnect, setAutoReconnect] = useState(p.autoReconnect !== false);
@@ -651,6 +653,14 @@ export default function SettingsDialog(p: Props) {
                   onChange={(e) => setAutoLimit(Number(e.target.value))}
                 />
               </label>
+              <label className="inline-field">
+                <input
+                  type="checkbox"
+                  checked={autoContinueRounds}
+                  onChange={(e) => setAutoContinueRounds(e.target.checked)}
+                />
+                {t("settings:autoContinueRounds")}
+              </label>
               <label>
                 {t("settings:automaticExecutionScope")}
                 <select
@@ -1053,6 +1063,10 @@ export default function SettingsDialog(p: Props) {
                     await api.SavePreference(
                       "autoAllowChanges",
                       String(allowChanges),
+                    );
+                    await api.SavePreference(
+                      "autoContinueRounds",
+                      String(autoContinueRounds),
                     );
                     await p.onRefresh();
                   }, message("settings:automaticSettingsSaved"))
