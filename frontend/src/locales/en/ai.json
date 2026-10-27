@@ -95,5 +95,6 @@
   "opsStepExecute": "2. Execute the proposed command",
   "opsStepVerify": "3. Verify business health independently",
   "opsAcknowledgePreflight": "I have checked the target environment, impacted services, backup, and rollback plan",
-  "opsVerificationPending": "Command executed; business outcome has not been independently verified"
+  "opsVerificationPending": "Command executed; business outcome has not been independently verified",
+  "opsNonZeroExit": "Command exited nonzero; actual effects require verification"
 }
