@@ -1,6 +1,6 @@
 export type SplitDropZone = "left" | "right" | "top" | "bottom";
 export type SplitDirection = "columns" | "rows";
-export type SplitDropMode = "edge" | "smart";
+type SplitDropMode = "edge" | "smart";
 export interface SplitDropIntent { zone: SplitDropZone; mode: SplitDropMode }
 
 interface Bounds {
