@@ -200,7 +200,6 @@ export interface AppState {
   autoCopySelection?: boolean;
   rightClickPaste?: boolean;
   confirmMultilinePaste?: boolean;
-  middleClickPaste?: boolean;
   logHighlights?: boolean;
   splitRatio?: number;
   keepAliveSeconds?: number;
