@@ -2,7 +2,7 @@ import { renderMessage, type DisplayText } from "../i18n/message";
 import { useTranslation } from "react-i18next";
 import { message } from "../i18n/message";
 import { t } from "../i18n";
-import { languages, type Language } from "../i18n/languages";
+import type { Language } from "../i18n/languages";
 import { useState } from "react";
 import {
   X,
@@ -13,8 +13,6 @@ import {
   Terminal,
   Bot,
   ShieldCheck,
-  Sun,
-  Moon,
   FolderOpen,
   Plus,
   Trash2,
@@ -22,9 +20,11 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import { api, errorText } from "../bridge";
-import { resolveTerminalTheme } from "../terminalThemes";
 import { useDialogs } from "./DialogProvider";
 import ModalSurface from "./ModalSurface";
+import GeneralSettingsPanel from "./GeneralSettingsPanel";
+import ConnectionSettingsPanel from "./ConnectionSettingsPanel";
+import TerminalSettingsPanel from "./TerminalSettingsPanel";
 import type {
   Session,
   LocalForward,
@@ -104,7 +104,6 @@ const emptyProfile: APIProfile = {
 export default function SettingsDialog(p: Props) {
   useTranslation();
   const dialogs = useDialogs();
-  const terminalPreview = resolveTerminalTheme(p.theme, p.terminalTheme);
   const [tab, setTab] = useState(
     p.kind === "session" ? "session" : "general",
   );
@@ -685,264 +684,55 @@ export default function SettingsDialog(p: Props) {
             </section>
           )}
           {tab === "general" && (
-            <section className="settings-panel" aria-labelledby="settings-general-title">
-              <div className="settings-panel-heading">
-                <h3 id="settings-general-title">{t("settings:general")}</h3>
-                <p>{t("settings:generalDescription")}</p>
-              </div>
-              <div className="settings-control-row">
-                <div className="settings-control-copy">
-                  <label htmlFor="settings-language">{t("settings:interfaceLanguage")}</label>
-                  <p>{t("settings:languageDescription")}</p>
-                </div>
-                <select
-                  id="settings-language"
-                  className="settings-control-select"
-                  value={p.language ?? "en"}
-                  disabled={p.languageSaving}
-                  onChange={(e) => {
-                    setError("");
-                    p.onLanguage?.(e.target.value as Language).catch((error) =>
-                      setError(error),
-                    );
-                  }}
-                >
-                  {languages.map((language) => (
-                    <option key={language.value} value={language.value}>
-                      {language.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="settings-control-row">
-                <div className="settings-control-copy">
-                  <label>{t("sessions:sessionBackupTitle")}</label>
-                  <p>{t("sessions:sessionBackupDescription")}</p>
-                </div>
-                <div style={{ display:"flex", gap: 8 }}>
-                  <button type="button" onClick={() => p.onExportSessionBackup?.()}>{t("sessions:exportSessionBackup")}</button>
-                  <button type="button" onClick={() => p.onImportSessionBackup?.()}>{t("sessions:restoreSessionBackup")}</button>
-                </div>
-              </div>
-              <div className="settings-theme-group">
-                <h4>{t("settings:theme")}</h4>
-                <p>{t("settings:themeDescription")}</p>
-                <div className="settings-theme-options" role="group" aria-label={t("settings:theme")}>
-                  {(["light", "dark"] as const).map((theme) => {
-                    const Icon = theme === "light" ? Sun : Moon;
-                    return (
-                      <button
-                        key={theme}
-                        type="button"
-                        className={`settings-theme-option ${p.theme === theme ? "selected" : ""}`}
-                        aria-pressed={p.theme === theme}
-                        onClick={() => p.onTheme(theme)}
-                      >
-                        <span className={`settings-theme-preview settings-theme-preview--${theme}`} aria-hidden="true">
-                          <span className="settings-theme-preview-sidebar" />
-                          <span className="settings-theme-preview-main">
-                            <span />
-                            <span />
-                            <span />
-                          </span>
-                        </span>
-                        <span className="settings-theme-option-label">
-                          <Icon size={14} aria-hidden="true" />
-                          {t(`settings:${theme}`)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
+            <GeneralSettingsPanel
+              language={p.language}
+              languageSaving={p.languageSaving}
+              onLanguage={p.onLanguage}
+              onLanguageError={setError}
+              onExportSessionBackup={p.onExportSessionBackup}
+              onImportSessionBackup={p.onImportSessionBackup}
+              theme={p.theme}
+              onTheme={p.onTheme}
+            />
           )}
           {tab === "connection" && (
-            <section className="settings-panel" aria-labelledby="settings-connection-title">
-              <div className="settings-panel-heading">
-                <h3 id="settings-connection-title">{t("settings:connection")}</h3>
-                <p>{t("settings:connectionDescription")}</p>
-              </div>
-              <div className="settings-terminal-group">
-                <label htmlFor="settings-keepalive">{t("settings:keepAliveInterval")}</label>
-                <select id="settings-keepalive" value={keepAliveSeconds} onChange={e => setKeepAliveSeconds(Number(e.target.value))}>
-                  <option value={0}>{t("settings:disabled")}</option>
-                  <option value={15}>15 {t("settings:seconds")}</option>
-                  <option value={30}>30 {t("settings:seconds")}</option>
-                  <option value={60}>60 {t("settings:seconds")}</option>
-                </select>
-              </div>
-              <div className="settings-terminal-group">
-                <label className="settings-toggle-row">
-                  <span className="settings-toggle-copy">
-                    <strong>{t("settings:autoReconnect")}</strong>
-                    <small>{t("settings:autoReconnectDescription")}</small>
-                  </span>
-                  <input className="settings-switch" type="checkbox" checked={autoReconnect}
-                    onChange={e => setAutoReconnect(e.target.checked)} />
-                </label>
-              </div>
-              <div className="settings-terminal-group">
-                <label htmlFor="settings-retries">{t("settings:maxReconnectAttempts")}</label>
-                <select id="settings-retries" disabled={!autoReconnect} value={maxReconnectAttempts}
-                  onChange={e => setMaxReconnectAttempts(Number(e.target.value))}>
-                  <option value={5}>5</option><option value={10}>10</option><option value={20}>20</option>
-                  <option value={0}>{t("settings:continuousRetry")}</option>
-                </select>
-              </div>
-              <div className="settings-terminal-group">
-                <label className="settings-toggle-row">
-                  <span className="settings-toggle-copy"><strong>{t("settings:showDisconnectReason")}</strong></span>
-                  <input className="settings-switch" type="checkbox" checked={showDisconnectReason}
-                    onChange={e => setShowDisconnectReason(e.target.checked)} />
-                </label>
-              </div>
-              <div className="settings-terminal-group">
-                <label htmlFor="settings-disconnect-behavior">{t("settings:disconnectBehavior")}</label>
-                <select id="settings-disconnect-behavior" value={disconnectBehavior}
-                  onChange={e => setDisconnectBehavior(e.target.value as import("../types").DisconnectBehavior)}>
-                  <option value="local">{t("settings:revertToLocalShell")}</option>
-                  <option value="retain">{t("settings:retainDisconnectedTerminal")}</option>
-                  <option value="close">{t("settings:closeDisconnectedTab")}</option>
-                </select>
-              </div>
-              {disconnectBehavior === "local" && (
-                <div className="settings-terminal-group">
-                  <label htmlFor="settings-local-shell">{t("settings:defaultLocalShell")}</label>
-                  <select id="settings-local-shell" value={localShell}
-                    onChange={e => setLocalShell(e.target.value as import("../types").LocalShell)}>
-                    <option value="powershell">Windows PowerShell</option>
-                    <option value="pwsh">PowerShell 7</option>
-                    <option value="cmd">CMD</option>
-                    <option value="wsl">WSL</option>
-                  </select>
-                </div>
-              )}
-              <div className="settings-terminal-group">
-                <label className="settings-toggle-row">
-                  <span className="settings-toggle-copy"><strong>{t("settings:preserveTerminalHistory")}</strong></span>
-                  <input className="settings-switch" type="checkbox" checked={preserveTerminalHistory}
-                    onChange={e => setPreserveTerminalHistory(e.target.checked)} />
-                </label>
-              </div>
-              <div className="settings-terminal-group">
-                <label className="settings-toggle-row">
-                  <span className="settings-toggle-copy"><strong>{t("settings:confirmActiveDisconnect")}</strong></span>
-                  <input className="settings-switch" type="checkbox" checked={confirmActiveDisconnect}
-                    onChange={e => setConfirmActiveDisconnect(e.target.checked)} />
-                </label>
-              </div>
-            </section>
+            <ConnectionSettingsPanel
+              keepAliveSeconds={keepAliveSeconds}
+              setKeepAliveSeconds={setKeepAliveSeconds}
+              autoReconnect={autoReconnect}
+              setAutoReconnect={setAutoReconnect}
+              maxReconnectAttempts={maxReconnectAttempts}
+              setMaxReconnectAttempts={setMaxReconnectAttempts}
+              showDisconnectReason={showDisconnectReason}
+              setShowDisconnectReason={setShowDisconnectReason}
+              disconnectBehavior={disconnectBehavior}
+              setDisconnectBehavior={setDisconnectBehavior}
+              localShell={localShell}
+              setLocalShell={setLocalShell}
+              preserveTerminalHistory={preserveTerminalHistory}
+              setPreserveTerminalHistory={setPreserveTerminalHistory}
+              confirmActiveDisconnect={confirmActiveDisconnect}
+              setConfirmActiveDisconnect={setConfirmActiveDisconnect}
+            />
           )}
           {tab === "terminal" && (
-            <section className="settings-panel" aria-labelledby="settings-terminal-title">
-              <div className="settings-panel-heading">
-                <h3 id="settings-terminal-title">{t("settings:terminal")}</h3>
-                <p>{t("settings:terminalDescription")}</p>
-              </div>
-              <div className="settings-terminal-group">
-                <label htmlFor="settings-terminal-theme">{t("settings:terminalColorScheme")}</label>
-                <select
-                  id="settings-terminal-theme"
-                  value={p.terminalTheme}
-                  onChange={(e) => p.onTerminalTheme(e.target.value as TerminalTheme)}
-                >
-                  <option value="follow">{t("settings:terminalThemeFollow")}</option>
-                  <option value="classic">{t("settings:terminalThemeClassic")}</option>
-                  <option value="dark">{t("settings:terminalThemeDark")}</option>
-                  <option value="light">{t("settings:terminalThemeLight")}</option>
-                </select>
-                <div className="terminal-palette-preview"
-                  aria-label={t("settings:terminalPalettePreview")}
-                  style={{ backgroundColor: terminalPreview.background, color: terminalPreview.foreground }}>
-                  <span style={{ color: terminalPreview.green }}>root@server</span>:~# ls -la{"\n"}
-                  <span style={{ color: terminalPreview.blue }}>Documents  Downloads</span>
-                </div>
-                <p className="muted small">{t("settings:terminalThemeDescription")}</p>
-              </div>
-              <div className="settings-terminal-group">
-                <div className="settings-font-heading">
-                  <label htmlFor="settings-font-size">{t("settings:fontSize")}</label>
-                  <output htmlFor="settings-font-size">{p.fontSize} px</output>
-                </div>
-                <input
-                  id="settings-font-size"
-                  type="range"
-                  min="11"
-                  max="24"
-                  value={p.fontSize}
-                  onChange={(e) => p.onFont(Number(e.target.value))}
-                />
-              </div>
-              <div className="settings-terminal-group">
-                <label htmlFor="settings-quick-commands">{t("settings:quickCommandLayout")}</label>
-                <select
-                  id="settings-quick-commands"
-                  value={p.quickCommandLayout}
-                  onChange={(e) =>
-                    p.onQuickCommandLayout(e.target.value as QuickCommandLayout)
-                  }
-                >
-                  <option value="single">{t("settings:singleRowWithHorizontalScrollingDefault")}</option>
-                  <option value="multi">{t("settings:multipleRowsWithWrapping")}</option>
-                </select>
-              </div>
-              <div className="settings-terminal-group">
-                <label className="settings-toggle-row">
-                  <span className="settings-toggle-copy">
-                    <strong>{t("settings:logHighlights")}</strong>
-                    <small>{t("settings:logHighlightsDescription")}</small>
-                  </span>
-                  <input className="settings-switch" type="checkbox"
-                    aria-label={t("settings:logHighlights")}
-                    checked={p.logHighlights}
-                    onChange={(e) => p.onLogHighlights(e.target.checked)} />
-                </label>
-              </div>
-              <div className="settings-terminal-group">
-                <h4>{t("settings:terminalMouseActions")}</h4>
-                <label className="settings-toggle-row">
-                  <span className="settings-toggle-copy">
-                    <strong>{t("settings:copySelectionAutomatically")}</strong>
-                    <small>{t("settings:copyTextToTheClipboardAfterSelectingIt")}</small>
-                  </span>
-                  <input
-                    className="settings-switch"
-                    type="checkbox"
-                    aria-label={t("settings:copySelectionAutomatically")}
-                    checked={p.autoCopySelection}
-                    onChange={(e) => p.onAutoCopySelection(e.target.checked)}
-                  />
-                </label>
-                <label className="settings-toggle-row">
-                  <span className="settings-toggle-copy">
-                    <strong>{t("settings:rightClickToPaste")}</strong>
-                    <small>{t("settings:rightClickInTheSshTerminalToPaste")}</small>
-                  </span>
-                  <input
-                    className="settings-switch"
-                    type="checkbox"
-                    aria-label={t("settings:rightClickToPaste")}
-                    checked={p.rightClickPaste}
-                    onChange={(e) => p.onRightClickPaste(e.target.checked)}
-                  />
-                </label>
-                {p.rightClickPaste && (
-                  <label className="settings-toggle-row settings-toggle-row--nested">
-                    <span className="settings-toggle-copy">
-                      <strong>{t("settings:confirmMultilinePaste")}</strong>
-                    </span>
-                    <input
-                      className="settings-switch"
-                      type="checkbox"
-                      aria-label={t("settings:confirmMultilinePaste")}
-                      checked={p.confirmMultilinePaste}
-                      onChange={(e) => p.onConfirmMultilinePaste(e.target.checked)}
-                    />
-                  </label>
-                )}
-              </div>
-            </section>
+            <TerminalSettingsPanel
+              theme={p.theme}
+              terminalTheme={p.terminalTheme}
+              onTerminalTheme={p.onTerminalTheme}
+              fontSize={p.fontSize}
+              onFont={p.onFont}
+              quickCommandLayout={p.quickCommandLayout}
+              onQuickCommandLayout={p.onQuickCommandLayout}
+              logHighlights={p.logHighlights}
+              onLogHighlights={p.onLogHighlights}
+              autoCopySelection={p.autoCopySelection}
+              onAutoCopySelection={p.onAutoCopySelection}
+              rightClickPaste={p.rightClickPaste}
+              onRightClickPaste={p.onRightClickPaste}
+              confirmMultilinePaste={p.confirmMultilinePaste}
+              onConfirmMultilinePaste={p.onConfirmMultilinePaste}
+            />
           )}
           {!!error && (
             <div className="form-error" role="alert">
