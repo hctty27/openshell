@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
-import { message, type DisplayText } from "../i18n/message";
+import { message } from "../i18n/message";
 import { t } from "../i18n";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Terminal } from "@xterm/xterm";
