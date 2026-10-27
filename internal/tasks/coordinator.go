@@ -15,6 +15,7 @@ import (
 
 type RunFunc func(context.Context, domain.ConnectionRef, string, string, time.Duration) (domain.CommandResult, error)
 type ToolInput struct {
+	Parallel bool `json:"-"`
 	TargetID string `json:"target_id,omitempty"`
 	Command string `json:"command"`
 	Purpose string `json:"purpose"`
@@ -23,7 +24,7 @@ type ToolInput struct {
 
 func ParseTool(name, args string) (ToolInput, error) {
 	var input ToolInput
-	if name != "propose_command" {
+	if name != "propose_command" && name != "propose_parallel_inspection" {
 		return input, apperror.New("unsupportedToolCallNoCommandWasRun", nil)
 	}
 	d := json.NewDecoder(bytes.NewBufferString(args))
@@ -36,6 +37,10 @@ func ParseTool(name, args string) (ToolInput, error) {
 	}
 	if e := validate(input.Command, input.Purpose, input.Cwd); e != nil {
 		return input, e
+	}
+	if name == "propose_parallel_inspection" {
+		if input.TargetID != "" || !IsInspectionCommand(input.Command) { return input, apperror.New("invalidToolArguments", nil) }
+		input.Parallel = true
 	}
 	return input, nil
 }
