@@ -70,8 +70,8 @@ export default function CommandProposal(p: Props) {
           min="1"
           max="600"
           value={seconds}
-          disabled={p.executing}
-          readOnly={p.readOnly}
+          disabled={p.executing || parallel}
+          readOnly={p.readOnly || parallel}
           onChange={(e) => setSeconds(Number(e.target.value))}
         />
         <span>{t("ai:seconds")}</span>
