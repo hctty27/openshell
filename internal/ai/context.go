@@ -16,7 +16,7 @@ type Preview struct {
 
 var ansi = regexp.MustCompile("\\x1b(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\x07]*(?:\\x07|\\x1b\\\\))")
 var bearer = regexp.MustCompile(`(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+`)
-var secret = regexp.MustCompile(`(?i)((?:password|passwd|pass|pwd|api[_-]?key|access[_-]?token|secret|密码)\b["\x27]?\s*[:=]\s*["\x27]?)([^\s,;"\x27}\\]+)`)
+var secret = regexp.MustCompile(`(?i)((?:password|passwd|pass|pwd|api[_-]?key|access[_-]?token|refresh[_-]?token|token|client[_-]?secret|secret|密码)\b["\x27]?\s*[:=]\s*["\x27]?)([^\s,;"\x27}\\]+)`)
 var urlCredential = regexp.MustCompile(`(?i)(://[^/\s:@]+:)[^@/\s]+(@)`)
 var privateKey = regexp.MustCompile(`(?s)-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----`)
 
