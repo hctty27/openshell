@@ -106,14 +106,12 @@
   "opsTimelineSteps": "steps",
   "opsRiskRead": "Read-only",
   "opsUnknownNoRetry": "Remote outcome is unknown. Inspect the server first; the app will not retry automatically.",
-  "opsStepStatus": {
-    "awaiting_confirmation": "Awaiting approval",
-    "running": "Running",
-    "completed": "Command executed",
-    "failed": "Command failed",
-    "unknown": "Unknown outcome",
-    "cancelled": "Cancelled",
-    "superseded": "Proposal revised",
-    "expired": "Proposal expired after restart"
-  }
+  "opsStepAwaiting": "Awaiting approval",
+  "opsStepRunning": "Running",
+  "opsStepCompleted": "Command executed",
+  "opsStepFailed": "Command failed",
+  "opsStepUnknown": "Unknown outcome",
+  "opsStepCancelled": "Cancelled",
+  "opsStepSuperseded": "Proposal revised",
+  "opsStepExpired": "Proposal expired after restart"
 }
