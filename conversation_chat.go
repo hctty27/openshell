@@ -115,6 +115,7 @@ func (a *App) chatContext(parent context.Context, req ChatRequest, continuation,
 			if e != nil { return response, e }
 			scope.WriteString("tab_id=" + ref.TabID + " server=" + target.Username + "@" + target.Host + " port=" + strconv.Itoa(target.Port) + "\n")
 		}
+		system.Content = strings.ReplaceAll(system.Content, "Handle only the current target.", "Handle only explicitly authorized target IDs.")
 		system.Content += scope.String() + "\nFor the SAME safe inspection command on ALL listed targets concurrently, use propose_parallel_inspection with no target_id. It is only for strictly read-only commands, and the application independently checks its safety. Use propose_command with target_id for individual target commands.\n"
 	}
 	messages, err := a.prepareConversationContext(ctx, run, profile, key, language, system)
