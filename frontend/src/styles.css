@@ -3726,3 +3726,8 @@ select.mode-select {
 .ai-target-chip.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, transparent); }
 .ai-target-chip:disabled { opacity: .55; cursor: not-allowed; }
 .ai-target-picker > small { font-size: 10px; color: var(--muted); }
+
+.ai-parallel-results { display: flex; flex-direction: column; gap: 8px; }
+.ai-parallel-result { border: 1px solid var(--border); border-radius: 6px; padding: 7px; min-width: 0; }
+.ai-parallel-result strong { display: block; font-size: 11px; }
+.ai-parallel-result > span { font-size: 10px; color: var(--muted); }
