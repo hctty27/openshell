@@ -243,10 +243,25 @@ export default function AISidebar(p: Props) {
                 {m.command && (
                   <code className="executed-command">{m.command}</code>
                 )}
-                <pre className="result-output">
-                  {m.result.stdout || t("ai:noStandardOutput")}
-                  {m.result.stderr && `\n[stderr]\n${m.result.stderr}`}
-                </pre>
+                {m.result.targetResults?.length ? (
+                  <div className="ai-parallel-results">
+                    {m.result.targetResults.map(item => {
+                      const target = p.availableTabs.find(tab => tab.id === item.ref.tabId);
+                      return (
+                        <section key={item.ref.tabId} className="ai-parallel-result">
+                          <strong>{target ? `${target.session.name} · ${target.session.host}` : item.ref.tabId}</strong>
+                          <span>{item.result.status} {item.result.exitCode !== null ? `(${item.result.exitCode})` : ""}</span>
+                          <pre className="result-output">{item.result.stdout || t("ai:noStandardOutput")}{item.result.stderr && `\n[stderr]\n${item.result.stderr}`}</pre>
+                        </section>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <pre className="result-output">
+                    {m.result.stdout || t("ai:noStandardOutput")}
+                    {m.result.stderr && `\n[stderr]\n${m.result.stderr}`}
+                  </pre>
+                )}
                 {m.result.truncated && (
                   <p className="small muted">
                     {t("ai:outputLimitReachedContentTruncated")}
@@ -273,6 +288,7 @@ export default function AISidebar(p: Props) {
             proposal={p.tab.proposal}
             host={(() => { const target = p.availableTabs.find(tab => tab.ref?.tabId === p.tab?.proposal?.ref.tabId && tab.ref?.generation === p.tab?.proposal?.ref.generation); return target ? `${target.session.host}:${target.session.port}` : t("ai:targetUnavailable"); })()}
             username={p.availableTabs.find(tab => tab.ref?.tabId === p.tab?.proposal?.ref.tabId)?.session.username ?? ""}
+            targetNames={Object.fromEntries(p.availableTabs.map(tab => [tab.id, `${tab.session.name} (${tab.session.host})`]))}
             executing={p.tab.executing}
             onConfirm={p.onConfirm}
             onCancel={p.onCancel}
