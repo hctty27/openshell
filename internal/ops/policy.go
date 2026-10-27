@@ -28,7 +28,7 @@ func Analyze(command string, readOnly bool) domain.OperationPlan {
                     allAbsolute := true
                     for _, w := range call.Args[2:] {
                         p := word(w)
-                        if p == "" || !strings.HasPrefix(p, "/") || strings.Contains(p, "..") {
+                        if !(strings.HasPrefix(p, "/tmp/") || strings.HasPrefix(p, "/var/tmp/")) || strings.Contains(p, "..") {
                             allAbsolute = false
                         }
                     }
