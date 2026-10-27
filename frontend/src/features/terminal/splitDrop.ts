@@ -1,5 +1,3 @@
-export const TAB_DRAG_MIME = "application/x-openshell-tab";
-
 export type SplitDropZone = "left" | "right" | "top" | "bottom";
 export type SplitDirection = "columns" | "rows";
 export type SplitDropMode = "edge" | "smart";
