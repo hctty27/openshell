@@ -357,13 +357,20 @@ test("dragging a connected tab splits a terminal without reconnecting", async ({
   }
   await expect(page.locator(".terminal-tab .connection-state-connected")).toHaveCount(2);
   await expect(page.locator(".terminal-split-select")).toHaveCount(0);
+  const secondTab = page.locator(".terminal-tab").nth(1);
+  const secondBounds = await secondTab.boundingBox();
+  expect(secondBounds).not.toBeNull();
+  await pointerDrag(page, page.locator(".terminal-tab button:first-child").first(),
+    secondBounds!.right - 8, secondBounds!.y + secondBounds!.height / 2);
+  await expect(page.locator(".terminal-tab button:first-child"))
+    .toHaveText(["server-b", "server-a"]);
   const destination = page.locator(".terminal-pane.visible");
   const bounds = await destination.boundingBox();
   expect(bounds).not.toBeNull();
   await destination.evaluate(el => {
     (window as any).__originalSplitTerminal = el.querySelector(".xterm");
   });
-  await pointerDrag(page, page.locator(".terminal-tab button:first-child").first(),
+  await pointerDrag(page, page.locator(".terminal-tab button:first-child").last(),
     bounds!.x + bounds!.width - 25, bounds!.y + bounds!.height / 2);
   await expect(page.locator(".terminal-container")).toHaveClass(/terminal-split-columns/);
   await expect(page.locator(".terminal-pane.visible")).toHaveCount(2);
