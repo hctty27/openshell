@@ -195,7 +195,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     [showQuickCommandManager, setShowQuickCommandManager] = useState(false),
     [quickCommandFocus, setQuickCommandFocus] = useState(0),
     [terminalSearchFocus, setTerminalSearchFocus] = useState(0),
-    [middleClickPaste, setMiddleClickPaste] = useState(initialState.middleClickPaste === true),
     [logHighlights, setLogHighlights] = useState(initialState.logHighlights === true),
     [profileID, setProfileID] = useState(
       initialState.profiles.find((p) => p.id === initialState.activeProfile)
@@ -487,7 +486,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
       setAutoCopySelection(data.autoCopySelection === true);
       setRightClickPaste(data.rightClickPaste === true);
       setConfirmMultilinePaste(data.confirmMultilinePaste !== false);
-      setMiddleClickPaste(data.middleClickPaste === true);
       setLogHighlights(data.logHighlights === true);
       setSplitRatio(Math.min(80, Math.max(20, data.splitRatio ?? 50)));
       if (data.fontSize)
@@ -1608,7 +1606,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   terminalTheme={terminalTheme}
                   autoCopySelection={autoCopySelection}
                   rightClickPaste={rightClickPaste}
-                  middleClickPaste={middleClickPaste}
                   logHighlights={logHighlights}
                   confirmMultilinePaste={confirmMultilinePaste}
                   onNotice={notify}
@@ -1944,8 +1941,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onAutoCopySelection={setAutoCopySelection}
           rightClickPaste={rightClickPaste}
           onRightClickPaste={setRightClickPaste}
-          middleClickPaste={middleClickPaste}
-          onMiddleClickPaste={setMiddleClickPaste}
           logHighlights={logHighlights}
           onLogHighlights={setLogHighlights}
           confirmMultilinePaste={confirmMultilinePaste}
