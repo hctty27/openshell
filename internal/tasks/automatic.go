@@ -277,8 +277,11 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 			}
 			s = t.snapshot()
 		}
-		if s.RoundSteps >= s.Limit {
-            if !t.autoContinue || s.Steps >= maxUnattendedCommands {
+		if t.autoContinue && s.Steps >= maxUnattendedCommands {
+            return t.finish("limit", "roundLimit"), nil
+        }
+        if s.RoundSteps >= s.Limit {
+            if !t.autoContinue {
                 return t.finish("limit", "roundLimit"), nil
             }
             t.mu.Lock()
