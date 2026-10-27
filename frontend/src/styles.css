@@ -921,10 +921,6 @@ kbd {
   align-items: center;
   gap: 8px;
 }
-.terminal-transfer-stats {
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-}
 .terminal-transfer-indicator button {
   padding: 3px 8px;
   border: 1px solid var(--border);
@@ -1083,27 +1079,6 @@ kbd {
   flex-direction: column;
   color: var(--accent);
   font-size: 12px;
-}
-.terminal-connect-state {
-  position: absolute;
-  bottom: 10px;
-  left: 14px;
-  right: 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--hover);
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-.terminal-connect-state button {
-  margin-left: auto;
-  color: var(--accent);
-  padding: 4px 10px;
-  background: var(--accent-soft);
 }
 .ai-sidebar {
   width: var(--ai-width);
@@ -1510,17 +1485,6 @@ kbd {
   color: var(--accent);
   line-height: 1.6;
 }
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay);
-  backdrop-filter: blur(3px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 25px;
-}
 .settings-dialog,
 .compact-dialog,
 .context-dialog {
@@ -1655,19 +1619,6 @@ kbd {
 .api-presets > button {
   width: 31px;
   border: 1px solid var(--border);
-}
-.font-control {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-.font-control > input {
-  padding: 0;
-  flex: 1;
-}
-.font-control > span {
-  width: 45px;
-  font: 11px monospace;
 }
 .muted {
   color: var(--text-muted);
