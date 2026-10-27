@@ -1187,7 +1187,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
         status: "ready",
         steps: 0,
         roundSteps: 0,
-        limit: state.autoCommandLimit ?? 10,
+        limit: state.autoCommandLimit ?? 50,
         allowChanges: state.autoAllowChanges ?? false,
         reason: "",
         reasonCode: "taskStarting",
@@ -1914,6 +1914,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           saveChatHistory={state.saveChatHistory}
           autoSummarize={state.autoSummarize}
           autoAllowChanges={state.autoAllowChanges}
+           autoContinueRounds={state.autoContinueRounds}
           language={language}
           languageSaving={languageSaving}
           onLanguage={changeLanguage}
