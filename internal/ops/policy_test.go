@@ -48,6 +48,8 @@ func TestRoutineOperationAllowlist(t *testing.T) {
         {"docker compose up -d myapp", "low"},
         {"systemctl restart sshd", "high"},
         {"systemctl restart redis", "high"},
+        {"systemctl restart mysql@production.service", "high"},
+        {"docker compose up -d database", "high"},
         {"supervisorctl stop all", "high"},
         {"docker compose up -d", "high"},
         {"docker compose pull", "high"},
