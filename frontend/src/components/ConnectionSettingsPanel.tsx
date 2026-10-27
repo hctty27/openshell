@@ -1,4 +1,5 @@
 import { t } from "../i18n";
+import type { DisconnectBehavior, LocalShell } from "../types";
 
 interface Props {
   keepAliveSeconds: number;
@@ -9,10 +10,10 @@ interface Props {
   setMaxReconnectAttempts(value: number): void;
   showDisconnectReason: boolean;
   setShowDisconnectReason(value: boolean): void;
-  disconnectBehavior: string;
-  setDisconnectBehavior(value: string): void;
-  localShell: string;
-  setLocalShell(value: string): void;
+  disconnectBehavior: DisconnectBehavior;
+  setDisconnectBehavior(value: DisconnectBehavior): void;
+  localShell: LocalShell;
+  setLocalShell(value: LocalShell): void;
   preserveTerminalHistory: boolean;
   setPreserveTerminalHistory(value: boolean): void;
   confirmActiveDisconnect: boolean;
@@ -69,7 +70,7 @@ export default function ConnectionSettingsPanel({
               <div className="settings-terminal-group">
                 <label htmlFor="settings-disconnect-behavior">{t("settings:disconnectBehavior")}</label>
                 <select id="settings-disconnect-behavior" value={disconnectBehavior}
-                  onChange={e => setDisconnectBehavior(e.target.value as import("../types").DisconnectBehavior)}>
+                  onChange={e => setDisconnectBehavior(e.target.value as DisconnectBehavior)}>
                   <option value="local">{t("settings:revertToLocalShell")}</option>
                   <option value="retain">{t("settings:retainDisconnectedTerminal")}</option>
                   <option value="close">{t("settings:closeDisconnectedTab")}</option>
@@ -79,7 +80,7 @@ export default function ConnectionSettingsPanel({
                 <div className="settings-terminal-group">
                   <label htmlFor="settings-local-shell">{t("settings:defaultLocalShell")}</label>
                   <select id="settings-local-shell" value={localShell}
-                    onChange={e => setLocalShell(e.target.value as import("../types").LocalShell)}>
+                    onChange={e => setLocalShell(e.target.value as LocalShell)}>
                     <option value="powershell">Windows PowerShell</option>
                     <option value="pwsh">PowerShell 7</option>
                     <option value="cmd">CMD</option>
