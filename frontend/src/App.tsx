@@ -4,7 +4,7 @@ import { t as tr } from "./i18n";
 import { useTranslation } from "react-i18next";
 import { initializeI18n, i18n } from "./i18n";
 import { normalizeLanguage, type Language } from "./i18n/languages";
-import { useState, useEffect, useRef, type CSSProperties, type DragEvent as ReactDragEvent } from "react";
+import { useState, useEffect, useRef, type CSSProperties } from "react";
 import {
   Terminal,
   Plus,
@@ -65,7 +65,8 @@ import AISidebar from "./components/AISidebar";
 import { useConversations } from "./useConversations";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
 import { useSplitWorkspace } from "./features/terminal/useSplitWorkspace";
-import { TAB_DRAG_MIME, getSplitDropZone, type SplitDropZone } from "./features/terminal/splitDrop";
+import { getSplitDropIntent, type SplitDropIntent } from "./features/terminal/splitDrop";
+import { MAX_SPLIT_PANES, paneIDs } from "./features/terminal/splitTree";
 import { useTransferActivity } from "./features/transfers/useTransferActivity";
 import { toChatMessages } from "./conversations";
 import QuickCommandBar from "./components/QuickCommandBar";
@@ -306,62 +307,79 @@ function Workspace({ initialState }: { initialState: AppState }) {
   }, []);
 
   const {
-    splitDirection, splitContainerRef, splitReady,
+    layout, splitDirection, splitContainerRef, splitReady,
     visibleTabIDs, paneBoxes, splitHandles,
     applyDrop, undockPane, closeSplit, rotateActiveSplit,
     setSplitRatio, resizeNodeAndSave, startSplitResize,
   } = useSplitWorkspace({
     tabs, activeID, showSFTP, initialRatio: initialState.splitRatio, onError: notify,
   });
-  const [draggedTabID, setDraggedTabID] = useState("");
   const [splitDropPreview, setSplitDropPreview] = useState<{
     targetID: string;
-    zone: SplitDropZone;
+    intent: SplitDropIntent;
+    invalid: boolean;
     left: number;
     top: number;
     width: number;
     height: number;
   } | null>(null);
 
-  const resolveSplitDrop = (event: ReactDragEvent<HTMLDivElement>) => {
-    if (!draggedTabID || showSFTP || !event.dataTransfer.types.includes(TAB_DRAG_MIME)) return null;
-    const source = tabs.find(tab => tab.id === draggedTabID && tab.status === "connected");
-    const targetNode = (event.target as HTMLElement).closest<HTMLElement>(".terminal-pane.visible");
-    if (!source || !targetNode) return null;
-    const targetID = targetNode.dataset.tabId ?? "";
-    const target = tabs.find(tab => tab.id === targetID && tab.status === "connected");
-    if (!target || targetID === draggedTabID) return null;
-    const bounds = targetNode.getBoundingClientRect();
-    if (!bounds.width || !bounds.height) return null;
-    return { targetID, zone: getSplitDropZone(bounds, event.clientX, event.clientY), bounds };
+  const findPointerDrop = (sourceID: string, x: number, y: number): {
+    targetID: string;
+    intent: SplitDropIntent;
+    invalid: boolean;
+    bounds: DOMRect;
+  } | null => {
+    const container = splitContainerRef.current;
+    if (!container || showSFTP) return null;
+    const source = tabs.find(tab => tab.id === sourceID && tab.status === "connected");
+    if (!source) return null;
+    const targetPane = Array.from(container.querySelectorAll<HTMLElement>(".terminal-pane.visible"))
+      .find(element => {
+        const rect = element.getBoundingClientRect();
+        return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+      });
+    if (!targetPane) return null;
+    const targetID = targetPane.dataset.tabId ?? "";
+    if (sourceID === targetID || !tabs.some(tab => tab.id === targetID && tab.status === "connected"))
+      return null;
+    const bounds = targetPane.getBoundingClientRect();
+    const previous = splitDropPreview?.targetID === targetID ? splitDropPreview.intent : undefined;
+    const intent = getSplitDropIntent(bounds, x, y, previous);
+    const existing = paneIDs(layout);
+    const invalid = !existing.includes(sourceID) && existing.length >= MAX_SPLIT_PANES;
+    return { targetID, intent, invalid, bounds };
   };
 
-  const onSplitDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
-    const target = resolveSplitDrop(event);
+  const onTabPointerMove = (sourceID: string, x: number, y: number) => {
+    const target = findPointerDrop(sourceID, x, y);
     const container = splitContainerRef.current;
     if (!target || !container) {
       setSplitDropPreview(null);
       return;
     }
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
     const outer = container.getBoundingClientRect();
     const next = {
-      targetID: target.targetID, zone: target.zone,
+      targetID: target.targetID, intent: target.intent, invalid: target.invalid,
       left: target.bounds.left - outer.left, top: target.bounds.top - outer.top,
       width: target.bounds.width, height: target.bounds.height,
     };
     setSplitDropPreview(previous =>
-      previous && Object.keys(next).every(key =>
-        previous[key as keyof typeof next] === next[key as keyof typeof next]) ? previous : next);
+      previous && previous.targetID === next.targetID &&
+      previous.intent.zone === next.intent.zone && previous.intent.mode === next.intent.mode &&
+      previous.invalid === next.invalid && previous.left === next.left &&
+      previous.top === next.top && previous.width === next.width && previous.height === next.height
+        ? previous : next);
   };
 
-  const onSplitDrop = (event: ReactDragEvent<HTMLDivElement>) => {
-    const target = resolveSplitDrop(event);
-    setSplitDropPreview(null);
-    if (!target || event.dataTransfer.getData(TAB_DRAG_MIME) !== draggedTabID) return;
-    event.preventDefault();
-    applyDrop(draggedTabID, target.targetID, target.zone);
+  const onTabPointerDrop = (sourceID: string, x: number, y: number) => {
+    const target = findPointerDrop(sourceID, x, y);
+    if (!target) return;
+    if (target.invalid) {
+      notify(tr("terminal:splitPaneLimit"));
+      return;
+    }
+    applyDrop(sourceID, target.targetID, target.intent.zone);
     setActiveID(target.targetID);
   };
 
@@ -1383,8 +1401,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onDuplicate={tab => open(tab.session, tab.id)}
           onClose={tab => { void close(tab); }}
           onNewTab={() => setShowSessionPicker(true)}
-          onTabDragStart={setDraggedTabID}
-          onTabDragEnd={() => { setDraggedTabID(""); setSplitDropPreview(null); }}
+          onTabPointerMove={onTabPointerMove}
+          onTabPointerDrop={onTabPointerDrop}
+          onTabDragEnd={() => setSplitDropPreview(null)}
           onDropOnStrip={undockPane}
           onReorder={(sourceID, targetID, placement) =>
             setTabs(current => reorderTabs(current, sourceID, targetID, placement))} />
@@ -1503,13 +1522,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
             </div>
             <div className={`workspace-workarea ${showSFTP ? "with-sftp" : ""}`}>
             <div ref={splitContainerRef}
-              onDragOver={onSplitDragOver}
-              onDrop={onSplitDrop}
-              onDragLeave={event => {
-                const rect = event.currentTarget.getBoundingClientRect();
-                if (event.clientX <= rect.left || event.clientX >= rect.right ||
-                    event.clientY <= rect.top || event.clientY >= rect.bottom) setSplitDropPreview(null);
-              }}
               className={`terminal-container ${splitReady ? `terminal-split terminal-split-${splitDirection}` : ""}`}
               style={{ "--terminal-background": activeTerminalBackground } as CSSProperties}>
               {tabs.map((tab) => (
@@ -1564,15 +1576,19 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 />
               ))}
               {splitDropPreview && (
-                <div className={`terminal-split-drop-preview terminal-split-drop-${splitDropPreview.zone}`}
+                <div className={`terminal-split-drop-preview terminal-split-drop-${splitDropPreview.intent.zone} ${splitDropPreview.intent.mode === "smart" ? "is-smart" : ""} ${splitDropPreview.invalid ? "is-invalid" : ""}`}
                   style={{
                     left: splitDropPreview.left, top: splitDropPreview.top,
                     width: splitDropPreview.width, height: splitDropPreview.height,
                   }} aria-hidden="true">
-                  <span>{tr(({
-                    left: "terminal:dropSplitLeft", right: "terminal:dropSplitRight",
-                    top: "terminal:dropSplitTop", bottom: "terminal:dropSplitBottom",
-                  } as const)[splitDropPreview.zone])}</span>
+                  <span>{splitDropPreview.invalid
+                    ? tr("terminal:splitPaneLimit")
+                    : splitDropPreview.intent.mode === "smart"
+                    ? tr("terminal:dropSplitSmart")
+                    : tr(({
+                      left: "terminal:dropSplitLeft", right: "terminal:dropSplitRight",
+                      top: "terminal:dropSplitTop", bottom: "terminal:dropSplitBottom",
+                    } as const)[splitDropPreview.intent.zone])}</span>
                 </div>
               )}
               {splitReady && splitHandles.map(handle => (

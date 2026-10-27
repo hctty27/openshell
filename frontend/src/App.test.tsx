@@ -401,25 +401,17 @@ test("double-clicking a terminal tab opens an independent SSH session beside it 
 });
 
 async function dragFirstTabOntoActiveTerminal() {
-  const tab = document.querySelector<HTMLElement>(".terminal-tab")!;
+  const tab = document.querySelector<HTMLElement>(".terminal-tab button")!;
   const target = document.querySelector<HTMLElement>(".terminal-pane.visible[data-active='true']")!;
   vi.spyOn(target, "getBoundingClientRect").mockReturnValue({
     left: 100, top: 100, width: 800, height: 500, right: 900, bottom: 600,
     x: 100, y: 100, toJSON: () => ({}),
   });
-  const values = new Map<string, string>();
-  const transfer = {
-    types: ["application/x-openshell-tab", "text/plain"],
-    setData: (type: string, value: string) => values.set(type, value),
-    getData: (type: string) => values.get(type) ?? "",
-    effectAllowed: "none", dropEffect: "none",
-  };
-  fireEvent.dragStart(tab, { dataTransfer: transfer });
-  fireEvent.dragOver(target, { dataTransfer: transfer, clientX: 850, clientY: 350 });
-  expect(transfer.dropEffect).toBe("move");
-  fireEvent.drop(target, { dataTransfer: transfer, clientX: 850, clientY: 350 });
-  fireEvent.dragEnd(tab, { dataTransfer: transfer });
-  await waitFor(() => expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split")).toBe(true));
+  fireEvent.pointerDown(tab, { button: 0, pointerId: 7, clientX: 140, clientY: 15 });
+  fireEvent.pointerMove(window, { pointerId: 7, clientX: 850, clientY: 350 });
+  fireEvent.pointerUp(window, { pointerId: 7, clientX: 850, clientY: 350 });
+  await waitFor(() =>
+    expect(document.querySelector(".terminal-container")?.classList.contains("terminal-split")).toBe(true));
 }
 
 test("two connected sessions can split, rotate, focus and close without extra SSH connections", async () => {
@@ -480,7 +472,7 @@ test("split gutter accepts keyboard, drag, and reset with persistent bounds", as
   fireEvent.click(screen.getByTitle("打开会话列表"));
   fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 eu" }));
   await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
-  dragFirstTabOntoActiveTerminal();
+  await dragFirstTabOntoActiveTerminal();
   const separator = screen.getByRole("separator", { name: "调整终端分屏比例" });
   expect(separator.getAttribute("aria-valuenow")).toBe("60");
   fireEvent.keyDown(separator, { key: "ArrowRight" });

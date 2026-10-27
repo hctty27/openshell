@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getSplitDropZone, splitLayoutFromDrop } from "./splitDrop";
+import { getSplitDropZone, getSplitDropIntent, splitLayoutFromDrop } from "./splitDrop";
 
 describe("split drag and drop", () => {
   const bounds = { left: 100, top: 50, width: 800, height: 400 };
@@ -9,6 +9,19 @@ describe("split drag and drop", () => {
     expect(getSplitDropZone(bounds, 890, 250)).toBe("right");
     expect(getSplitDropZone(bounds, 500, 60)).toBe("top");
     expect(getSplitDropZone(bounds, 500, 440)).toBe("bottom");
+  });
+
+  it("selects a forgiving smart center based on terminal aspect ratio", () => {
+    expect(getSplitDropIntent(bounds, 500, 250))
+      .toEqual({ zone: "right", mode: "smart" });
+    expect(getSplitDropIntent({ left: 0, top: 0, width: 240, height: 700 }, 120, 350))
+      .toEqual({ zone: "bottom", mode: "smart" });
+  });
+
+  it("applies edge hysteresis to prevent flickering near adjacent regions", () => {
+    const previous = getSplitDropIntent(bounds, 500, 65);
+    expect(previous).toEqual({ zone: "top", mode: "edge" });
+    expect(getSplitDropIntent(bounds, 505, 72, previous)).toEqual(previous);
   });
 
   it("produces ordered horizontal and vertical layouts", () => {

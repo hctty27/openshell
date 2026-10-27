@@ -8,55 +8,114 @@ const makeTab = (id: string, status: Tab["status"] = "connected") => ({
   status, ref: { tabId: id, sessionId: id, generation: 1 }, everConnected: true,
 } as Tab);
 
+function geometry(container: HTMLElement) {
+  const strip = container.querySelector<HTMLElement>(".tab-strip")!;
+  vi.spyOn(strip, "getBoundingClientRect").mockReturnValue({
+    left: 0, right: 500, top: 0, bottom: 36, width: 500, height: 36,
+  } as DOMRect);
+  container.querySelectorAll<HTMLElement>(".terminal-tab").forEach((el, i) =>
+    vi.spyOn(el, "getBoundingClientRect").mockImplementation(() => {
+      const match = el.style.transform.match(/translateX\((-?[\d.]+)px\)/);
+      const shift = match ? Number(match[1]) : 0;
+      return { left: i * 100 + shift, right: (i + 1) * 100 + shift,
+        top: 0, bottom: 36, width: 100, height: 36 } as DOMRect;
+    }));
+  return strip;
+}
+
 describe("WorkspaceTabStrip", () => {
   function setup() {
     const onReorder = vi.fn();
     const onDuplicate = vi.fn();
     const onClose = vi.fn();
+    const onTabPointerMove = vi.fn();
+    const onTabPointerDrop = vi.fn();
+    const onDropOnStrip = vi.fn();
     const tabs = [makeTab("first"), makeTab("second"), makeTab("third", "disconnected")];
     const result = render(
       <WorkspaceTabStrip tabs={tabs} activeID="first" disconnectBehavior="local"
         onActivate={vi.fn()} onDuplicate={onDuplicate} onClose={onClose}
-        onNewTab={vi.fn()} onReorder={onReorder} />,
-    );
-    return { ...result, onReorder, onDuplicate, onClose, tabs };
-  }
-
-  it("reorders a dragged tab after the hovered tab", () => {
-    const { container, onReorder } = setup();
-    const nodes = container.querySelectorAll<HTMLElement>(".terminal-tab");
-    const transfer = { setData: vi.fn(), effectAllowed: "none", dropEffect: "none" };
-    vi.spyOn(nodes[2], "getBoundingClientRect").mockReturnValue({ left: 100, width: 100, right: 200 } as DOMRect);
-    fireEvent.dragStart(nodes[0], { dataTransfer: transfer });
-    fireEvent.dragOver(nodes[2], { dataTransfer: transfer, clientX: 180 });
-    expect(nodes[2].classList.contains("drag-after")).toBe(true);
-    fireEvent.drop(nodes[2], { dataTransfer: transfer, clientX: 180 });
-    expect(onReorder).toHaveBeenCalledWith("first", "third", "after");
-  });
-
-  it("publishes a typed drag payload and releases a split tab on the empty strip", () => {
-    setup();
-    const onTabDragStart = vi.fn();
-    const onTabDragEnd = vi.fn();
-    const onDropOnStrip = vi.fn();
-    const tabs = [makeTab("A"), makeTab("B")];
-    const { container } = render(
-      <WorkspaceTabStrip tabs={tabs} activeID="A" disconnectBehavior="local"
-        onActivate={vi.fn()} onDuplicate={vi.fn()} onClose={vi.fn()}
-        onNewTab={vi.fn()} onReorder={vi.fn()}
-        onTabDragStart={onTabDragStart} onTabDragEnd={onTabDragEnd}
+        onNewTab={vi.fn()} onReorder={onReorder}
+        onTabPointerMove={onTabPointerMove} onTabPointerDrop={onTabPointerDrop}
         onDropOnStrip={onDropOnStrip} />,
     );
-    const strip = container.querySelector<HTMLElement>(".tab-strip")!;
-    const tab = strip.querySelector<HTMLElement>(".terminal-tab")!;
-    const transfer = { setData: vi.fn(), effectAllowed: "none", dropEffect: "none" };
-    fireEvent.dragStart(tab, { dataTransfer: transfer });
-    expect(transfer.setData).toHaveBeenCalledWith("application/x-openshell-tab", "A");
-    expect(onTabDragStart).toHaveBeenCalledWith("A");
-    fireEvent.dragOver(strip, { dataTransfer: transfer });
-    fireEvent.drop(strip, { dataTransfer: transfer });
-    expect(onDropOnStrip).toHaveBeenCalledWith("A");
-    expect(onTabDragEnd).toHaveBeenCalled();
+    geometry(result.container);
+    return { ...result, onReorder, onDuplicate, onClose, tabs,
+      onTabPointerMove, onTabPointerDrop, onDropOnStrip };
+  }
+
+  const press = (button: HTMLElement, x = 40, y = 15) =>
+    fireEvent.pointerDown(button, { button: 0, pointerId: 1, clientX: x, clientY: y });
+  const move = (x: number, y: number) =>
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: x, clientY: y });
+  const release = (x: number, y: number) =>
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: x, clientY: y });
+
+  it("shows live displacement and reorders on pointer release", () => {
+    const { container, onReorder } = setup();
+    press(container.querySelector(".terminal-tab button")!);
+    move(280, 15);
+    expect(container.querySelector(".terminal-tab.dragging")).not.toBeNull();
+    expect(document.querySelector(".tab-drag-overlay")).not.toBeNull();
+    expect(container.querySelectorAll(".terminal-tab")[1].getAttribute("style"))
+      .toContain("translateX(-100px)");
+    release(280, 15);
+    expect(onReorder).toHaveBeenCalledWith("first", "third", "after");
+    expect(document.querySelector(".tab-drag-overlay")).toBeNull();
+  });
+
+  it("does not mistake an animated last tab for empty strip space", () => {
+    const onReorder = vi.fn();
+    const onDropOnStrip = vi.fn();
+    const { container } = render(
+      <WorkspaceTabStrip tabs={[makeTab("A"), makeTab("B")]} activeID="A"
+        disconnectBehavior="local" onActivate={vi.fn()} onDuplicate={vi.fn()}
+        onClose={vi.fn()} onNewTab={vi.fn()} onReorder={onReorder}
+        onDropOnStrip={onDropOnStrip} />,
+    );
+    geometry(container);
+    const last = container.querySelectorAll<HTMLElement>(".terminal-tab")[1];
+    vi.spyOn(last, "getBoundingClientRect").mockImplementation(() => {
+      const shift = last.style.transform ? -100 : 0;
+      return { left: 100 + shift, right: 200 + shift, width: 100 } as DOMRect;
+    });
+    press(container.querySelector(".terminal-tab button")!);
+    move(190, 15);
+    release(190, 15);
+    expect(onReorder).toHaveBeenCalledWith("A", "B", "after");
+    expect(onDropOnStrip).not.toHaveBeenCalled();
+  });
+
+  it("does not initiate a drag before the five-pixel threshold", () => {
+    const { container, onTabPointerMove, onReorder } = setup();
+    press(container.querySelector(".terminal-tab button")!);
+    move(43, 16);
+    release(43, 16);
+    expect(onTabPointerMove).not.toHaveBeenCalled();
+    expect(onReorder).not.toHaveBeenCalled();
+  });
+
+  it("hands off to terminal drop and undocks on blank strip space", () => {
+    const { container, onTabPointerDrop, onDropOnStrip } = setup();
+    const button = container.querySelector<HTMLElement>(".terminal-tab button")!;
+    press(button);
+    move(350, 250);
+    release(350, 250);
+    expect(onTabPointerDrop).toHaveBeenCalledWith("first", 350, 250);
+    press(button);
+    move(450, 15);
+    release(450, 15);
+    expect(onDropOnStrip).toHaveBeenCalledWith("first");
+  });
+
+  it("cancels on Escape, retaining tab order", () => {
+    const { container, onReorder, onTabPointerDrop } = setup();
+    press(container.querySelector(".terminal-tab button")!);
+    move(350, 250);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onReorder).not.toHaveBeenCalled();
+    expect(onTabPointerDrop).not.toHaveBeenCalled();
+    expect(document.querySelector(".tab-drag-overlay")).toBeNull();
   });
 
   it("keeps double click duplication and keyboard reordering", () => {
@@ -68,13 +127,13 @@ describe("WorkspaceTabStrip", () => {
     expect(onReorder).toHaveBeenCalledWith("first", "second", "after");
   });
 
-  it("does not start dragging from the close button", () => {
-    const { container, onClose, tabs } = setup();
-    const node = container.querySelector<HTMLElement>(".terminal-tab")!;
-    const close = node.querySelector<HTMLButtonElement>(".terminal-tab-close")!;
-    const transfer = { setData: vi.fn(), effectAllowed: "none" };
-    expect(fireEvent.dragStart(close, { dataTransfer: transfer })).toBe(false);
-    expect(transfer.setData).not.toHaveBeenCalled();
+  it("never starts a drag from the close button", () => {
+    const { container, onClose, tabs, onTabPointerMove } = setup();
+    const close = container.querySelector<HTMLElement>(".terminal-tab-close")!;
+    press(close);
+    move(350, 250);
+    release(350, 250);
+    expect(onTabPointerMove).not.toHaveBeenCalled();
     fireEvent.click(close);
     expect(onClose).toHaveBeenCalledWith(tabs[0]);
   });

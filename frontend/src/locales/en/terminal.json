@@ -69,5 +69,7 @@
   "dropSplitRight": "Drop to split right",
   "dropSplitTop": "Drop to split above",
   "dropSplitBottom": "Drop to split below",
-  "undockPane": "Remove pane from split"
+  "undockPane": "Remove pane from split",
+  "dropSplitSmart": "Release for smart split",
+  "splitPaneLimit": "Maximum of 4 split panes"
 }

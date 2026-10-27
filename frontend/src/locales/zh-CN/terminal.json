@@ -69,5 +69,7 @@
   "dropSplitRight": "释放以在右侧分屏",
   "dropSplitTop": "释放以在上方分屏",
   "dropSplitBottom": "释放以在下方分屏",
-  "undockPane": "将此终端移出分屏"
+  "undockPane": "将此终端移出分屏",
+  "dropSplitSmart": "释放以智能分屏",
+  "splitPaneLimit": "当前最多支持 4 个分屏"
 }
