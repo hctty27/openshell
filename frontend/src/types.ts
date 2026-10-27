@@ -367,22 +367,3 @@ export interface SFTPSyncPreview {
   bytes: number;
 }
 
-export type SFTPAIMode = "analyze" | "log" | "compare" | "edit" | "upload";
-export interface SFTPAIRequest {
-  ref: Ref;
-  profileId: string;
-  mode: SFTPAIMode;
-  paths: string[];
-  remoteDir: string;
-  instruction: string;
-}
-export interface SFTPAIResponse {
-  mode: SFTPAIMode;
-  summary: string;
-  source: string;
-  destination: string;
-  revision: string;
-  original: string;
-  proposed: string;
-  truncated: boolean;
-}

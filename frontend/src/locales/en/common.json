@@ -50,7 +50,6 @@
   "customAi": "Custom AI",
   "doubleClickASessionOnTheLeftTo": "Double-click a session on the left to connect",
   "interfacePreviewUseTheWindowsAppForSsh": "Interface preview · Use the Windows app for SSH connections",
-  "reauthenticate": "Reauthenticate",
   "reconnect": "Reconnect",
   "sendSelectedTextOrRecentOutputToAi": "Send selected text or recent output to AI",
   "connecting": "Connecting",
@@ -160,5 +159,6 @@
   "quitActiveSessionsTitle": "Exit OpenShell?",
   "quitActiveSessionsDescription": "{{count}} SSH connection(s) will be disconnected when OpenShell exits.",
   "quitActiveSessionsBusyDescription": "{{count}} SSH connection(s) will be disconnected, and running AI tasks or file transfers may be interrupted. Remote processes may continue running.",
-  "quitAndDisconnect": "Disconnect all and exit"
+  "quitAndDisconnect": "Disconnect all and exit",
+  "retryConnection": "Retry connection"
 }
