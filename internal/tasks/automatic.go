@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
+	"github.com/hctty27/openshell/internal/ops"
 	"strings"
 	"sync"
 )
@@ -265,8 +266,10 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 		signature := p.Ref.TabID + "\x00" + p.Cwd + "\x00" + strings.TrimSpace(p.Command)
 		reason := ""
 		if !s.AllowChanges && !IsInspectionCommand(p.Command) {
-			reason = "inspectionConfirmation"
-		}
+            reason = "inspectionConfirmation"
+        } else if ops.Analyze(p.Command, IsInspectionCommand(p.Command)).RequiresConfirmation {
+            reason = "criticalChangeConfirmation"
+        }
 		if t.seen[signature] {
 			reason = "repeatedCommand"
 		}
@@ -326,6 +329,7 @@ var automaticReasons = map[string]string{
 	"taskTargetChanged":      "Command target does not match the task connection",
 	"roundLimit":             "Round limit reached. Continue when ready.",
 	"inspectionConfirmation": "Unrecognized inspection command. Confirmation required.",
+    "criticalChangeConfirmation": "High-risk change. Review the preflight checklist and confirm explicitly.",
 	"repeatedCommand":        "Repeated command. Confirmation required.",
 	"remoteResultUnknown":    "Remote result unconfirmed. Automatic task stopped.",
 }
