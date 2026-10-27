@@ -120,7 +120,7 @@
   "opsPreflightProbePassed": "基础探针完成，仍需人工核实业务条件",
   "opsPreflightProbeFailed": "部分必需探针失败，请检查后再操作",
   "opsProbeConnection": "SSH 连接",
-  "opsProbeIdentity": "主机身份",
+  "opsProbeIdentity": "主机名查询",
   "opsProbeCapacity": "磁盘容量信息",
   "opsProbePassed": "通过",
   "opsProbeFailed": "失败",
