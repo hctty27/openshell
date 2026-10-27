@@ -59,7 +59,15 @@ func (a *App) confirmCommandContext(parent context.Context, id string) (domain.C
 	if err != nil {
 		return domain.CommandResult{}, err
 	}
-	run, err := a.checkProposalOwner(p.Ref, id)
+	a.mu.Lock()
+	runID := a.proposalRuns[id]
+	a.mu.Unlock()
+	a.executionMu.Lock()
+	ex := a.executions[runID]
+	if ex == nil { a.executionMu.Unlock(); return domain.CommandResult{}, apperror.New("memoryNotOwner", nil) }
+	owner := ex.Run.OwnerRef
+	a.executionMu.Unlock()
+	run, err := a.checkProposalOwner(owner, id)
 	if err != nil {
 		return domain.CommandResult{}, err
 	}
