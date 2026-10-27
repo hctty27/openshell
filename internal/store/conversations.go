@@ -41,7 +41,18 @@ PRAGMA user_version=2;`)
 			return err
 		}
 	}
-	return tx.Commit()
+	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS operation_steps(
+  conversation_id TEXT NOT NULL, step_id TEXT NOT NULL, seq INTEGER NOT NULL, data TEXT NOT NULL,
+  PRIMARY KEY(conversation_id, step_id), UNIQUE(conversation_id, seq));
+CREATE INDEX IF NOT EXISTS operation_steps_conversation ON operation_steps(conversation_id, seq DESC);
+-- Never assume a command that was running before a process crash completed.
+UPDATE operation_steps SET data=json_set(data, '$.status',
+  CASE WHEN json_extract(data,'$.status')='running' THEN 'unknown' ELSE 'expired' END,
+  '$.reason', CASE WHEN json_extract(data,'$.status')='running' THEN 'interrupted_on_restart' ELSE 'proposal_expired_on_restart' END,
+  '$.verificationStatus', CASE WHEN json_extract(data,'$.status')='running' THEN 'pending' ELSE '' END)
+WHERE json_extract(data,'$.status') IN ('awaiting_confirmation','running');`)
+    if err != nil { return err }
+    return tx.Commit()
 }
 func (s *Store) CreateConversation(ctx context.Context, key, sessionID string) (domain.Conversation, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -218,6 +229,7 @@ func (s *Store) MutateConversation(ctx context.Context, id string, expected int6
 			c.Title = shortTitle(m.Content)
 		}
 	case "clear":
+        if _, err = tx.ExecContext(ctx, "DELETE FROM operation_steps WHERE conversation_id=?", id); err != nil { return c, err }
 		if _, err = tx.ExecContext(ctx, "DELETE FROM conversation_messages WHERE conversation_id=?", id); err != nil {
 			return c, err
 		}
@@ -241,7 +253,7 @@ func (s *Store) MutateConversation(ctx context.Context, id string, expected int6
 	return c, tx.Commit()
 }
 func deleteConversationTx(ctx context.Context, tx *sql.Tx, id string) error {
-	for _, query := range []string{"DELETE FROM conversation_messages WHERE conversation_id=?", "DELETE FROM conversation_selections WHERE last_conversation_id=?", "DELETE FROM conversations WHERE id=?"} {
+	for _, query := range []string{"DELETE FROM operation_steps WHERE conversation_id=?", "DELETE FROM conversation_messages WHERE conversation_id=?", "DELETE FROM conversation_selections WHERE last_conversation_id=?", "DELETE FROM conversations WHERE id=?"} {
 		if _, err := tx.ExecContext(ctx, query, id); err != nil {
 			return err
 		}
