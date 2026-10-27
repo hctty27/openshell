@@ -228,7 +228,9 @@ export default function AISidebar(p: Props) {
                       ? t("ai:completed")
                       : m.result.status === "unknown"
                         ? t("ai:resultUnknown")
-                        : t("ai:failed")}
+                        : m.result.verificationStatus === "pending"
+                          ? t("ai:opsNonZeroExit")
+                          : t("ai:failed")}
                   </strong>
                   <span>
                     {t("ai:exitCodeValue", {
