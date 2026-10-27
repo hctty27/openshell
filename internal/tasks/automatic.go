@@ -24,6 +24,9 @@ type AutoSnapshot struct {
 	RoundSteps   int                  `json:"roundSteps"`
 	Limit        int                  `json:"limit"`
 	AllowChanges bool                 `json:"allowChanges"`
+    VerificationPending bool        `json:"verificationPending"`
+    VerificationChecks int          `json:"verificationChecks"`
+    RecoveryFailures int            `json:"recoveryFailures"`
 	Reason       string               `json:"reason"`
 	Proposal     *domain.Proposal     `json:"proposal,omitempty"`
 }
@@ -53,6 +56,10 @@ type automaticTask struct {
 	seen          map[string]int
     lastResults   map[string][32]byte
 	autoContinue  bool
+    verificationRef domain.ConnectionRef
+    verificationViolations int
+    failedMutation bool
+    unresolvedFailure bool
 }
 type AutomaticRunner struct {
 	mu        sync.Mutex
@@ -107,6 +114,7 @@ func (r *AutomaticRunner) SetAutoContinue(id string, enabled bool) error {
 }
 
 const maxUnattendedCommands = 200
+const maxRecoveryFailures = 3
 
 func autoTerminal(status string) bool {
 	return status == "completed" || status == "stopped" || status == "error"
@@ -274,9 +282,19 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 				return t.snapshot(), nil
 			}
 			t.emit("reply", reply.Text, nil)
-			if reply.Proposal == nil {
-				return t.finish("completed", "taskCompleted"), nil
-			}
+            if reply.Proposal == nil {
+                current := t.snapshot()
+                if current.VerificationPending {
+                    return t.finish("stopped", "verificationRequired"), nil
+                }
+                t.mu.Lock()
+                unresolved := t.unresolvedFailure
+                t.mu.Unlock()
+                if unresolved {
+                    return t.finish("stopped", "failedTaskUnresolved"), nil
+                }
+                return t.finish("completed", "taskCompleted"), nil
+            }
 			s = t.snapshot()
 		}
 		if t.autoContinue && s.Steps >= maxUnattendedCommands {
@@ -293,7 +311,24 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
             s = t.snapshot()
         }
 		p := *s.Proposal
-		signature := p.Ref.TabID + "\x00" + p.Cwd + "\x00" + strings.TrimSpace(p.Command)
+        // A change must be followed by a successful inspection of the SAME
+        // target before additional mutations or a successful completion.
+        if s.VerificationPending && (!IsInspectionCommand(p.Command) || p.Ref != t.verificationRef || len(p.Targets) > 0) {
+            t.mu.Lock()
+            t.state.Proposal = nil
+            t.verificationViolations++
+            violations := t.verificationViolations
+            t.mu.Unlock()
+            if t.callbacks.CancelProposal != nil {
+                t.callbacks.CancelProposal(p.ID)
+            }
+            if violations >= 2 {
+                return t.finish("stopped", "verificationRequired"), nil
+            }
+            t.emit("state", "", nil)
+            continue
+        }
+        signature := p.Ref.TabID + "\x00" + p.Cwd + "\x00" + strings.TrimSpace(p.Command)
 		reason := ""
 		if !s.AllowChanges && !IsInspectionCommand(p.Command) {
             reason = "inspectionConfirmation"
@@ -341,12 +376,43 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 			r.Stop(id)
 			return t.snapshot(), nil
 		}
-		if err != nil {
-			return t.finish("error", err.Error()), nil
-		}
-		if result.Status == "unknown" || result.Status == "cancelled" || result.Status == "" {
-			return t.finish("stopped", "remoteResultUnknown"), nil
-		}
+        if err != nil {
+            return t.finish("error", err.Error()), nil
+        }
+        if result.Status == "unknown" || result.Status == "cancelled" || result.Status == "" {
+            return t.finish("stopped", "remoteResultUnknown"), nil
+        }
+        failed := result.Status != "completed" || (result.ExitCode != nil && *result.ExitCode != 0)
+        inspected := IsInspectionCommand(p.Command)
+        t.mu.Lock()
+        if !inspected {
+            t.state.VerificationPending = true
+            t.verificationRef = p.Ref
+            t.verificationViolations = 0
+            if failed {
+                t.failedMutation = true
+            } else {
+                t.failedMutation = false
+            }
+        } else if t.state.VerificationPending && p.Ref == t.verificationRef && !failed {
+            t.state.VerificationPending = false
+            t.state.VerificationChecks++
+            t.verificationViolations = 0
+        }
+        if failed {
+            t.state.RecoveryFailures++
+            t.unresolvedFailure = true
+        } else if !inspected {
+            t.unresolvedFailure = false
+        } else if !t.failedMutation && !t.state.VerificationPending {
+            t.unresolvedFailure = false
+        }
+        failures := t.state.RecoveryFailures
+        t.mu.Unlock()
+        t.emit("state", "", nil)
+        if failures >= maxRecoveryFailures {
+            return t.finish("stopped", "recoveryAttemptsExhausted"), nil
+        }
 	}
 }
 
@@ -377,6 +443,9 @@ var automaticReasons = map[string]string{
 	"repeatedCommand":        "Repeated change. Confirmation required.",
     "repeatedInspectionNoProgress": "Repeated inspection made no progress; automatic task stopped.",
 	"remoteResultUnknown":    "Remote result unconfirmed. Automatic task stopped.",
+    "verificationRequired": "Modification needs independent read-only verification on the same server.",
+    "failedTaskUnresolved": "Command failures remain unresolved; task cannot be marked completed.",
+    "recoveryAttemptsExhausted": "Too many failed commands. Automatic recovery stopped.",
 }
 
 func (r *AutomaticRunner) CheckOwner(id string, ref domain.ConnectionRef) error {
