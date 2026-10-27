@@ -39,13 +39,16 @@ export default function WorkspaceTabStrip(p: Props) {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
   }, []);
 
+  const baseTabBounds = (el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    const match = el.style.transform.match(/translateX\((-?[\d.]+)px\)/);
+    const shift = match ? Number(match[1]) : 0;
+    return { left: rect.left - shift, right: rect.right - shift, width: rect.width };
+  };
+
   const insertionAt = (id: string, x: number) =>
     tabInsertionIndex(Array.from(stripRef.current?.querySelectorAll<HTMLElement>(".terminal-tab") ?? [])
-      .map(el => {
-        const bounds = el.getBoundingClientRect();
-        const visualShift = Number(el.style.transform.match(/translateX\\((-?[\\d.]+)px\\)/)?.[1] ?? 0);
-        return { id: el.dataset.tabId ?? "", left: bounds.left - visualShift, width: bounds.width };
-      }), id, x);
+      .map(el => ({ id: el.dataset.tabId ?? "", ...baseTabBounds(el) })), id, x);
 
   const moveWithKeyboard = (tabID: string, index: number, event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (!event.altKey || !event.shiftKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
@@ -113,7 +116,7 @@ export default function WorkspaceTabStrip(p: Props) {
           up.clientY >= bounds.top && up.clientY <= bounds.bottom;
         if (inside) {
           const tabs = Array.from(strip?.querySelectorAll<HTMLElement>(".terminal-tab") ?? []);
-          const rightEdge = tabs.length ? tabs[tabs.length - 1].getBoundingClientRect().right : bounds.left;
+          const rightEdge = tabs.length ? baseTabBounds(tabs[tabs.length - 1]).right : bounds.left;
           if (up.clientX > rightEdge + 8) {
             p.onDropOnStrip?.(tabID);
           } else {
