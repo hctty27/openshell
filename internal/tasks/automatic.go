@@ -394,7 +394,7 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
             } else {
                 t.failedMutation = false
             }
-        } else if t.state.VerificationPending && p.Ref == t.verificationRef && !failed {
+        } else if t.state.VerificationPending && p.Ref == t.verificationRef && !failed && result.ExitCode != nil && *result.ExitCode == 0 {
             t.state.VerificationPending = false
             t.state.VerificationChecks++
             t.verificationViolations = 0
