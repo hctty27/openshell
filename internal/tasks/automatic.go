@@ -42,6 +42,7 @@ type AutoCallbacks struct {
 	Authorized     func(domain.ConnectionRef) bool
 	Model          func(context.Context, bool) (AutoReply, error)
 	Execute        func(context.Context, domain.Proposal) (domain.CommandResult, error)
+    MarkChecked    func(context.Context, string) error
 	CancelProposal func(string)
 	Emit           func(AutoEvent)
 }
@@ -57,6 +58,7 @@ type automaticTask struct {
     lastResults   map[string][32]byte
 	autoContinue  bool
     verificationRef domain.ConnectionRef
+    verificationID string
     verificationViolations int
     failedMutation bool
     unresolvedFailure bool
@@ -384,10 +386,20 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
         }
         failed := result.Status != "completed" || (result.ExitCode != nil && *result.ExitCode != 0)
         inspected := IsInspectionCommand(p.Command)
+        // Persist the independent inspection before claiming this mutation
+        // was checked. A journal error leaves verification pending.
+        if inspected && t.state.VerificationPending && p.Ref == t.verificationRef &&
+            !failed && result.ExitCode != nil && *result.ExitCode == 0 &&
+            t.callbacks.MarkChecked != nil {
+            if err := t.callbacks.MarkChecked(t.ctx, t.verificationID); err != nil {
+                return t.finish("error", err.Error()), nil
+            }
+        }
         t.mu.Lock()
         if !inspected {
             t.state.VerificationPending = true
             t.verificationRef = p.Ref
+            t.verificationID = p.ID
             t.verificationViolations = 0
             if failed {
                 t.failedMutation = true
