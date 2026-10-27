@@ -3740,3 +3740,4 @@ select.mode-select {
 .ops-plan__ack { display: flex; gap: 7px; align-items: flex-start; font-size: 11px; line-height: 1.5; }
 .ops-plan__ack input { width: auto; flex: 0 0 auto; margin: 2px 0 0; }
 .ops-verification-pending { border-left: 2px solid var(--warning); margin: 5px 0; padding: 3px 8px; color: var(--text-secondary); font-size: 11px; }
+.ops-plan__checks { margin: 3px 0 3px; padding-left: 17px; color: var(--text-secondary); }
