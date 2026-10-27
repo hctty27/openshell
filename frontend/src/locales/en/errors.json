@@ -222,5 +222,6 @@
   "memoryHistoryUnavailable": "Conversation history response is unavailable",
   "noActiveFileTransfer": "No active ZMODEM transfer to cancel",
   "inspectionCommandNotAllowed": "This command is not on the parallel read-only inspection allowlist. Run it against a specific target with confirmation instead.",
-  "parallelInspectionDoesNotAcceptTargetId": "Parallel inspection uses all authorized sessions and must not specify a target ID."
+  "parallelInspectionDoesNotAcceptTargetId": "Parallel inspection uses all authorized sessions and must not specify a target ID.",
+  "credentialsInCommandNotAllowed": "AI commands must not embed plaintext credentials. Use a managed credential or authenticate manually."
 }
