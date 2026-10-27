@@ -190,6 +190,8 @@ func (c *Coordinator) runParallel(ctx context.Context, p domain.Proposal) (domai
 	for i, ref := range p.Targets {
 		out := outcomes[i]
 		if out.err != nil && firstErr == nil { firstErr = out.err }
+		if out.result.Status == "" { out.result.Status = "unknown" }
+		if out.err != nil && out.result.Reason == "" { out.result.Reason = out.err.Error() }
 		if out.result.Status == "unknown" || out.result.Status == "" { result.Status = "unknown" } else if out.result.Status != "completed" && result.Status == "completed" { result.Status = "failed" }
 		result.TargetResults = append(result.TargetResults, domain.TargetCommandResult{Ref: ref, Result: out.result})
 		output.WriteString(fmt.Sprintf("Target tab_id=%s status=%s exit=%v\n", ref.TabID, out.result.Status, out.result.ExitCode))
