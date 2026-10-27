@@ -19,7 +19,16 @@ export default function OperationTimeline({ steps }: { steps: OperationStep[] })
               <div className="ops-timeline__head">
                 <strong>#{step.sequence} · {step.targets.map(x => x.tabId).join(", ")}</strong>
                 <span className={uncertain ? "ops-timeline__warning" : ""}>
-                  {t(`ai:opsStepStatus.${step.status}`, { defaultValue: step.status })}
+                  {t(({
+                    awaiting_confirmation: "ai:opsStepAwaiting",
+                    running: "ai:opsStepRunning",
+                    completed: "ai:opsStepCompleted",
+                    failed: "ai:opsStepFailed",
+                    unknown: "ai:opsStepUnknown",
+                    cancelled: "ai:opsStepCancelled",
+                    superseded: "ai:opsStepSuperseded",
+                    expired: "ai:opsStepExpired",
+                  } as const)[step.status])}
                 </span>
               </div>
               <code title={step.command}>{step.command}</code>
