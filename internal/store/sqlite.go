@@ -98,7 +98,8 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	}
 	defer tx.Rollback()
 	for _, query := range []string{
-		"DELETE FROM conversation_messages WHERE conversation_id IN (SELECT id FROM conversations WHERE session_id=?)",
+		"DELETE FROM operation_steps WHERE conversation_id IN (SELECT id FROM conversations WHERE session_id=?)",
+        "DELETE FROM conversation_messages WHERE conversation_id IN (SELECT id FROM conversations WHERE session_id=?)",
 		"DELETE FROM conversation_selections WHERE last_conversation_id IN (SELECT id FROM conversations WHERE session_id=?)",
 		"DELETE FROM conversations WHERE session_id=?", "DELETE FROM sessions WHERE id=?",
 	} {
