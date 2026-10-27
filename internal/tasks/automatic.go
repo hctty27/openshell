@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"context"
+    "crypto/sha256"
 	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"github.com/hctty27/openshell/internal/ops"
@@ -50,6 +51,7 @@ type automaticTask struct {
 	busy, started bool
 	messageID     string
 	seen          map[string]int
+    lastResults   map[string][32]byte
 	autoContinue  bool
 }
 type AutomaticRunner struct {
@@ -86,7 +88,7 @@ func (r *AutomaticRunner) Start(parent context.Context, id string, ref domain.Co
 		}
 	}
 	ctx, cancel := context.WithCancel(parent)
-	r.tasks[id] = &automaticTask{state: AutoSnapshot{ID: id, Ref: ref, Status: "ready", Limit: limit, AllowChanges: allowChanges}, callbacks: cb, ctx: ctx, cancel: cancel, seen: map[string]int{}}
+	r.tasks[id] = &automaticTask{state: AutoSnapshot{ID: id, Ref: ref, Status: "ready", Limit: limit, AllowChanges: allowChanges}, callbacks: cb, ctx: ctx, cancel: cancel, seen: map[string]int{}, lastResults: map[string][32]byte{}}
 	return nil
 }
 // SetAutoContinue enables bounded unattended rounds for newly started tasks.
@@ -317,14 +319,24 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 		}
 		t.state.Steps++
 		t.state.RoundSteps++
-		t.seen[signature]++
 		t.mu.Unlock()
 		t.emit("executing", "", nil)
 		result, err := t.callbacks.Execute(t.ctx, p)
-		t.emit("result", "", &result)
-		t.mu.Lock()
-		t.state.Proposal = nil
-		t.mu.Unlock()
+        t.emit("result", "", &result)
+        t.mu.Lock()
+        t.state.Proposal = nil
+        if t.autoContinue && IsInspectionCommand(p.Command) {
+            fingerprint := sha256.Sum256([]byte(result.Status + "\x00" + result.Stdout + "\x00" + result.Stderr))
+            if last, exists := t.lastResults[signature]; exists && last == fingerprint {
+                t.seen[signature]++
+            } else {
+                t.seen[signature] = 1
+            }
+            t.lastResults[signature] = fingerprint
+        } else {
+            t.seen[signature]++
+        }
+        t.mu.Unlock()
 		if !t.live() {
 			r.Stop(id)
 			return t.snapshot(), nil
