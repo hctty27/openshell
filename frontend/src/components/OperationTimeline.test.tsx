@@ -36,3 +36,12 @@ test("no operation history leaves chat unchanged", () => {
   const { container } = render(<OperationTimeline steps={[]} />);
   expect(container.querySelector(".ops-timeline")).toBeNull();
 });
+
+test("shows independently checked steps without claiming business health", () => {
+  const checked = step("completed");
+  checked.verificationStatus = "checked";
+  render(<OperationTimeline steps={[checked]} />);
+  fireEvent.click(screen.getByText(/运维任务记录/));
+  expect(screen.getByText(/已执行只读检查/)).toBeTruthy();
+  expect(screen.getByText(/不代表业务验证通过/)).toBeTruthy();
+});
