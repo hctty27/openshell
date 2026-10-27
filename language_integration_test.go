@@ -59,7 +59,23 @@ func TestAIRequestLanguageAndAutomaticFreeze(t *testing.T) {
 		}
         if verifyNext {
             verifyNext = false
-            fmt.Fprint(w, "data: {\\\"choices\\\":[{\\\"delta\\\":{\\\"tool_calls\\\":[{\\\"index\\\":0,\\\"id\\\":\\\"lang-verify\\\",\\\"type\\\":\\\"function\\\",\\\"function\\\":{\\\"name\\\":\\\"propose_command\\\",\\\"arguments\\\":\\\"{\\\\\\\"command\\\\\\\":\\\\\\\"pwd\\\\\\\",\\\\\\\"purpose\\\\\\\":\\\\\\\"verify\\\\\\\",\\\\\\\"cwd\\\\\\\":\\\\\\\"/tmp\\\\\\\"}\\\"}}]},\\\"finish_reason\\\":\\\"tool_calls\\\"}]}\\n\\ndata: [DONE]\\n\\n")
+            arguments, _ := json.Marshal(map[string]string{
+                "command": "pwd", "purpose": "verify", "cwd": "/tmp",
+            })
+            response, _ := json.Marshal(map[string]any{
+                "choices": []any{map[string]any{
+                    "delta": map[string]any{
+                        "tool_calls": []any{map[string]any{
+                            "index": 0, "id": "lang-verify", "type": "function",
+                            "function": map[string]string{
+                                "name": "propose_command", "arguments": string(arguments),
+                            },
+                        }},
+                    },
+                    "finish_reason": "tool_calls",
+                }},
+            })
+            fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", response)
             return
         }
 		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"done\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
