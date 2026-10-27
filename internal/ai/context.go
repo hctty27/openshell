@@ -102,6 +102,7 @@ func BuildToolResult(command, cwd string, result domain.CommandResult) string {
 		Stdout         string `json:"stdout"`
 		Stderr         string `json:"stderr"`
 		Truncated      bool   `json:"truncated"`
+		Targets        []any  `json:"targets,omitempty"`
 	}
 	cmd := BuildPreview(Redact(command), 10000, 1200)
 	dir := BuildPreview(cwd, 10000, 512)
@@ -110,7 +111,22 @@ func BuildToolResult(command, cwd string, result domain.CommandResult) string {
 		out := BuildOutputPreview(result.Stdout, limit)
 		errout := BuildOutputPreview(result.Stderr, limit)
 		reason := BuildPreview(Redact(result.Reason), 10000, 1024)
-		data, _ := json.Marshal(payload{cmd.Text, dir.Text, result.Status, reason.Text, result.ExitCode, result.DurationMillis, out.Text, errout.Text, result.Truncated || cmd.Truncated || dir.Truncated || reason.Truncated || out.Truncated || errout.Truncated})
+		targets := make([]any, 0, len(result.TargetResults))
+		if len(result.TargetResults) > 0 {
+			for _, item := range result.TargetResults {
+				perTargetLimit := 2400 / len(result.TargetResults)
+				targets = append(targets, map[string]any{
+					"target_id": item.Ref.TabID, "status": item.Result.Status,
+					"exitCode": item.Result.ExitCode,
+					"stdout": BuildOutputPreview(item.Result.Stdout, perTargetLimit).Text,
+					"stderr": BuildOutputPreview(item.Result.Stderr, perTargetLimit / 2).Text,
+					"truncated": item.Result.Truncated,
+				})
+			}
+			out.Text = ""
+			errout.Text = ""
+		}
+		data, _ := json.Marshal(payload{cmd.Text, dir.Text, result.Status, reason.Text, result.ExitCode, result.DurationMillis, out.Text, errout.Text, result.Truncated || cmd.Truncated || dir.Truncated || reason.Truncated || out.Truncated || errout.Truncated, targets})
 		if len(data) <= 8192 {
 			return string(data)
 		}
