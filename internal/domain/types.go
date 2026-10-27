@@ -61,8 +61,14 @@ type Proposal struct {
 	TimeoutSeconds int           `json:"timeoutSeconds"`
 	Status         string        `json:"status"`
 	ToolCallID     string        `json:"toolCallId"`
+	Targets        []ConnectionRef `json:"targets,omitempty"`
+}
+type TargetCommandResult struct {
+	Ref ConnectionRef `json:"ref"`
+	Result CommandResult `json:"result"`
 }
 type CommandResult struct {
+	TargetResults []TargetCommandResult `json:"targetResults,omitempty"`
 	ReasonCode     string         `json:"reasonCode,omitempty"`
 	ReasonParams   map[string]any `json:"reasonParams,omitempty"`
 	Status         string         `json:"status"`
