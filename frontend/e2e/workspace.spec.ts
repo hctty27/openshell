@@ -361,7 +361,7 @@ test("dragging a connected tab splits a terminal without reconnecting", async ({
   const secondBounds = await secondTab.boundingBox();
   expect(secondBounds).not.toBeNull();
   await pointerDrag(page, page.locator(".terminal-tab button:first-child").first(),
-    secondBounds!.right - 8, secondBounds!.y + secondBounds!.height / 2);
+    secondBounds!.x + secondBounds!.width - 8, secondBounds!.y + secondBounds!.height / 2);
   await expect(page.locator(".terminal-tab button:first-child"))
     .toHaveText(["server-b", "server-a"]);
   const destination = page.locator(".terminal-pane.visible");
