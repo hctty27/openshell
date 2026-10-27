@@ -34,6 +34,7 @@ type AutoEvent struct {
 }
 type AutoCallbacks struct {
 	Valid          func(domain.ConnectionRef) bool
+	Authorized     func(domain.ConnectionRef) bool
 	Model          func(context.Context, bool) (AutoReply, error)
 	Execute        func(context.Context, domain.Proposal) (domain.CommandResult, error)
 	CancelProposal func(string)
@@ -235,7 +236,7 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 			if err != nil {
 				return t.finish("error", err.Error()), nil
 			}
-			if reply.Proposal != nil && reply.Proposal.Ref != s.Ref {
+			if reply.Proposal != nil && ((t.callbacks.Authorized != nil && !t.callbacks.Authorized(reply.Proposal.Ref)) || (t.callbacks.Authorized == nil && reply.Proposal.Ref != s.Ref)) {
 				return t.finish("error", "taskTargetChanged"), nil
 			}
 			t.mu.Lock()
@@ -261,7 +262,7 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
 			return t.finish("limit", "roundLimit"), nil
 		}
 		p := *s.Proposal
-		signature := p.Cwd + "\x00" + strings.TrimSpace(p.Command)
+		signature := p.Ref.TabID + "\x00" + p.Cwd + "\x00" + strings.TrimSpace(p.Command)
 		reason := ""
 		if !s.AllowChanges && !IsInspectionCommand(p.Command) {
 			reason = "inspectionConfirmation"
