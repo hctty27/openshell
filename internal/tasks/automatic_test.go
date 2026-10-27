@@ -315,3 +315,94 @@ func successExitCode() *int {
     code := 0
     return &code
 }
+
+func TestAutomaticChangeRequiresVerification(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    calls, executions := 0, 0
+    err := r.Start(context.Background(), "verify", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            calls++
+            if calls == 1 {
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "write", Ref: ref, Command: "systemctl restart myapp", Cwd: "/",
+                }}, nil
+            }
+            return AutoReply{Text: "done"}, nil
+        },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            executions++
+            return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
+        },
+    })
+    if err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("verify", "", false)
+    if err != nil || snapshot.Status != "stopped" || snapshot.ReasonCode != "verificationRequired" ||
+        !snapshot.VerificationPending || executions != 1 {
+        t.Fatalf("unverified mutation was accepted: %+v err=%v", snapshot, err)
+    }
+}
+
+func TestAutomaticDiagnosesFailedWriteAndVerifiesRepair(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    commands := []string{
+        "systemctl restart myapp",
+        "systemctl status myapp",
+        "systemctl start myapp",
+        "systemctl status myapp",
+    }
+    calls, executed := 0, 0
+    err := r.Start(context.Background(), "recover", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            calls++
+            if calls <= len(commands) {
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: domain.NewID(), Ref: ref, Command: commands[calls-1], Cwd: "/",
+                }}, nil
+            }
+            return AutoReply{Text: "done"}, nil
+        },
+        Execute: func(_ context.Context, p domain.Proposal) (domain.CommandResult, error) {
+            executed++
+            if p.Command == "systemctl restart myapp" {
+                code := 1
+                return domain.CommandResult{Status: "failed", ExitCode: &code, Stderr: "service not responding"}, nil
+            }
+            return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
+        },
+    })
+    if err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("recover", "", false)
+    if err != nil || snapshot.Status != "completed" || snapshot.RecoveryFailures != 1 ||
+        snapshot.VerificationChecks != 2 || snapshot.VerificationPending || executed != 4 {
+        t.Fatalf("recovery or verification failed: %+v err=%v commands=%d", snapshot, err, executed)
+    }
+}
+
+func TestAutomaticRepeatedFailuresStop(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    executed := 0
+    err := r.Start(context.Background(), "failures", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            return AutoReply{Proposal: &domain.Proposal{
+                ID: domain.NewID(), Ref: ref, Command: "pwd", Cwd: "/tmp/" + domain.NewID(),
+            }}, nil
+        },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            executed++
+            code := 1
+            return domain.CommandResult{Status: "failed", ExitCode: &code}, nil
+        },
+    })
+    if err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("failures", "", false)
+    if err != nil || snapshot.Status != "stopped" || snapshot.ReasonCode != "recoveryAttemptsExhausted" ||
+        snapshot.RecoveryFailures != 3 || executed != 3 {
+        t.Fatalf("recovery budget was not respected: %+v err=%v commands=%d", snapshot, err, executed)
+    }
+}
