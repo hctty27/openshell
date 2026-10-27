@@ -1,0 +1,168 @@
+/* SFTP: native two-pane file browser sharing the active SSH session. */
+.sftp-view {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+.sftp-panes {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.sftp-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  container-type: inline-size;
+}
+.sftp-panel + .sftp-panel { border-left: 1px solid var(--border); }
+.sftp-remote { --wails-drop-target: drop; }
+.sftp-panel-header {
+  height: 34px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  background: var(--panel);
+}
+.sftp-panel-header strong, .sftp-actions, .sftp-file-name, .sftp-panel-footer, .sftp-primary, .sftp-queue-heading > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sftp-panel-dot { height: 6px; width: 6px; border-radius: 50%; background: var(--accent); }
+.sftp-actions button { width: 24px; height: 24px; padding: 4px; color: var(--text-muted); }
+.sftp-actions button:hover, .sftp-breadcrumb button:hover { color: var(--text-primary); }
+.sftp-breadcrumb {
+  display: flex;
+  align-items: center;
+  margin: 8px 9px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--field-bg);
+}
+.sftp-breadcrumb button { height: 100%; width: 29px; flex-shrink: 0; padding: 3px; color: var(--text-muted); }
+.sftp-breadcrumb input {
+  flex: 1; min-width: 0; height: 100%; border: 0;
+  background: transparent; font: 11px Consolas, monospace; color: var(--text-primary);
+  padding: 0 7px; outline: none;
+}
+.sftp-file-table { overflow: auto; flex: 1; min-height: 0; }
+.sftp-column-head, .sftp-file-row {
+  display: grid; grid-template-columns: minmax(0,1fr) 74px 89px 48px;
+  align-items: center; text-align: left; column-gap: 8px; padding: 0 9px;
+}
+.sftp-column-head {
+  height: 25px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 1; background: var(--surface);
+  color: var(--text-muted); font-size: 10px;
+}
+.sftp-file-row {
+  width: 100%; height: 29px; min-width: 0;
+  border-radius: 0; font-size: 11px; color: var(--text-secondary);
+  cursor: default;
+}
+.sftp-file-row:hover { background: var(--raised); }
+.sftp-file-row.selected { background: var(--accent-soft); color: var(--text-primary); }
+.sftp-file-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sftp-file-name { min-width: 0; color: var(--text-primary); }
+.sftp-file-name svg { color: var(--info); flex-shrink: 0; }
+.sftp-file-name > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sftp-link-badge { color: var(--text-muted); }
+.sftp-placeholder { display: flex; padding: 20px; align-items: center; gap: 10px; color: var(--text-muted); overflow-wrap: anywhere; }
+.sftp-error { color: var(--info); }
+.sftp-panel-footer {
+  justify-content: space-between; flex-shrink: 0; height: 35px;
+  padding: 0 10px; border-top: 1px solid var(--border); color: var(--text-muted);
+}
+.sftp-primary { padding: 5px 9px; font-size: 11px; color: var(--accent); }
+.sftp-primary:disabled { opacity: .4; cursor: default; }
+.sftp-queue { flex-shrink: 0; border-top: 1px solid var(--border); }
+.sftp-queue-heading {
+  width: 100%; padding: 0 12px; height: 31px; display: flex;
+  align-items: center; justify-content: space-between; background: var(--panel);
+  font-size: 11px; color: var(--text-secondary);
+}
+.sftp-queue-heading > svg { transition: transform .15s; transform: rotate(180deg); }
+.sftp-queue.expanded .sftp-queue-heading > svg { transform: none; }
+.sftp-queue-list { max-height: 145px; overflow: auto; }
+.sftp-no-tasks { display: block; padding: 14px; color: var(--text-muted); }
+.sftp-task {
+  display: grid; grid-template-columns: 14px minmax(80px,1fr) minmax(70px,130px) 110px 100px 20px;
+  gap: 9px; padding: 5px 12px; align-items: center; min-height: 27px;
+  border-top: 1px solid var(--border); color: var(--text-secondary);
+}
+.sftp-task-name, .sftp-task-state { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sftp-task-name { color: var(--text-primary); }
+.sftp-task-size { color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sftp-progress { height: 4px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.sftp-progress > span { display: block; height: 100%; background: var(--accent-fill); }
+.sftp-task button { padding: 2px; }
+.sftp-remote.wails-drop-target-active { box-shadow: inset 0 0 0 2px var(--accent); }
+@container (max-width: 360px) {
+  .sftp-column-head, .sftp-file-row { grid-template-columns: minmax(0,1fr) 62px; }
+  .sftp-column-head > span:nth-child(n+3), .sftp-file-row > span:nth-child(n+3) { display: none; }
+}
+@media (max-width: 1150px) {
+  .sftp-task { grid-template-columns: 14px minmax(80px,1fr) 90px 60px 20px; }
+  .sftp-task-size { display: none; }
+}
+
+/* Portable SSH session import preview */
+.xshell-import-dialog {
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(740px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text-primary);
+  box-shadow: 0 24px 80px #0005;
+}
+.xshell-import-header, .xshell-import-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 18px;
+}
+.xshell-import-header { border-bottom: 1px solid var(--border); }
+.xshell-import-header h2 { margin: 0 0 4px; display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.xshell-import-header p { margin: 0; color: var(--text-muted); font-size: 12px; }
+.xshell-import-header button { background: transparent; border: 0; color: var(--text-secondary); cursor: pointer; }
+.xshell-import-content { padding: 12px 18px; min-height: 0; overflow: auto; }
+.xshell-import-select-all, .xshell-import-entry { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.xshell-import-select-all { padding: 4px 0 10px; font-weight: 600; }
+.xshell-import-list { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.xshell-import-entry { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.xshell-import-entry:last-child { border-bottom: 0; }
+.xshell-import-entry:hover { background: var(--hover); }
+.xshell-import-entry input, .xshell-import-select-all input { margin-top: 3px; accent-color: var(--accent-fill); }
+.xshell-import-entry div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.xshell-import-entry strong { font-size: 13px; }
+.xshell-import-entry small { font-size: 11px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.xshell-import-entry .xshell-import-warning { color: var(--warning); }
+.xshell-import-skipped { margin-top: 12px; color: var(--warning); font-size: 12px; }
+.xshell-import-skipped summary { display: flex; gap: 6px; cursor: pointer; align-items: center; }
+.xshell-import-skipped ul { max-height: 120px; overflow: auto; padding-left: 22px; overflow-wrap: anywhere; }
+.xshell-import-conflict { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.xshell-import-conflict select { max-width: 240px; border: 1px solid var(--border); background: var(--field-bg); color: var(--text-primary); padding: 7px 10px; border-radius: 6px; }
+.xshell-import-footer { border-top: 1px solid var(--border); justify-content: flex-end; }
+.xshell-import-footer button { padding: 8px 13px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; color: var(--text-primary); background: var(--raised); }
+.xshell-import-footer button.primary { color: var(--on-accent); background: var(--accent-fill); border-color: transparent; }
+.xshell-import-footer button:disabled { opacity: 0.5; cursor: not-allowed; }
+
