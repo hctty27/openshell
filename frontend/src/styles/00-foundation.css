@@ -1,0 +1,164 @@
+:root {
+  --chrome-bar-height: 30px;
+  --surface: #1B2028;
+  --panel: #222933;
+  --raised: #2D3642;
+  --field-bg: #1F2630;
+  --border: #394553;
+  --text-primary: #E6EAF0;
+  --text-secondary: #B6C0CE;
+  --text-muted: #91A0B2;
+  --accent: #8DBAF3;
+  --accent-fill: #5D9CEC;
+  --on-accent: #FFFFFF;
+  --accent-soft: #5D9CEC25;
+  --accent-border: #5D9CEC88;
+  --info: #8DBAF3;
+  --info-soft: #5D9CEC1A;
+  --info-border: #5D9CEC66;
+  --warning: #E5BF72;
+  --danger: #F4A0A6;
+  --danger-soft: #C5545C20;
+  --danger-border: #C5545C88;
+  --hover: #FFFFFF11;
+  --overlay: #0D1015B5;
+  --terminal-overlay: #171A1FEB;
+  --scrollbar: #7A8799;
+  --terminal-scroll-track: #7A879918;
+  --terminal-scroll-thumb: #7A879970;
+  --terminal-scroll-thumb-hover: #A5B2C4;
+  --terminal-scroll-thumb-active: #CAD4E0;
+  --terminal-workspace: #1E2228;
+  --connected: #49C391;
+  --connecting: #E5BE6B;
+  --reconnecting: #EDA969;
+  --connection-error: #F28C92;
+  --disconnected: #91A0B2;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --surface: #F5F7FA;
+  --panel: #FFFFFF;
+  --raised: #F0F4F9;
+  --field-bg: #FFFFFF;
+  --border: #D7DEE8;
+  --text-primary: #1F2937;
+  --text-secondary: #4B5A6C;
+  --text-muted: #65758A;
+  --accent: #2563EB;
+  --accent-fill: #2563EB;
+  --on-accent: #FFFFFF;
+  --accent-soft: #2563EB18;
+  --accent-border: #2563EB63;
+  --info: #2563EB;
+  --info-soft: #2563EB14;
+  --info-border: #2563EB4F;
+  --warning: #845A0B;
+  --danger: #AC3445;
+  --danger-soft: #B63D4D14;
+  --danger-border: #B63D4D55;
+  --hover: #1729400C;
+  --overlay: #DDE2E9A3;
+  --terminal-overlay: #FFFFFFEB;
+  --scrollbar: #8591A0;
+  --terminal-scroll-track: #52647E14;
+  --terminal-scroll-thumb: #8591A080;
+  --terminal-scroll-thumb-hover: #66768B;
+  --terminal-scroll-thumb-active: #43566D;
+  --terminal-workspace: #FFFFFF;
+  --connected: #168657;
+  --connecting: #AE781B;
+  --reconnecting: #AC620F;
+  --connection-error: #B93B50;
+  --disconnected: #65758A;
+}
+:root {
+  font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--surface);
+  font-synthesis: none;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  overflow: hidden;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button {
+  color: inherit;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 5px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+button:hover {
+  background: var(--hover);
+  color: var(--info);
+}
+button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+button:focus-visible {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 2px;
+}
+input,
+select,
+textarea {
+  color: var(--info);
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 11px;
+  outline: none;
+  min-width: 0;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 2px #5ab69a0b;
+}
+textarea {
+  resize: vertical;
+  line-height: 1.65;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+input[type="checkbox"] {
+  accent-color: #69c9ac;
+  width: 14px;
+  height: 14px;
+}
+kbd {
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font: 10px monospace;
+  padding: 1px 4px;
+}
+.app {
+  height: 100vh;
+  display: flex;
+  min-width: 900px;
+  overflow: hidden;
+}
