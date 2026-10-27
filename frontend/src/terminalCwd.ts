@@ -4,6 +4,7 @@ export const BASH_CWD_REPORT_COMMAND = "__openshell_report_cwd() { local path=\"
  * Terminal-side cwd reports from OSC 7 and iTerm2 OSC 1337.
  * Only absolute POSIX paths are accepted; SFTP still validates existence.
  */
+/** @internal Normalization helper shared by the OSC parsers and tests. */
 export function normalizeRemoteDirectory(value: string): string | null {
   if (!value.startsWith("/") || value.length > 4096 || /[\x00-\x1f\x7f]/.test(value)) return null;
   return value;
