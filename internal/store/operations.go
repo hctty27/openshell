@@ -57,6 +57,41 @@ func (s *Store) TransitionOperationStep(ctx context.Context, conversationID, ste
     return tx.Commit()
 }
 
+
+ // MarkOperationChecked records that a subsequent independent inspection finished
+ // successfully; it does NOT assert the application's business outcome is healthy.
+ func (s *Store) MarkOperationChecked(ctx context.Context, conversationID, stepID string) error {
+     if conversationID == "" || stepID == "" {
+         return ErrOperationTransition
+     }
+     tx, err := s.db.BeginTx(ctx, nil)
+     if err != nil { return err }
+     defer tx.Rollback()
+     var raw string
+     if err = tx.QueryRowContext(ctx,
+         "SELECT data FROM operation_steps WHERE conversation_id=? AND step_id=?",
+         conversationID, stepID,
+     ).Scan(&raw); err != nil { return err }
+     var step domain.OperationStep
+     if err = json.Unmarshal([]byte(raw), &step); err != nil { return err }
+     if step.VerificationStatus != "pending" ||
+         (step.Status != "completed" && step.Status != "failed") {
+         return ErrOperationTransition
+     }
+     step.VerificationStatus = "checked"
+     step.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+     data, err := json.Marshal(step)
+     if err != nil { return err }
+     result, err := tx.ExecContext(ctx,
+         "UPDATE operation_steps SET data=? WHERE conversation_id=? AND step_id=?",
+         string(data), conversationID, stepID,
+     )
+     if err != nil { return err }
+     changed, err := result.RowsAffected()
+     if err != nil || changed != 1 { return ErrOperationTransition }
+     return tx.Commit()
+ }
+
 func (s *Store) ListOperationSteps(ctx context.Context, conversationID string) ([]domain.OperationStep, error) {
     if conversationID == "" { return nil, sql.ErrNoRows }
     if _, err := s.GetConversation(ctx, conversationID); err != nil { return nil, err }
