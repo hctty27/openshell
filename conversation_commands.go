@@ -35,7 +35,15 @@ func (a *App) reviseOwnedProposal(run domain.ConversationRun, id, command, cwd s
 	if err != nil {
 		return domain.Proposal{}, err
 	}
-	a.pending[next.ID] = a.pending[id]
+	if err = a.operationTransition(context.Background(), run.ID, run.ConversationID, id, "awaiting_confirmation", "superseded", "", "", nil); err != nil {
+        _ = a.coordinator.Cancel(next.ID)
+        return domain.Proposal{}, err
+    }
+    if err = a.recordOperation(context.Background(), run, next); err != nil {
+        _ = a.coordinator.Cancel(next.ID)
+        return domain.Proposal{}, err
+    }
+    a.pending[next.ID] = a.pending[id]
 	a.proposalRuns[next.ID] = run.ID
 	delete(a.pending, id)
 	delete(a.proposalRuns, id)
@@ -85,7 +93,19 @@ func (a *App) confirmCommandContext(parent context.Context, id string) (domain.C
 		a.finishExecution(run.ID)
 		return domain.CommandResult{}, err
 	}
+    // Commit the start marker before sending a command to a remote server.
+    // If persistence fails, fail closed and do not execute.
+    if err = a.operationTransition(ctx, run.ID, run.ConversationID, id, "awaiting_confirmation", "running", "", "", nil); err != nil {
+        a.finishExecution(run.ID)
+        return domain.CommandResult{}, err
+    }
 	result, err := a.coordinator.Confirm(ctx, id)
+    outcome := result.Status
+    if outcome != "completed" && outcome != "failed" && outcome != "cancelled" { outcome = "unknown" }
+    reason := result.Reason
+    if err != nil && reason == "" { reason = err.Error() }
+    journalErr := a.operationTransition(context.Background(), run.ID, run.ConversationID, id, "running", outcome, result.VerificationStatus, reason, result.ExitCode)
+    if journalErr != nil && err == nil { err = journalErr }
 	if result.Status != "" {
 		if e := a.finishTool(id, p, result); e != nil {
 			err = e
@@ -132,7 +152,16 @@ func (a *App) cancelCommand(id string) error {
 	if err != nil {
 		return err
 	}
-	if rejected {
+    if rejected {
+        a.mu.Lock()
+        runID := a.proposalRuns[id]
+        a.mu.Unlock()
+        a.executionMu.Lock()
+        ex := a.executions[runID]
+        a.executionMu.Unlock()
+        if ex != nil {
+            if err := a.operationTransition(context.Background(), runID, ex.Run.ConversationID, id, "awaiting_confirmation", "cancelled", "", "Command rejected; nothing ran.", nil); err != nil { return err }
+        }
 		return a.finishTool(id, p, domain.CommandResult{Status: "cancelled", Reason: "Command rejected. Nothing was run.", ReasonCode: "commandRejected"})
 	}
 	return nil
