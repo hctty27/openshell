@@ -61,14 +61,17 @@ func TestAutomaticModificationWaitsForExactApproval(t *testing.T) {
 		Valid: func(domain.ConnectionRef) bool { return true },
 		Model: func(context.Context, bool) (AutoReply, error) {
 			models++
-			if models > 1 {
-				return AutoReply{Text: "done"}, nil
-			}
-			return AutoReply{Proposal: &domain.Proposal{ID: "proposal", Ref: ref, Command: "systemctl restart app", Cwd: "/"}}, nil
+			if models == 1 {
+                return AutoReply{Proposal: &domain.Proposal{ID: "proposal", Ref: ref, Command: "systemctl restart app", Cwd: "/"}}, nil
+            }
+            if models == 2 {
+                return AutoReply{Proposal: &domain.Proposal{ID: "verify", Ref: ref, Command: "systemctl status app", Cwd: "/"}}, nil
+            }
+            return AutoReply{Text: "done"}, nil
 		},
 		Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
 			executed++
-			return domain.CommandResult{Status: "completed"}, nil
+			return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
 		},
 	})
 	s, e := r.Run("task", "", false)
@@ -79,7 +82,7 @@ func TestAutomaticModificationWaitsForExactApproval(t *testing.T) {
 		t.Fatal("accepted mismatched approval")
 	}
 	s, e = r.Run("task", "proposal", false)
-	if e != nil || s.Status != "completed" || executed != 1 {
+	if e != nil || s.Status != "completed" || s.VerificationChecks != 1 || executed != 2 {
 		t.Fatal(s, e, executed)
 	}
 }
@@ -187,12 +190,13 @@ func TestAutomaticHighRiskRequiresApprovalEvenWhenChangesEnabled(t *testing.T) {
         Valid: func(domain.ConnectionRef) bool { return true },
         Model: func(context.Context, bool) (AutoReply, error) {
             models++
-            if models != 1 { return AutoReply{Text:"done"}, nil }
-            return AutoReply{Proposal: &domain.Proposal{ID:"restart", Ref:ref, Command:"supervisorctl stop all", Cwd:"/"}}, nil
+            if models == 1 { return AutoReply{Proposal: &domain.Proposal{ID:"restart", Ref:ref, Command:"supervisorctl stop all", Cwd:"/"}}, nil }
+            if models == 2 { return AutoReply{Proposal: &domain.Proposal{ID:"verify", Ref:ref, Command:"supervisorctl status app", Cwd:"/"}}, nil }
+            return AutoReply{Text:"done"}, nil
         },
         Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
             executions++
-            return domain.CommandResult{Status:"completed"}, nil
+            return domain.CommandResult{Status:"completed", ExitCode:successExitCode()}, nil
         },
     }); err != nil { t.Fatal(err) }
     snapshot, err := r.Run("high-risk-task", "", false)
@@ -200,7 +204,7 @@ func TestAutomaticHighRiskRequiresApprovalEvenWhenChangesEnabled(t *testing.T) {
         t.Fatalf("unsafe automatic action executed without confirmation: %+v %v", snapshot, err)
     }
     snapshot, err = r.Run("high-risk-task", "restart", false)
-    if err != nil || snapshot.Status != "completed" || executions != 1 {
+    if err != nil || snapshot.Status != "completed" || snapshot.VerificationChecks != 1 || executions != 2 {
         t.Fatalf("explicit approval did not authorize exactly one high-risk change: %+v %v", snapshot, err)
     }
 }
@@ -218,15 +222,18 @@ func TestAutomaticRoutineChangesRunWithoutReviewWhenEnabled(t *testing.T) {
                     ID: "routine-proposal", Ref: ref, Command: "systemctl restart myapp", Cwd: "/",
                 }}, nil
             }
+            if models == 2 {
+                return AutoReply{Proposal: &domain.Proposal{ID: "verify", Ref: ref, Command: "systemctl status myapp", Cwd: "/"}}, nil
+            }
             return AutoReply{Text: "done"}, nil
         },
         Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
             executed++
-            return domain.CommandResult{Status: "completed"}, nil
+            return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
         },
     }); err != nil { t.Fatal(err) }
     snapshot, err := r.Run("routine", "", false)
-    if err != nil || snapshot.Status != "completed" || executed != 1 {
+    if err != nil || snapshot.Status != "completed" || snapshot.VerificationChecks != 1 || executed != 2 {
         t.Fatalf("routine change did not run automatically: %+v, %v", snapshot, err)
     }
 }
@@ -302,4 +309,9 @@ func TestAutomaticRepeatedInspectionAllowsChangingResults(t *testing.T) {
     if err != nil || snapshot.Status != "completed" || executed != 4 {
         t.Fatalf("changing inspection output should not trigger no-progress guard: %+v %v", snapshot, err)
     }
+}
+
+func successExitCode() *int {
+    code := 0
+    return &code
 }
