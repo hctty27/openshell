@@ -332,6 +332,16 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   await expect(page.getByText("AI 助手", { exact: true })).toHaveCount(0);
 });
 
+async function pointerDrag(page: import("@playwright/test").Page,
+  source: import("@playwright/test").Locator, x: number, y: number) {
+  const bounds = await source.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(x, y, { steps: 15 });
+  await page.mouse.up();
+}
+
 test("dragging a connected tab splits a terminal without reconnecting", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
@@ -353,9 +363,8 @@ test("dragging a connected tab splits a terminal without reconnecting", async ({
   await destination.evaluate(el => {
     (window as any).__originalSplitTerminal = el.querySelector(".xterm");
   });
-  await page.locator(".terminal-tab").first().dragTo(destination, {
-    targetPosition: { x: bounds!.width - 25, y: bounds!.height / 2 },
-  });
+  await pointerDrag(page, page.locator(".terminal-tab button:first-child").first(),
+    bounds!.x + bounds!.width - 25, bounds!.y + bounds!.height / 2);
   await expect(page.locator(".terminal-container")).toHaveClass(/terminal-split-columns/);
   await expect(page.locator(".terminal-pane.visible")).toHaveCount(2);
   await expect(page.getByRole("separator", { name: "调整终端分屏比例" })).toBeVisible();
@@ -386,9 +395,9 @@ test("four sessions support nested splits, independent handles and undocking", a
     const target = page.locator(".terminal-pane.active");
     const box = await target.boundingBox();
     expect(box).not.toBeNull();
-    await tab.dragTo(target, { targetPosition: zone === "right"
-      ? { x: box!.width - 15, y: box!.height / 2 }
-      : { x: box!.width / 2, y: box!.height - 15 } });
+    await pointerDrag(page, tab.locator("button:first-child"), zone === "right"
+      ? box!.x + box!.width - 15 : box!.x + box!.width / 2,
+      zone === "bottom" ? box!.y + box!.height - 15 : box!.y + box!.height / 2);
   };
   await drag("pane-a", "right");
   await drag("pane-b", "bottom");
@@ -399,9 +408,10 @@ test("four sessions support nested splits, independent handles and undocking", a
     expect((await pane.boundingBox())!.width).toBeGreaterThan(0);
     expect((await pane.boundingBox())!.height).toBeGreaterThan(0);
   }
-  await page.locator(".terminal-tab").filter({ hasText: "pane-a" }).dragTo(page.locator(".tab-strip"), {
-    targetPosition: { x: (await page.locator(".tab-strip").boundingBox())!.width - 15, y: 15 },
-  });
+  const stripBounds = await page.locator(".tab-strip").boundingBox();
+  expect(stripBounds).not.toBeNull();
+  await pointerDrag(page, page.locator(".terminal-tab").filter({ hasText: "pane-a" }).locator("button:first-child"),
+    stripBounds!.x + stripBounds!.width - 15, stripBounds!.y + 15);
   await expect(page.locator(".terminal-pane.visible")).toHaveCount(3);
   await expect(page.getByRole("separator", { name: "调整终端分屏比例" })).toHaveCount(2);
   await expect(page.locator(".terminal-tab .connection-state-connected")).toHaveCount(4);
