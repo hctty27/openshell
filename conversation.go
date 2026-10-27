@@ -10,6 +10,7 @@ import (
 
 type conversationExecution struct {
 	Run    domain.ConversationRun
+	Targets []domain.ConnectionRef
 	TaskID string
 	Ctx    context.Context
 	Cancel context.CancelFunc
@@ -40,21 +41,59 @@ func (a *App) DeleteConversation(ref domain.ConnectionRef, id string) error {
 	return a.memory.Delete(a.ctx, ref, id)
 }
 func (a *App) startExecution(ref domain.ConnectionRef, kind string) (domain.ConversationRun, error) {
-	return a.startExecutionWithTask(ref, kind, "")
+	return a.startExecutionWithTargets(ref, kind, "", nil)
 }
 func (a *App) startExecutionWithTask(ref domain.ConnectionRef, kind, taskID string) (domain.ConversationRun, error) {
+	return a.startExecutionWithTargets(ref, kind, taskID, nil)
+}
+func (a *App) startExecutionWithTargets(ref domain.ConnectionRef, kind, taskID string, requested []domain.ConnectionRef) (domain.ConversationRun, error) {
 	a.executionMu.Lock()
 	defer a.executionMu.Unlock()
 	if !a.ssh.Valid(ref) || a.closing[ref.TabID] == ref || a.ctx.Err() != nil {
 		return domain.ConversationRun{}, apperror.New("memoryConnectionChanged", nil)
+	}
+	targets := requested
+	if len(targets) == 0 {
+		targets = []domain.ConnectionRef{ref}
+	}
+	if len(targets) > 8 {
+		return domain.ConversationRun{}, apperror.New("invalidToolArguments", nil)
+	}
+	seen := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		if target.TabID == "" || seen[target.TabID] || !a.ssh.Valid(target) || a.closing[target.TabID] == target {
+			return domain.ConversationRun{}, apperror.New("memoryConnectionChanged", nil)
+		}
+		seen[target.TabID] = true
+	}
+	for _, existing := range a.executions {
+		if existing.Ending || existing.Ctx.Err() != nil {
+			continue
+		}
+		for _, busy := range existing.Targets {
+			if seen[busy.TabID] {
+				return domain.ConversationRun{}, apperror.New("memoryBusy", nil)
+			}
+		}
+		if seen[existing.Run.OwnerRef.TabID] {
+			return domain.ConversationRun{}, apperror.New("memoryBusy", nil)
+		}
 	}
 	run, err := a.memory.Begin(ref, kind)
 	if err != nil {
 		return run, err
 	}
 	ctx, cancel := context.WithCancel(a.ctx)
-	a.executions[run.ID] = &conversationExecution{Run: run, TaskID: taskID, Ctx: ctx, Cancel: cancel, Done: make(chan struct{})}
+	a.executions[run.ID] = &conversationExecution{Run: run, TaskID: taskID, Targets: append([]domain.ConnectionRef(nil), targets...), Ctx: ctx, Cancel: cancel, Done: make(chan struct{})}
 	return run, nil
+}
+func (a *App) runTargets(id string) []domain.ConnectionRef {
+	a.executionMu.Lock()
+	defer a.executionMu.Unlock()
+	if ex := a.executions[id]; ex != nil {
+		return append([]domain.ConnectionRef(nil), ex.Targets...)
+	}
+	return nil
 }
 func (a *App) operation(run domain.ConversationRun) (context.Context, func(), error) {
 	a.executionMu.Lock()
@@ -156,16 +195,30 @@ func (a *App) checkProposalOwner(ref domain.ConnectionRef, id string) (domain.Co
 	if err != nil {
 		return domain.ConversationRun{}, err
 	}
-	if p.Ref != ref {
+	a.mu.Lock()
+	proposalRun := a.proposalRuns[id]
+	a.mu.Unlock()
+	a.executionMu.Lock()
+	ex := a.executions[proposalRun]
+	if ex == nil || ex.Ending || ex.Run.OwnerRef != ref {
+		a.executionMu.Unlock()
+		return domain.ConversationRun{}, apperror.New("memoryNotOwner", nil)
+	}
+	allowed := false
+	for _, target := range ex.Targets {
+		if target == p.Ref {
+			allowed = true
+			break
+		}
+	}
+	a.executionMu.Unlock()
+	if !allowed {
 		return domain.ConversationRun{}, apperror.New("memoryNotOwner", nil)
 	}
 	run, err := a.memory.CurrentRun(ref)
 	if err != nil {
 		return run, err
 	}
-	a.mu.Lock()
-	proposalRun := a.proposalRuns[id]
-	a.mu.Unlock()
 	if proposalRun != run.ID {
 		return run, apperror.New("memoryNotOwner", nil)
 	}
