@@ -17,7 +17,7 @@ import {
   Terminal,
   LoaderCircle,
 } from "lucide-react";
-import type { Tab, APIProfile, Proposal, ChatMode, OperationStep } from "../types";
+import type { Tab, APIProfile, ChatMode, OperationStep } from "../types";
 import OperationTimeline from "./OperationTimeline";
 import CommandProposal from "./CommandProposal";
 import ConversationPicker from "./ConversationPicker";
