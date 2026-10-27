@@ -44,6 +44,7 @@ go mod tidy -diff
 
 ## 第二轮自动审查
 
-- PR CI 中的 TypeScript unused-symbol audit 已成功执行（2026-10-27）。
-- Knip 6.43.0 生产代码图扫描限定 `remove-unused` 类 PR 分支执行、`continue-on-error`，不会增加主干日常发布成本；不要直接将诊断视为删除授权。
+- PR CI 的首次 advisory 扫描发现 6 处 TypeScript 未使用导入，已从业务代码删除；日志中静态命令曾退出非零，`continue-on-error` 只是不阻断构建。
+- Knip 6.43.0 首次扫描出现 3 个自动生成文件、60 多个 Wails runtime 导出及数个自研导出候选；已加 `frontend/knip.json` 将自动生成代码标记为忽略，并明确测试专用导出及内部类型边界。只有真正没有任何调用的接口才删除。Knip 在 `remove-unused` 类 PR 分支以 advisory 方式运行。
+- 本次删除 7 条无法在当前 TSX 组件中找到引用的旧样式规则，约 49 行；其余同名选择器覆盖不做自动合并。
 - 现有 UI 的动态 CSS 规则（如 `connection-state-*`、`drag-before`、`terminal-split-drop-*`）虽不能用字面全文匹配确认调用，已主动排除清理范围。
