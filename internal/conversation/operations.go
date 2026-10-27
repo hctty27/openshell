@@ -33,6 +33,17 @@ func (s *Service) TransitionOperation(ctx context.Context, runID, stepID, from, 
     return s.db.TransitionOperationStep(ctx, run.ConversationID, stepID, from, to, verification, reason, exit)
 }
 
+func (s *Service) MarkOperationChecked(ctx context.Context, runID, stepID string) error {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    run, ok := s.runs[runID]
+    if !ok { return apperror.New("memoryNoRun", nil) }
+    if b, err := s.binding(run.OwnerRef); err != nil || b.ID != run.ConversationID {
+        return apperror.New("memoryConnectionChanged", nil)
+    }
+    return s.db.MarkOperationChecked(ctx, run.ConversationID, stepID)
+}
+
 func (s *Service) ListOperations(ctx context.Context, ref domain.ConnectionRef, conversationID string) ([]domain.OperationStep, error) {
     s.mu.Lock()
     defer s.mu.Unlock()
