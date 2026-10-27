@@ -52,6 +52,14 @@ type ConnectionRef struct {
 	SessionID  string `json:"sessionId"`
 	Generation uint64 `json:"generation"`
 }
+// OperationPlan describes checks a human must verify before execution.
+// It is metadata, not proof the checks have passed.
+type OperationPlan struct {
+    Risk string `json:"risk"`
+    RequiresConfirmation bool `json:"requiresConfirmation"`
+    Preflight []string `json:"preflight"`
+    VerificationRequired bool `json:"verificationRequired"`
+}
 type Proposal struct {
 	ID             string        `json:"id"`
 	Ref            ConnectionRef `json:"ref"`
@@ -61,6 +69,7 @@ type Proposal struct {
 	TimeoutSeconds int           `json:"timeoutSeconds"`
 	Status         string        `json:"status"`
 	ToolCallID     string        `json:"toolCallId"`
+	Plan           *OperationPlan `json:"plan,omitempty"`
 	Targets        []ConnectionRef `json:"targets,omitempty"`
 }
 type TargetCommandResult struct {
@@ -69,6 +78,7 @@ type TargetCommandResult struct {
 }
 type CommandResult struct {
 	TargetResults []TargetCommandResult `json:"targetResults,omitempty"`
+	VerificationStatus string `json:"verificationStatus,omitempty"`
 	ReasonCode     string         `json:"reasonCode,omitempty"`
 	ReasonParams   map[string]any `json:"reasonParams,omitempty"`
 	Status         string         `json:"status"`
