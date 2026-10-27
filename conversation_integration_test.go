@@ -411,3 +411,41 @@ func TestConversationDraftPersistsOnlyAfterSending(t *testing.T) {
 		t.Fatal("sent draft did not survive reconnect")
 	}
 }
+
+func TestOperationsTimelineTracksApprovedCommandAndBlocksUnownedReads(t *testing.T) {
+    a, _, owner, observer, profile, remote := memoryFixture(t, true)
+    before := remote.Count()
+    reply, err := a.Chat(ChatRequest{Ref:owner.Ref, ProfileID:profile.ID, Text:"inspect", Operate:true})
+    if err != nil || reply.Proposal == nil { t.Fatal(reply, err) }
+    steps, err := a.ListOperationSteps(observer.Ref, owner.ConversationID)
+    if err != nil || len(steps)!=1 || steps[0].Status!="awaiting_confirmation" {
+        t.Fatal(steps, err)
+    }
+    if remote.Count()!=before { t.Fatal("proposing a command caused remote execution") }
+    if strings.Contains(steps[0].Command, "MEMORY") { t.Fatal("raw command parameters leaked into journal") }
+    result, err := a.ConfirmCommand(owner.Ref, reply.Proposal.ID)
+    if err != nil || result.Stdout != "MEMORY" { t.Fatal(result, err) }
+    steps, err = a.ListOperationSteps(owner.Ref, owner.ConversationID)
+    if err != nil || len(steps)!=1 || steps[0].Status!="completed" || steps[0].ID!=reply.Proposal.ID {
+        t.Fatal(steps, err)
+    }
+    if _, err = a.ListOperationSteps(domain.ConnectionRef{TabID:"forged", SessionID:owner.Ref.SessionID, Generation:owner.Ref.Generation}, owner.ConversationID); err==nil {
+        t.Fatal("unauthorized journal access succeeded")
+    }
+}
+
+func TestOperationsTimelineTracksRevisionAndRejection(t *testing.T) {
+    a, _, owner, _, profile, remote := memoryFixture(t, true)
+    count := remote.Count()
+    reply, err := a.Chat(ChatRequest{Ref:owner.Ref, ProfileID:profile.ID, Text:"inspect", Operate:true})
+    if err != nil || reply.Proposal == nil { t.Fatal(reply, err) }
+    revised, err := a.ReviseProposal(owner.Ref, reply.Proposal.ID, "pwd", "/", 60)
+    if err != nil { t.Fatal(err) }
+    steps, err := a.ListOperationSteps(owner.Ref, owner.ConversationID)
+    if err != nil || len(steps)!=2 || steps[0].ID!=revised.ID || steps[0].Status!="awaiting_confirmation" || steps[1].Status!="superseded" {
+        t.Fatalf("revision journal invalid: %+v %v",steps,err)
+    }
+    if err = a.CancelCommand(owner.Ref,revised.ID); err != nil { t.Fatal(err) }
+    steps, err = a.ListOperationSteps(owner.Ref, owner.ConversationID)
+    if err != nil || steps[0].Status!="cancelled" || remote.Count()!=count { t.Fatalf("rejected command ran: %+v %v",steps,err) }
+}
