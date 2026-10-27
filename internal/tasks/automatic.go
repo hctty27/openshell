@@ -336,7 +336,7 @@ func (r *AutomaticRunner) Run(id, approvedID string, extend bool) (AutoSnapshot,
             reason = "criticalChangeConfirmation"
         }
 		if t.seen[signature] > 0 {
-            if !t.autoContinue || !IsInspectionCommand(p.Command) {
+            if !IsInspectionCommand(p.Command) || (!t.autoContinue && !s.VerificationPending) {
                 reason = "repeatedCommand"
             } else if t.seen[signature] >= 3 {
                 return t.finish("stopped", "repeatedInspectionNoProgress"), nil
