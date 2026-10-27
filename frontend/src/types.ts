@@ -58,8 +58,10 @@ export interface Proposal {
   cwd: string;
   timeoutSeconds: number;
   status: string;
+  targets?: Ref[];
 }
-export interface CommandResult {
+export interface CommandResult { 
+  targetResults?: { ref: Ref; result: CommandResult }[];
   status: string;
   stdout: string;
   stderr: string;
