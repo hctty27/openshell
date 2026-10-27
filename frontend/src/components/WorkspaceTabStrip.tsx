@@ -41,8 +41,11 @@ export default function WorkspaceTabStrip(p: Props) {
 
   const insertionAt = (id: string, x: number) =>
     tabInsertionIndex(Array.from(stripRef.current?.querySelectorAll<HTMLElement>(".terminal-tab") ?? [])
-      .map(el => ({ id: el.dataset.tabId ?? "", left: el.getBoundingClientRect().left,
-        width: el.getBoundingClientRect().width })), id, x);
+      .map(el => {
+        const bounds = el.getBoundingClientRect();
+        const visualShift = Number(el.style.transform.match(/translateX\\((-?[\\d.]+)px\\)/)?.[1] ?? 0);
+        return { id: el.dataset.tabId ?? "", left: bounds.left - visualShift, width: bounds.width };
+      }), id, x);
 
   const moveWithKeyboard = (tabID: string, index: number, event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (!event.altKey || !event.shiftKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
