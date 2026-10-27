@@ -99,6 +99,9 @@ func allServiceNames(names []string) bool {
 }
 
 func routineService(service string) bool {
+    if strings.HasPrefix(service, "-") || strings.HasPrefix(service, ".") || strings.Contains(service, "..") {
+        return false
+    }
     name := strings.TrimSuffix(strings.ToLower(service), ".service")
     switch name {
     case "", "all", "ssh", "sshd", "network", "networking", "networkmanager",
