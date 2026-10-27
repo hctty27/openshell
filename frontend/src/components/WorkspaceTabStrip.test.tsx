@@ -62,6 +62,28 @@ describe("WorkspaceTabStrip", () => {
     expect(document.querySelector(".tab-drag-overlay")).toBeNull();
   });
 
+  it("does not mistake an animated last tab for empty strip space", () => {
+    const onReorder = vi.fn();
+    const onDropOnStrip = vi.fn();
+    const { container } = render(
+      <WorkspaceTabStrip tabs={[makeTab("A"), makeTab("B")]} activeID="A"
+        disconnectBehavior="local" onActivate={vi.fn()} onDuplicate={vi.fn()}
+        onClose={vi.fn()} onNewTab={vi.fn()} onReorder={onReorder}
+        onDropOnStrip={onDropOnStrip} />,
+    );
+    geometry(container);
+    const last = container.querySelectorAll<HTMLElement>(".terminal-tab")[1];
+    vi.spyOn(last, "getBoundingClientRect").mockImplementation(() => {
+      const shift = last.style.transform ? -100 : 0;
+      return { left: 100 + shift, right: 200 + shift, width: 100 } as DOMRect;
+    });
+    press(container.querySelector(".terminal-tab button")!);
+    move(190, 15);
+    release(190, 15);
+    expect(onReorder).toHaveBeenCalledWith("A", "B", "after");
+    expect(onDropOnStrip).not.toHaveBeenCalled();
+  });
+
   it("does not initiate a drag before the five-pixel threshold", () => {
     const { container, onTabPointerMove, onReorder } = setup();
     press(container.querySelector(".terminal-tab button")!);
