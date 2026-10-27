@@ -15,17 +15,21 @@ type automaticProfile struct {
 	key      string
 }
 
-func (a *App) automaticSettings() (int, bool, error) {
+func (a *App) automaticSettings() (int, bool, bool, error) {
 	raw, err := a.store.GetPreference(a.ctx, "autoCommandLimit")
 	if err != nil {
-		return 0, false, err
+		return 0, false, false, err
 	}
 	limit, _ := strconv.Atoi(raw)
 	if limit < 1 || limit > 100 {
-		limit = 10
+		limit = 50
 	}
 	allow, err := a.store.GetPreference(a.ctx, "autoAllowChanges")
-	return limit, allow == "true", err
+	if err != nil {
+        return 0, false, false, err
+    }
+    rawContinue, err := a.store.GetPreference(a.ctx, "autoContinueRounds")
+    return limit, allow == "true", rawContinue != "false", err
 }
 func (a *App) StartAutomatic(req ChatRequest, taskID string) (tasks.AutoSnapshot, error) {
 	if !a.ssh.Valid(req.Ref) {
@@ -38,7 +42,7 @@ func (a *App) StartAutomatic(req ChatRequest, taskID string) (tasks.AutoSnapshot
 	if !profile.ToolsEnabled {
 		return tasks.AutoSnapshot{}, apperror.New("enableApiToolCallsToUseAutomaticMode", nil)
 	}
-	limit, allow, err := a.automaticSettings()
+	limit, allow, autoContinue, err := a.automaticSettings()
 	if err != nil {
 		return tasks.AutoSnapshot{}, err
 	}
@@ -79,10 +83,14 @@ func (a *App) StartAutomatic(req ChatRequest, taskID string) (tasks.AutoSnapshot
 		},
 	})
 	if err != nil {
-		a.finishExecution(run.ID)
-		return tasks.AutoSnapshot{}, err
-	}
-	return a.automatic.Run(taskID, "", false)
+        a.finishExecution(run.ID)
+        return tasks.AutoSnapshot{}, err
+    }
+    if err = a.automatic.SetAutoContinue(taskID, autoContinue); err != nil {
+        a.cancelRun(run.ID, req.Ref, false)
+        return tasks.AutoSnapshot{}, err
+    }
+    return a.automatic.Run(taskID, "", false)
 }
 func (a *App) ResumeAutomatic(ref domain.ConnectionRef, taskID, approvedProposalID string, extend bool) (tasks.AutoSnapshot, error) {
 	if _, err := a.automaticExecution(ref, taskID); err != nil {
