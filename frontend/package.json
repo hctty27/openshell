@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
-    "test": "vitest"
+    "test": "vitest",
+    "audit:unused": "tsc --noEmit --noUnusedLocals --noUnusedParameters"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.12.0-beta.311",
