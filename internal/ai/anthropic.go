@@ -111,6 +111,19 @@ func encodeAnthropicRequest(profile domain.APIProfile, messages []Message) ([]by
 				"required": []string{"command", "purpose", "cwd"},
 				"additionalProperties": false,
 			},
+		}, map[string]any{
+			"name": "propose_parallel_inspection",
+			"description": "Run one strictly read-only inspection command simultaneously on all authorized SSH sessions and return labeled results.",
+			"input_schema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"command": map[string]string{"type": "string"},
+					"purpose": map[string]string{"type": "string"},
+					"cwd": map[string]string{"type": "string", "description": "Absolute directory valid on every target, usually /"},
+				},
+				"required": []string{"command", "purpose", "cwd"},
+				"additionalProperties": false,
+			},
 		}}
 	}
 	return json.Marshal(request)
