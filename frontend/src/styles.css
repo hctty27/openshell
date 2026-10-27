@@ -3741,3 +3741,13 @@ select.mode-select {
 .ops-plan__ack input { width: auto; flex: 0 0 auto; margin: 2px 0 0; }
 .ops-verification-pending { border-left: 2px solid var(--warning); margin: 5px 0; padding: 3px 8px; color: var(--text-secondary); font-size: 11px; }
 .ops-plan__checks { margin: 3px 0 3px; padding-left: 17px; color: var(--text-secondary); }
+
+/* Durable AI operations are read-only UI; no replay action is exposed. */
+.ops-timeline { margin: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 11px; }
+.ops-timeline > summary { cursor: pointer; padding: 9px 11px; color: var(--text-secondary); font-weight: 600; }
+.ops-timeline__items { max-height: 230px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; padding: 3px 9px 9px; }
+.ops-timeline__item { border-top: 1px solid var(--border); padding: 7px 2px 4px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ops-timeline__head { display: flex; gap: 8px; justify-content: space-between; align-items: start; }
+.ops-timeline__item code { overflow-wrap: anywhere; font-size: 10px; }
+.ops-timeline__details { font-size: 10px; color: var(--text-secondary); }
+.ops-timeline__warning { color: var(--warning); }
