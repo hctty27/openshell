@@ -80,8 +80,8 @@ func TestAnthropicProviderStreamsTextAndToolCalls(t *testing.T) {
 	if reply.Text!="ready" || strings.Join(chunks,"")!="ready" || len(reply.ToolCalls)!=1 ||
 		reply.ToolCalls[0].ID!="toolu_1" || reply.ToolCalls[0].Function.Name!="propose_command" ||
 		!json.Valid([]byte(reply.ToolCalls[0].Function.Arguments)) {t.Fatalf("reply: %+v",reply)}
-	if received.System!="Help with SSH." || len(received.Messages)!=4 || len(received.Tools)!=1 ||
-		received.Tools[0].Name!="propose_command" {t.Fatalf("request: %+v",received)}
+	if received.System!="Help with SSH." || len(received.Messages)!=4 || len(received.Tools)!=2 ||
+		received.Tools[0].Name!="propose_command" || received.Tools[1].Name!="propose_parallel_inspection" {t.Fatalf("request: %+v",received)}
 	if !strings.Contains(string(received.Messages[2].Content), "tool_result") ||
 		!strings.Contains(string(received.Messages[1].Content), "tool_use") {
 		t.Fatalf("history missing tool blocks: %+v",received.Messages)

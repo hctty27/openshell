@@ -117,7 +117,7 @@ func TestToolDescribesAlreadyConnectedRemoteExecution(t *testing.T) {
 		if e := json.NewDecoder(r.Body).Decode(&req); e != nil {
 			t.Error(e)
 		}
-		if len(req.Tools) != 1 || !strings.Contains(req.Tools[0].Function.Description, "already connected via SSH") || !strings.Contains(req.Tools[0].Function.Parameters.Properties["command"].Description, "without ssh login prefixes") {
+		if len(req.Tools) != 2 || !strings.Contains(req.Tools[0].Function.Description, "already connected via SSH") || !strings.Contains(req.Tools[0].Function.Parameters.Properties["command"].Description, "without ssh login prefixes") {
 			t.Error("tool does not explain execution location")
 		}
 		w.Header().Set("Content-Type", "text/event-stream")

@@ -23,6 +23,9 @@ import ConversationPicker from "./ConversationPicker";
 import { errorText } from "../bridge";
 interface Props {
   tab: Tab | undefined;
+  availableTabs: Tab[];
+  targetTabIDs: string[];
+  onToggleTarget(tabID: string): void;
   profiles: APIProfile[];
   profileID: string;
   onProfile(id: string): void;
@@ -240,10 +243,26 @@ export default function AISidebar(p: Props) {
                 {m.command && (
                   <code className="executed-command">{m.command}</code>
                 )}
-                <pre className="result-output">
-                  {m.result.stdout || t("ai:noStandardOutput")}
-                  {m.result.stderr && `\n[stderr]\n${m.result.stderr}`}
-                </pre>
+                {m.result.targetResults?.length ? (
+                  <div className="ai-parallel-results">
+                    {m.result.targetResults.map(item => {
+                      const target = p.availableTabs.find(tab => tab.id === item.ref.tabId);
+                      return (
+                        <section key={item.ref.tabId} className="ai-parallel-result">
+                          <strong>{target ? `${target.session.name} · ${target.session.host}` : item.ref.tabId}</strong>
+                          <span>{item.result.status} {item.result.exitCode !== null ? `(${item.result.exitCode})` : ""}</span>
+                          {item.result.reason && <span>{item.result.reason}</span>}
+                          <pre className="result-output">{item.result.stdout || t("ai:noStandardOutput")}{item.result.stderr && `\n[stderr]\n${item.result.stderr}`}</pre>
+                        </section>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <pre className="result-output">
+                    {m.result.stdout || t("ai:noStandardOutput")}
+                    {m.result.stderr && `\n[stderr]\n${m.result.stderr}`}
+                  </pre>
+                )}
                 {m.result.truncated && (
                   <p className="small muted">
                     {t("ai:outputLimitReachedContentTruncated")}
@@ -268,8 +287,9 @@ export default function AISidebar(p: Props) {
           <CommandProposal
             key={p.tab.proposal.id}
             proposal={p.tab.proposal}
-            host={`${p.tab.session.host}:${p.tab.session.port}`}
-            username={p.tab.session.username}
+            host={(() => { const target = p.availableTabs.find(tab => tab.ref?.tabId === p.tab?.proposal?.ref.tabId && tab.ref?.generation === p.tab?.proposal?.ref.generation); return target ? `${target.session.host}:${target.session.port}` : t("ai:targetUnavailable"); })()}
+            username={p.availableTabs.find(tab => tab.ref?.tabId === p.tab?.proposal?.ref.tabId)?.session.username ?? ""}
+            targetNames={Object.fromEntries(p.availableTabs.map(tab => [tab.id, `${tab.session.name} (${tab.session.host})`]))}
             executing={p.tab.executing}
             onConfirm={p.onConfirm}
             onCancel={p.onCancel}
@@ -323,6 +343,28 @@ export default function AISidebar(p: Props) {
             <code title={p.tab.cwd}>
               {p.tab.cwd || t("ai:directoryUnavailable")}
             </code>
+          </div>
+        )}
+        {p.tab && p.availableTabs.length > 1 && (
+          <div className="ai-target-picker">
+            <span className="ai-target-picker__label">{t("ai:authorizedTargets")} · {p.targetTabIDs.length}</span>
+            <div className="ai-target-picker__chips">
+              {p.availableTabs.map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`ai-target-chip ${p.targetTabIDs.includes(tab.id) ? "selected" : ""}`}
+                  aria-pressed={p.targetTabIDs.includes(tab.id)}
+                  title={`${tab.session.username}@${tab.session.host}:${tab.session.port}`}
+                  disabled={busy || !!p.tab?.memoryRun || !!p.tab?.proposal || automaticActive}
+                  onClick={() => p.onToggleTarget(tab.id)}
+                >
+                  {p.targetTabIDs.includes(tab.id) && <Check size={11} />}
+                  {tab.session.name}
+                </button>
+              ))}
+            </div>
+            <small>{t("ai:targetSelectionHint")}</small>
           </div>
         )}
         {p.context && (

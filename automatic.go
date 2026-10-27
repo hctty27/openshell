@@ -46,13 +46,20 @@ func (a *App) StartAutomatic(req ChatRequest, taskID string) (tasks.AutoSnapshot
 	if err != nil {
 		return tasks.AutoSnapshot{}, err
 	}
-	run, err := a.startExecutionWithTask(req.Ref, "auto", taskID)
+	run, err := a.startExecutionWithTargets(req.Ref, "auto", taskID, req.Targets)
 	if err != nil {
 		return tasks.AutoSnapshot{}, err
 	}
 	req.Operate = true
 	err = a.registerAutomatic(run, taskID, limit, allow, tasks.AutoCallbacks{
 		Valid: a.ssh.Valid,
+		Authorized: func(target domain.ConnectionRef) bool {
+			if !a.ssh.Valid(target) { return false }
+			for _, ref := range a.runTargets(run.ID) {
+				if target == ref { return true }
+			}
+			return false
+		},
 		Model: func(ctx context.Context, first bool) (tasks.AutoReply, error) {
 			response, e := a.chatContext(ctx, req, !first, true, &automaticProfile{runID: run.ID, profile: profile, key: key, language: language})
 			return tasks.AutoReply{Text: response.Text, Proposal: response.Proposal}, e

@@ -7,6 +7,7 @@ interface Props {
   proposal: Proposal;
   host: string;
   username: string;
+  targetNames?: Record<string, string>;
   executing: boolean;
   readOnly?: boolean;
   confirmDisabled?: boolean;
@@ -19,6 +20,7 @@ export default function CommandProposal(p: Props) {
   const [command, setCommand] = useState(p.proposal.command);
   const [cwd, setCwd] = useState(p.proposal.cwd);
   const [seconds, setSeconds] = useState(p.proposal.timeoutSeconds);
+  const parallel = !!p.proposal.targets?.length;
   const dirty =
     command !== p.proposal.command ||
     cwd !== p.proposal.cwd ||
@@ -37,14 +39,16 @@ export default function CommandProposal(p: Props) {
       <p>{p.proposal.purpose}</p>
       <div className="proposal-target">
         <ShieldCheck size={13} />
-        {p.username}@{p.host}
+        {parallel
+          ? p.proposal.targets!.map(ref => p.targetNames?.[ref.tabId] ?? ref.tabId).join(" · ")
+          : `${p.username}@${p.host}`}
       </div>
       <textarea
         aria-label={t("ai:pendingCommand")}
         className="command-editor"
         value={command}
         disabled={p.executing}
-        readOnly={p.readOnly}
+        readOnly={p.readOnly || parallel}
         onChange={(e) => setCommand(e.target.value)}
         spellCheck={false}
       />
@@ -53,8 +57,8 @@ export default function CommandProposal(p: Props) {
         <input
           aria-label={t("ai:workingDirectory")}
           value={cwd}
-          disabled={p.executing}
-          readOnly={p.readOnly}
+          disabled={p.executing || parallel}
+          readOnly={p.readOnly || parallel}
           onChange={(e) => setCwd(e.target.value)}
         />
       </label>
@@ -66,8 +70,8 @@ export default function CommandProposal(p: Props) {
           min="1"
           max="600"
           value={seconds}
-          disabled={p.executing}
-          readOnly={p.readOnly}
+          disabled={p.executing || parallel}
+          readOnly={p.readOnly || parallel}
           onChange={(e) => setSeconds(Number(e.target.value))}
         />
         <span>{t("ai:seconds")}</span>
@@ -81,7 +85,7 @@ export default function CommandProposal(p: Props) {
         ) : (
           <>
             <button onClick={p.onCancel}>{t("common:reject")}</button>
-            {dirty ? (
+            {dirty && !parallel ? (
               <button
                 className="primary"
                 onClick={() => p.onRevise(command, cwd, seconds)}
