@@ -123,6 +123,7 @@ type ConnectResult struct {
 type ChatRequest struct {
 	RequestID string               `json:"requestId"`
 	Ref       domain.ConnectionRef `json:"ref"`
+	Targets   []domain.ConnectionRef `json:"targets,omitempty"`
 	ProfileID string               `json:"profileId"`
 	Text      string               `json:"text"`
 	Context   string               `json:"context"`
