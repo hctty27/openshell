@@ -204,3 +204,54 @@ func TestAutomaticHighRiskRequiresApprovalEvenWhenChangesEnabled(t *testing.T) {
         t.Fatalf("explicit approval did not authorize exactly one high-risk change: %+v %v", snapshot, err)
     }
 }
+
+func TestAutomaticRoutineChangesRunWithoutReviewWhenEnabled(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    models, executed := 0, 0
+    if err := r.Start(context.Background(), "routine", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            models++
+            if models == 1 {
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "routine-proposal", Ref: ref, Command: "systemctl restart myapp", Cwd: "/",
+                }}, nil
+            }
+            return AutoReply{Text: "done"}, nil
+        },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            executed++
+            return domain.CommandResult{Status: "completed"}, nil
+        },
+    }); err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("routine", "", false)
+    if err != nil || snapshot.Status != "completed" || executed != 1 {
+        t.Fatalf("routine change did not run automatically: %+v, %v", snapshot, err)
+    }
+}
+
+func TestAutomaticAutoContinueStopsRepeatedInspectionLoop(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    models, executed := 0, 0
+    if err := r.Start(context.Background(), "loop", ref, 1, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            models++
+            return AutoReply{Proposal: &domain.Proposal{
+                ID: domain.NewID(), Ref: ref, Command: "pwd", Cwd: "/",
+            }}, nil
+        },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            executed++
+            return domain.CommandResult{Status: "completed"}, nil
+        },
+    }); err != nil { t.Fatal(err) }
+    if err := r.SetAutoContinue("loop", true); err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("loop", "", false)
+    if err != nil || snapshot.Status != "stopped" ||
+        snapshot.ReasonCode != "repeatedInspectionNoProgress" || executed != 3 || models != 4 {
+        t.Fatalf("unexpected loop guard behavior: %+v err=%v executed=%d models=%d", snapshot, err, executed, models)
+    }
+}
