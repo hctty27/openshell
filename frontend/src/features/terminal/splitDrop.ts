@@ -1,8 +1,6 @@
-export const TAB_DRAG_MIME = "application/x-openshell-tab";
-
 export type SplitDropZone = "left" | "right" | "top" | "bottom";
 export type SplitDirection = "columns" | "rows";
-export type SplitDropMode = "edge" | "smart";
+type SplitDropMode = "edge" | "smart";
 export interface SplitDropIntent { zone: SplitDropZone; mode: SplitDropMode }
 
 interface Bounds {
@@ -36,18 +34,4 @@ export function getSplitDropIntent(
     return previous;
   if (closest.distance < 0.28) return { zone: closest.zone, mode: "edge" };
   return { zone: bounds.width >= bounds.height ? "right" : "bottom", mode: "smart" };
-}
-
-// Retain this API for first-stage layout helpers and existing callers.
-export function getSplitDropZone(bounds: Bounds, x: number, y: number): SplitDropZone {
-  return getSplitDropIntent(bounds, x, y).zone;
-}
-
-export function splitLayoutFromDrop(sourceID: string, targetID: string, zone: SplitDropZone) {
-  if (!sourceID || !targetID || sourceID === targetID) return null;
-  const before = zone === "left" || zone === "top";
-  return {
-    pair: (before ? [sourceID, targetID] : [targetID, sourceID]) as [string, string],
-    direction: (zone === "left" || zone === "right" ? "columns" : "rows") as SplitDirection,
-  };
 }

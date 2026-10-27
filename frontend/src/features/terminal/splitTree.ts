@@ -4,7 +4,7 @@ export type SplitNode =
   | { type: "pane"; tabID: string }
   | { type: "split"; id: string; direction: SplitDirection; ratio: number; first: SplitNode; second: SplitNode };
 
-export interface SplitBox { left: number; top: number; width: number; height: number }
+interface SplitBox { left: number; top: number; width: number; height: number }
 export interface SplitHandle extends SplitBox {
   id: string;
   direction: SplitDirection;
@@ -17,7 +17,7 @@ export interface SplitGeometry {
 }
 
 export const MAX_SPLIT_PANES = 4;
-export const SPLIT_GUTTER = 6;
+const SPLIT_GUTTER = 6;
 export const pane = (tabID: string): SplitNode => ({ type: "pane", tabID });
 export const clampRatio = (ratio: number): number => Math.round(Math.max(20, Math.min(80, ratio)));
 

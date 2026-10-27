@@ -45,7 +45,7 @@ export interface APIProfile {
   secretRef: string;
   toolsEnabled: boolean;
 }
-export interface PreflightCheck {
+interface PreflightCheck {
   ref: Ref;
   key: "connection" | "identity" | "capacity";
   status: "passed" | "failed" | "warning";
@@ -78,7 +78,7 @@ export interface Ref {
   sessionId: string;
   generation: number;
 }
-export interface OperationPlan {
+interface OperationPlan {
   risk: "read" | "low" | "high";
   requiresConfirmation: boolean;
   preflight: string[];
@@ -353,7 +353,7 @@ export interface SFTPDocument {
   revision: string;
   size: number;
 }
-export interface SFTPSyncAction {
+interface SFTPSyncAction {
   relative: string;
   source: string;
   destination: string;

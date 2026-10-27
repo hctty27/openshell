@@ -12,7 +12,6 @@ import {
   type PropsWithChildren,
 } from "react";
 import {
-  AlertTriangle,
   FolderPlus,
   Info,
   Pencil,

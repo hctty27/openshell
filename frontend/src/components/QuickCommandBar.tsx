@@ -11,6 +11,7 @@ interface Props {
   onRun(command: QuickCommand): void;
 }
 
+/** @internal Testable visibility rule used by the command bar. */
 export function visibleQuickCommands(commands: QuickCommand[], tab?: Tab) {
   if (!tab) return [];
   return commands.filter(

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/main.tsx!"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}!",
+    "!src/**/*.test.{ts,tsx}!",
+    "!src/**/*.d.ts!"
+  ],
+  "ignore": [
+    "wailsjs/**"
+  ],
+  "ignoreBinaries": [
+    "vite"
+  ]
+}
