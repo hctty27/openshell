@@ -24,4 +24,5 @@ The entrypoint imports these files in original source order:
 - The initial extraction was verified by concatenating all 11 files and comparing the result byte-for-byte with the original 90,397-character stylesheet.
 - Add related selectors to the matching file; consider the existing cascade when modifying rules and do not create arbitrary `@layer` declarations.
 - Keep Wails and xterm runtime class selectors even when static code search cannot find an explicit JSX reference.
-- For changes affecting styling, run the frontend build, Vitest, and the Playwright workspace checks before merging.
+- The CI-enforced `npm run audit:styles` script checks that the module manifest stays in its reviewed order and no module is missing or empty.
+- For changes affecting styling, run the frontend build, `npm run audit:styles`, Vitest, and the Playwright workspace checks before merging.
