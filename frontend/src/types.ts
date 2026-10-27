@@ -45,6 +45,23 @@ export interface APIProfile {
   secretRef: string;
   toolsEnabled: boolean;
 }
+export interface OperationStep {
+  id: string;
+  conversationId: string;
+  runId: string;
+  sequence: number;
+  command: string;
+  purpose: string;
+  targets: Ref[];
+  risk: "read" | "low" | "high";
+  preflight?: string[];
+  status: "awaiting_confirmation" | "running" | "completed" | "failed" | "unknown" | "cancelled" | "superseded" | "expired";
+  verificationStatus?: string;
+  exitCode?: number | null;
+  reason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface Ref {
   tabId: string;
   sessionId: string;
