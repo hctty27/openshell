@@ -39,17 +39,6 @@ export default function WorkspaceTabStrip(p: Props) {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
   }, []);
 
-  const baseTabBounds = (el: HTMLElement) => {
-    const rect = el.getBoundingClientRect();
-    const match = el.style.transform.match(/translateX\((-?[\d.]+)px\)/);
-    const shift = match ? Number(match[1]) : 0;
-    return { left: rect.left - shift, right: rect.right - shift, width: rect.width };
-  };
-
-  const insertionAt = (id: string, x: number) =>
-    tabInsertionIndex(Array.from(stripRef.current?.querySelectorAll<HTMLElement>(".terminal-tab") ?? [])
-      .map(el => ({ id: el.dataset.tabId ?? "", ...baseTabBounds(el) })), id, x);
-
   const moveWithKeyboard = (tabID: string, index: number, event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (!event.altKey || !event.shiftKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
     event.preventDefault();
@@ -65,6 +54,20 @@ export default function WorkspaceTabStrip(p: Props) {
     const pointerID = event.pointerId;
     const origin = { x: event.clientX, y: event.clientY };
     point.current = origin;
+    const stripAtStart = stripRef.current;
+    const initialScrollLeft = stripAtStart?.scrollLeft ?? 0;
+    const initialTabBounds = Array.from(stripAtStart?.querySelectorAll<HTMLElement>(".terminal-tab") ?? [])
+      .map(el => {
+        const bounds = el.getBoundingClientRect();
+        return { id: el.dataset.tabId ?? "", left: bounds.left, width: bounds.width };
+      });
+    const scrollOffset = () => (stripRef.current?.scrollLeft ?? initialScrollLeft) - initialScrollLeft;
+    const insertionAt = (x: number) => tabInsertionIndex(
+      initialTabBounds.map(tab => ({ ...tab, left: tab.left - scrollOffset() })), tabID, x);
+    const lastTabRight = () => {
+      const last = initialTabBounds[initialTabBounds.length - 1];
+      return last ? last.left + last.width - scrollOffset() : origin.x;
+    };
     let started = false;
     let lastFrame = 0;
     const scroll = (timestamp: number) => {
@@ -79,7 +82,7 @@ export default function WorkspaceTabStrip(p: Props) {
         if (speed && strip.scrollWidth > strip.clientWidth) {
           strip.scrollLeft += speed * elapsed * 0.65;
           setDrag(previous => previous && previous.id === tabID
-            ? { ...previous, insertion: insertionAt(tabID, point.current.x) } : previous);
+            ? { ...previous, insertion: insertionAt(point.current.x) } : previous);
         }
       }
       frame.current = requestAnimationFrame(scroll);
@@ -102,7 +105,7 @@ export default function WorkspaceTabStrip(p: Props) {
       const width = stripRef.current?.querySelector<HTMLElement>(`[data-tab-id="${tabID}"]`)
         ?.getBoundingClientRect().width ?? 140;
       setDrag({ id: tabID, x: move.clientX, y: move.clientY,
-        insertion: inside ? insertionAt(tabID, move.clientX) : -1, width });
+        insertion: inside ? insertionAt(move.clientX) : -1, width });
       p.onTabPointerMove?.(tabID, move.clientX, move.clientY);
       move.preventDefault();
     };
@@ -115,12 +118,11 @@ export default function WorkspaceTabStrip(p: Props) {
         const inside = !!bounds && up.clientX >= bounds.left && up.clientX <= bounds.right &&
           up.clientY >= bounds.top && up.clientY <= bounds.bottom;
         if (inside) {
-          const tabs = Array.from(strip?.querySelectorAll<HTMLElement>(".terminal-tab") ?? []);
-          const rightEdge = tabs.length ? baseTabBounds(tabs[tabs.length - 1]).right : bounds.left;
+          const rightEdge = lastTabRight();
           if (up.clientX > rightEdge + 8) {
             p.onDropOnStrip?.(tabID);
           } else {
-            const move = reorderFromInsertion(p.tabs.map(tab => tab.id), tabID, insertionAt(tabID, up.clientX));
+            const move = reorderFromInsertion(p.tabs.map(tab => tab.id), tabID, insertionAt(up.clientX));
             if (move) p.onReorder(tabID, move.targetID, move.placement);
           }
         } else {
