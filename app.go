@@ -95,6 +95,7 @@ type AppState struct {
 	ActiveProfile         string              `json:"activeProfile"`
 	AutoCommandLimit      int                 `json:"autoCommandLimit"`
 	AutoAllowChanges      bool                `json:"autoAllowChanges"`
+	AutoContinueRounds     bool                `json:"autoContinueRounds"`
 	Version               string              `json:"version"`
 }
 
@@ -312,7 +313,7 @@ func (a *App) State() (AppState, error) {
 			commands[i].Mode = ""
 		}
 	}
-	limit, allow, e := a.automaticSettings()
+	limit, allow, autoContinue, e := a.automaticSettings()
 	if e != nil {
 		return AppState{}, e
 	}
@@ -356,7 +357,7 @@ func (a *App) State() (AppState, error) {
 		PreserveTerminalHistory: preserveHistory != "false",
 		ConfirmActiveDisconnect: confirmDisconnect != "false",
 		SaveChatHistory: saveChat != "false", AutoSummarize: autoSummary != "false",
-		Language: language, AutoCommandLimit: limit, AutoAllowChanges: allow,
+		Language: language, AutoCommandLimit: limit, AutoAllowChanges: allow, AutoContinueRounds: autoContinue,
 		Sessions: sessions, Groups: groups, Profiles: profiles,
 		FontSize: font, Theme: theme, TerminalTheme: terminalTheme, ActiveProfile: active,
 		QuickCommands: commands, QuickCommandLayout: layout,
@@ -516,7 +517,7 @@ func (a *App) SavePreference(key, value string) error {
 		if e != nil || n < 1 || n > 100 {
 			return apperror.New("commandLimitMustBeBetween1And100", nil)
 		}
-	case "autoCopySelection", "rightClickPaste", "middleClickPaste", "logHighlights", "confirmMultilinePaste", "autoAllowChanges", "saveChatHistory", "autoSummarize", "autoReconnect", "showDisconnectReason", "confirmActiveDisconnect", "preserveTerminalHistory":
+	case "autoCopySelection", "rightClickPaste", "middleClickPaste", "logHighlights", "confirmMultilinePaste", "autoAllowChanges", "autoContinueRounds", "saveChatHistory", "autoSummarize", "autoReconnect", "showDisconnectReason", "confirmActiveDisconnect", "preserveTerminalHistory":
 		if value != "true" && value != "false" {
 			return apperror.New("booleanSettingsMustBeTrueOrFalse", nil)
 		}
