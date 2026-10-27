@@ -37,17 +37,3 @@ export function getSplitDropIntent(
   if (closest.distance < 0.28) return { zone: closest.zone, mode: "edge" };
   return { zone: bounds.width >= bounds.height ? "right" : "bottom", mode: "smart" };
 }
-
-// Retain this API for first-stage layout helpers and existing callers.
-export function getSplitDropZone(bounds: Bounds, x: number, y: number): SplitDropZone {
-  return getSplitDropIntent(bounds, x, y).zone;
-}
-
-export function splitLayoutFromDrop(sourceID: string, targetID: string, zone: SplitDropZone) {
-  if (!sourceID || !targetID || sourceID === targetID) return null;
-  const before = zone === "left" || zone === "top";
-  return {
-    pair: (before ? [sourceID, targetID] : [targetID, sourceID]) as [string, string],
-    direction: (zone === "left" || zone === "right" ? "columns" : "rows") as SplitDirection,
-  };
-}
