@@ -40,3 +40,10 @@ func TestSanitizeNestedCommandResultAndStoredDisplay(t *testing.T) {
         }
     }
 }
+
+func TestChinesePasswordAndMySQLPasswordAreRedacted(t *testing.T) {
+    output := Redact("密码=zh-secret MYSQL_PWD=mysql-secret")
+    if strings.Contains(output, "zh-secret") || strings.Contains(output, "mysql-secret") {
+        t.Fatal("non-English or prefixed credential escaped redaction")
+    }
+}
