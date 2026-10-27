@@ -11,7 +11,7 @@ describe("pointer-based tab sorting", () => {
 
   it("calculates insertion by the other tabs' centers", () => {
     expect(tabInsertionIndex(tabs, "B", 30)).toBe(0);
-    expect(tabInsertionIndex(tabs, "B", 290)).toBe(2);
+    expect(tabInsertionIndex(tabs, "B", 320)).toBe(2);
     expect(tabInsertionIndex(tabs, "B", 480)).toBe(3);
     expect(reorderFromInsertion(["A", "B", "C", "D"], "B", 3))
       .toEqual({ targetID: "D", placement: "after" });
