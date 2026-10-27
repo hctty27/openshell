@@ -106,14 +106,12 @@
   "opsTimelineSteps": "步",
   "opsRiskRead": "只读检查",
   "opsUnknownNoRetry": "结果未确认，请先检查服务器，系统不会自动重试",
-  "opsStepStatus": {
-    "awaiting_confirmation": "待确认",
-    "running": "执行中",
-    "completed": "命令已执行",
-    "failed": "命令返回失败",
-    "unknown": "结果未知",
-    "cancelled": "已取消",
-    "superseded": "已修改提案",
-    "expired": "重启后提案已失效"
-  }
+  "opsStepAwaiting": "待确认",
+  "opsStepRunning": "执行中",
+  "opsStepCompleted": "命令已执行",
+  "opsStepFailed": "命令返回失败",
+  "opsStepUnknown": "结果未知",
+  "opsStepCancelled": "已取消",
+  "opsStepSuperseded": "已修改提案",
+  "opsStepExpired": "重启后提案已失效"
 }
