@@ -5,6 +5,8 @@ import {domain} from '../models';
 import {ai} from '../models';
 import {tasks} from '../models';
 
+export function ListOperationSteps(arg1:domain.ConnectionRef,arg2:string):Promise<import('../../../src/types').OperationStep[]>;
+
 export function CancelChat(arg1:domain.ConnectionRef):Promise<void>;
 
 export function CancelCommand(arg1:domain.ConnectionRef,arg2:string):Promise<void>;
