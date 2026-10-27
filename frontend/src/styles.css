@@ -3717,3 +3717,12 @@ select.mode-select {
 .modal-surface.settings-dialog--settings,
 .modal-surface.quick-manager,
 .modal-surface.xshell-import-dialog { overflow: hidden; }
+
+/* AI task scope: display every authorized connected SSH session. */
+.ai-target-picker { padding: 8px 12px 5px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.ai-target-picker__label { font-size: 11px; color: var(--muted); }
+.ai-target-picker__chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ai-target-chip { padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-target-chip.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.ai-target-chip:disabled { opacity: .55; cursor: not-allowed; }
+.ai-target-picker > small { font-size: 10px; color: var(--muted); }
