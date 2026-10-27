@@ -186,13 +186,11 @@ test("terminal mouse settings are opt-in and saved independently", async () => {
   fireEvent.click(screen.getByRole("button", { name: "终端" }));
   const copy = screen.getByLabelText("选中自动复制") as HTMLInputElement;
   const paste = screen.getByLabelText("鼠标右键粘贴") as HTMLInputElement;
-  const middle = screen.getByLabelText("鼠标中键粘贴") as HTMLInputElement;
   const highlight = screen.getByLabelText("持续高亮日志级别") as HTMLInputElement;
   expect(copy.checked).toBe(false);
   expect(paste.checked).toBe(false);
-  expect(middle.checked).toBe(false);
+  expect(screen.queryByLabelText("鼠标中键粘贴")).toBeNull();
   expect(highlight.checked).toBe(false);
-  fireEvent.click(middle);
   fireEvent.click(highlight);
   fireEvent.click(copy);
   fireEvent.click(paste);
@@ -206,7 +204,6 @@ test("terminal mouse settings are opt-in and saved independently", async () => {
       "true",
     );
     expect(api.SavePreference).toHaveBeenCalledWith("rightClickPaste", "true");
-    expect(api.SavePreference).toHaveBeenCalledWith("middleClickPaste", "true");
     expect(api.SavePreference).toHaveBeenCalledWith("logHighlights", "true");
     expect(api.SavePreference).toHaveBeenCalledWith(
       "confirmMultilinePaste",
