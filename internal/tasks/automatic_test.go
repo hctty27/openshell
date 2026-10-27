@@ -278,3 +278,28 @@ func TestAutomaticTotalCapIsEnforcedOnEveryCommand(t *testing.T) {
         t.Fatalf("unattended cap exceeded: %+v err=%v executions=%d", snapshot, err, executed)
     }
 }
+
+func TestAutomaticRepeatedInspectionAllowsChangingResults(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    models, executed := 0, 0
+    if err := r.Start(context.Background(), "progress", ref, 1, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            models++
+            if models > 4 { return AutoReply{Text: "done"}, nil }
+            return AutoReply{Proposal: &domain.Proposal{
+                ID: domain.NewID(), Ref: ref, Command: "pwd", Cwd: "/",
+            }}, nil
+        },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            executed++
+            return domain.CommandResult{Status: "completed", Stdout: string(rune('0' + executed))}, nil
+        },
+    }); err != nil { t.Fatal(err) }
+    if err := r.SetAutoContinue("progress", true); err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("progress", "", false)
+    if err != nil || snapshot.Status != "completed" || executed != 4 {
+        t.Fatalf("changing inspection output should not trigger no-progress guard: %+v %v", snapshot, err)
+    }
+}
