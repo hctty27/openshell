@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+    "strings"
 	"github.com/hctty27/openshell/internal/domain"
 )
 
@@ -24,12 +25,23 @@ func redactJSON(raw json.RawMessage) (json.RawMessage, error) {
 			}
 		case map[string]any:
 			for k, v := range x {
-				x[k] = clean(v)
-			}
+                if sensitiveJSONKey(k) {
+                    x[k] = "[REDACTED]"
+                } else {
+                    x[k] = clean(v)
+                }
+            }
 		}
 		return v
 	}
 	return json.Marshal(clean(value))
+}
+func sensitiveJSONKey(key string) bool {
+    switch strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "-", ""), "_", "")) {
+    case "pass", "pwd", "password", "passwd", "secret", "token", "apikey", "accesstoken", "refreshtoken", "clientsecret":
+        return true
+    }
+    return false
 }
 func SanitizeMessage(m domain.ConversationMessage) (domain.ConversationMessage, error) {
 	if m.Role == "tool" && json.Valid([]byte(m.Content)) {
