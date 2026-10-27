@@ -50,6 +50,7 @@ interface Props {
   onPreview(): void;
   context: string;
   onClearContext(): void;
+  onPreflight?(): Promise<import("../types").PreflightReport>;
   onConfirm(): void;
   onCancel(): void;
   onRevise(command: string, cwd: string, seconds: number): Promise<void>;
@@ -299,6 +300,7 @@ export default function AISidebar(p: Props) {
             username={p.availableTabs.find(tab => tab.ref?.tabId === p.tab?.proposal?.ref.tabId)?.session.username ?? ""}
             targetNames={Object.fromEntries(p.availableTabs.map(tab => [tab.id, `${tab.session.name} (${tab.session.host})`]))}
             executing={p.tab.executing}
+            onPreflight={p.onPreflight}
             onConfirm={p.onConfirm}
             onCancel={p.onCancel}
             onRevise={p.onRevise}
