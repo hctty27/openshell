@@ -16,13 +16,15 @@ type Preview struct {
 
 var ansi = regexp.MustCompile("\\x1b(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\x07]*(?:\\x07|\\x1b\\\\))")
 var bearer = regexp.MustCompile(`(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+`)
-var secret = regexp.MustCompile(`(?i)((?:password|passwd|api[_-]?key|access[_-]?token|secret|密码)\s*[:=]\s*)([^\s,;]+)`)
+var secret = regexp.MustCompile(`(?i)((?:password|passwd|pass|pwd|api[_-]?key|access[_-]?token|secret|密码)\b["\x27]?\s*[:=]\s*["\x27]?)([^\s,;"\x27}\\]+)`)
+var urlCredential = regexp.MustCompile(`(?i)(://[^/\s:@]+:)[^@/\s]+(@)`)
 var privateKey = regexp.MustCompile(`(?s)-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----`)
 
 func Redact(text string) string {
 	text = privateKey.ReplaceAllString(text, "[PRIVATE KEY REDACTED]")
 	text = bearer.ReplaceAllString(text, "${1}[REDACTED]")
-	return secret.ReplaceAllString(text, "${1}[REDACTED]")
+	text = secret.ReplaceAllString(text, "${1}[REDACTED]")
+	return urlCredential.ReplaceAllString(text, "${1}[REDACTED]${2}")
 }
 func BuildPreview(text string, maxLines, maxBytes int) Preview {
 	text = ansi.ReplaceAllString(text, "")
@@ -132,4 +134,20 @@ func BuildToolResult(command, cwd string, result domain.CommandResult) string {
 		}
 		limit /= 2
 	}
+}
+
+ 
+// SanitizeResult removes credentials before results reach the conversation,
+// display events, or LLM context. Parallel target outputs are covered too.
+func SanitizeResult(result domain.CommandResult) domain.CommandResult {
+    result.Stdout = Redact(result.Stdout)
+    result.Stderr = Redact(result.Stderr)
+    result.Reason = Redact(result.Reason)
+    for i := range result.TargetResults {
+        result.TargetResults[i].Result = SanitizeResult(result.TargetResults[i].Result)
+    }
+    for key, v := range result.ReasonParams {
+        if value, ok := v.(string); ok { result.ReasonParams[key] = Redact(value) }
+    }
+    return result
 }
