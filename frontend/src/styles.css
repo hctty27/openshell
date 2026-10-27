@@ -3751,3 +3751,10 @@ select.mode-select {
 .ops-timeline__item code { overflow-wrap: anywhere; font-size: 10px; }
 .ops-timeline__details { font-size: 10px; color: var(--text-secondary); }
 .ops-timeline__warning { color: var(--warning); }
+
+/* Fixed-command server probes are informative, never proof of deploy readiness. */
+.ops-preflight { margin: 8px 0; display: flex; align-items: flex-start; gap: 6px; flex-direction: column; }
+.ops-preflight > button { padding: 5px 9px; font-size: 11px; }
+.ops-preflight__results { display: flex; flex-direction: column; gap: 3px; padding: 7px 9px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 6px; width: 100%; font-size: 11px; }
+.ops-preflight__results > div { overflow-wrap: anywhere; }
+.ops-preflight__results small { color: var(--text-secondary); }
