@@ -29,8 +29,8 @@ test("general settings delegate language, backup and theme actions", () => {
 
   fireEvent.change(screen.getByLabelText("界面语言"), { target: { value: "en" } });
   fireEvent.click(screen.getByRole("button", { name: "浅色" }));
-  fireEvent.click(screen.getByRole("button", { name: "导出会话" }));
-  fireEvent.click(screen.getByRole("button", { name: "恢复会话" }));
+  fireEvent.click(screen.getByRole("button", { name: "导出备份" }));
+  fireEvent.click(screen.getByRole("button", { name: "恢复备份" }));
 
   expect(onLanguage).toHaveBeenCalledWith("en");
   expect(onTheme).toHaveBeenCalledWith("light");
@@ -62,7 +62,7 @@ test("connection settings keep the local shell conditional on disconnect behavio
   };
   const { rerender } = render(<ConnectionSettingsPanel {...props} />);
   expect(screen.getByLabelText("默认本地 Shell")).toBeTruthy();
-  fireEvent.change(screen.getByLabelText("断开后的行为"), {
+  fireEvent.change(screen.getByLabelText("SSH 断开后的操作"), {
     target: { value: "retain" },
   });
   expect(setDisconnectBehavior).toHaveBeenCalledWith("retain");
