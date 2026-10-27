@@ -237,6 +237,9 @@ export default function AISidebar(p: Props) {
                     })}
                   </span>
                 </div>
+                {m.result.verificationStatus === "pending" && (
+                  <p className="ops-verification-pending">{t("ai:opsVerificationPending")}</p>
+                )}
                 {m.result.reason && (
                   <p className="small muted">{reasonText(m.result)}</p>
                 )}
