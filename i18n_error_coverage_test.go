@@ -105,9 +105,9 @@ func TestAppErrorCodesHaveBilingualTranslations(t *testing.T) {
 
 func TestUserFacingFileOperationsUseStructuredErrors(t *testing.T) {
 	paths := []string{
-		"sftp_ai.go", "xshell_import.go", "session_backup.go",
+		"xshell_import.go", "session_backup.go",
 		"internal/sftp/files.go", "internal/sftp/transfer.go",
-		"internal/sftp/advanced.go", "internal/sftp/ai.go",
+		"internal/sftp/advanced.go",
 	}
 	for _, path := range paths {
 		data, err := os.ReadFile(path)

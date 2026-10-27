@@ -896,22 +896,24 @@ function Workspace({ initialState }: { initialState: AppState }) {
     setDisconnectingTabs([...disconnectInFlight.current]);
     try {
       stopRetryTimer(tab.id);
-    update(tab.id, t => ({
-      ...t, status: "disconnected", manualDisconnected: true,
-      localFallbackPending: true,
-      retryCount: 0, chatBusy: false, executing: false, proposal: null,
-      error: "",
-    }));
-    try {
-      if (tab.status === "reconnecting" || tab.status === "connecting" || !tab.ref) {
-        await api.CancelConnecting(tab.id);
-      } else {
-        await api.Disconnect(tab.ref);
+      update(tab.id, t => ({
+        ...t, status: "disconnected", manualDisconnected: true,
+        localFallbackPending: true,
+        retryCount: 0, chatBusy: false, executing: false, proposal: null,
+        error: "",
+      }));
+      try {
+        if (tab.status === "reconnecting" || tab.status === "connecting" || !tab.ref) {
+          await api.CancelConnecting(tab.id);
+        } else {
+          await api.Disconnect(tab.ref);
+        }
+        update(tab.id, t => t.manualDisconnected && t.status === "disconnected" &&
+          t.ref?.generation === tab.ref?.generation
+          ? { ...t, localFallbackPending: false } : t);
+      } catch (error) {
+        notify(error);
       }
-      update(tab.id, t => t.manualDisconnected && t.status === "disconnected" &&
-        t.ref?.generation === tab.ref?.generation
-        ? { ...t, localFallbackPending: false } : t);
-    } catch (error) { notify(error); }
     } finally {
       disconnectInFlight.current.delete(tab.id);
       setDisconnectingTabs([...disconnectInFlight.current]);
