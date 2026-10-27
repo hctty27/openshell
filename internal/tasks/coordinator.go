@@ -40,7 +40,8 @@ func ParseTool(name, args string) (ToolInput, error) {
 		return input, e
 	}
 	if name == "propose_parallel_inspection" {
-		if input.TargetID != "" || !IsInspectionCommand(input.Command) { return input, apperror.New("invalidToolArguments", nil) }
+		if input.TargetID != "" { return input, apperror.New("parallelInspectionDoesNotAcceptTargetId", nil) }
+		if !IsInspectionCommand(input.Command) { return input, apperror.New("inspectionCommandNotAllowed", nil) }
 		input.Parallel = true
 	}
 	return input, nil
@@ -102,9 +103,8 @@ func proposalContains(p domain.Proposal, ref domain.ConnectionRef) bool {
 }
 // ProposeParallel allows only a vetted read-only shell command on each authorized connection.
 func (c *Coordinator) ProposeParallel(refs []domain.ConnectionRef, command, purpose, cwd string, seconds int) (domain.Proposal, error) {
-	if len(refs) < 2 || len(refs) > 8 || !IsInspectionCommand(command) {
-		return domain.Proposal{}, apperror.New("invalidToolArguments", nil)
-	}
+	if len(refs) < 2 || len(refs) > 8 { return domain.Proposal{}, apperror.New("invalidToolArguments", nil) }
+	if !IsInspectionCommand(command) { return domain.Proposal{}, apperror.New("inspectionCommandNotAllowed", nil) }
 	if err := validate(command, purpose, cwd); err != nil { return domain.Proposal{}, err }
 	if seconds == 0 { seconds = 60 }
 	if seconds < 1 || seconds > 600 { return domain.Proposal{}, apperror.New("timeoutMustBeBetween1And600Seconds", nil) }
