@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Server, X } from "lucide-react";
 import { t } from "../i18n";
@@ -44,7 +44,7 @@ export default function WorkspaceTabStrip(p: Props) {
       .map(el => ({ id: el.dataset.tabId ?? "", left: el.getBoundingClientRect().left,
         width: el.getBoundingClientRect().width })), id, x);
 
-  const moveWithKeyboard = (tabID: string, index: number, event: KeyboardEvent<HTMLButtonElement>) => {
+  const moveWithKeyboard = (tabID: string, index: number, event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (!event.altKey || !event.shiftKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
     event.preventDefault();
     const offset = event.key === "ArrowLeft" ? -1 : 1;
@@ -81,6 +81,7 @@ export default function WorkspaceTabStrip(p: Props) {
       if (!started && Math.hypot(move.clientX - origin.x, move.clientY - origin.y) < 5) return;
       if (!started) {
         started = true;
+        document.body.style.setProperty("user-select", "none");
         dragging.current = tabID;
         suppressClick.current = true;
         p.onTabDragStart?.(tabID);
@@ -120,10 +121,10 @@ export default function WorkspaceTabStrip(p: Props) {
     };
     const onUp = (up: PointerEvent) => stop(up);
     const onCancel = (up: PointerEvent) => stop(up, true);
-    const onKey = (key: globalThis.KeyboardEvent) => {
+    const onKey = (key: KeyboardEvent) => {
       if (key.key !== "Escape") return;
       key.preventDefault();
-      stop(new PointerEvent("pointercancel", { pointerId: pointerID }), true);
+      stop({ pointerId: pointerID } as PointerEvent, true);
     };
     const onBlur = () => stop(new PointerEvent("pointercancel", { pointerId: pointerID }), true);
     const release = () => {
