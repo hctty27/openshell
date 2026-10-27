@@ -7,7 +7,7 @@
 - 保留 `SplitDirection` 类型：`splitTree.ts` 仍直接依赖它。
 - 删除旧终端状态、旧弹窗背景与旧字体控制对应的 7 条孤立 CSS 规则；已比对当前前端 JSX 组件引用，动态拼接状态类与 Wails 拖放类保留。
 - 版本号的前端回退值直接取 `frontend/package.json`，避免旧版本硬编码。
-- 添加 `npm run audit:unused` 检测 TypeScript 未使用声明和参数；CI 中以 advisory 方式运行。
+- 添加 `npm run audit:unused` 检测 TypeScript 未使用声明和参数，现已接入 CI 作为阻断检查。
 
 ## 后续清理候选（未直接删除）
 
@@ -45,6 +45,6 @@ go mod tidy -diff
 ## 第二轮自动审查
 
 - PR CI 的首次 advisory 扫描发现 6 处 TypeScript 未使用导入，已从业务代码删除；日志中静态命令曾退出非零，`continue-on-error` 只是不阻断构建。
-- Knip 6.43.0 首次扫描出现 3 个自动生成文件、60 多个 Wails runtime 导出及数个自研导出候选；已加 `frontend/knip.json` 将自动生成代码标记为忽略，并明确测试专用导出及内部类型边界。只有真正没有任何调用的接口才删除。Knip 在 `remove-unused` 类 PR 分支以 advisory 方式运行。
+- Knip 6.43.0 首次扫描出现 3 个自动生成文件、60 多个 Wails runtime 导出及数个自研导出候选；已加 `frontend/knip.json` 将自动生成代码标记为忽略，并明确测试专用导出及内部类型边界。只有真正没有任何调用的接口才删除。Knip 在 `remove-unused` 类 PR 分支以阻断检查方式运行。
 - 本次删除 7 条无法在当前 TSX 组件中找到引用的旧样式规则，约 49 行；其余同名选择器覆盖不做自动合并。
 - 现有 UI 的动态 CSS 规则（如 `connection-state-*`、`drag-before`、`terminal-split-drop-*`）虽不能用字面全文匹配确认调用，已主动排除清理范围。
