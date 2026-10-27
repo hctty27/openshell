@@ -34,7 +34,7 @@ export default function OperationTimeline({ steps }: { steps: OperationStep[] })
               <code title={step.command}>{step.command}</code>
               <span className="ops-timeline__details">
                 {step.risk === "high" ? t("ai:opsRiskHigh") : step.risk === "low" ? t("ai:opsRiskLow") : t("ai:opsRiskRead")}
-                {step.verificationStatus === "pending" ? " · " + t("ai:opsVerificationPending") : ""}
+                {step.verificationStatus === "pending" ? " · " + t("ai:opsVerificationPending") : step.verificationStatus === "checked" ? " · " + t("ai:opsVerificationChecked") : ""}
               </span>
               {uncertain && <span className="ops-timeline__warning">{t("ai:opsUnknownNoRetry")}</span>}
             </div>
