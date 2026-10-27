@@ -60,15 +60,18 @@ export default function WorkspaceTabStrip(p: Props) {
     const origin = { x: event.clientX, y: event.clientY };
     point.current = origin;
     let started = false;
-    const scroll = () => {
+    let lastFrame = 0;
+    const scroll = (timestamp: number) => {
       if (!started) return;
+      const elapsed = lastFrame ? Math.min(40, timestamp - lastFrame) : 16;
+      lastFrame = timestamp;
       const strip = stripRef.current;
       if (strip) {
         const bounds = strip.getBoundingClientRect();
         const inside = point.current.y >= bounds.top && point.current.y <= bounds.bottom;
         const speed = inside ? tabEdgeScrollSpeed(point.current.x, bounds.left, bounds.right) : 0;
         if (speed && strip.scrollWidth > strip.clientWidth) {
-          strip.scrollLeft += speed * 11;
+          strip.scrollLeft += speed * elapsed * 0.65;
           setDrag(previous => previous && previous.id === tabID
             ? { ...previous, insertion: insertionAt(tabID, point.current.x) } : previous);
         }
