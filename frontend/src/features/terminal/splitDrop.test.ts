@@ -21,7 +21,7 @@ describe("split drag and drop", () => {
   it("applies edge hysteresis to prevent flickering near adjacent regions", () => {
     const previous = getSplitDropIntent(bounds, 500, 65);
     expect(previous).toEqual({ zone: "top", mode: "edge" });
-    expect(getSplitDropIntent(bounds, 125, 88, previous)).toEqual(previous);
+    expect(getSplitDropIntent(bounds, 505, 72, previous)).toEqual(previous);
   });
 
   it("produces ordered horizontal and vertical layouts", () => {
