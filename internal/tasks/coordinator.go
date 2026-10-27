@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
+	"github.com/hctty27/openshell/internal/ops"
+	"github.com/hctty27/openshell/internal/ai"
 	"io"
 	"path"
 	"strings"
@@ -89,7 +91,8 @@ func (c *Coordinator) Propose(ref domain.ConnectionRef, command, purpose, cwd st
 			return domain.Proposal{}, apperror.New("handleThePendingCommandProposalFirst", nil)
 		}
 	}
-	p := domain.Proposal{ID: domain.NewID(), Ref: ref, Command: command, Purpose: purpose, Cwd: cwd, TimeoutSeconds: seconds, Status: "awaiting_confirmation"}
+	plan := ops.Analyze(command, IsInspectionCommand(command))
+	p := domain.Proposal{ID: domain.NewID(), Ref: ref, Command: command, Purpose: purpose, Cwd: cwd, TimeoutSeconds: seconds, Status: "awaiting_confirmation", Plan: &plan}
 	c.items[p.ID] = &entry{proposal: p}
 	return p, nil
 }
@@ -123,7 +126,8 @@ func (c *Coordinator) ProposeParallel(refs []domain.ConnectionRef, command, purp
 			if proposalContains(item.proposal, ref) { return domain.Proposal{}, apperror.New("handleThePendingCommandProposalFirst", nil) }
 		}
 	}
-	p := domain.Proposal{ID: domain.NewID(), Ref: refs[0], Targets: append([]domain.ConnectionRef(nil), refs...), Command: command, Purpose: purpose, Cwd: cwd, TimeoutSeconds: seconds, Status: "awaiting_confirmation"}
+	plan := ops.Analyze(command, true)
+	p := domain.Proposal{ID: domain.NewID(), Ref: refs[0], Targets: append([]domain.ConnectionRef(nil), refs...), Command: command, Purpose: purpose, Cwd: cwd, TimeoutSeconds: seconds, Status: "awaiting_confirmation", Plan: &plan}
 	c.items[p.ID] = &entry{proposal: p}
 	return p, nil
 }
@@ -162,6 +166,12 @@ func (c *Coordinator) Confirm(ctx context.Context, id string) (domain.CommandRes
 		result, e = c.runParallel(ctx, p)
 	} else {
 		result, e = c.run(ctx, p.Ref, p.Command, p.Cwd, time.Duration(p.TimeoutSeconds)*time.Second)
+	}
+	result = ai.SanitizeResult(result)
+	if p.Plan != nil && p.Plan.VerificationRequired && result.Status != "unknown" && result.Status != "cancelled" {
+		result.VerificationStatus = "pending"
+	} else if p.Plan != nil && !p.Plan.VerificationRequired {
+		result.VerificationStatus = "not_required"
 	}
 	c.mu.Lock()
 	if result.Status == "" {
@@ -270,6 +280,8 @@ func (c *Coordinator) Revise(id, command, cwd string, seconds int) (domain.Propo
 	next.Cwd = cwd
 	next.TimeoutSeconds = seconds
 	next.Status = "awaiting_confirmation"
+	plan := ops.Analyze(command, IsInspectionCommand(command))
+	next.Plan = &plan
 	c.items[next.ID] = &entry{proposal: next}
 	return next, nil
 }
