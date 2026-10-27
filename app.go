@@ -78,7 +78,6 @@ type AppState struct {
 	AutoCopySelection     bool                `json:"autoCopySelection"`
 	RightClickPaste       bool                `json:"rightClickPaste"`
 	ConfirmMultilinePaste bool                `json:"confirmMultilinePaste"`
-	MiddleClickPaste       bool                `json:"middleClickPaste"`
 	LogHighlights          bool                `json:"logHighlights"`
 	KeepAliveSeconds       int                 `json:"keepAliveSeconds"`
 	AutoReconnect          bool                `json:"autoReconnect"`
@@ -279,8 +278,6 @@ func (a *App) State() (AppState, error) {
 	if e != nil {
 		return AppState{}, e
 	}
-	middleClickPaste, e := a.store.GetPreference(a.ctx, "middleClickPaste")
-	if e != nil { return AppState{}, e }
 	logHighlights, e := a.store.GetPreference(a.ctx, "logHighlights")
 	if e != nil { return AppState{}, e }
 	rawSplitRatio, e := a.store.GetPreference(a.ctx, "splitRatio")
@@ -363,7 +360,7 @@ func (a *App) State() (AppState, error) {
 		QuickCommands: commands, QuickCommandLayout: layout,
 		AutoCopySelection: autoCopySelection == "true", RightClickPaste: rightClickPaste == "true",
 		ConfirmMultilinePaste: confirmMultilinePaste != "false",
-		MiddleClickPaste: middleClickPaste == "true", LogHighlights: logHighlights == "true", SplitRatio: splitRatio,
+		LogHighlights: logHighlights == "true", SplitRatio: splitRatio,
 		Version:               branding.Version,
 	}, nil
 }
@@ -517,7 +514,7 @@ func (a *App) SavePreference(key, value string) error {
 		if e != nil || n < 1 || n > 100 {
 			return apperror.New("commandLimitMustBeBetween1And100", nil)
 		}
-	case "autoCopySelection", "rightClickPaste", "middleClickPaste", "logHighlights", "confirmMultilinePaste", "autoAllowChanges", "autoContinueRounds", "saveChatHistory", "autoSummarize", "autoReconnect", "showDisconnectReason", "confirmActiveDisconnect", "preserveTerminalHistory":
+	case "autoCopySelection", "rightClickPaste", "logHighlights", "confirmMultilinePaste", "autoAllowChanges", "autoContinueRounds", "saveChatHistory", "autoSummarize", "autoReconnect", "showDisconnectReason", "confirmActiveDisconnect", "preserveTerminalHistory":
 		if value != "true" && value != "false" {
 			return apperror.New("booleanSettingsMustBeTrueOrFalse", nil)
 		}

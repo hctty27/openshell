@@ -88,8 +88,6 @@
   "memoryDescription": "同服务器标签页共用历史。关闭保存后使用临时对话，原有记录会保留。",
   "summaryDescription": "摘要会额外消耗模型额度。上下文限制为 48 KiB 请求数据，并非精确的 Token 数。",
   "saveMemorySettings": "保存记忆设置",
-  "middleClickToPaste": "鼠标中键粘贴",
-  "middleClickPasteDescription": "未启用交互程序鼠标追踪时，按中键粘贴剪贴板文本。",
   "logHighlights": "持续高亮日志级别",
   "logHighlightsDescription": "持续标记新输出中的 WARN、ERROR、FATAL、FAILED，不影响普通搜索。",
   "sessionTerminalTheme": "此会话终端配色",

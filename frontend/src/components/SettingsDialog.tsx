@@ -63,8 +63,6 @@ interface Props {
   rightClickPaste: boolean;
   onRightClickPaste(enabled: boolean): void;
   confirmMultilinePaste: boolean;
-  middleClickPaste: boolean;
-  onMiddleClickPaste(enabled: boolean): void;
   logHighlights: boolean;
   keepAliveSeconds?: number;
   autoReconnect?: boolean;
@@ -929,17 +927,7 @@ export default function SettingsDialog(p: Props) {
                     onChange={(e) => p.onRightClickPaste(e.target.checked)}
                   />
                 </label>
-                <label className="settings-toggle-row">
-                  <span className="settings-toggle-copy">
-                    <strong>{t("settings:middleClickToPaste")}</strong>
-                    <small>{t("settings:middleClickPasteDescription")}</small>
-                  </span>
-                  <input className="settings-switch" type="checkbox"
-                    aria-label={t("settings:middleClickToPaste")}
-                    checked={p.middleClickPaste}
-                    onChange={(e) => p.onMiddleClickPaste(e.target.checked)} />
-                </label>
-                {(p.rightClickPaste || p.middleClickPaste) && (
+                {p.rightClickPaste && (
                   <label className="settings-toggle-row settings-toggle-row--nested">
                     <span className="settings-toggle-copy">
                       <strong>{t("settings:confirmMultilinePaste")}</strong>
@@ -1115,7 +1103,6 @@ export default function SettingsDialog(p: Props) {
                       "confirmMultilinePaste",
                       String(p.confirmMultilinePaste),
                     );
-                    await api.SavePreference("middleClickPaste", String(p.middleClickPaste));
                     await api.SavePreference("logHighlights", String(p.logHighlights));
                   }, message("settings:settingsSaved"))
                 }
