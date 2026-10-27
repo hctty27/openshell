@@ -322,10 +322,19 @@ export default function AISidebar(p: Props) {
             </strong>
             <span>
               {reasonText(automatic) ||
-                (p.tab?.executing
-                  ? t("ai:runningCommand")
-                  : t("ai:processingTask"))}
+                (automatic.verificationPending
+                  ? t("ai:verifyingChange")
+                  : p.tab?.executing
+                    ? t("ai:runningCommand")
+                    : t("ai:processingTask"))}
             </span>
+            {(automatic.verificationChecks || automatic.recoveryFailures) ? (
+              <small>
+                {automatic.verificationChecks ? t("ai:verificationChecks", { count: automatic.verificationChecks }) : ""}
+                {automatic.verificationChecks && automatic.recoveryFailures ? " · " : ""}
+                {automatic.recoveryFailures ? t("ai:recoveryFailures", { count: automatic.recoveryFailures }) : ""}
+              </small>
+            ) : null}
             {automatic.status === "limit" && (
               <button className="secondary" onClick={p.onAutoContinue}>
                 {t("ai:nextRound")}

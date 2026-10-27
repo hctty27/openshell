@@ -37,6 +37,7 @@ func TestAIRequestLanguageAndAutomaticFreeze(t *testing.T) {
 	}
 	var systems []string
 	propose := false
+    verifyNext := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Messages []struct {
@@ -51,10 +52,32 @@ func TestAIRequestLanguageAndAutomaticFreeze(t *testing.T) {
 		systems = append(systems, req.Messages[0].Content)
 		w.Header().Set("Content-Type", "text/event-stream")
 		if propose {
+            verifyNext = true
 			propose = false
 			fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"lang-call\",\"type\":\"function\",\"function\":{\"name\":\"propose_command\",\"arguments\":\"{\\\"command\\\":\\\"printf DONE\\\",\\\"purpose\\\":\\\"check\\\",\\\"cwd\\\":\\\"/tmp\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n")
 			return
 		}
+        if verifyNext {
+            verifyNext = false
+            arguments, _ := json.Marshal(map[string]string{
+                "command": "pwd", "purpose": "verify", "cwd": "/tmp",
+            })
+            response, _ := json.Marshal(map[string]any{
+                "choices": []any{map[string]any{
+                    "delta": map[string]any{
+                        "tool_calls": []any{map[string]any{
+                            "index": 0, "id": "lang-verify", "type": "function",
+                            "function": map[string]string{
+                                "name": "propose_command", "arguments": string(arguments),
+                            },
+                        }},
+                    },
+                    "finish_reason": "tool_calls",
+                }},
+            })
+            fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", response)
+            return
+        }
 		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"done\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
 	}))
 	defer server.Close()
@@ -91,16 +114,16 @@ func TestAIRequestLanguageAndAutomaticFreeze(t *testing.T) {
 	if err != nil || task.Status != "completed" {
 		t.Fatal(task, err)
 	}
-	if !strings.Contains(systems[2], "Default response language: Simplified Chinese") || !strings.Contains(systems[3], "Default response language: Simplified Chinese") {
+	if !strings.Contains(systems[2], "Default response language: Simplified Chinese") || !strings.Contains(systems[3], "Default response language: Simplified Chinese") || !strings.Contains(systems[4], "Default response language: Simplified Chinese") {
 		t.Fatal("automatic language changed", systems)
 	}
-	if remote.Count() != before+1 {
+	if remote.Count() != before+2 {
 		t.Fatal("unexpected command count")
 	}
 	if _, err = a.StartAutomatic(req, "language-new"); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(systems[4], "Default response language: English") {
+	if !strings.Contains(systems[5], "Default response language: English") {
 		t.Fatal("new task did not use current language")
 	}
 }

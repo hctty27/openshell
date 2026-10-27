@@ -173,6 +173,9 @@ export interface AutoSnapshot {
   roundSteps: number;
   limit: number;
   allowChanges: boolean;
+  verificationPending?: boolean;
+  verificationChecks?: number;
+  recoveryFailures?: number;
   reason: string;
   reasonCode?: string;
   reasonParams?: Record<string, string | number>;

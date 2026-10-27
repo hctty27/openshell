@@ -61,14 +61,17 @@ func TestAutomaticModificationWaitsForExactApproval(t *testing.T) {
 		Valid: func(domain.ConnectionRef) bool { return true },
 		Model: func(context.Context, bool) (AutoReply, error) {
 			models++
-			if models > 1 {
-				return AutoReply{Text: "done"}, nil
-			}
-			return AutoReply{Proposal: &domain.Proposal{ID: "proposal", Ref: ref, Command: "systemctl restart app", Cwd: "/"}}, nil
+			if models == 1 {
+                return AutoReply{Proposal: &domain.Proposal{ID: "proposal", Ref: ref, Command: "systemctl restart app", Cwd: "/"}}, nil
+            }
+            if models == 2 {
+                return AutoReply{Proposal: &domain.Proposal{ID: "verify", Ref: ref, Command: "systemctl status app", Cwd: "/"}}, nil
+            }
+            return AutoReply{Text: "done"}, nil
 		},
 		Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
 			executed++
-			return domain.CommandResult{Status: "completed"}, nil
+			return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
 		},
 	})
 	s, e := r.Run("task", "", false)
@@ -79,7 +82,7 @@ func TestAutomaticModificationWaitsForExactApproval(t *testing.T) {
 		t.Fatal("accepted mismatched approval")
 	}
 	s, e = r.Run("task", "proposal", false)
-	if e != nil || s.Status != "completed" || executed != 1 {
+	if e != nil || s.Status != "completed" || s.VerificationChecks != 1 || executed != 2 {
 		t.Fatal(s, e, executed)
 	}
 }
@@ -187,12 +190,13 @@ func TestAutomaticHighRiskRequiresApprovalEvenWhenChangesEnabled(t *testing.T) {
         Valid: func(domain.ConnectionRef) bool { return true },
         Model: func(context.Context, bool) (AutoReply, error) {
             models++
-            if models != 1 { return AutoReply{Text:"done"}, nil }
-            return AutoReply{Proposal: &domain.Proposal{ID:"restart", Ref:ref, Command:"supervisorctl stop all", Cwd:"/"}}, nil
+            if models == 1 { return AutoReply{Proposal: &domain.Proposal{ID:"restart", Ref:ref, Command:"supervisorctl stop all", Cwd:"/"}}, nil }
+            if models == 2 { return AutoReply{Proposal: &domain.Proposal{ID:"verify", Ref:ref, Command:"supervisorctl status app", Cwd:"/"}}, nil }
+            return AutoReply{Text:"done"}, nil
         },
         Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
             executions++
-            return domain.CommandResult{Status:"completed"}, nil
+            return domain.CommandResult{Status:"completed", ExitCode:successExitCode()}, nil
         },
     }); err != nil { t.Fatal(err) }
     snapshot, err := r.Run("high-risk-task", "", false)
@@ -200,7 +204,7 @@ func TestAutomaticHighRiskRequiresApprovalEvenWhenChangesEnabled(t *testing.T) {
         t.Fatalf("unsafe automatic action executed without confirmation: %+v %v", snapshot, err)
     }
     snapshot, err = r.Run("high-risk-task", "restart", false)
-    if err != nil || snapshot.Status != "completed" || executions != 1 {
+    if err != nil || snapshot.Status != "completed" || snapshot.VerificationChecks != 1 || executions != 2 {
         t.Fatalf("explicit approval did not authorize exactly one high-risk change: %+v %v", snapshot, err)
     }
 }
@@ -218,15 +222,18 @@ func TestAutomaticRoutineChangesRunWithoutReviewWhenEnabled(t *testing.T) {
                     ID: "routine-proposal", Ref: ref, Command: "systemctl restart myapp", Cwd: "/",
                 }}, nil
             }
+            if models == 2 {
+                return AutoReply{Proposal: &domain.Proposal{ID: "verify", Ref: ref, Command: "systemctl status myapp", Cwd: "/"}}, nil
+            }
             return AutoReply{Text: "done"}, nil
         },
         Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
             executed++
-            return domain.CommandResult{Status: "completed"}, nil
+            return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
         },
     }); err != nil { t.Fatal(err) }
     snapshot, err := r.Run("routine", "", false)
-    if err != nil || snapshot.Status != "completed" || executed != 1 {
+    if err != nil || snapshot.Status != "completed" || snapshot.VerificationChecks != 1 || executed != 2 {
         t.Fatalf("routine change did not run automatically: %+v, %v", snapshot, err)
     }
 }
@@ -301,5 +308,281 @@ func TestAutomaticRepeatedInspectionAllowsChangingResults(t *testing.T) {
     snapshot, err := r.Run("progress", "", false)
     if err != nil || snapshot.Status != "completed" || executed != 4 {
         t.Fatalf("changing inspection output should not trigger no-progress guard: %+v %v", snapshot, err)
+    }
+}
+
+func successExitCode() *int {
+    code := 0
+    return &code
+}
+
+func TestAutomaticChangeRequiresVerification(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    calls, executions := 0, 0
+    err := r.Start(context.Background(), "verify", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            calls++
+            if calls == 1 {
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "write", Ref: ref, Command: "systemctl restart myapp", Cwd: "/",
+                }}, nil
+            }
+            return AutoReply{Text: "done"}, nil
+        },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            executions++
+            return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
+        },
+    })
+    if err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("verify", "", false)
+    if err != nil || snapshot.Status != "stopped" || snapshot.ReasonCode != "verificationRequired" ||
+        !snapshot.VerificationPending || executions != 1 {
+        t.Fatalf("unverified mutation was accepted: %+v err=%v", snapshot, err)
+    }
+}
+
+func TestAutomaticDiagnosesFailedWriteAndVerifiesRepair(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    commands := []string{
+        "systemctl restart myapp",
+        "systemctl status myapp",
+        "systemctl start myapp",
+        "systemctl status myapp",
+    }
+    calls, executed := 0, 0
+    err := r.Start(context.Background(), "recover", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            calls++
+            if calls <= len(commands) {
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: domain.NewID(), Ref: ref, Command: commands[calls-1], Cwd: "/",
+                }}, nil
+            }
+            return AutoReply{Text: "done"}, nil
+        },
+        Execute: func(_ context.Context, p domain.Proposal) (domain.CommandResult, error) {
+            executed++
+            if p.Command == "systemctl restart myapp" {
+                code := 1
+                return domain.CommandResult{Status: "failed", ExitCode: &code, Stderr: "service not responding"}, nil
+            }
+            return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
+        },
+    })
+    if err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("recover", "", false)
+    if err != nil || snapshot.Status != "completed" || snapshot.RecoveryFailures != 1 ||
+        snapshot.VerificationChecks != 2 || snapshot.VerificationPending || executed != 4 {
+        t.Fatalf("recovery or verification failed: %+v err=%v commands=%d", snapshot, err, executed)
+    }
+}
+
+func TestAutomaticRepeatedFailuresStop(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    executed := 0
+    err := r.Start(context.Background(), "failures", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            return AutoReply{Proposal: &domain.Proposal{
+                ID: domain.NewID(), Ref: ref, Command: "pwd", Cwd: "/tmp/" + domain.NewID(),
+            }}, nil
+        },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            executed++
+            code := 1
+            return domain.CommandResult{Status: "failed", ExitCode: &code}, nil
+        },
+    })
+    if err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("failures", "", false)
+    if err != nil || snapshot.Status != "stopped" || snapshot.ReasonCode != "recoveryAttemptsExhausted" ||
+        snapshot.RecoveryFailures != 3 || executed != 3 {
+        t.Fatalf("recovery budget was not respected: %+v err=%v commands=%d", snapshot, err, executed)
+    }
+}
+
+func TestAutomaticVerificationIsBoundToChangeTarget(t *testing.T) {
+    first := domain.ConnectionRef{TabID: "first", Generation: 1}
+    second := domain.ConnectionRef{TabID: "second", Generation: 1}
+    r := NewAutomaticRunner()
+    models, executed, rejected := 0, 0, 0
+    err := r.Start(context.Background(), "multi", first, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Authorized: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            models++
+            switch models {
+            case 1:
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "change", Ref: first, Command: "systemctl restart myapp", Cwd: "/",
+                }}, nil
+            case 2:
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "wrong", Ref: second, Command: "pwd", Cwd: "/",
+                }}, nil
+            case 3:
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "correct", Ref: first, Command: "pwd", Cwd: "/",
+                }}, nil
+            default:
+                return AutoReply{Text: "done"}, nil
+            }
+        },
+        CancelProposal: func(string) { rejected++ },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            executed++
+            return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
+        },
+    })
+    if err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("multi", "", false)
+    if err != nil || snapshot.Status != "completed" || snapshot.VerificationChecks != 1 ||
+        executed != 2 || rejected != 1 {
+        t.Fatalf("cross-target verification was accepted: %+v err=%v executed=%d rejected=%d", snapshot, err, executed, rejected)
+    }
+}
+
+func TestAutomaticUnresolvedFailureIsNotCompletion(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    models := 0
+    err := r.Start(context.Background(), "unresolved", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            models++
+            switch models {
+            case 1:
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "change", Ref: ref, Command: "systemctl restart myapp", Cwd: "/",
+                }}, nil
+            case 2:
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "diagnostic", Ref: ref, Command: "pwd", Cwd: "/",
+                }}, nil
+            default:
+                return AutoReply{Text: "all done"}, nil
+            }
+        },
+        Execute: func(_ context.Context, p domain.Proposal) (domain.CommandResult, error) {
+            if p.Command == "pwd" {
+                return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
+            }
+            code := 1
+            return domain.CommandResult{Status: "failed", ExitCode: &code}, nil
+        },
+    })
+    if err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("unresolved", "", false)
+    if err != nil || snapshot.Status != "stopped" || snapshot.ReasonCode != "failedTaskUnresolved" ||
+        snapshot.VerificationChecks != 1 || snapshot.RecoveryFailures != 1 {
+        t.Fatalf("unresolved failure was marked as success: %+v err=%v", snapshot, err)
+    }
+}
+
+func TestAutomaticRequiresVerifiedInspectionExitCode(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    calls := 0
+    err := r.Start(context.Background(), "missing-exit", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            calls++
+            if calls == 1 {
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "change", Ref: ref, Command: "systemctl restart myapp", Cwd: "/",
+                }}, nil
+            }
+            if calls == 2 {
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "check", Ref: ref, Command: "pwd", Cwd: "/",
+                }}, nil
+            }
+            return AutoReply{Text: "done"}, nil
+        },
+        Execute: func(_ context.Context, p domain.Proposal) (domain.CommandResult, error) {
+            if p.Command == "pwd" {
+                return domain.CommandResult{Status: "completed"}, nil
+            }
+            return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
+        },
+    })
+    if err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("missing-exit", "", false)
+    if err != nil || snapshot.Status != "stopped" || snapshot.ReasonCode != "verificationRequired" {
+        t.Fatalf("missing inspection exit code counted as proof: %+v err=%v", snapshot, err)
+    }
+}
+
+func TestAutomaticMarksJournalOnlyAfterSuccessfulInspection(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    models := 0
+    checked := []string{}
+    err := r.Start(context.Background(), "journal", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            models++
+            if models == 1 {
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "changed", Ref: ref, Command: "systemctl restart myapp", Cwd: "/",
+                }}, nil
+            }
+            if models == 2 {
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "inspected", Ref: ref, Command: "systemctl status myapp", Cwd: "/",
+                }}, nil
+            }
+            return AutoReply{Text: "done"}, nil
+        },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
+        },
+        MarkChecked: func(_ context.Context, stepID string) error {
+            checked = append(checked, stepID)
+            return nil
+        },
+    })
+    if err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("journal", "", false)
+    if err != nil || snapshot.Status != "completed" || len(checked) != 1 || checked[0] != "changed" {
+        t.Fatalf("verification journal callback incorrect: %+v err=%v checked=%v", snapshot, err, checked)
+    }
+}
+
+func TestAutomaticJournalFailurePreservesPendingVerification(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "tab", Generation: 1}
+    r := NewAutomaticRunner()
+    models := 0
+    err := r.Start(context.Background(), "journal-error", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            models++
+            if models == 1 {
+                return AutoReply{Proposal: &domain.Proposal{
+                    ID: "changed", Ref: ref, Command: "systemctl restart myapp", Cwd: "/",
+                }}, nil
+            }
+            return AutoReply{Proposal: &domain.Proposal{
+                ID: "inspected", Ref: ref, Command: "systemctl status myapp", Cwd: "/",
+            }}, nil
+        },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            return domain.CommandResult{Status: "completed", ExitCode: successExitCode()}, nil
+        },
+        MarkChecked: func(context.Context, string) error {
+            return context.DeadlineExceeded
+        },
+    })
+    if err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("journal-error", "", false)
+    if err != nil || snapshot.Status != "error" || !snapshot.VerificationPending ||
+        snapshot.VerificationChecks != 0 {
+        t.Fatalf("journal failure falsely cleared verification: %+v err=%v", snapshot, err)
     }
 }

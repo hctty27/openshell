@@ -71,6 +71,13 @@ func (a *App) StartAutomatic(req ChatRequest, taskID string) (tasks.AutoSnapshot
 		Execute: func(ctx context.Context, p domain.Proposal) (domain.CommandResult, error) {
 			return a.confirmCommandContext(ctx, p.ID)
 		},
+        MarkChecked: func(ctx context.Context, stepID string) error {
+            if err := a.memory.MarkOperationChecked(ctx, run.ID, stepID); err != nil {
+                return err
+            }
+            a.emit("ops:changed", map[string]any{"conversationId": run.ConversationID})
+            return nil
+        },
 		CancelProposal: func(id string) { a.cancelCommand(id) },
 		Emit: func(event tasks.AutoEvent) {
 			a.emit("auto:event", event)
