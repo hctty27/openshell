@@ -15,14 +15,14 @@ import {
   ClipboardGetText,
   ClipboardSetText,
 } from "../../wailsjs/runtime/runtime";
-import type { Tab, Ref, Theme, TerminalTheme } from "../types";
+import type { Tab, Ref, Theme, TerminalTheme, DisconnectBehavior, LocalShell } from "../types";
 import { resolveTerminalTheme } from "../terminalThemes";
 import { parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
 import { useDialogs } from "./DialogProvider";
 interface Props {
   tab: Tab;
-  disconnectBehavior?: import("../types").DisconnectBehavior;
-  localShell?: import("../types").LocalShell;
+  disconnectBehavior?: DisconnectBehavior;
+  localShell?: LocalShell;
   preserveHistory?: boolean;
   showDisconnectReason?: boolean;
   active: boolean;
