@@ -5,8 +5,9 @@
 - 删除 `frontend/src/features/terminal/splitDrop.ts` 中已无生产调用的首阶段兼容 API：`getSplitDropZone`、`splitLayoutFromDrop`。
 - 将相关测试迁移至真实生产调用的 `getSplitDropIntent`，覆盖四个边缘、智能中心、滞后防抖与非法尺寸。
 - 保留 `SplitDirection` 类型：`splitTree.ts` 仍直接依赖它。
+- 删除旧终端状态、旧弹窗背景与旧字体控制对应的 7 条孤立 CSS 规则；已比对当前前端 JSX 组件引用，动态拼接状态类与 Wails 拖放类保留。
 - 版本号的前端回退值直接取 `frontend/package.json`，避免旧版本硬编码。
-- 添加按需静态审查命令 `npm run audit:unused`，用于检测 TypeScript 未使用声明和参数；暂不纳入阻断式 CI，先处理现存告警。
+- 添加 `npm run audit:unused` 检测 TypeScript 未使用声明和参数；CI 中以 advisory 方式运行。
 
 ## 后续清理候选（未直接删除）
 
@@ -40,3 +41,9 @@ go mod tidy -diff
 ## 验证状态
 
 本次 GitHub 连接支持源文件审查和提交。执行环境未能通过网络克隆 GitHub 仓库，故未在本地实际运行构建与测试；提交 PR 后以仓库 GitHub Actions 结果作为第一轮验证，并在 Windows 真实 SSH / SFTP / rz-sz 场景进行回归。
+
+## 第二轮自动审查
+
+- PR CI 中的 TypeScript unused-symbol audit 已成功执行（2026-10-27）。
+- Knip 6.43.0 生产代码图扫描限定 `remove-unused` 类 PR 分支执行、`continue-on-error`，不会增加主干日常发布成本；不要直接将诊断视为删除授权。
+- 现有 UI 的动态 CSS 规则（如 `connection-state-*`、`drag-before`、`terminal-split-drop-*`）虽不能用字面全文匹配确认调用，已主动排除清理范围。
