@@ -1,3 +1,4 @@
+import packageManifest from "../package.json";
 import { reasonText, decodeAppError } from "./i18n/errors";
 import { message, renderMessage, type DisplayText } from "./i18n/message";
 import { t as tr } from "./i18n";
@@ -75,7 +76,7 @@ import QuickCommandManager from "./components/QuickCommandManager";
 import { quickCommandTerminalInput } from "./quickCommands";
 import { DialogProvider, useDialogs } from "./components/DialogProvider";
 import ModalSurface from "./components/ModalSurface";
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || "0.1.64";
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || packageManifest.version;
 const initial: AppState = {
   sessions: [],
   groups: [],
