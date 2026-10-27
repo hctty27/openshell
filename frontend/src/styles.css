@@ -3731,3 +3731,13 @@ select.mode-select {
 .ai-parallel-result { border: 1px solid var(--border); border-radius: 6px; padding: 7px; min-width: 0; }
 .ai-parallel-result strong { display: block; font-size: 11px; }
 .ai-parallel-result > span { font-size: 10px; color: var(--text-muted); }
+
+/* High-risk AI operation plans: explicit user preflight acknowledgement. */
+.ops-plan { border: 1px solid var(--warning); border-radius: 7px; padding: 9px; margin: 6px 0; font-size: 11px; }
+.ops-plan > strong { display: block; color: var(--warning); }
+.ops-plan__steps { margin: 6px 0; padding-left: 20px; }
+.ops-plan__steps li { padding: 2px 0; }
+.ops-plan__ack { display: flex; gap: 7px; align-items: flex-start; font-size: 11px; line-height: 1.5; }
+.ops-plan__ack input { width: auto; flex: 0 0 auto; margin: 2px 0 0; }
+.ops-verification-pending { border-left: 2px solid var(--warning); margin: 5px 0; padding: 3px 8px; color: var(--text-secondary); font-size: 11px; }
+.ops-plan__checks { margin: 3px 0 3px; padding-left: 17px; color: var(--text-secondary); }

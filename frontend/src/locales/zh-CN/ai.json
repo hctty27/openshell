@@ -86,5 +86,20 @@
   "conversationTitle": "对话标题",
   "deleteConversationDescription": "删除此对话及其全部历史？所有查看它的标签页都会切换到其他对话。",
   "renameConversationDescription": "为这段服务器对话设置一个简短标题。",
-  "contextBudgetHint": "上下文采用 48 KiB 字节预算，并非精确的 Token 数。摘要可能额外消耗模型额度。"
+  "contextBudgetHint": "上下文采用 48 KiB 字节预算，并非精确的 Token 数。摘要可能额外消耗模型额度。",
+  "opsPlanTitle": "操作计划",
+  "opsRiskHigh": "高风险",
+  "opsRiskLow": "低风险",
+  "opsStepPreflight": "1. 执行前检查",
+  "opsPreflightNotVerified": "尚未自动验证",
+  "opsStepExecute": "2. 执行所示命令",
+  "opsStepVerify": "3. 独立验证业务状态",
+  "opsAcknowledgePreflight": "我已核实目标环境、受影响服务、备份及回滚方案",
+  "opsVerificationPending": "命令已执行，业务效果仍需独立验证",
+  "opsNonZeroExit": "命令返回非零退出码，需核实实际效果",
+  "opsCheckTarget": "确认目标服务器和会话",
+  "opsCheckImpact": "确认受影响的服务和停机风险",
+  "opsCheckEnvironment": "检查程序、环境参数、容量及依赖",
+  "opsCheckBackup": "确认已有可恢复的备份",
+  "opsCheckRollback": "确认回滚动作和恢复条件"
 }

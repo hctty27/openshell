@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
+	"github.com/hctty27/openshell/internal/ops"
+	"github.com/hctty27/openshell/internal/ai"
 	"io"
 	"path"
+    "regexp"
 	"strings"
 	"sync"
 	"time"
@@ -40,12 +43,19 @@ func ParseTool(name, args string) (ToolInput, error) {
 		return input, e
 	}
 	if name == "propose_parallel_inspection" {
-		if input.TargetID != "" || !IsInspectionCommand(input.Command) { return input, apperror.New("invalidToolArguments", nil) }
+		if input.TargetID != "" { return input, apperror.New("parallelInspectionDoesNotAcceptTargetId", nil) }
+		if !IsInspectionCommand(input.Command) { return input, apperror.New("inspectionCommandNotAllowed", nil) }
 		input.Parallel = true
 	}
 	return input, nil
 }
+var inlineCredentialArg = regexp.MustCompile(`(?i)(?:^|[[:space:];])(?:-p[^[:space:]]+|--password(?:=|[[:space:]])[^[:space:]]+|MYSQL_PWD=[^[:space:]]+)`)
 func validate(command, purpose, cwd string) error {
+    // Never propose credentials embedded in a shell command: those appear
+    // in process arguments, screenshots and command/history records.
+    if ai.Redact(command) != command || inlineCredentialArg.MatchString(command) {
+        return apperror.New("credentialsInCommandNotAllowed", nil)
+    }
 	if strings.TrimSpace(command) == "" || len(command) > 32768 || strings.ContainsRune(command, 0) || strings.TrimSpace(purpose) == "" || len(purpose) > 4096 || !strings.HasPrefix(cwd, "/") || len(cwd) > 4096 || strings.ContainsAny(cwd, "\x00\r\n") {
 		return apperror.New("provideACommandPurposeAndValidAbsoluteWorking", nil)
 	}
@@ -88,7 +98,8 @@ func (c *Coordinator) Propose(ref domain.ConnectionRef, command, purpose, cwd st
 			return domain.Proposal{}, apperror.New("handleThePendingCommandProposalFirst", nil)
 		}
 	}
-	p := domain.Proposal{ID: domain.NewID(), Ref: ref, Command: command, Purpose: purpose, Cwd: cwd, TimeoutSeconds: seconds, Status: "awaiting_confirmation"}
+	plan := ops.Analyze(command, IsInspectionCommand(command))
+	p := domain.Proposal{ID: domain.NewID(), Ref: ref, Command: command, Purpose: purpose, Cwd: cwd, TimeoutSeconds: seconds, Status: "awaiting_confirmation", Plan: &plan}
 	c.items[p.ID] = &entry{proposal: p}
 	return p, nil
 }
@@ -102,9 +113,8 @@ func proposalContains(p domain.Proposal, ref domain.ConnectionRef) bool {
 }
 // ProposeParallel allows only a vetted read-only shell command on each authorized connection.
 func (c *Coordinator) ProposeParallel(refs []domain.ConnectionRef, command, purpose, cwd string, seconds int) (domain.Proposal, error) {
-	if len(refs) < 2 || len(refs) > 8 || !IsInspectionCommand(command) {
-		return domain.Proposal{}, apperror.New("invalidToolArguments", nil)
-	}
+	if len(refs) < 2 || len(refs) > 8 { return domain.Proposal{}, apperror.New("invalidToolArguments", nil) }
+	if !IsInspectionCommand(command) { return domain.Proposal{}, apperror.New("inspectionCommandNotAllowed", nil) }
 	if err := validate(command, purpose, cwd); err != nil { return domain.Proposal{}, err }
 	if seconds == 0 { seconds = 60 }
 	if seconds < 1 || seconds > 600 { return domain.Proposal{}, apperror.New("timeoutMustBeBetween1And600Seconds", nil) }
@@ -123,7 +133,8 @@ func (c *Coordinator) ProposeParallel(refs []domain.ConnectionRef, command, purp
 			if proposalContains(item.proposal, ref) { return domain.Proposal{}, apperror.New("handleThePendingCommandProposalFirst", nil) }
 		}
 	}
-	p := domain.Proposal{ID: domain.NewID(), Ref: refs[0], Targets: append([]domain.ConnectionRef(nil), refs...), Command: command, Purpose: purpose, Cwd: cwd, TimeoutSeconds: seconds, Status: "awaiting_confirmation"}
+	plan := ops.Analyze(command, true)
+	p := domain.Proposal{ID: domain.NewID(), Ref: refs[0], Targets: append([]domain.ConnectionRef(nil), refs...), Command: command, Purpose: purpose, Cwd: cwd, TimeoutSeconds: seconds, Status: "awaiting_confirmation", Plan: &plan}
 	c.items[p.ID] = &entry{proposal: p}
 	return p, nil
 }
@@ -162,6 +173,12 @@ func (c *Coordinator) Confirm(ctx context.Context, id string) (domain.CommandRes
 		result, e = c.runParallel(ctx, p)
 	} else {
 		result, e = c.run(ctx, p.Ref, p.Command, p.Cwd, time.Duration(p.TimeoutSeconds)*time.Second)
+	}
+	result = ai.SanitizeResult(result)
+	if p.Plan != nil && p.Plan.VerificationRequired && result.Status != "unknown" && result.Status != "cancelled" {
+		result.VerificationStatus = "pending"
+	} else if p.Plan != nil && !p.Plan.VerificationRequired {
+		result.VerificationStatus = "not_required"
 	}
 	c.mu.Lock()
 	if result.Status == "" {
@@ -270,6 +287,8 @@ func (c *Coordinator) Revise(id, command, cwd string, seconds int) (domain.Propo
 	next.Cwd = cwd
 	next.TimeoutSeconds = seconds
 	next.Status = "awaiting_confirmation"
+	plan := ops.Analyze(command, IsInspectionCommand(command))
+	next.Plan = &plan
 	c.items[next.ID] = &entry{proposal: next}
 	return next, nil
 }

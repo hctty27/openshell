@@ -220,5 +220,8 @@
   "memoryUnsupportedMutation": "不支持的对话修改操作",
   "backupInvalidConnection": "连接配置无效",
   "memoryHistoryUnavailable": "无法获取会话历史记录",
-  "noActiveFileTransfer": "当前没有可取消的 ZMODEM 文件传输"
+  "noActiveFileTransfer": "当前没有可取消的 ZMODEM 文件传输",
+  "inspectionCommandNotAllowed": "此命令不属于允许并行执行的只读检查，请改为逐台执行并确认",
+  "parallelInspectionDoesNotAcceptTargetId": "并行检查自动使用全部已授权会话，不接受单独的目标会话 ID",
+  "credentialsInCommandNotAllowed": "AI 命令不能携带明文凭据，请使用受控凭据配置或手动认证"
 }

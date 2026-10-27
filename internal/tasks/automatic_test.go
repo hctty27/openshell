@@ -177,3 +177,30 @@ func TestAutomaticStopDuringExecutionPreventsContinuation(t *testing.T) {
 		t.Fatal(s, models.Load())
 	}
 }
+
+func TestAutomaticHighRiskRequiresApprovalEvenWhenChangesEnabled(t *testing.T) {
+    ref := domain.ConnectionRef{TabID: "host", Generation: 1}
+    r := NewAutomaticRunner()
+    var executions int
+    var models int
+    if err := r.Start(context.Background(), "high-risk-task", ref, 10, true, AutoCallbacks{
+        Valid: func(domain.ConnectionRef) bool { return true },
+        Model: func(context.Context, bool) (AutoReply, error) {
+            models++
+            if models != 1 { return AutoReply{Text:"done"}, nil }
+            return AutoReply{Proposal: &domain.Proposal{ID:"restart", Ref:ref, Command:"supervisorctl stop all", Cwd:"/"}}, nil
+        },
+        Execute: func(context.Context, domain.Proposal) (domain.CommandResult, error) {
+            executions++
+            return domain.CommandResult{Status:"completed"}, nil
+        },
+    }); err != nil { t.Fatal(err) }
+    snapshot, err := r.Run("high-risk-task", "", false)
+    if err != nil || snapshot.Status != "awaiting_confirmation" || snapshot.ReasonCode != "criticalChangeConfirmation" || executions != 0 {
+        t.Fatalf("unsafe automatic action executed without confirmation: %+v %v", snapshot, err)
+    }
+    snapshot, err = r.Run("high-risk-task", "restart", false)
+    if err != nil || snapshot.Status != "completed" || executions != 1 {
+        t.Fatalf("explicit approval did not authorize exactly one high-risk change: %+v %v", snapshot, err)
+    }
+}

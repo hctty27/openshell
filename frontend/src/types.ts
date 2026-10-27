@@ -50,7 +50,14 @@ export interface Ref {
   sessionId: string;
   generation: number;
 }
+export interface OperationPlan {
+  risk: "read" | "low" | "high";
+  requiresConfirmation: boolean;
+  preflight: string[];
+  verificationRequired: boolean;
+}
 export interface Proposal {
+  plan?: OperationPlan;
   id: string;
   ref: Ref;
   command: string;
@@ -70,6 +77,7 @@ export interface CommandResult {
   truncated: boolean;
   reason: string;
   reasonCode?: string;
+  verificationStatus?: "pending" | "not_required";
   reasonParams?: Record<string, string | number>;
 }
 export interface ChatMessage {

@@ -76,7 +76,14 @@ func inspectionCall(args []string) bool {
 	switch path.Base(name) {
 	case "pwd", "uptime", "ps", "free", "df", "du", "ls", "cat", "head", "tail", "grep", "wc", "stat", "uname", "id", "whoami":
 		return true
-	case "hostname":
+	case "supervisorctl":
+        // Only the status subcommand is read-only; reject mutations.
+        if len(args) < 2 || args[1] != "status" { return false }
+        for _, name := range args[2:] {
+            if name == "" || strings.HasPrefix(name, "-") { return false }
+        }
+        return true
+    case "hostname":
 		if len(args) == 1 {
 			return true
 		}

@@ -21,6 +21,8 @@ export default function CommandProposal(p: Props) {
   const [cwd, setCwd] = useState(p.proposal.cwd);
   const [seconds, setSeconds] = useState(p.proposal.timeoutSeconds);
   const parallel = !!p.proposal.targets?.length;
+  const [preflightAcknowledged, setPreflightAcknowledged] = useState(false);
+  const highRisk = p.proposal.plan?.risk === "high";
   const dirty =
     command !== p.proposal.command ||
     cwd !== p.proposal.cwd ||
@@ -43,6 +45,35 @@ export default function CommandProposal(p: Props) {
           ? p.proposal.targets!.map(ref => p.targetNames?.[ref.tabId] ?? ref.tabId).join(" · ")
           : `${p.username}@${p.host}`}
       </div>
+      {p.proposal.plan && p.proposal.plan.risk !== "read" && (
+        <div className="ops-plan" role="group" aria-label={t("ai:opsPlanTitle")}>
+          <strong>{t("ai:opsPlanTitle")} · {highRisk ? t("ai:opsRiskHigh") : t("ai:opsRiskLow")}</strong>
+          <ol className="ops-plan__steps">
+            <li>
+              {t("ai:opsStepPreflight")} ({t("ai:opsPreflightNotVerified")})
+              <ul className="ops-plan__checks">
+                {p.proposal.plan.preflight.map(check => (
+                  <li key={check}>{check === "target" ? t("ai:opsCheckTarget")
+                    : check === "impact" ? t("ai:opsCheckImpact")
+                    : check === "environment" ? t("ai:opsCheckEnvironment")
+                    : check === "backup" ? t("ai:opsCheckBackup")
+                    : check === "rollback" ? t("ai:opsCheckRollback")
+                    : check}</li>
+                ))}
+              </ul>
+            </li>
+            <li>{t("ai:opsStepExecute")}</li>
+            {p.proposal.plan.verificationRequired && <li>{t("ai:opsStepVerify")}</li>}
+          </ol>
+          {highRisk && (
+            <label className="ops-plan__ack">
+              <input type="checkbox" checked={preflightAcknowledged}
+                disabled={p.executing} onChange={e => setPreflightAcknowledged(e.target.checked)} />
+              <span>{t("ai:opsAcknowledgePreflight")}</span>
+            </label>
+          )}
+        </div>
+      )}
       <textarea
         aria-label={t("ai:pendingCommand")}
         className="command-editor"
@@ -96,7 +127,7 @@ export default function CommandProposal(p: Props) {
             ) : (
               <button
                 className="primary"
-                disabled={p.confirmDisabled}
+                disabled={p.confirmDisabled || (highRisk && !preflightAcknowledged)}
                 onClick={p.onConfirm}
               >
                 <Play size={13} />
