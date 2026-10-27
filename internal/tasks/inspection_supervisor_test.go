@@ -35,3 +35,14 @@ func TestParallelSupervisorToolGivesSpecificErrors(t *testing.T) {
         t.Fatalf("bad target_id returned wrong error: %v", err)
     }
 }
+
+func TestNoCredentialsInAgentCommand(t *testing.T) {
+    for _, cmd := range []string{
+        "mysql -uhtdba -psecret", "mysql --password=secret",
+        "MYSQL_PWD=secret mysql -h 127.0.0.1", "echo pass=secret", "curl mysql://u:password@host/database",
+    } {
+        if err := validate(cmd, "inspect", "/"); err == nil {
+            t.Fatalf("accepted inline credential: %s", cmd)
+        }
+    }
+}
