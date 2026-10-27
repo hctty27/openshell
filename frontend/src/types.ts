@@ -51,7 +51,7 @@ export interface OperationStep {
   runId: string;
   sequence: number;
   command: string;
-  purpose: string;
+  purpose?: string;
   targets: Ref[];
   risk: "read" | "low" | "high";
   preflight?: string[];
