@@ -65,6 +65,7 @@ vi.mock("./bridge", async () => {
         home: "/root",
         conversationId: "chat",
       })),
+      ListOperationSteps: vi.fn(async () => []),
       ListConversations: vi.fn(async () => ({
         items: [conversation],
         nextCursor: null,

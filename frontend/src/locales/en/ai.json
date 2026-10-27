@@ -101,5 +101,17 @@
   "opsCheckImpact": "Review impacted services and downtime risk",
   "opsCheckEnvironment": "Check programs, environment, capacity and dependencies",
   "opsCheckBackup": "Confirm a restorable backup exists",
-  "opsCheckRollback": "Confirm rollback steps and recovery conditions"
+  "opsCheckRollback": "Confirm rollback steps and recovery conditions",
+  "opsTimelineTitle": "Operation history",
+  "opsTimelineSteps": "steps",
+  "opsRiskRead": "Read-only",
+  "opsUnknownNoRetry": "Remote outcome is unknown. Inspect the server first; the app will not retry automatically.",
+  "opsStepAwaiting": "Awaiting approval",
+  "opsStepRunning": "Running",
+  "opsStepCompleted": "Command executed",
+  "opsStepFailed": "Command failed",
+  "opsStepUnknown": "Unknown outcome",
+  "opsStepCancelled": "Cancelled",
+  "opsStepSuperseded": "Proposal revised",
+  "opsStepExpired": "Proposal expired after restart"
 }

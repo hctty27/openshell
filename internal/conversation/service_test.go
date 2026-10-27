@@ -325,3 +325,26 @@ func TestEmptyBindingAndStorageSwitchEmitDraftSelection(t *testing.T) {
 		t.Fatal("persisted selection was not restored", selected, err)
 	}
 }
+
+func TestOperationJournalRespectsEphemeralHistoryMode(t *testing.T) {
+    s, db, ctx, row, ref, _ := fixture(t)
+    saved, err := bindWithPersist(s, ctx, ref, row)
+    if err != nil { t.Fatal(err) }
+    if err = s.Configure(ctx, false); err != nil { t.Fatal(err) }
+    run, err := s.Begin(ref, "chat")
+    if err != nil { t.Fatal(err) }
+    step := domain.OperationStep{
+        ID:"proposal", ConversationID:run.ConversationID, RunID:run.ID,
+        Command:"supervisorctl · digest", Risk:"read", Status:"awaiting_confirmation",
+        Targets:[]domain.ConnectionRef{ref},
+    }
+    if err = s.AppendOperation(ctx, run.ID, step); err != nil { t.Fatal(err) }
+    visible, err := s.ListOperations(ctx, ref, run.ConversationID)
+    if err != nil || len(visible) != 1 { t.Fatal(visible, err) }
+    durable, err := db.ListOperationSteps(ctx, saved.ID)
+    if err != nil || len(durable) != 0 { t.Fatalf("ephemeral operation leaked to disk: %+v %v", durable, err) }
+    s.End(run.ID)
+    if err = s.Configure(ctx, true); err != nil { t.Fatal(err) }
+    durable, err = s.ListOperations(ctx, ref, saved.ID)
+    if err != nil || len(durable) != 0 { t.Fatal(durable, err) }
+}

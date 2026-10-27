@@ -17,12 +17,14 @@ import {
   Terminal,
   LoaderCircle,
 } from "lucide-react";
-import type { Tab, APIProfile, Proposal, ChatMode } from "../types";
+import type { Tab, APIProfile, Proposal, ChatMode, OperationStep } from "../types";
+import OperationTimeline from "./OperationTimeline";
 import CommandProposal from "./CommandProposal";
 import ConversationPicker from "./ConversationPicker";
 import { errorText } from "../bridge";
 interface Props {
   tab: Tab | undefined;
+  operationSteps?: OperationStep[];
   availableTabs: Tab[];
   targetTabIDs: string[];
   onToggleTarget(tabID: string): void;
@@ -203,6 +205,7 @@ export default function AISidebar(p: Props) {
             </div>
           </div>
         )}
+        <OperationTimeline steps={p.operationSteps ?? []} />
         {p.tab?.messages.map((m) => (
           <div key={m.id} className={`message ${m.role}`}>
             <div className="message-label">

@@ -51,6 +51,7 @@ import type {
   QuickCommand,
   QuickCommandLayout,
   XshellImportPreview,
+  OperationStep,
 } from "./types";
 import SessionTree from "./components/SessionTree";
 import SessionPicker from "./components/SessionPicker";
@@ -265,6 +266,31 @@ function Workspace({ initialState }: { initialState: AppState }) {
         hasEarlier: activeCache?.hasMore,
       }
     : undefined;
+  const [operationSteps, setOperationSteps] = useState<OperationStep[]>([]);
+  useEffect(() => {
+    const ref = rawActive?.ref;
+    const conversationID = activeConversationID;
+    if (!showAI || !ref || !conversationID) {
+      setOperationSteps([]);
+      return;
+    }
+    let cancelled = false;
+    const refresh = () => {
+      api.ListOperationSteps(ref, conversationID).then(steps => {
+        if (!cancelled) setOperationSteps(steps);
+      }).catch(() => {
+        if (!cancelled) setOperationSteps([]);
+      });
+    };
+    refresh();
+    const stopOperations = listen("ops:changed", (evt: { conversationId?: string }) => {
+      if (evt.conversationId === conversationID) refresh();
+    });
+    const stopConversations = listen("conversation:event", (evt: { conversationId?: string; kind?: string }) => {
+      if (evt.conversationId === conversationID && ["cleared", "deleted"].includes(evt.kind ?? "")) refresh();
+    });
+    return () => { cancelled = true; stopOperations(); stopConversations(); };
+  }, [showAI, rawActive?.ref?.tabId, rawActive?.ref?.generation, activeConversationID]);
   const activeTerminalBackground = resolveTerminalTheme(theme, terminalTheme, active?.session.terminalTheme).background;
   const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
   const notify = (error: unknown) => setToast(error);
@@ -1699,6 +1725,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           <div className="splitter" onPointerDown={(e) => drag("ai", e)} />
           <AISidebar
             tab={active}
+            operationSteps={operationSteps}
             availableTabs={tabs.filter(t => t.ref && t.status === "connected")}
             targetTabIDs={active ? (aiTargetIDs[active.id] ?? [active.id]) : []}
             onToggleTarget={(targetID) => {

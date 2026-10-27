@@ -101,5 +101,17 @@
   "opsCheckImpact": "确认受影响的服务和停机风险",
   "opsCheckEnvironment": "检查程序、环境参数、容量及依赖",
   "opsCheckBackup": "确认已有可恢复的备份",
-  "opsCheckRollback": "确认回滚动作和恢复条件"
+  "opsCheckRollback": "确认回滚动作和恢复条件",
+  "opsTimelineTitle": "运维任务记录",
+  "opsTimelineSteps": "步",
+  "opsRiskRead": "只读检查",
+  "opsUnknownNoRetry": "结果未确认，请先检查服务器，系统不会自动重试",
+  "opsStepAwaiting": "待确认",
+  "opsStepRunning": "执行中",
+  "opsStepCompleted": "命令已执行",
+  "opsStepFailed": "命令返回失败",
+  "opsStepUnknown": "结果未知",
+  "opsStepCancelled": "已取消",
+  "opsStepSuperseded": "已修改提案",
+  "opsStepExpired": "重启后提案已失效"
 }

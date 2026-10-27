@@ -27,6 +27,7 @@ import type {
   ConversationList,
   ConversationPage,
   Conversation,
+  OperationStep,
 } from "./types";
 type Backend = {
   SFTPAIAssist(req: SFTPAIRequest): Promise<SFTPAIResponse>;
@@ -43,6 +44,7 @@ type Backend = {
   SFTPBatchChmod(ref: Ref, side: string, paths: string[], mode: string): Promise<number>;
   SFTPEnsureDirectory(ref: Ref, side: string, directory: string): Promise<void>;
   StartAutomatic(req: ChatRequest, taskID: string): Promise<AutoSnapshot>;
+  ListOperationSteps(ref: Ref, conversationID: string): Promise<OperationStep[]>;
   ListConversations(ref: Ref, cursor: ConversationCursor | null, limit: number): Promise<ConversationList>;
   ReadConversation(ref: Ref, id: string, before: number, limit: number): Promise<ConversationPage>;
   SelectConversation(ref: Ref, id: string): Promise<ConversationPage>;
