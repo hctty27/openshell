@@ -95,5 +95,6 @@
   "opsStepExecute": "2. 执行所示命令",
   "opsStepVerify": "3. 独立验证业务状态",
   "opsAcknowledgePreflight": "我已核实目标环境、受影响服务、备份及回滚方案",
-  "opsVerificationPending": "命令已执行，业务效果仍需独立验证"
+  "opsVerificationPending": "命令已执行，业务效果仍需独立验证",
+  "opsNonZeroExit": "命令返回非零退出码，需核实实际效果"
 }
