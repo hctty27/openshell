@@ -9,6 +9,7 @@ import (
 	"github.com/hctty27/openshell/internal/domain"
 	"github.com/hctty27/openshell/internal/tasks"
 	"strings"
+	"strconv"
 )
 
 func (a *App) chatContext(parent context.Context, req ChatRequest, continuation, automatic bool, frozen *automaticProfile) (response ChatResponse, err error) {
@@ -25,7 +26,7 @@ func (a *App) chatContext(parent context.Context, req ChatRequest, continuation,
 	if automatic || continuation {
 		run, err = a.memory.CurrentRun(req.Ref)
 	} else {
-		run, err = a.startExecution(req.Ref, "chat")
+		run, err = a.startExecutionWithTargets(req.Ref, "chat", "", req.Targets)
 	}
 	if err != nil {
 		return response, err
@@ -104,6 +105,18 @@ func (a *App) chatContext(parent context.Context, req ChatRequest, continuation,
 		}
 	}
 	system := ai.SystemMessage(live, profile.ToolsEnabled, language, automatic)
+	targets := a.runTargets(run.ID)
+	if len(targets) == 0 { return response, apperror.New("memoryNoRun", nil) }
+	if len(targets) != 1 || targets[0] != req.Ref {
+		var scope strings.Builder
+		scope.WriteString("\nFor THIS TASK the command execution targets are ONLY the following authorized SSH connections. The current UI tab is the task owner, not necessarily an execution target. Each propose_command MUST provide target_id exactly matching a tab_id below. Never invent tab_ids or use ssh/scp wrappers. Results from different targets must be compared using their tab_id labels:\n")
+		for _, ref := range targets {
+			target, e := a.ssh.ConnectedSession(ref)
+			if e != nil { return response, e }
+			scope.WriteString("tab_id=" + ref.TabID + " server=" + target.Username + "@" + target.Host + " port=" + strconv.Itoa(target.Port) + "\n")
+		}
+		system.Content += scope.String()
+	}
 	messages, err := a.prepareConversationContext(ctx, run, profile, key, language, system)
 	if err != nil {
 		return response, err
@@ -175,7 +188,19 @@ func (a *App) registerProposal(ctx context.Context, run domain.ConversationRun, 
 	if ex == nil || ex.Ending || ex.Ctx.Err() != nil || ctx.Err() != nil || !a.ssh.Valid(run.OwnerRef) {
 		return domain.Proposal{}, apperror.New("memoryNoRun", nil)
 	}
-	p, err := a.coordinator.Propose(run.OwnerRef, input.Command, input.Purpose, input.Cwd, 60)
+	target := run.OwnerRef
+	if len(ex.Targets) == 1 { target = ex.Targets[0] }
+	if input.TargetID != "" {
+		matched := false
+		for _, candidate := range ex.Targets {
+			if candidate.TabID == input.TargetID { target = candidate; matched = true; break }
+		}
+		if !matched { return domain.Proposal{}, apperror.New("memoryNotOwner", nil) }
+	} else if len(ex.Targets) != 1 {
+		return domain.Proposal{}, apperror.New("invalidToolArguments", nil)
+	}
+	if !a.ssh.Valid(target) { return domain.Proposal{}, apperror.New("memoryConnectionChanged", nil) }
+	p, err := a.coordinator.Propose(target, input.Command, input.Purpose, input.Cwd, 60)
 	if err != nil {
 		return p, err
 	}
