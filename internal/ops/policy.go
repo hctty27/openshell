@@ -41,7 +41,7 @@ func Analyze(command string, readOnly bool) domain.OperationPlan {
     if risk == "high" {
         preflight = append(preflight, "environment", "backup", "rollback")
     }
-    return Plan{Risk: risk, RequiresConfirmation: risk == "high", Preflight: preflight, VerificationRequired: true}
+    return domain.OperationPlan{Risk: risk, RequiresConfirmation: risk == "high", Preflight: preflight, VerificationRequired: true}
 }
 
 // word accepts a literal argument only: no expansion, substitutions or globbing.
