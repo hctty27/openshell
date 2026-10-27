@@ -7,7 +7,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "test": "vitest",
-    "audit:unused": "tsc --noEmit --noUnusedLocals --noUnusedParameters"
+    "audit:unused": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
+    "audit:styles": "node scripts/check-css-order.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.12.0-beta.311",
