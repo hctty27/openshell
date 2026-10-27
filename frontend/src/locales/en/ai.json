@@ -96,5 +96,10 @@
   "opsStepVerify": "3. Verify business health independently",
   "opsAcknowledgePreflight": "I have checked the target environment, impacted services, backup, and rollback plan",
   "opsVerificationPending": "Command executed; business outcome has not been independently verified",
-  "opsNonZeroExit": "Command exited nonzero; actual effects require verification"
+  "opsNonZeroExit": "Command exited nonzero; actual effects require verification",
+  "opsCheckTarget": "Verify authorized target session",
+  "opsCheckImpact": "Review impacted services and downtime risk",
+  "opsCheckEnvironment": "Check programs, environment, capacity and dependencies",
+  "opsCheckBackup": "Confirm a restorable backup exists",
+  "opsCheckRollback": "Confirm rollback steps and recovery conditions"
 }
