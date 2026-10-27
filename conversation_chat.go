@@ -115,7 +115,7 @@ func (a *App) chatContext(parent context.Context, req ChatRequest, continuation,
 			if e != nil { return response, e }
 			scope.WriteString("tab_id=" + ref.TabID + " server=" + target.Username + "@" + target.Host + " port=" + strconv.Itoa(target.Port) + "\n")
 		}
-		system.Content += scope.String()
+		system.Content += scope.String() + "\nFor the SAME safe inspection command on ALL listed targets concurrently, use propose_parallel_inspection with no target_id. It is only for strictly read-only commands, and the application independently checks its safety. Use propose_command with target_id for individual target commands.\n"
 	}
 	messages, err := a.prepareConversationContext(ctx, run, profile, key, language, system)
 	if err != nil {
@@ -189,6 +189,7 @@ func (a *App) registerProposal(ctx context.Context, run domain.ConversationRun, 
 		return domain.Proposal{}, apperror.New("memoryNoRun", nil)
 	}
 	target := run.OwnerRef
+	if input.Parallel && len(ex.Targets) > 1 { input.TargetID = ex.Targets[0].TabID }
 	if len(ex.Targets) == 1 { target = ex.Targets[0] }
 	if input.TargetID != "" {
 		matched := false
@@ -200,7 +201,16 @@ func (a *App) registerProposal(ctx context.Context, run domain.ConversationRun, 
 		return domain.Proposal{}, apperror.New("invalidToolArguments", nil)
 	}
 	if !a.ssh.Valid(target) { return domain.Proposal{}, apperror.New("memoryConnectionChanged", nil) }
-	p, err := a.coordinator.Propose(target, input.Command, input.Purpose, input.Cwd, 60)
+	var p domain.Proposal
+	var err error
+	if input.Parallel {
+		for _, ref := range ex.Targets {
+			if !a.ssh.Valid(ref) { return domain.Proposal{}, apperror.New("memoryConnectionChanged", nil) }
+		}
+		p, err = a.coordinator.ProposeParallel(ex.Targets, input.Command, input.Purpose, input.Cwd, 60)
+	} else {
+		p, err = a.coordinator.Propose(target, input.Command, input.Purpose, input.Cwd, 60)
+	}
 	if err != nil {
 		return p, err
 	}
