@@ -86,5 +86,14 @@
   "conversationTitle": "Conversation title",
   "deleteConversationDescription": "Delete this conversation and its history? All tabs viewing it will switch to another conversation.",
   "renameConversationDescription": "Choose a short title for this server conversation.",
-  "contextBudgetHint": "Context uses a 48 KiB byte budget, not an exact Token count. Summaries may use additional model credits."
+  "contextBudgetHint": "Context uses a 48 KiB byte budget, not an exact Token count. Summaries may use additional model credits.",
+  "opsPlanTitle": "Operation plan",
+  "opsRiskHigh": "High risk",
+  "opsRiskLow": "Low risk",
+  "opsStepPreflight": "1. Preflight checks",
+  "opsPreflightNotVerified": "Not automatically verified",
+  "opsStepExecute": "2. Execute the proposed command",
+  "opsStepVerify": "3. Verify business health independently",
+  "opsAcknowledgePreflight": "I have checked the target environment, impacted services, backup, and rollback plan",
+  "opsVerificationPending": "Command executed; business outcome has not been independently verified"
 }
