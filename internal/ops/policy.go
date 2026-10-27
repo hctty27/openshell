@@ -2,24 +2,19 @@ package ops
 
 import (
     "strings"
+    "github.com/hctty27/openshell/internal/domain"
 
     "mvdan.cc/sh/v3/syntax"
 )
 
 // Plan is a server-authored proposal risk assessment, not a claim that any
 // remote preflight or business verification has already succeeded.
-type Plan struct {
-    Risk                 string   `json:"risk"`
-    RequiresConfirmation bool     `json:"requiresConfirmation"`
-    Preflight            []string `json:"preflight"`
-    VerificationRequired bool     `json:"verificationRequired"`
-}
 
 // Analyze produces a conservative risk assessment. Only commands independently
 // confirmed to be read-only by the caller qualify as inspections.
-func Analyze(command string, readOnly bool) Plan {
+func Analyze(command string, readOnly bool) domain.OperationPlan {
     if readOnly {
-        return Plan{Risk: "read", RequiresConfirmation: false, Preflight: []string{"target"}}
+        return domain.OperationPlan{Risk: "read", RequiresConfirmation: false, Preflight: []string{"target"}}
     }
     risk := "high"
     file, err := syntax.NewParser(syntax.Variant(syntax.LangPOSIX)).Parse(strings.NewReader(command), "")
