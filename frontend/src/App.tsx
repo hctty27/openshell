@@ -350,7 +350,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
   } = useSplitWorkspace({
     tabs, activeID, showSFTP, initialRatio: initialState.splitRatio, onError: notify,
   });
-  const { splitDropPreview, onTabPointerMove, onTabPointerDrop } = useTabSplitDrop({
+  const { splitDropPreview, onTabPointerMove, onTabPointerDrop, clearDropPreview } = useTabSplitDrop({
     tabs, layout, splitContainerRef, showSFTP, applyDrop, setActiveID, onError: notify,
   });
 
@@ -1395,7 +1395,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onNewTab={() => setShowSessionPicker(true)}
           onTabPointerMove={onTabPointerMove}
           onTabPointerDrop={onTabPointerDrop}
-          onTabDragEnd={() => setSplitDropPreview(null)}
+          onTabDragEnd={clearDropPreview}
           onDropOnStrip={undockPane}
           onReorder={(sourceID, targetID, placement) =>
             setTabs(current => reorderTabs(current, sourceID, targetID, placement))} />
