@@ -392,9 +392,8 @@ impl Render for Workspace {
                             .gap_3()
                             .child("Saved SSH sessions · read-only")
                             .child(sessions_status)
-                            .children(session_rows.into_iter().enumerate().map(|(i, label)| {
+                            .children(session_rows.into_iter().map(|label| {
                                 div()
-                                    .id(("session-row", i))
                                     .p_2()
                                     .rounded_md()
                                     .bg(rgb(0x1d2633))
