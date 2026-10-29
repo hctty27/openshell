@@ -1,5 +1,5 @@
 use gpui::{rgb, FontWeight, HighlightStyle, StyledText};
-use openshell_core::{TerminalSize, terminal::RenderCell};
+use openshell_core::{TerminalSize, terminal::RenderCell, workspace::SplitAxis};
 
 /// Diagnostic text styling; the production terminal will paint cells directly.
 pub(super) fn styled_terminal_line(cells: &[RenderCell]) -> StyledText {
@@ -69,3 +69,46 @@ pub(super) fn terminal_size_for_viewport(width: f32, height: f32) -> TerminalSiz
     TerminalSize::new(columns, rows)
 }
 
+
+const SPLIT_GUTTER: f32 = 6.0;
+
+/// The split is only a view into existing terminal tabs; each visible PTY
+/// must be resized to its actual pane instead of retaining full-width columns.
+pub(super) fn terminal_size_for_split(
+    width: f32,
+    height: f32,
+    axis: SplitAxis,
+) -> TerminalSize {
+    match axis {
+        // Vertical divider: two panes side by side.
+        SplitAxis::Vertical => {
+            let usable = ((width - SIDEBAR_WIDTH - SPLIT_GUTTER).max(0.0)) / 2.0;
+            terminal_size_for_viewport(usable + SIDEBAR_WIDTH, height)
+        }
+        // Horizontal divider: top and bottom panes.
+        SplitAxis::Horizontal => {
+            let usable = ((height - TITLEBAR_HEIGHT - TABBAR_HEIGHT - SPLIT_GUTTER)
+                .max(0.0)) / 2.0;
+            terminal_size_for_viewport(width, usable + TITLEBAR_HEIGHT + TABBAR_HEIGHT)
+        }
+    }
+}
+
+#[cfg(test)]
+mod split_size_tests {
+    use super::*;
+
+    #[test]
+    fn split_halves_the_relevant_dimension_and_keeps_bounds() {
+        let full = terminal_size_for_viewport(1200.0, 760.0);
+        let side = terminal_size_for_split(1200.0, 760.0, SplitAxis::Vertical);
+        assert!(side.columns < full.columns);
+        assert_eq!(side.rows, full.rows);
+        let stacked = terminal_size_for_split(1200.0, 760.0, SplitAxis::Horizontal);
+        assert_eq!(stacked.columns, full.columns);
+        assert!(stacked.rows < full.rows);
+        let tiny = terminal_size_for_split(0.0, 0.0, SplitAxis::Vertical);
+        assert!(tiny.columns >= 2);
+        assert!(tiny.rows >= 1);
+    }
+}
