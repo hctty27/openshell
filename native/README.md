@@ -5,7 +5,7 @@ A new Rust implementation alongside the existing Go/Wails version. **Not a repla
 ## Architecture
 
 - openshell-core: validated session domain, local SQLite metadata, Alacritty ANSI state machine, Russh/Tokio SSH transport.
-- openshell-native: native GPUI desktop window. Currently the **UI shell only**; terminal rendering integration is not complete.
+- openshell-native: native GPUI desktop window. Currently the **experimental local terminal preview**; terminal rendering integration is not complete.
 - Windows x64 primary target.
 
 ## Build on Windows
@@ -19,18 +19,19 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 
 ## Implemented
 
-- GPU-backed GPUI workspace shell.
+- GPU-backed GPUI workspace with an experimental read-only text-cell snapshot.
 - Alacritty terminal parser with partial-sequence state maintained across writes.
+- PowerShell startup through portable-pty/Windows ConPTY in an off-UI worker, bounded I/O, output displayed in GPUI and basic direct keyboard input.
 - Bounded byte-oriented Russh/Tokio SSH channel, password authentication requiring previously verified SHA256 host fingerprint.
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
 - Read-only preview of legacy Wails sessions (including auth configuration and credential references). No automatic data migration or credential extraction.
 
 ## Not implemented yet
 
-- Terminal grid painting, ANSI colors/cursor, IME/CJK input, keyboard, mouse and clipboard.
+- Production terminal cell painting, ANSI colors/cursor, CJK/IME composition, mouse, clipboard, scrollback and dynamic resizing. Basic ASCII keyboard handling exists only in the prototype.
 - End-user session editor, known_hosts approval UI and system credential vault.
 - Private-key/agent authentication, SSH reconnection, port forwarding and keepalive.
-- SFTP file browser/transfers, rz/sz, Windows ConPTY.
+- SFTP file browser/transfers, rz/sz and additional Windows shells/WSL integration.
 - AI provider tools and multi-session automation, conversation storage.
 - Xshell import, drag-to-split, i18n, themes and native installer.
 - End-to-end Windows validation and verified performance comparisons.
