@@ -328,12 +328,13 @@ impl Workspace {
                 let identity = HostIdentity::new(&session.host, session.port)
                     .map_err(|e| e.to_string())?;
                 let trust = HostTrustStore::open(&database).map_err(|e| e.to_string())?;
-                if matches!(
-                    trust.check(&identity, fingerprint).map_err(|e| e.to_string())?,
-                    TrustDecision::Unknown
-                ) {
-                    trust.record_user_approved(&identity, fingerprint)
-                        .map_err(|e| e.to_string())?;
+                match trust.record_initial_user_approved(&identity, fingerprint)
+                    .map_err(|e| e.to_string())?
+                {
+                    TrustDecision::Trusted => {}
+                    TrustDecision::Unknown | TrustDecision::Changed { .. } => {
+                        return Err("Host trust was not saved; existing pinned key must not be replaced".to_owned());
+                    }
                 }
             }
             // Windows Credential Manager is the only password persistence

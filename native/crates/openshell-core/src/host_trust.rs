@@ -114,6 +114,26 @@ impl HostTrustStore {
         Ok(())
     }
 
+    /// First-time GUI approval must never overwrite another trust record,
+    /// even when another OpenShell process inserts a fingerprint concurrently.
+    /// A changed key requires the separate explicit rotation workflow.
+    pub fn record_initial_user_approved(
+        &self,
+        identity: &HostIdentity,
+        fingerprint: &str,
+    ) -> Result<TrustDecision, HostTrustError> {
+        if !valid_sha256_fingerprint(fingerprint) {
+            return Err(HostTrustError::InvalidFingerprint);
+        }
+        self.connection.execute(
+            "INSERT INTO native_trusted_hosts(host,port,fingerprint)
+             VALUES (?1,?2,?3)
+             ON CONFLICT(host,port) DO NOTHING",
+            params![identity.host, identity.port, fingerprint],
+        )?;
+        self.check(identity, fingerprint)
+    }
+
     pub fn forget(&self, identity: &HostIdentity) -> Result<bool, HostTrustError> {
         Ok(self.connection.execute(
             "DELETE FROM native_trusted_hosts WHERE host=?1 AND port=?2",
@@ -153,6 +173,17 @@ mod tests {
             db.check(&host, KEY_2).unwrap(),
             TrustDecision::Changed { previous: KEY_1.into() },
         );
+        assert_eq!(db.trusted_fingerprint(&host).unwrap().as_deref(), Some(KEY_1));
+    }
+
+    #[test]
+    fn gui_host_approval_cannot_rotate_a_pinned_key() {
+        let db = HostTrustStore::open(":memory:").unwrap();
+        let host = HostIdentity::new("safe.example", 22).unwrap();
+        assert_eq!(db.record_initial_user_approved(&host, KEY_1).unwrap(), TrustDecision::Trusted);
+        assert_eq!(db.record_initial_user_approved(&host, KEY_1).unwrap(), TrustDecision::Trusted);
+        assert_eq!(db.record_initial_user_approved(&host, KEY_2).unwrap(),
+            TrustDecision::Changed { previous: KEY_1.into() });
         assert_eq!(db.trusted_fingerprint(&host).unwrap().as_deref(), Some(KEY_1));
     }
 
