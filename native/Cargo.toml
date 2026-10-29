@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["crates/openshell-core", "crates/openshell-desktop"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/hctty27/openshell"
+rust-version = "1.90"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
