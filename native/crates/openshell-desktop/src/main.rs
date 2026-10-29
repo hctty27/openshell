@@ -21,7 +21,7 @@ use gpui::{
     ClipboardItem, IntoElement, KeyDownEvent, Keystroke, MouseButton, Render, Task, Window, WindowBounds,
     WindowOptions, Subscription, ScrollWheelEvent,
 };
-use openshell_core::{LocalShell, LocalTerminal, Session, SessionStore, SshTerminalCommand, TerminalEngine, TerminalSize};
+use openshell_core::{LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize};
 use openshell_core::native_paths::{native_database_path, ensure_native_data_directory};
 use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session};
 
@@ -230,6 +230,15 @@ impl Workspace {
         true
     }
 
+    fn use_password_for_edit(&mut self, cx: &mut Context<Self>) {
+        if let Some(draft) = &mut self.session_editor {
+            if !draft.saving {
+                draft.use_password();
+                cx.notify();
+            }
+        }
+    }
+
     fn save_edit(&mut self, cx: &mut Context<Self>) {
         let Some(draft) = &self.session_editor else { return; };
         if draft.saving { return; }
@@ -254,6 +263,8 @@ impl Workspace {
             }
         };
         let existing = draft.id.is_some();
+        let key_path = draft.key_path.trim().to_owned();
+        let clear_key = draft.clear_key;
         if let Some(draft) = &mut self.session_editor {
             draft.error = None;
             draft.saving = true;
@@ -261,11 +272,23 @@ impl Workspace {
         cx.notify();
         let work = cx.background_spawn(async move {
             let dir = ensure_native_data_directory().map_err(|e| e.to_string())?;
-            let store = SessionStore::open(dir.join("native.db")).map_err(|e| e.to_string())?;
+            let database = dir.join("native.db");
+            if !key_path.is_empty() && !std::path::Path::new(&key_path).is_file() {
+                return Err("The selected SSH private key file does not exist".to_owned());
+            }
+            let store = SessionStore::open(&database).map_err(|e| e.to_string())?;
             if existing {
                 store.save(&session).map_err(|e| e.to_string())?;
             } else if !store.insert_if_absent(&session).map_err(|e| e.to_string())? {
                 return Err("Session ID collision; retry creating the session".to_owned());
+            }
+            if clear_key || !key_path.is_empty() {
+                let keys = SessionKeyStore::open(&database).map_err(|e| e.to_string())?;
+                if clear_key {
+                    keys.clear(&session.id).map_err(|e| e.to_string())?;
+                } else {
+                    keys.set(&session.id, &key_path).map_err(|e| e.to_string())?;
+                }
             }
             Ok::<(), String>(())
         });
@@ -919,6 +942,14 @@ impl Render for Workspace {
                         }))
                 }))
                 .child(prompt)
+                .child("Private key: enter a local unencrypted OpenSSH key path. Blank keeps the existing choice.")
+                .child(div()
+                    .id("ssh-session-use-password")
+                    .cursor_pointer()
+                    .p_2()
+                    .bg(rgb(0x29435d))
+                    .child("Use password authentication (save to apply)")
+                    .on_click(cx.listener(|view, _, _, cx| view.use_password_for_edit(cx))))
                 .child(div().flex().gap_2()
                     .child(div().id("ssh-session-save").cursor_pointer().p_2()
                         .bg(rgb(0x2c654b)).child("Save")

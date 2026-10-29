@@ -11,6 +11,9 @@ pub(super) struct SessionDraft {
     pub host: String,
     pub port: String,
     pub username: String,
+    /// Empty means keep the existing choice; new sessions default to password.
+    pub key_path: String,
+    pub clear_key: bool,
     pub selected: usize,
     pub saving: bool,
     pub error: Option<String>,
@@ -21,6 +24,7 @@ impl SessionDraft {
         Self {
             id: None, name: String::new(), host: String::new(),
             port: "22".into(), username: String::new(),
+            key_path: String::new(), clear_key: false,
             selected: 0, saving: false, error: None,
         }
     }
@@ -30,13 +34,15 @@ impl SessionDraft {
             id: Some(session.id.clone()), name: session.name.clone(),
             host: session.host.clone(), port: session.port.to_string(),
             username: session.username.clone(), selected: 0,
+            key_path: String::new(), clear_key: false,
             saving: false, error: None,
         }
     }
 
-    pub fn fields(&self) -> [(&'static str, &str); 4] {
+    pub fn fields(&self) -> [(&'static str, &str); 5] {
         [("Name", &self.name), ("Host", &self.host),
-         ("Port", &self.port), ("Username", &self.username)]
+         ("Port", &self.port), ("Username", &self.username),
+         ("Private key path (optional)", &self.key_path)]
     }
 
     fn selected_mut(&mut self) -> &mut String {
@@ -44,29 +50,40 @@ impl SessionDraft {
             0 => &mut self.name,
             1 => &mut self.host,
             2 => &mut self.port,
-            _ => &mut self.username,
+            3 => &mut self.username,
+            _ => &mut self.key_path,
         }
     }
 
     pub fn select(&mut self, field: usize) {
-        self.selected = field.min(3);
+        self.selected = field.min(4);
         self.error = None;
     }
 
     pub fn type_text(&mut self, value: &str) {
         let numeric = self.selected == 2;
+        let key_path = self.selected == 4;
+        if key_path { self.clear_key = false; }
+        let capacity = if key_path { 1024 } else { MAX_FIELD_LENGTH };
         let field = self.selected_mut();
         for ch in value.chars() {
             if ch.is_control() || (numeric && !ch.is_ascii_digit()) { continue; }
-            if field.len() + ch.len_utf8() > MAX_FIELD_LENGTH { break; }
+            if field.len() + ch.len_utf8() > capacity { break; }
             field.push(ch);
         }
+        self.error = None;
+
+    }
+
+    pub fn use_password(&mut self) {
+        self.key_path.clear();
+        self.clear_key = true;
         self.error = None;
     }
 
     pub fn on_key(&mut self, key: &Keystroke) {
         match key.key.as_str() {
-            "tab" => self.select((self.selected + if key.modifiers.shift { 3 } else { 1 }) % 4),
+            "tab" => self.select((self.selected + if key.modifiers.shift { 4 } else { 1 }) % 5),
             "backspace" => { self.selected_mut().pop(); self.error = None; }
             "a" if key.modifiers.control => { self.selected_mut().clear(); self.error = None; }
             _ if !key.modifiers.control && !key.modifiers.platform && !key.is_ime_in_progress() => {
@@ -105,6 +122,20 @@ mod tests {
         draft.port = "22".into();
         draft.host = "user@server".into();
         assert!(draft.session("native-1".into()).is_err());
+    }
+
+    #[test]
+    fn private_key_path_is_editable_without_copying_key_data() {
+        let mut draft = SessionDraft::new();
+        draft.select(4);
+        draft.type_text(r"C:\Users\dev\.ssh\id_ed25519");
+        assert!(draft.key_path.ends_with("id_ed25519"));
+        assert!(!draft.clear_key);
+        draft.use_password();
+        assert!(draft.key_path.is_empty());
+        assert!(draft.clear_key);
+        draft.type_text(r"C:\ssh\key");
+        assert!(!draft.clear_key);
     }
 
     #[test]
