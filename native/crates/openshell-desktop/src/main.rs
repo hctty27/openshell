@@ -1,10 +1,14 @@
+mod ssh_preview;
+
 use gpui::prelude::*;
 use gpui::{
     div, px, rgb, size, App, Application, Bounds, Context, FocusHandle, Focusable,
     IntoElement, KeyDownEvent, Keystroke, Render, Task, Window, WindowBounds,
     WindowOptions, HighlightStyle, StyledText, FontWeight, Subscription, ScrollWheelEvent,
 };
-use openshell_core::{LocalShell, LocalTerminal, TerminalEngine, TerminalSize};
+use openshell_core::{LocalShell, LocalTerminal, SshTerminalCommand, TerminalEngine, TerminalSize};
+use ssh_preview::{PreviewStatus, start_from_environment};
+use tokio::sync::mpsc;
 use openshell_core::terminal::RenderCell;
 
 
@@ -78,6 +82,7 @@ fn terminal_size_for_viewport(width: f32, height: f32) -> TerminalSize {
 struct Workspace {
     terminal: TerminalEngine,
     local: Option<LocalTerminal>,
+    remote_commands: Option<mpsc::Sender<SshTerminalCommand>>,
     _startup_task: Task<()>,
     _resize_subscription: Subscription,
     focus_handle: FocusHandle,
@@ -136,67 +141,154 @@ impl Workspace {
             let viewport = window.viewport_size();
             view.resize_to_viewport(f32::from(viewport.width), f32::from(viewport.height), cx);
         });
-        let background = cx.background_spawn(async move {
-            LocalTerminal::spawn(LocalShell::PowerShell, size)
-        });
-        let startup = cx.spawn(async move |this, cx| {
-            match background.await {
-                Ok(mut local) => {
-                    let Some(mut rx) = local.take_output() else { return };
+        let (startup, initial_status) = match start_from_environment(size) {
+            Ok(Some(mut remote)) => {
+                let remote_tx = remote.commands.clone();
+                let startup = cx.spawn(async move |this, cx| {
                     if this.update(cx, |view, cx| {
-                        // The window may have resized while ConPTY started.
-                        let resize_result = local.resize(view.terminal.size());
-                        view.local = Some(local);
-                        view.status = match resize_result {
-                            Ok(()) => "PowerShell connected · experimental ConPTY".into(),
-                            Err(err) => format!("PowerShell connected; ConPTY resize failed: {err}"),
-                        };
+                        view.remote_commands = Some(remote_tx);
                         cx.notify();
                     }).is_err() {
                         return;
                     }
-                    while let Some(mut bytes) = rx.recv().await {
-                        // Coalesce up to eight bounded PTY chunks before UI repaint.
-                        for _ in 0..7 {
-                            match rx.try_recv() {
-                                Ok(chunk) => bytes.extend_from_slice(&chunk),
-                                Err(_) => break,
-                            }
-                        }
-                        if this.update(cx, |view, cx| {
-                            for reply in view.terminal.feed_pty_replies(&bytes) {
-                                if let Some(local) = &view.local {
-                                    if local.try_write(reply).is_err() {
-                                        view.status = "Terminal reply queue full or closed".into();
+
+                    let mut output_open = true;
+                    let mut status_open = true;
+                    while output_open || status_open {
+                        tokio::select! {
+                            packet = remote.output.recv(), if output_open => {
+                                match packet {
+                                    Some(mut bytes) => {
+                                        // Use the same Alacritty parser for local and remote PTYs.
+                                        for _ in 0..7 {
+                                            match remote.output.try_recv() {
+                                                Ok(chunk) => bytes.extend_from_slice(&chunk),
+                                                Err(_) => break,
+                                            }
+                                        }
+                                        if this.update(cx, |view, cx| {
+                                            for reply in view.terminal.feed_pty_replies(&bytes) {
+                                                if let Some(tx) = &view.remote_commands {
+                                                    let _ = tx.try_send(SshTerminalCommand::Input(reply));
+                                                }
+                                            }
+                                            cx.notify();
+                                        }).is_err() {
+                                            break;
+                                        }
                                     }
+                                    None => output_open = false,
                                 }
                             }
-                            cx.notify();
-                        }).is_err() {
-                            break;
+                            state = remote.status.recv(), if status_open => {
+                                match state {
+                                    Some(PreviewStatus::Connected) => {
+                                        let _ = this.update(cx, |view, cx| {
+                                            // Cover a window resize that happened during connect.
+                                            if let Some(tx) = &view.remote_commands {
+                                                let size = view.terminal.size();
+                                                let _ = tx.try_send(SshTerminalCommand::resize(size.columns, size.rows));
+                                            }
+                                            view.status = "SSH connected · pinned host key · debug preview".into();
+                                            cx.notify();
+                                        });
+                                    }
+                                    Some(PreviewStatus::Finished(code)) => {
+                                        let _ = this.update(cx, |view, cx| {
+                                            view.remote_commands = None;
+                                            view.status = format!("SSH channel closed · exit status {code:?}");
+                                            cx.notify();
+                                        });
+                                    }
+                                    Some(PreviewStatus::Failed(error)) => {
+                                        let _ = this.update(cx, |view, cx| {
+                                            view.remote_commands = None;
+                                            view.status = format!("SSH preview failed: {error}");
+                                            cx.notify();
+                                        });
+                                    }
+                                    None => status_open = false,
+                                }
+                            }
                         }
                     }
                     let _ = this.update(cx, |view, cx| {
-                        view.local = None;
-                        view.status = "Local terminal exited".into();
+                        view.remote_commands = None;
                         cx.notify();
                     });
-                }
-                Err(err) => {
-                    let _ = this.update(cx, |view, cx| {
-                        view.status = format!("Could not start PowerShell: {err}");
-                        cx.notify();
-                    });
-                }
+                });
+                (startup, "Connecting to pinned SSH test server...".to_owned())
             }
-        });
+            Ok(None) => {
+            let background = cx.background_spawn(async move {
+                LocalTerminal::spawn(LocalShell::PowerShell, size)
+            });
+            let startup = cx.spawn(async move |this, cx| {
+                match background.await {
+                    Ok(mut local) => {
+                        let Some(mut rx) = local.take_output() else { return };
+                        if this.update(cx, |view, cx| {
+                            // The window may have resized while ConPTY started.
+                            let resize_result = local.resize(view.terminal.size());
+                            view.local = Some(local);
+                            view.status = match resize_result {
+                                Ok(()) => "PowerShell connected · experimental ConPTY".into(),
+                                Err(err) => format!("PowerShell connected; ConPTY resize failed: {err}"),
+                            };
+                            cx.notify();
+                        }).is_err() {
+                            return;
+                        }
+                        while let Some(mut bytes) = rx.recv().await {
+                            // Coalesce up to eight bounded PTY chunks before UI repaint.
+                            for _ in 0..7 {
+                                match rx.try_recv() {
+                                    Ok(chunk) => bytes.extend_from_slice(&chunk),
+                                    Err(_) => break,
+                                }
+                            }
+                            if this.update(cx, |view, cx| {
+                                for reply in view.terminal.feed_pty_replies(&bytes) {
+                                    if let Some(local) = &view.local {
+                                        if local.try_write(reply).is_err() {
+                                            view.status = "Terminal reply queue full or closed".into();
+                                        }
+                                    }
+                                }
+                                cx.notify();
+                            }).is_err() {
+                                break;
+                            }
+                        }
+                        let _ = this.update(cx, |view, cx| {
+                            view.local = None;
+                            view.status = "Local terminal exited".into();
+                            cx.notify();
+                        });
+                    }
+                    Err(err) => {
+                        let _ = this.update(cx, |view, cx| {
+                            view.status = format!("Could not start PowerShell: {err}");
+                            cx.notify();
+                        });
+                    }
+                }
+            });
+                    (startup, "Starting PowerShell...".to_owned())
+            }
+            Err(error) => {
+                let task = cx.spawn(async move |_, _| {});
+                (task, format!("SSH preview configuration error: {error}"))
+            }
+        };
         Self {
             terminal: TerminalEngine::new(size),
             local: None,
+            remote_commands: None,
             _startup_task: startup,
             _resize_subscription: subscription,
             focus_handle: cx.focus_handle(),
-            status: "Starting PowerShell...".into(),
+            status: initial_status,
             scroll_remainder: 0.0,
         }
     }
@@ -210,6 +302,11 @@ impl Workspace {
         if let Some(local) = &self.local {
             if let Err(err) = local.resize(size) {
                 self.status = format!("ConPTY resize failed: {err}");
+            }
+        }
+        if let Some(tx) = &self.remote_commands {
+            if tx.try_send(SshTerminalCommand::resize(size.columns, size.rows)).is_err() {
+                self.status = "SSH resize queue full or closed".into();
             }
         }
         cx.notify();
@@ -271,7 +368,12 @@ impl Render for Workspace {
                                     }
                                 }
                                 let Some(data) = terminal_key_bytes(&event.keystroke) else { return };
-                                if let Some(local) = &this.local {
+                                if let Some(tx) = &this.remote_commands {
+                                    if tx.try_send(SshTerminalCommand::Input(data)).is_err() {
+                                        this.status = "SSH input queue full or closed".into();
+                                        cx.notify();
+                                    }
+                                } else if let Some(local) = &this.local {
                                     if local.try_write(data).is_err() {
                                         this.status = "Terminal input queue full or closed".into();
                                         cx.notify();
