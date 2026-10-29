@@ -201,6 +201,41 @@ splits, resizing the divider, separate pane zoom, CJK/IME, correct glyph metrics
 clipboard, SFTP or AI across panes. The split UI must pass Windows CI and be
 manually tested with concurrent SSH sessions before it can be considered stable.
 
+## Windows startup failure: DirectWriteTextSystem
+
+If the unsigned Debug EXE displays **"Failed to launch / Error creating
+DirectWriteTextSystem"**, the native GPUI window has not been created yet.
+This is a Windows DirectWrite/Direct3D initialization error, **not** an SSH,
+ConPTY, or session data failure. CI only compiles and unit-tests the app;
+GUI startup depends on the actual Windows graphics/font environment.
+
+Download a fresh artifact that includes the independent diagnostic command.
+From PowerShell in the extracted directory, run:
+
+```powershell
+.\openshell-native.exe --diagnose
+Get-Content "$env:TEMP\openshell-native-directwrite-diagnostic.txt"
+dxdiag
+```
+
+The --diagnose mode deliberately **does not construct GPUI or open an SSH
+connection**. It separately tests DirectWrite Factory5, its in-memory font
+loader, font-set builder and system font collection, reporting the first
+Windows HRESULT error. It also writes a local text file in the Temp folder.
+
+- If DirectWrite initialization fails, the report identifies the failing
+  Windows API and HRESULT. Check OS version/Windows font services.
+- If all DirectWrite tests pass but the app still fails on launch, the
+  remaining possibility includes GPU-backed emoji/text shader creation
+  inside GPUI. Check the GPU name, installed driver and DirectX 11 feature
+  levels in **dxdiag**; update graphics drivers from the hardware vendor
+  rather than copying random DLLs into the program directory.
+- This diagnostic does **not** prove the real GPU shader initialization
+  works; it deliberately isolates the Windows font API portion only.
+
+Share the report and the Display tab's driver/feature-level information
+(redact personal PC information if desired) for the exact next fix.
+
 ## Windows developer preview
 
 The native CI builds a **debug-only, unsigned** `openshell-native.exe` and uploads it
