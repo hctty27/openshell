@@ -2,9 +2,50 @@ use gpui::prelude::*;
 use gpui::{
     div, px, rgb, size, App, Application, Bounds, Context, FocusHandle, Focusable,
     IntoElement, KeyDownEvent, Keystroke, Render, Task, Window, WindowBounds,
-    WindowOptions,
+    WindowOptions, HighlightStyle, StyledText, FontWeight,
 };
 use openshell_core::{LocalShell, LocalTerminal, TerminalEngine, TerminalSize};
+use openshell_core::terminal::RenderCell;
+
+
+/// Diagnostic text styling; the production terminal will paint cells directly.
+fn styled_terminal_line(cells: &[RenderCell]) -> StyledText {
+    let mut text = String::with_capacity(cells.len() * 2);
+    let mut highlights = Vec::new();
+    let mut last_style: Option<(u32, u32, bool)> = None;
+    let mut start = 0;
+
+    for cell in cells {
+        let (fg, bg) = if cell.cursor { (cell.bg, cell.fg) } else { (cell.fg, cell.bg) };
+        let style = (fg, bg, cell.bold);
+        if last_style.is_some_and(|previous| previous != style) {
+            let previous = last_style.expect("previous style");
+            if start != text.len() {
+                highlights.push((start..text.len(), HighlightStyle {
+                    color: Some(rgb(previous.0).into()),
+                    background_color: Some(rgb(previous.1).into()),
+                    font_weight: previous.2.then_some(FontWeight::BOLD),
+                    ..Default::default()
+                }));
+            }
+            start = text.len();
+        }
+        last_style = Some(style);
+        text.push_str(&cell.text);
+    }
+
+    if let Some(style) = last_style {
+        if start != text.len() {
+            highlights.push((start..text.len(), HighlightStyle {
+                color: Some(rgb(style.0).into()),
+                background_color: Some(rgb(style.1).into()),
+                font_weight: style.2.then_some(FontWeight::BOLD),
+                ..Default::default()
+            }));
+        }
+    }
+    StyledText::new(text).with_highlights(highlights)
+}
 
 struct Workspace {
     terminal: TerminalEngine,
@@ -74,9 +115,22 @@ impl Workspace {
                     }).is_err() {
                         return;
                     }
-                    while let Some(bytes) = rx.recv().await {
+                    while let Some(mut bytes) = rx.recv().await {
+                        // Coalesce up to eight bounded PTY chunks before UI repaint.
+                        for _ in 0..7 {
+                            match rx.try_recv() {
+                                Ok(chunk) => bytes.extend_from_slice(&chunk),
+                                Err(_) => break,
+                            }
+                        }
                         if this.update(cx, |view, cx| {
-                            view.terminal.feed(&bytes);
+                            for reply in view.terminal.feed_pty_replies(&bytes) {
+                                if let Some(local) = &view.local {
+                                    if local.try_write(reply).is_err() {
+                                        view.status = "Terminal reply queue full or closed".into();
+                                    }
+                                }
+                            }
                             cx.notify();
                         }).is_err() {
                             break;
@@ -114,7 +168,7 @@ impl Focusable for Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let lines = self.terminal.visible_lines();
+        let rows = self.terminal.render_cells();
 
         div()
             .size_full()
@@ -180,10 +234,10 @@ impl Render for Workspace {
                                     .font_family("Consolas")
                                     .flex()
                                     .flex_col()
-                                    .children(lines.into_iter().map(|line| {
+                                    .children(rows.into_iter().map(|cells| {
                                         div()
                                             .h(px(19.0))
-                                            .child(if line.is_empty() { " ".into() } else { line })
+                                            .child(styled_terminal_line(&cells))
                                     })),
                             ),
                     ),
