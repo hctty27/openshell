@@ -6,6 +6,7 @@ use terminal_tab::{TerminalTab, RemotePhase, remote_button_label};
 use split_view::SplitView;
 use openshell_core::workspace::SplitAxis;
 mod ssh_preview;
+mod startup_diagnostics;
 
 use gpui::prelude::*;
 use gpui::{
@@ -912,6 +913,12 @@ impl Render for Workspace {
 }
 
 fn main() {
+    // Run the Windows DirectWrite preflight before GPUI is constructed.
+    // This works even on machines where GPUI cannot create its first window.
+    if std::env::args().any(|arg| arg == "--diagnose") {
+        println!("{}", startup_diagnostics::run());
+        return;
+    }
     tracing_subscriber::fmt::init();
 
     Application::new().run(|cx: &mut App| {
