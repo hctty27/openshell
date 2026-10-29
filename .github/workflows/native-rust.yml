@@ -37,15 +37,19 @@ jobs:
         run: cargo check -p openshell-native
       - name: Native desktop key encoding tests
         run: cargo test -p openshell-native
-      - name: Build Windows preview executable
-        run: cargo build -p openshell-native
-      - name: Test standalone DirectWrite preflight on Windows runner
+      # GPUI's Windows Debug shader pipeline reads HLSL files using
+      # a compile-machine CARGO_MANIFEST_DIR absolute path at launch.
+      # A standalone EXE artifact cannot satisfy that dependency.
+      # Release embeds shader bytecode; use it for transferable builds.
+      - name: Build self-contained Windows Release preview
+        run: cargo build --release -p openshell-native
+      - name: Test embedded-shader Release diagnostic on Windows runner
         run: |
-          .\target\debug\openshell-native.exe --diagnose
-      - name: Upload unsigned debug prototype
+          .\target\release\openshell-native.exe --diagnose
+      - name: Upload unsigned Release preview
         uses: actions/upload-artifact@v4
         with:
-          name: openshell-native-unsigned-debug-windows-x64
-          path: native/target/debug/openshell-native.exe
+          name: openshell-native-unsigned-release-preview-windows-x64
+          path: native/target/release/openshell-native.exe
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 7
