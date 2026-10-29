@@ -21,7 +21,7 @@ use gpui::{
     ClipboardItem, IntoElement, KeyDownEvent, Keystroke, MouseButton, Render, Task, Window, WindowBounds,
     WindowOptions, Subscription, ScrollWheelEvent,
 };
-use openshell_core::{LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize};
+use openshell_core::{CredentialVault, LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize};
 use openshell_core::native_paths::{native_database_path, ensure_native_data_directory};
 use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session};
 
@@ -218,7 +218,10 @@ impl Workspace {
             "enter" => self.save_edit(cx),
             "v" if key.modifiers.control => {
                 if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-                    if let Some(draft) = &mut self.session_editor { draft.type_text(&text); }
+                    let clipboard = zeroize::Zeroizing::new(text);
+                    if let Some(draft) = &mut self.session_editor {
+                        draft.type_text(&clipboard);
+                    }
                     cx.notify();
                 }
             }
@@ -265,10 +268,13 @@ impl Workspace {
         let existing = draft.id.is_some();
         let key_path = draft.key_path.trim().to_owned();
         let clear_key = draft.clear_key;
-        if let Some(draft) = &mut self.session_editor {
+        // Move ownership of the secret to the background worker rather than
+        // cloning it. The old draft buffer is zeroized on replacement/drop.
+        let password = if let Some(draft) = &mut self.session_editor {
             draft.error = None;
             draft.saving = true;
-        }
+            std::mem::replace(&mut draft.password, zeroize::Zeroizing::new(String::new()))
+        } else { return; };
         cx.notify();
         let work = cx.background_spawn(async move {
             let dir = ensure_native_data_directory().map_err(|e| e.to_string())?;
@@ -289,6 +295,12 @@ impl Workspace {
                 } else {
                     keys.set(&session.id, &key_path).map_err(|e| e.to_string())?;
                 }
+            }
+            // Windows Credential Manager is the only password persistence
+            // backend. No secret bytes are written to native SQLite or logs.
+            if !password.is_empty() {
+                CredentialVault::put(&session.id, &password)
+                    .map_err(|e| e.to_string())?;
             }
             Ok::<(), String>(())
         });
@@ -942,7 +954,8 @@ impl Render for Workspace {
                         }))
                 }))
                 .child(prompt)
-                .child("Private key: enter a local unencrypted OpenSSH key path. Blank keeps the existing choice.")
+                .child("Private key: enter an unencrypted OpenSSH key path. Blank keeps the existing choice.")
+                .child("Password is masked, never loaded back into the form, and stored in Windows Credential Manager. Leave blank to keep the saved password.")
                 .child(div()
                     .id("ssh-session-use-password")
                     .cursor_pointer()

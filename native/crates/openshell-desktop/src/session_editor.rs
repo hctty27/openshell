@@ -1,10 +1,11 @@
-//! Non-secret SSH session editor. Passwords and trust decisions are never stored here.
+//! SSH session editor. Passwords are held only in zeroizing memory and
+//! stored in the Windows Credential Manager; never render or log secrets.
 use openshell_core::{HostIdentity, Session};
 use gpui::Keystroke;
+use zeroize::Zeroizing;
 
 const MAX_FIELD_LENGTH: usize = 255;
 
-#[derive(Clone, Debug)]
 pub(super) struct SessionDraft {
     pub id: Option<String>,
     pub name: String,
@@ -14,6 +15,7 @@ pub(super) struct SessionDraft {
     /// Empty means keep the existing choice; new sessions default to password.
     pub key_path: String,
     pub clear_key: bool,
+    pub password: Zeroizing<String>,
     pub selected: usize,
     pub saving: bool,
     pub error: Option<String>,
@@ -25,6 +27,7 @@ impl SessionDraft {
             id: None, name: String::new(), host: String::new(),
             port: "22".into(), username: String::new(),
             key_path: String::new(), clear_key: false,
+            password: Zeroizing::new(String::new()),
             selected: 0, saving: false, error: None,
         }
     }
@@ -35,14 +38,25 @@ impl SessionDraft {
             host: session.host.clone(), port: session.port.to_string(),
             username: session.username.clone(), selected: 0,
             key_path: String::new(), clear_key: false,
+            password: Zeroizing::new(String::new()),
             saving: false, error: None,
         }
     }
 
-    pub fn fields(&self) -> [(&'static str, &str); 5] {
-        [("Name", &self.name), ("Host", &self.host),
-         ("Port", &self.port), ("Username", &self.username),
-         ("Private key path (optional)", &self.key_path)]
+    /// Only masked password indicators are returned for rendering.
+    pub fn fields(&self) -> [(&'static str, String); 6] {
+        [
+            ("Name", self.name.clone()),
+            ("Host", self.host.clone()),
+            ("Port", self.port.clone()),
+            ("Username", self.username.clone()),
+            ("Private key path (optional)", self.key_path.clone()),
+            ("Password (leave blank to keep existing)", if self.password.is_empty() {
+                "(unchanged)".to_owned()
+            } else {
+                "●".repeat(self.password.chars().count().min(24))
+            }),
+        ]
     }
 
     fn selected_mut(&mut self) -> &mut String {
@@ -51,20 +65,22 @@ impl SessionDraft {
             1 => &mut self.host,
             2 => &mut self.port,
             3 => &mut self.username,
-            _ => &mut self.key_path,
+            4 => &mut self.key_path,
+            _ => &mut *self.password,
         }
     }
 
     pub fn select(&mut self, field: usize) {
-        self.selected = field.min(4);
+        self.selected = field.min(5);
         self.error = None;
     }
 
     pub fn type_text(&mut self, value: &str) {
         let numeric = self.selected == 2;
         let key_path = self.selected == 4;
+        let password = self.selected == 5;
         if key_path { self.clear_key = false; }
-        let capacity = if key_path { 1024 } else { MAX_FIELD_LENGTH };
+        let capacity = if password { 4096 } else if key_path { 1024 } else { MAX_FIELD_LENGTH };
         let field = self.selected_mut();
         for ch in value.chars() {
             if ch.is_control() || (numeric && !ch.is_ascii_digit()) { continue; }
@@ -83,8 +99,18 @@ impl SessionDraft {
 
     pub fn on_key(&mut self, key: &Keystroke) {
         match key.key.as_str() {
-            "tab" => self.select((self.selected + if key.modifiers.shift { 4 } else { 1 }) % 5),
+            "tab" => self.select((self.selected + if key.modifiers.shift { 5 } else { 1 }) % 6),
+            "backspace" if self.selected == 5 => {
+                let count = self.password.chars().count().saturating_sub(1);
+                let replacement: String = self.password.chars().take(count).collect();
+                self.password = Zeroizing::new(replacement);
+                self.error = None;
+            }
             "backspace" => { self.selected_mut().pop(); self.error = None; }
+            "a" if key.modifiers.control && self.selected == 5 => {
+                self.password = Zeroizing::new(String::new());
+                self.error = None;
+            }
             "a" if key.modifiers.control => { self.selected_mut().clear(); self.error = None; }
             _ if !key.modifiers.control && !key.modifiers.platform && !key.is_ime_in_progress() => {
                 if let Some(text) = &key.key_char { self.type_text(text); }
@@ -136,6 +162,20 @@ mod tests {
         assert!(draft.clear_key);
         draft.type_text(r"C:\ssh\key");
         assert!(!draft.clear_key);
+    }
+
+    #[test]
+    fn password_is_masked_and_never_returned_by_render_fields() {
+        let mut form = SessionDraft::new();
+        form.select(5);
+        form.type_text("s3cret\u{1f511}");
+        let fields = format!("{:?}", form.fields());
+        assert!(!fields.contains("s3cret"));
+        assert!(!fields.contains("🔑"));
+        assert!(fields.contains("●"));
+        assert_eq!(form.password.as_str(), "s3cret🔑");
+        form.use_password();
+        assert!(form.clear_key);
     }
 
     #[test]
