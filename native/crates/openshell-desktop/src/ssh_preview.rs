@@ -13,7 +13,7 @@ use openshell_core::{
     SshConnection, SshTerminalCommand, TerminalSize,
     native_paths::native_database_path,
 };
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use zeroize::Zeroizing;
 
 const MAX_PENDING_PACKETS: usize = 64;
@@ -29,6 +29,22 @@ pub struct SshPreview {
     pub commands: mpsc::Sender<SshTerminalCommand>,
     pub output: mpsc::Receiver<Vec<u8>>,
     pub status: mpsc::Receiver<PreviewStatus>,
+    pub cancel: watch::Sender<bool>,
+}
+
+impl Drop for SshPreview {
+    fn drop(&mut self) {
+        // GPUI tasks are cancelled by dropping their handles; also interrupt
+        // the worker's SSH handshake rather than leaving its OS thread alive.
+        let _ = self.cancel.send(true);
+    }
+}
+
+async fn wait_for_cancel(cancel: &mut watch::Receiver<bool>) {
+    if *cancel.borrow() { return; }
+    while cancel.changed().await.is_ok() {
+        if *cancel.borrow_and_update() { return; }
+    }
 }
 
 struct PreviewConfig {
@@ -135,10 +151,12 @@ fn start_source(source: PreviewSource, size: TerminalSize) -> Result<SshPreview,
     let (commands, command_rx) = mpsc::channel(MAX_PENDING_PACKETS);
     let (output_tx, output) = mpsc::channel(MAX_PENDING_PACKETS);
     let (status_tx, status) = mpsc::channel(8);
+    let (cancel, mut cancel_rx) = watch::channel(false);
 
     thread::Builder::new()
         .name("openshell-ssh-preview".into())
         .spawn(move || {
+            if *cancel_rx.borrow() { return; }
             let config = match source {
                 PreviewSource::StoredSession(id) => resolve_stored_session(&id),
                 PreviewSource::Development(config) => Ok(config),
@@ -151,6 +169,7 @@ fn start_source(source: PreviewSource, size: TerminalSize) -> Result<SshPreview,
                 }
             };
 
+            if *cancel_rx.borrow() { return; }
             let runtime = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
@@ -162,7 +181,7 @@ fn start_source(source: PreviewSource, size: TerminalSize) -> Result<SshPreview,
                 }
             };
 
-            let result = runtime.block_on(async {
+            let ssh_flow = async {
                 let connection = SshConnection::connect_password(
                     &config.session,
                     &config.password,
@@ -184,6 +203,13 @@ fn start_source(source: PreviewSource, size: TerminalSize) -> Result<SshPreview,
 
                 let _ = connection.disconnect().await;
                 outcome.map(|result| result.exit_status)
+            };
+            let result = runtime.block_on(async {
+                tokio::select! {
+                    biased;
+                    _ = wait_for_cancel(&mut cancel_rx) => Err("SSH connection cancelled".to_owned()),
+                    result = ssh_flow => result,
+                }
             });
 
             let state = match result {
@@ -194,12 +220,29 @@ fn start_source(source: PreviewSource, size: TerminalSize) -> Result<SshPreview,
         })
         .map_err(|err| format!("failed to start SSH worker: {err}"))?;
 
-    Ok(SshPreview { commands, output, status })
+    Ok(SshPreview { commands, output, status, cancel })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn cancellation_interrupts_a_pending_handshake() {
+        let (sender, mut receiver) = watch::channel(false);
+        let handshake = async {
+            std::future::pending::<()>().await;
+        };
+        let join = tokio::spawn(async move {
+            tokio::select! {
+                _ = wait_for_cancel(&mut receiver) => "cancelled",
+                _ = handshake => "unexpected connection",
+            }
+        });
+        sender.send(true).unwrap();
+        assert_eq!(tokio::time::timeout(std::time::Duration::from_secs(1), join)
+            .await.unwrap().unwrap(), "cancelled");
+    }
 
     #[test]
     fn preview_configuration_has_bounded_queues() {
