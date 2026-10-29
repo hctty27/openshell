@@ -1,4 +1,6 @@
 mod terminal_paint;
+mod clipboard_paste;
+use clipboard_paste::{encode_paste, needs_paste_confirmation, MAX_PASTE_BYTES};
 mod terminal_tab;
 mod split_view;
 mod tab_drag;
@@ -14,7 +16,7 @@ mod direct3d_diagnostics;
 use gpui::prelude::*;
 use gpui::{
     div, px, rgb, size, App, Application, Bounds, Context, FocusHandle, Focusable,
-    IntoElement, KeyDownEvent, Keystroke, Render, Task, Window, WindowBounds,
+    ClipboardItem, IntoElement, KeyDownEvent, Keystroke, Render, Task, Window, WindowBounds,
     WindowOptions, Subscription, ScrollWheelEvent,
 };
 use openshell_core::{LocalShell, LocalTerminal, Session, SessionStore, SshTerminalCommand, TerminalEngine, TerminalSize};
@@ -36,6 +38,7 @@ struct Workspace {
     active_id: u64,
     next_tab_id: u64,
     pending_close: Option<u64>,
+    pending_paste: Option<(u64, String)>,
     split: Option<SplitView>,
     viewport_width: f32,
     viewport_height: f32,
@@ -127,6 +130,7 @@ impl Workspace {
             active_id: initial_id,
             next_tab_id: initial_id + 1,
             pending_close: None,
+            pending_paste: None,
             split: None,
             viewport_width: f32::from(viewport.width),
             viewport_height: f32::from(viewport.height),
@@ -370,6 +374,7 @@ impl Workspace {
 
     fn activate_tab(&mut self, id: u64, cx: &mut Context<Self>) {
         if self.tabs.iter().any(|tab| tab.id == id) {
+            if self.active_id != id { self.pending_paste = None; }
             self.active_id = id;
             if self.split.is_some_and(|split| !split.contains(id)) {
                 self.split = None;
@@ -412,6 +417,9 @@ impl Workspace {
 
     fn close_tab(&mut self, id: u64, cx: &mut Context<Self>) {
         let Some(index) = self.tabs.iter().position(|tab| tab.id == id) else { return; };
+        if self.pending_paste.as_ref().is_some_and(|(target, _)| *target == id) {
+            self.pending_paste = None;
+        }
         let size = self.tabs[index].terminal.size();
         if self.pending_close == Some(id) { self.pending_close = None; }
         if self.split.is_some_and(|split| split.contains(id)) {
@@ -606,6 +614,56 @@ impl Workspace {
         }
     }
 
+
+    fn copy_visible_terminal(&mut self, cx: &mut Context<Self>) {
+        let mut lines = self.active_tab().terminal.visible_lines();
+        while lines.last().is_some_and(String::is_empty) {
+            lines.pop();
+        }
+        let text = lines.join("\n");
+        if text.is_empty() { return; }
+        cx.write_to_clipboard(ClipboardItem::new_string(text));
+        self.active_tab_mut().status = "Visible terminal text copied".into();
+        cx.notify();
+    }
+
+    fn paste_from_clipboard(&mut self, cx: &mut Context<Self>) {
+        let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+            return;
+        };
+        if text.is_empty() { return; }
+        if text.len() > MAX_PASTE_BYTES {
+            self.active_tab_mut().status = "Clipboard paste exceeds 128 KiB limit".into();
+            cx.notify();
+            return;
+        }
+        if needs_paste_confirmation(&text) {
+            self.pending_paste = Some((self.active_id, text));
+            cx.notify();
+            return;
+        }
+        self.apply_paste(text, cx);
+    }
+
+    fn apply_paste(&mut self, text: String, cx: &mut Context<Self>) {
+        let bracketed = self.active_tab().terminal.bracketed_paste();
+        self.send_input(encode_paste(&text, bracketed), cx);
+    }
+
+    fn confirm_paste(&mut self, cx: &mut Context<Self>) {
+        if let Some((id, text)) = self.pending_paste.take() {
+            if id == self.active_id {
+                self.apply_paste(text, cx);
+            }
+        }
+        cx.notify();
+    }
+
+    fn cancel_paste(&mut self, cx: &mut Context<Self>) {
+        self.pending_paste = None;
+        cx.notify();
+    }
+
     fn scroll_active(&mut self, lines: i32, cx: &mut Context<Self>) {
         if lines != 0 {
             self.active_tab_mut().terminal.scroll_history(lines);
@@ -723,6 +781,10 @@ impl Render for Workspace {
             self.tabs.iter().find(|tab| tab.id == id)
                 .map(|tab| tab.title.clone())
         });
+        let paste_prompt = self.pending_paste.as_ref().and_then(|(id, text)| {
+            self.tabs.iter().find(|tab| tab.id == *id)
+                .map(|tab| (tab.title.clone(), text.lines().count().max(1)))
+        });
         let split = self.split;
         let pane_nodes: Vec<_> = self.visible_tab_ids()
             .into_iter()
@@ -779,6 +841,39 @@ impl Render for Workspace {
                                     .child("Cancel")
                                     .on_click(cx.listener(|view, _, _, cx| {
                                         view.cancel_close_tab(cx);
+                                    })),
+                            )
+                    } else if let Some((label, lines)) = paste_prompt {
+                        div()
+                            .id("pending-paste-banner")
+                            .flex()
+                            .items_center()
+                            .gap_3()
+                            .child(format!("Paste {lines} line(s) into '{label}'?"))
+                            .child(
+                                div()
+                                    .id("confirm-paste")
+                                    .px_3()
+                                    .py_1()
+                                    .rounded_md()
+                                    .bg(rgb(0x29435d))
+                                    .cursor_pointer()
+                                    .child("Paste")
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.confirm_paste(cx);
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .id("cancel-paste")
+                                    .px_3()
+                                    .py_1()
+                                    .rounded_md()
+                                    .bg(rgb(0x7b3434))
+                                    .cursor_pointer()
+                                    .child("Cancel")
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.cancel_paste(cx);
                                     })),
                             )
                     } else {
@@ -865,6 +960,26 @@ impl Render for Workspace {
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.clear_split(cx);
                             })),
+                    )
+                    .child(
+                        div()
+                            .id("copy-terminal-viewport")
+                            .cursor_pointer()
+                            .px_3()
+                            .child("Copy viewport")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.copy_visible_terminal(cx);
+                            })),
+                    )
+                    .child(
+                        div()
+                            .id("paste-terminal-clipboard")
+                            .cursor_pointer()
+                            .px_3()
+                            .child("Paste")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.paste_from_clipboard(cx);
+                            })),
                     ),
             )
             .child(
@@ -922,6 +1037,11 @@ impl Render for Workspace {
                             .on_key_down(cx.listener(|view, event: &KeyDownEvent, _, cx| {
                                 if event.keystroke.modifiers.control {
                                     match event.keystroke.key.as_str() {
+                                        "v" => { view.paste_from_clipboard(cx); return; }
+                                        "c" if event.keystroke.modifiers.shift => {
+                                            view.copy_visible_terminal(cx);
+                                            return;
+                                        }
                                         "tab" => {
                                             let direction = if event.keystroke.modifiers.shift { -1 } else { 1 };
                                             view.cycle_active_tab(direction, cx);
@@ -935,6 +1055,12 @@ impl Render for Workspace {
                                         "t" => { view.add_local_tab(cx); return; }
                                         _ => {}
                                     }
+                                }
+                                if event.keystroke.modifiers.shift
+                                    && event.keystroke.key == "insert"
+                                {
+                                    view.paste_from_clipboard(cx);
+                                    return;
                                 }
                                 if event.keystroke.modifiers.shift
                                     && !view.active_tab().terminal.in_alternate_screen()

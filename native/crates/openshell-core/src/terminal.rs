@@ -151,6 +151,10 @@ impl TerminalEngine {
         self.term.mode().contains(TermMode::ALT_SCREEN)
     }
 
+    pub fn bracketed_paste(&self) -> bool {
+        self.term.mode().contains(TermMode::BRACKETED_PASTE)
+    }
+
     /// Scroll the primary-screen history without disturbing the running PTY.
     /// Alternate-screen programs require mouse/key reporting instead.
     pub fn scroll_history(&mut self, lines: i32) {
@@ -329,6 +333,16 @@ mod tests {
         assert!(terminal.visible_lines().join("\n").contains("row 0"));
         terminal.scroll_history(-100);
         assert!(!terminal.visible_lines().join("\n").contains("row 0"));
+    }
+
+    #[test]
+    fn bracketed_paste_mode_tracks_ansi_sequences() {
+        let mut terminal = TerminalEngine::new(TerminalSize::new(80, 24));
+        assert!(!terminal.bracketed_paste());
+        terminal.feed(b"\x1b[?2004h");
+        assert!(terminal.bracketed_paste());
+        terminal.feed(b"\x1b[?2004l");
+        assert!(!terminal.bracketed_paste());
     }
 
     #[test]

@@ -26,6 +26,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - Grouped GPUI text highlights and coalesced PTY output to reduce redundant frame work.
 - GPUI window bounds now update the terminal grid and ConPTY dimensions. Temporary column widths are estimates, not font-shaped metrics.
 - Primary-screen scrollback with wheel and Shift+PageUp/PageDown; alternate-screen mouse reporting remains incomplete. Run the ANSI microbenchmark before claiming speedups.
+- Windows system-clipboard paste using Ctrl+V, Ctrl+Shift+V, Shift+Insert or the Paste button; bracketed paste protocol is honored when enabled by the terminal application. Multiline/large paste requires a confirmation tied to the original terminal tab. Ctrl+Shift+C and Copy viewport copy **visible terminal text**, not a mouse selection. Clipboard escape controls and pasted content over 128 KiB are rejected.
 - Bounded byte-oriented Russh/Tokio SSH channel, password authentication requiring previously verified SHA256 host fingerprint.
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
 - Read-only preview of legacy Wails sessions (including auth configuration and credential references). No automatic data migration or credential extraction.
@@ -35,7 +36,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 
 ## Not implemented yet
 
-- Production GPU cell painting, precise monospace glyph measurement, CJK/IME composition, full mouse reporting, selection, clipboard, and resize performance/accuracy. Basic input and local scrollback exist only as a prototype.
+- Production GPU cell painting, precise monospace glyph measurement, CJK/IME composition, full mouse reporting, mouse-based text selection/copy, and resize performance/accuracy. Basic keyboard clipboard paste and viewport copy are available, but arbitrary selection/copy is not.
 - End-user session editor, host-key approval UI, public-key login and reconnect policy. The initial Windows credential vault and saved-session selection are implemented, but not independently tested through live GUI interactions.
 - Private-key/agent authentication, automatic SSH reconnection/backoff, port forwarding and keepalive. Manual reconnect is available for saved sessions.
 - SFTP file browser/transfers, rz/sz and additional Windows shells/WSL integration.
