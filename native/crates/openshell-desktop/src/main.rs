@@ -57,6 +57,7 @@ fn styled_terminal_line(cells: &[RenderCell]) -> StyledText {
 // The final renderer must derive cell dimensions from shaped glyph metrics.
 const SIDEBAR_WIDTH: f32 = 244.0;
 const TITLEBAR_HEIGHT: f32 = 46.0;
+const TABBAR_HEIGHT: f32 = 36.0;
 const TOOLBAR_HEIGHT: f32 = 40.0;
 const CONTENT_PADDING: f32 = 32.0;
 const CELL_WIDTH: f32 = 8.5;
@@ -72,7 +73,7 @@ fn terminal_size_for_viewport(width: f32, height: f32) -> TerminalSize {
         .floor()
         .max(2.0)
         .min(MAX_COLUMNS as f32) as usize;
-    let rows = ((height - TITLEBAR_HEIGHT - TOOLBAR_HEIGHT - CONTENT_PADDING)
+    let rows = ((height - TITLEBAR_HEIGHT - TABBAR_HEIGHT - TOOLBAR_HEIGHT - CONTENT_PADDING)
         / CELL_HEIGHT)
         .floor()
         .max(1.0)
@@ -100,21 +101,85 @@ fn remote_button_label(phase: RemotePhase, saved_session: bool) -> &'static str 
     }
 }
 
-struct Workspace {
+/// Each tab owns its Alacritty history, PTY/SSH channels and asynchronous
+/// output task. Switching the active tab must not drop or restart other tabs.
+struct TerminalTab {
+    id: u64,
+    title: String,
+    session_id: Option<String>,
     terminal: TerminalEngine,
     local: Option<LocalTerminal>,
     remote_commands: Option<mpsc::Sender<SshTerminalCommand>>,
     remote_cancel: Option<watch::Sender<bool>>,
     remote_phase: RemotePhase,
-    remote_mode: bool,
-    _startup_task: Task<()>,
-    _resize_subscription: Subscription,
-    focus_handle: FocusHandle,
     status: String,
     scroll_remainder: f32,
+    task: Option<Task<()>>,
+}
+
+impl TerminalTab {
+    fn local(id: u64, size: TerminalSize) -> Self {
+        Self {
+            id,
+            title: format!("PowerShell {id}"),
+            session_id: None,
+            terminal: TerminalEngine::new(size),
+            local: None,
+            remote_commands: None,
+            remote_cancel: None,
+            remote_phase: RemotePhase::Local,
+            status: "Starting PowerShell...".into(),
+            scroll_remainder: 0.0,
+            task: None,
+        }
+    }
+
+    fn remote(id: u64, title: String, session_id: Option<String>, size: TerminalSize) -> Self {
+        Self {
+            id,
+            title,
+            session_id,
+            terminal: TerminalEngine::new(size),
+            local: None,
+            remote_commands: None,
+            remote_cancel: None,
+            remote_phase: RemotePhase::Connecting,
+            status: "Connecting to SSH server...".into(),
+            scroll_remainder: 0.0,
+            task: None,
+        }
+    }
+
+    fn is_remote(&self) -> bool {
+        self.remote_phase != RemotePhase::Local
+    }
+
+    fn cancel_transport(&mut self) {
+        if let Some(cancel) = self.remote_cancel.take() {
+            let _ = cancel.send(true);
+        }
+        // Dropping the task releases SshPreview, which also signals its
+        // worker to cancel any outstanding connection or authentication.
+        self.task = None;
+        self.remote_commands = None;
+        self.local = None;
+    }
+}
+
+impl Drop for TerminalTab {
+    fn drop(&mut self) {
+        self.cancel_transport();
+    }
+}
+
+struct Workspace {
+    tabs: Vec<TerminalTab>,
+    active_id: u64,
+    next_tab_id: u64,
+    _resize_subscription: Subscription,
+    focus_handle: FocusHandle,
     saved_sessions: Vec<Session>,
     sessions_status: String,
-    active_remote_id: Option<String>,
     _session_catalog_task: Task<()>,
 }
 
@@ -164,306 +229,338 @@ fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
 impl Workspace {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let viewport = window.viewport_size();
-        let size = terminal_size_for_viewport(f32::from(viewport.width), f32::from(viewport.height));
+        let size = terminal_size_for_viewport(
+            f32::from(viewport.width), f32::from(viewport.height),
+        );
         let subscription = cx.observe_window_bounds(window, |view, window, cx| {
-            let viewport = window.viewport_size();
-            view.resize_to_viewport(f32::from(viewport.width), f32::from(viewport.height), cx);
+            let size = window.viewport_size();
+            view.resize_to_viewport(f32::from(size.width), f32::from(size.height), cx);
         });
         let catalog_task = Self::spawn_catalog_load(cx);
-        let (startup, initial_status, remote_mode, remote_phase) = match start_from_environment(size) {
+
+        let initial_id = 1;
+        let mut initial = match start_from_environment(size) {
             Ok(Some(remote)) => {
-                let startup = Self::spawn_remote(remote, cx);
-                (startup, "Connecting to pinned SSH test server...".to_owned(), true, RemotePhase::Connecting)
+                let mut tab = TerminalTab::remote(initial_id, "SSH test".into(), None, size);
+                tab.task = Some(Self::spawn_remote(initial_id, remote, cx));
+                tab
             }
             Ok(None) => {
-                (Self::spawn_local(size, cx), "Starting PowerShell...".to_owned(), false, RemotePhase::Local)
+                let mut tab = TerminalTab::local(initial_id, size);
+                tab.task = Some(Self::spawn_local(initial_id, size, cx));
+                tab
             }
             Err(error) => {
-                let task = cx.spawn(async move |_, _| {});
-                (task, format!("SSH preview configuration error: {error}"), true, RemotePhase::Disconnected)
+                let mut tab = TerminalTab::remote(initial_id, "SSH error".into(), None, size);
+                tab.remote_phase = RemotePhase::Disconnected;
+                tab.status = format!("SSH preview configuration error: {error}");
+                tab
             }
         };
+        // The worker's GPUI task is retained by the tab for its whole lifetime.
+        // It remains alive while the user looks at a different tab.
         Self {
-            terminal: TerminalEngine::new(size),
-            local: None,
-            remote_commands: None,
-            remote_cancel: None,
-            remote_phase,
-            remote_mode,
-            _startup_task: startup,
+            tabs: vec![initial],
+            active_id: initial_id,
+            next_tab_id: initial_id + 1,
             _resize_subscription: subscription,
             focus_handle: cx.focus_handle(),
-            status: initial_status,
-            scroll_remainder: 0.0,
             saved_sessions: Vec::new(),
             sessions_status: "Loading saved sessions...".into(),
-            active_remote_id: None,
             _session_catalog_task: catalog_task,
         }
     }
 
+    fn tab_mut(&mut self, id: u64) -> Option<&mut TerminalTab> {
+        self.tabs.iter_mut().find(|tab| tab.id == id)
+    }
+
+    fn active_tab(&self) -> &TerminalTab {
+        self.tabs.iter().find(|tab| tab.id == self.active_id)
+            .expect("workspace must always have an active tab")
+    }
+
+    fn active_tab_mut(&mut self) -> &mut TerminalTab {
+        let id = self.active_id;
+        self.tab_mut(id).expect("workspace must always have an active tab")
+    }
+
     fn spawn_catalog_load(cx: &mut Context<Self>) -> Task<()> {
-        let catalog_load = cx.background_spawn(async {
+        let work = cx.background_spawn(async {
             let database = native_database_path().map_err(|err| err.to_string())?;
-            if !database.exists() {
-                return Ok::<Vec<Session>, String>(Vec::new());
-            }
-            let store = SessionStore::open(database).map_err(|err| err.to_string())?;
-            store.list().map_err(|err| err.to_string())
+            if !database.exists() { return Ok::<Vec<Session>, String>(Vec::new()); }
+            SessionStore::open(database)
+                .map_err(|err| err.to_string())?
+                .list()
+                .map_err(|err| err.to_string())
         });
         cx.spawn(async move |this, cx| {
-            let result = catalog_load.await;
+            let result = work.await;
             let _ = this.update(cx, |view, cx| {
                 match result {
                     Ok(sessions) => {
-                        view.sessions_status = if sessions.is_empty() {
-                            "No saved sessions".into()
-                        } else {
-                            format!("{} saved sessions", sessions.len())
-                        };
+                        view.sessions_status = format!("{} saved SSH sessions", sessions.len());
                         view.saved_sessions = sessions;
                     }
-                    Err(error) => {
-                        view.sessions_status = format!("Session list unavailable: {error}");
-                    }
+                    Err(err) => view.sessions_status = format!("Session list unavailable: {err}"),
                 }
                 cx.notify();
-            });        })
+            });
+        })
     }
 
     fn refresh_sessions(&mut self, cx: &mut Context<Self>) {
         self._session_catalog_task = Self::spawn_catalog_load(cx);
-        self.sessions_status = "Refreshing sessions...".into();
+        self.sessions_status = "Refreshing saved sessions...".into();
         cx.notify();
     }
 
-    fn spawn_local(size: TerminalSize, cx: &mut Context<Self>) -> Task<()> {
-        let background = cx.background_spawn(async move {
-                LocalTerminal::spawn(LocalShell::PowerShell, size)
-            });
+    fn spawn_local(id: u64, size: TerminalSize, cx: &mut Context<Self>) -> Task<()> {
+        let start = cx.background_spawn(async move {
+            LocalTerminal::spawn(LocalShell::PowerShell, size)
+        });
         cx.spawn(async move |this, cx| {
-                match background.await {
-                    Ok(mut local) => {
-                        let Some(mut rx) = local.take_output() else { return };
-                        if this.update(cx, |view, cx| {
-                            // The window may have resized while ConPTY started.
-                            let resize_result = local.resize(view.terminal.size());
-                            view.local = Some(local);
-                            view.status = match resize_result {
-                                Ok(()) => "PowerShell connected · experimental ConPTY".into(),
-                                Err(err) => format!("PowerShell connected; ConPTY resize failed: {err}"),
-                            };
+            match start.await {
+                Ok(mut local) => {
+                    let Some(mut output) = local.take_output() else { return; };
+                    if this.update(cx, |view, cx| {
+                        if let Some(tab) = view.tab_mut(id) {
+                            let result = local.resize(tab.terminal.size());
+                            tab.local = Some(local);
+                            tab.status = result
+                                .map(|_| "PowerShell connected".to_owned())
+                                .unwrap_or_else(|err| format!("PowerShell resize failed: {err}"));
                             cx.notify();
-                        }).is_err() {
-                            return;
                         }
-                        while let Some(mut bytes) = rx.recv().await {
-                            // Coalesce up to eight bounded PTY chunks before UI repaint.
+                    }).is_err() { return; }
+
+                    while let Some(mut bytes) = output.recv().await {
+                        for _ in 0..7 {
+                            match output.try_recv() {
+                                Ok(part) => bytes.extend_from_slice(&part),
+                                Err(_) => break,
+                            }
+                        }
+                        if this.update(cx, |view, cx| {
+                            if let Some(tab) = view.tab_mut(id) {
+                                for reply in tab.terminal.feed_pty_replies(&bytes) {
+                                    if let Some(local) = &tab.local {
+                                        if local.try_write(reply).is_err() {
+                                            tab.status = "Local input queue is closed/full".into();
+                                        }
+                                    }
+                                }
+                                if view.active_id == id { cx.notify(); }
+                            }
+                        }).is_err() { break; }
+                    }
+                    let _ = this.update(cx, |view, cx| {
+                        if let Some(tab) = view.tab_mut(id) {
+                            tab.local = None;
+                            tab.status = "Local terminal exited".into();
+                            cx.notify();
+                        }
+                    });
+                }
+                Err(err) => {
+                    let _ = this.update(cx, |view, cx| {
+                        if let Some(tab) = view.tab_mut(id) {
+                            tab.status = format!("Could not start PowerShell: {err}");
+                            cx.notify();
+                        }
+                    });
+                }
+            }
+        })
+    }
+
+    fn spawn_remote(id: u64, mut remote: SshPreview, cx: &mut Context<Self>) -> Task<()> {
+        let commands = remote.commands.clone();
+        let cancel = remote.cancel.clone();
+        cx.spawn(async move |this, cx| {
+            if this.update(cx, |view, cx| {
+                if let Some(tab) = view.tab_mut(id) {
+                    tab.remote_commands = Some(commands);
+                    tab.remote_cancel = Some(cancel);
+                    if view.active_id == id { cx.notify(); }
+                }
+            }).is_err() { return; }
+
+            let mut output_open = true;
+            let mut status_open = true;
+            while output_open || status_open {
+                tokio::select! {
+                    message = remote.output.recv(), if output_open => match message {
+                        Some(mut bytes) => {
                             for _ in 0..7 {
-                                match rx.try_recv() {
+                                match remote.output.try_recv() {
                                     Ok(chunk) => bytes.extend_from_slice(&chunk),
                                     Err(_) => break,
                                 }
                             }
                             if this.update(cx, |view, cx| {
-                                for reply in view.terminal.feed_pty_replies(&bytes) {
-                                    if let Some(local) = &view.local {
-                                        if local.try_write(reply).is_err() {
-                                            view.status = "Terminal reply queue full or closed".into();
+                                if let Some(tab) = view.tab_mut(id) {
+                                    for reply in tab.terminal.feed_pty_replies(&bytes) {
+                                        if let Some(tx) = &tab.remote_commands {
+                                            let _ = tx.try_send(SshTerminalCommand::Input(reply));
                                         }
                                     }
+                                    if view.active_id == id { cx.notify(); }
                                 }
-                                cx.notify();
-                            }).is_err() {
-                                break;
-                            }
+                            }).is_err() { break; }
                         }
-                        let _ = this.update(cx, |view, cx| {
-                            view.local = None;
-                            view.status = "Local terminal exited".into();
-                            cx.notify();
-                        });
-                    }
-                    Err(err) => {
-                        let _ = this.update(cx, |view, cx| {
-                            view.status = format!("Could not start PowerShell: {err}");
-                            cx.notify();
-                        });
+                        None => output_open = false,
+                    },
+                    state = remote.status.recv(), if status_open => match state {
+                        Some(PreviewStatus::Connected) => {
+                            let _ = this.update(cx, |view, cx| {
+                                if let Some(tab) = view.tab_mut(id) {
+                                    if let Some(tx) = &tab.remote_commands {
+                                        let size = tab.terminal.size();
+                                        let _ = tx.try_send(SshTerminalCommand::resize(
+                                            size.columns, size.rows,
+                                        ));
+                                    }
+                                    tab.status = "SSH connected · pinned host key".into();
+                                    tab.remote_phase = RemotePhase::Connected;
+                                    cx.notify();
+                                }
+                            });
+                        }
+                        Some(PreviewStatus::Finished(code)) => {
+                            let _ = this.update(cx, |view, cx| {
+                                if let Some(tab) = view.tab_mut(id) {
+                                    tab.status = format!("SSH closed · exit status {code:?}");
+                                    tab.remote_phase = RemotePhase::Disconnected;
+                                    tab.remote_commands = None;
+                                    tab.remote_cancel = None;
+                                    cx.notify();
+                                }
+                            });
+                        }
+                        Some(PreviewStatus::Failed(err)) => {
+                            let _ = this.update(cx, |view, cx| {
+                                if let Some(tab) = view.tab_mut(id) {
+                                    tab.status = format!("SSH error: {err}");
+                                    tab.remote_phase = RemotePhase::Disconnected;
+                                    tab.remote_commands = None;
+                                    tab.remote_cancel = None;
+                                    cx.notify();
+                                }
+                            });
+                        }
+                        None => status_open = false,
                     }
                 }
+            }
+            let _ = this.update(cx, |view, cx| {
+                if let Some(tab) = view.tab_mut(id) {
+                    tab.remote_commands = None;
+                    tab.remote_cancel = None;
+                    if tab.remote_phase != RemotePhase::Disconnected {
+                        tab.remote_phase = RemotePhase::Disconnected;
+                        tab.status = "SSH channel ended".into();
+                    }
+                    cx.notify();
+                }
+            });
         })
     }
 
-    /// Return to a standalone local ConPTY; replacing the GUI task cancels
-    /// delivery from any previous remote session.
-    fn start_local(&mut self, cx: &mut Context<Self>) {
-        if let Some(cancel) = self.remote_cancel.take() {
-            let _ = cancel.send(true);
-        }
-        let size = self.terminal.size();
-        self._startup_task = Self::spawn_local(size, cx);
-        self.local = None;
-        self.remote_commands = None;
-        self.remote_phase = RemotePhase::Local;
-        self.remote_mode = false;
-        self.active_remote_id = None;
-        self.terminal = TerminalEngine::new(size);
-        self.status = "Starting local PowerShell...".into();
-        self.scroll_remainder = 0.0;
+    fn add_local_tab(&mut self, cx: &mut Context<Self>) {
+        let id = self.next_tab_id;
+        self.next_tab_id += 1;
+        let size = self.active_tab().terminal.size();
+        let mut tab = TerminalTab::local(id, size);
+        tab.task = Some(Self::spawn_local(id, size, cx));
+        self.tabs.push(tab);
+        self.active_id = id;
         cx.notify();
     }
 
-    /// Own a single session's event stream in a GPUI Task. Replacing the task
-    /// cancels old GUI event delivery, preventing stale output from repainting
-    /// a newly selected session.
-    fn spawn_remote(mut remote: SshPreview, cx: &mut Context<Self>) -> Task<()> {
-                let remote_tx = remote.commands.clone();
-                let cancel_tx = remote.cancel.clone();
-                cx.spawn(async move |this, cx| {
-                    if this.update(cx, |view, cx| {
-                        view.remote_commands = Some(remote_tx);
-                        view.remote_cancel = Some(cancel_tx);
-                        cx.notify();
-                    }).is_err() {
-                        return;
-                    }
-
-                    let mut output_open = true;
-                    let mut status_open = true;
-                    while output_open || status_open {
-                        tokio::select! {
-                            packet = remote.output.recv(), if output_open => {
-                                match packet {
-                                    Some(mut bytes) => {
-                                        // Use the same Alacritty parser for local and remote PTYs.
-                                        for _ in 0..7 {
-                                            match remote.output.try_recv() {
-                                                Ok(chunk) => bytes.extend_from_slice(&chunk),
-                                                Err(_) => break,
-                                            }
-                                        }
-                                        if this.update(cx, |view, cx| {
-                                            for reply in view.terminal.feed_pty_replies(&bytes) {
-                                                if let Some(tx) = &view.remote_commands {
-                                                    let _ = tx.try_send(SshTerminalCommand::Input(reply));
-                                                }
-                                            }
-                                            cx.notify();
-                                        }).is_err() {
-                                            break;
-                                        }
-                                    }
-                                    None => output_open = false,
-                                }
-                            }
-                            state = remote.status.recv(), if status_open => {
-                                match state {
-                                    Some(PreviewStatus::Connected) => {
-                                        let _ = this.update(cx, |view, cx| {
-                                            // Cover a window resize that happened during connect.
-                                            if let Some(tx) = &view.remote_commands {
-                                                let size = view.terminal.size();
-                                                let _ = tx.try_send(SshTerminalCommand::resize(size.columns, size.rows));
-                                            }
-                                            view.status = "SSH connected · pinned host key · debug preview".into();
-                                            view.remote_phase = RemotePhase::Connected;
-                                            cx.notify();
-                                        });
-                                    }
-                                    Some(PreviewStatus::Finished(code)) => {
-                                        let _ = this.update(cx, |view, cx| {
-                                            view.remote_commands = None;
-                                            view.status = format!("SSH channel closed · exit status {code:?}");
-                                            view.remote_phase = RemotePhase::Disconnected;
-                                            view.remote_cancel = None;
-                                            cx.notify();
-                                        });
-                                    }
-                                    Some(PreviewStatus::Failed(error)) => {
-                                        let _ = this.update(cx, |view, cx| {
-                                            view.remote_commands = None;
-                                            view.status = format!("SSH preview failed: {error}");
-                                            view.remote_phase = RemotePhase::Disconnected;
-                                            view.remote_cancel = None;
-                                            cx.notify();
-                                        });
-                                    }
-                                    None => status_open = false,
-                                }
-                            }
-                        }
-                    }
-                    let _ = this.update(cx, |view, cx| {
-                        view.remote_commands = None;
-                        cx.notify();
-                    });                })
-    }
-
-    fn connect_saved(&mut self, id: String, cx: &mut Context<Self>) {
-        // Clicking an already active connected session should not terminate it.
-        if self.active_remote_id.as_deref() == Some(id.as_str())
-            && self.remote_commands.is_some()
-        {
-            return;
-        }
-        let size = self.terminal.size();
-        match start_saved_session(id.clone(), size) {
+    fn add_ssh_tab(&mut self, session_id: String, cx: &mut Context<Self>) {
+        let size = self.active_tab().terminal.size();
+        match start_saved_session(session_id.clone(), size) {
             Ok(remote) => {
-                // Cancel the previous worker, not only its GPUI output task.
-                if let Some(cancel) = self.remote_cancel.take() {
-                    let _ = cancel.send(true);
-                }
-                self._startup_task = Self::spawn_remote(remote, cx);
-                // Dropping ConPTY also terminates the local child process.
-                self.local = None;
-                self.remote_commands = None;
-                self.remote_phase = RemotePhase::Connecting;
-                self.remote_mode = true;
-                self.active_remote_id = Some(id.clone());
-                self.terminal = TerminalEngine::new(size);
-                self.status = format!("Connecting saved SSH session: {id}");
-                self.scroll_remainder = 0.0;
+                let id = self.next_tab_id;
+                self.next_tab_id += 1;
+                let title = self.saved_sessions.iter().find(|s| s.id == session_id)
+                    .map(|s| s.name.clone())
+                    .unwrap_or(session_id.clone());
+                let mut tab = TerminalTab::remote(id, title, Some(session_id), size);
+                tab.task = Some(Self::spawn_remote(id, remote, cx));
+                self.tabs.push(tab);
+                self.active_id = id;
             }
-            Err(error) => {
-                self.status = format!("Could not start SSH session: {error}");
-            }
+            Err(err) => self.active_tab_mut().status = format!("SSH start failed: {err}"),
         }
         cx.notify();
     }
 
-    /// Explicitly terminate a pending handshake or force-close a stuck SSH PTY.
-    fn cancel_remote(&mut self, cx: &mut Context<Self>) {
-        if let Some(cancel) = self.remote_cancel.take() {
-            let _ = cancel.send(true);
+    fn activate_tab(&mut self, id: u64, cx: &mut Context<Self>) {
+        if self.tabs.iter().any(|tab| tab.id == id) {
+            self.active_id = id;
+            cx.notify();
         }
-        // Dropping this task also drops SshPreview, signalling its worker.
-        self._startup_task = cx.spawn(async move |_, _| {});
-        self.remote_commands = None;
-        self.remote_phase = RemotePhase::Disconnected;
-        self.status = "SSH operation cancelled".into();
+    }
+
+    fn close_tab(&mut self, id: u64, cx: &mut Context<Self>) {
+        let Some(index) = self.tabs.iter().position(|tab| tab.id == id) else { return; };
+        let removed = self.tabs.remove(index);
+        drop(removed);
+        if self.tabs.is_empty() {
+            self.add_local_tab(cx);
+        } else if self.active_id == id {
+            self.active_id = self.tabs[index.min(self.tabs.len() - 1)].id;
+        }
+        cx.notify();
+    }
+
+    fn cancel_active_remote(&mut self, cx: &mut Context<Self>) {
+        let tab = self.active_tab_mut();
+        tab.cancel_transport();
+        tab.remote_phase = RemotePhase::Disconnected;
+        tab.status = "SSH operation cancelled".into();
         cx.notify();
     }
 
     fn remote_primary_action(&mut self, cx: &mut Context<Self>) {
-        match self.remote_phase {
-            RemotePhase::Local => {}
-            RemotePhase::Connecting | RemotePhase::Disconnecting => self.cancel_remote(cx),
+        match self.active_tab().remote_phase {
+            RemotePhase::Local => self.add_local_tab(cx),
+            RemotePhase::Connecting | RemotePhase::Disconnecting => self.cancel_active_remote(cx),
             RemotePhase::Connected => {
-                if let Some(tx) = &self.remote_commands {
-                    if tx.try_send(SshTerminalCommand::Close).is_ok() {
-                        self.remote_phase = RemotePhase::Disconnecting;
-                        self.status = "Disconnecting SSH terminal...".into();
-                        cx.notify();
-                    } else {
-                        self.cancel_remote(cx);
-                    }
+                let tab = self.active_tab_mut();
+                if tab.remote_commands.as_ref().is_some_and(|tx| {
+                    tx.try_send(SshTerminalCommand::Close).is_ok()
+                }) {
+                    tab.remote_phase = RemotePhase::Disconnecting;
+                    tab.status = "Disconnecting SSH...".into();
+                    cx.notify();
                 } else {
-                    self.cancel_remote(cx);
+                    self.cancel_active_remote(cx);
                 }
             }
             RemotePhase::Disconnected => {
-                if let Some(id) = self.active_remote_id.clone() {
-                    self.connect_saved(id, cx);
+                let saved = self.active_tab().session_id.clone();
+                if let Some(saved) = saved {
+                    // Reconnect in the same tab, keeping its identity.
+                    let size = self.active_tab().terminal.size();
+                    match start_saved_session(saved, size) {
+                        Ok(remote) => {
+                            let id = self.active_id;
+                            let task = Self::spawn_remote(id, remote, cx);
+                            let tab = self.active_tab_mut();
+                            tab.cancel_transport();
+                            tab.terminal = TerminalEngine::new(size);
+                            tab.remote_phase = RemotePhase::Connecting;
+                            tab.status = "Reconnecting SSH...".into();
+                            tab.task = Some(task);
+                        }
+                        Err(err) => self.active_tab_mut().status = format!("Reconnect failed: {err}"),
+                    }
+                    cx.notify();
+                } else {
+                    self.add_local_tab(cx);
                 }
             }
         }
@@ -471,21 +568,48 @@ impl Workspace {
 
     fn resize_to_viewport(&mut self, width: f32, height: f32, cx: &mut Context<Self>) {
         let size = terminal_size_for_viewport(width, height);
-        if size == self.terminal.size() {
-            return;
+        let mut changed = false;
+        for tab in &mut self.tabs {
+            if tab.terminal.size() == size { continue; }
+            tab.terminal.resize(size);
+            if let Some(local) = &tab.local {
+                if let Err(err) = local.resize(size) {
+                    tab.status = format!("ConPTY resize failed: {err}");
+                }
+            }
+            if let Some(tx) = &tab.remote_commands {
+                if tx.try_send(SshTerminalCommand::resize(size.columns, size.rows)).is_err() {
+                    tab.status = "SSH resize queue full/closed".into();
+                }
+            }
+            changed = true;
         }
-        self.terminal.resize(size);
-        if let Some(local) = &self.local {
-            if let Err(err) = local.resize(size) {
-                self.status = format!("ConPTY resize failed: {err}");
+        if changed { cx.notify(); }
+    }
+
+    fn send_input(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
+        let tab = self.active_tab_mut();
+        if tab.is_remote() {
+            if tab.remote_phase != RemotePhase::Connected { return; }
+            if let Some(tx) = &tab.remote_commands {
+                if tx.try_send(SshTerminalCommand::Input(bytes)).is_err() {
+                    tab.status = "SSH input queue full/closed".into();
+                    cx.notify();
+                }
+            }
+        } else if let Some(local) = &tab.local {
+            if local.try_write(bytes).is_err() {
+                tab.status = "ConPTY input queue full/closed".into();
+                cx.notify();
             }
         }
-        if let Some(tx) = &self.remote_commands {
-            if tx.try_send(SshTerminalCommand::resize(size.columns, size.rows)).is_err() {
-                self.status = "SSH resize queue full or closed".into();
-            }
+    }
+
+    fn scroll_active(&mut self, lines: i32, cx: &mut Context<Self>) {
+        if lines != 0 {
+            self.active_tab_mut().terminal.scroll_history(lines);
+            cx.notify();
         }
-        cx.notify();
     }
 }
 
@@ -497,12 +621,19 @@ impl Focusable for Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let rows = self.terminal.render_cells();
-        let session_rows: Vec<(String, String, bool)> = self.saved_sessions.iter().map(|session| {
+        let tab = self.active_tab();
+        let rows = tab.terminal.render_cells();
+        let title = tab.title.clone();
+        let status = tab.status.clone();
+        let phase = tab.remote_phase;
+        let saved = tab.session_id.is_some();
+        let tabs: Vec<_> = self.tabs.iter().map(|t| {
+            (t.id, t.title.clone(), t.remote_phase, t.id == self.active_id)
+        }).collect();
+        let sessions: Vec<_> = self.saved_sessions.iter().map(|session| {
             (
                 session.id.clone(),
                 format!("{}\n{}@{}:{}", session.name, session.username, session.host, session.port),
-                self.active_remote_id.as_deref() == Some(session.id.as_str()),
             )
         }).collect();
         let sessions_status = self.sessions_status.clone();
@@ -520,7 +651,69 @@ impl Render for Workspace {
                     .flex()
                     .items_center()
                     .bg(rgb(0x161c25))
-                    .child(if self.remote_mode { "OpenShell Native  |  SSH Test Terminal" } else { "OpenShell Native  |  Local Terminal" }),
+                    .child("OpenShell Native 2.0 · Multi-tab prototype"),
+            )
+            .child(
+                div()
+                    .id("terminal-tab-strip")
+                    .h(px(TABBAR_HEIGHT))
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .px_2()
+                    .bg(rgb(0x192231))
+                    .overflow_x_scroll()
+                    .children(tabs.into_iter().enumerate().map(
+                        |(index, (id, label, phase, active))| {
+                            div()
+                                .id(("terminal-tab", index))
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .px_2()
+                                .py_1()
+                                .bg(rgb(if active { 0x29435d } else { 0x202a39 }))
+                                .rounded_md()
+                                .child(
+                                    div()
+                                        .id(("terminal-tab-select", index))
+                                        .cursor_pointer()
+                                        .text_size(px(12.0))
+                                        .child(format!("{} · {}", label, match phase {
+                                            RemotePhase::Local => "Local",
+                                            RemotePhase::Connecting => "Connecting",
+                                            RemotePhase::Connected => "SSH",
+                                            RemotePhase::Disconnecting => "Closing",
+                                            RemotePhase::Disconnected => "Offline",
+                                        }))
+                                        .on_click(cx.listener(move |view, _, window, cx| {
+                                            view.activate_tab(id, cx);
+                                            window.focus(&view.focus_handle(cx));
+                                        })),
+                                )
+                                .child(
+                                    div()
+                                        .id(("terminal-tab-close", index))
+                                        .cursor_pointer()
+                                        .px_1()
+                                        .text_size(px(12.0))
+                                        .child("×")
+                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                            view.close_tab(id, cx);
+                                        })),
+                                )
+                        },
+                    ))
+                    .child(
+                        div()
+                            .id("new-local-tab")
+                            .cursor_pointer()
+                            .px_3()
+                            .child("+ Local")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.add_local_tab(cx);
+                            })),
+                    ),
             )
             .child(
                 div()
@@ -528,7 +721,7 @@ impl Render for Workspace {
                     .flex()
                     .child(
                         div()
-                            .w(px(244.0))
+                            .w(px(SIDEBAR_WIDTH))
                             .p_4()
                             .bg(rgb(0x121822))
                             .flex()
@@ -538,31 +731,33 @@ impl Render for Workspace {
                             .child(sessions_status)
                             .child(
                                 div()
-                                    .id("refresh-saved-sessions")
+                                    .id("refresh-sessions")
+                                    .cursor_pointer()
                                     .px_2()
                                     .py_1()
                                     .rounded_md()
                                     .bg(rgb(0x29435d))
-                                    .cursor_pointer()
                                     .child("Refresh list")
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.refresh_sessions(cx);
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.refresh_sessions(cx);
                                     })),
                             )
-                            .children(session_rows.into_iter().enumerate().map(|(index, (id, label, active))| {
-                                div()
-                                    .id(("saved-ssh-session", index))
-                                    .p_2()
-                                    .rounded_md()
-                                    .cursor_pointer()
-                                    .bg(rgb(if active { 0x29435d } else { 0x1d2633 }))
-                                    .text_size(px(12.0))
-                                    .child(label)
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        this.connect_saved(id.clone(), cx);
-                                        window.focus(&this.focus_handle(cx));
-                                    }))
-                            })),
+                            .children(sessions.into_iter().enumerate().map(
+                                |(index, (id, label))| {
+                                    div()
+                                        .id(("saved-ssh-session", index))
+                                        .p_2()
+                                        .rounded_md()
+                                        .cursor_pointer()
+                                        .bg(rgb(0x1d2633))
+                                        .text_size(px(12.0))
+                                        .child(label)
+                                        .on_click(cx.listener(move |view, _, window, cx| {
+                                            view.add_ssh_tab(id.clone(), cx);
+                                            window.focus(&view.focus_handle(cx));
+                                        }))
+                                },
+                            )),
                     )
                     .child(
                         div()
@@ -573,84 +768,58 @@ impl Render for Workspace {
                             .id("terminal-pane")
                             .key_context("OpenShellTerminal")
                             .track_focus(&self.focus_handle)
-                            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                                if event.keystroke.modifiers.shift && !this.terminal.in_alternate_screen() {
-                                    let page = this.terminal.size().rows as i32;
+                            .on_key_down(cx.listener(|view, event: &KeyDownEvent, _, cx| {
+                                if event.keystroke.modifiers.shift
+                                    && !view.active_tab().terminal.in_alternate_screen()
+                                {
+                                    let page = view.active_tab().terminal.size().rows as i32;
                                     match event.keystroke.key.as_str() {
-                                        "pageup" => { this.terminal.scroll_history(page); cx.notify(); return; }
-                                        "pagedown" => { this.terminal.scroll_history(-page); cx.notify(); return; }
+                                        "pageup" => { view.scroll_active(page, cx); return; }
+                                        "pagedown" => { view.scroll_active(-page, cx); return; }
                                         _ => {}
                                     }
                                 }
-                                let Some(data) = terminal_key_bytes(&event.keystroke) else { return };
-                                // Never queue speculative keystrokes for an SSH session
-                                // before host verification and authentication complete.
-                                if this.remote_mode && this.remote_phase != RemotePhase::Connected {
-                                    return;
-                                }
-                                if let Some(tx) = &this.remote_commands {
-                                    if tx.try_send(SshTerminalCommand::Input(data)).is_err() {
-                                        this.status = "SSH input queue full or closed".into();
-                                        cx.notify();
-                                    }
-                                } else if let Some(local) = &this.local {
-                                    if local.try_write(data).is_err() {
-                                        this.status = "Terminal input queue full or closed".into();
-                                        cx.notify();
-                                    }
+                                if let Some(bytes) = terminal_key_bytes(&event.keystroke) {
+                                    view.send_input(bytes, cx);
                                 }
                             }))
-                            .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
-                                let delta = f32::from(event.delta.pixel_delta(px(CELL_HEIGHT)).y);
-                                this.scroll_remainder += delta / CELL_HEIGHT;
-                                let lines = this.scroll_remainder.trunc() as i32;
-                                this.scroll_remainder -= lines as f32;
-                                if lines != 0 {
-                                    this.terminal.scroll_history(lines);
-                                    cx.notify();
-                                }
-                            }))
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                window.focus(&this.focus_handle(cx));
+                            .on_scroll_wheel(cx.listener(
+                                |view, event: &ScrollWheelEvent, _, cx| {
+                                    let pixels = f32::from(
+                                        event.delta.pixel_delta(px(CELL_HEIGHT)).y,
+                                    );
+                                    let tab = view.active_tab_mut();
+                                    tab.scroll_remainder += pixels / CELL_HEIGHT;
+                                    let lines = tab.scroll_remainder.trunc() as i32;
+                                    tab.scroll_remainder -= lines as f32;
+                                    view.scroll_active(lines, cx);
+                                },
+                            ))
+                            .on_click(cx.listener(|view, _, window, cx| {
+                                window.focus(&view.focus_handle(cx));
                             }))
                             .child(
                                 div()
-                                    .h(px(40.0))
+                                    .h(px(TOOLBAR_HEIGHT))
                                     .px_4()
                                     .flex()
                                     .items_center()
-                                    .bg(rgb(0x161c25))
                                     .justify_between()
-                                    .child(self.status.clone())
+                                    .bg(rgb(0x161c25))
+                                    .child(format!("{title}  ·  {status}"))
                                     .child(
                                         div()
-                                            .id("ssh-lifecycle")
+                                            .id("active-tab-lifecycle")
                                             .px_3()
                                             .py_1()
                                             .rounded_md()
                                             .bg(rgb(0x29435d))
                                             .cursor_pointer()
-                                            .child(remote_button_label(self.remote_phase, self.active_remote_id.is_some()))
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.remote_primary_action(cx);
+                                            .child(remote_button_label(phase, saved))
+                                            .on_click(cx.listener(|view, _, _, cx| {
+                                                view.remote_primary_action(cx);
                                             })),
-                                    )
-                                    .child(if self.remote_mode {
-                                        div()
-                                            .id("return-to-local")
-                                            .px_3()
-                                            .py_1()
-                                            .rounded_md()
-                                            .bg(rgb(0x213345))
-                                            .cursor_pointer()
-                                            .child("Back to local")
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.start_local(cx);
-                                            }))
-                                    } else {
-                                        // Keep both branches as Stateful<Div>.
-                                        div().id("return-to-local-placeholder")
-                                    }),
+                                    ),
                             )
                             .child(
                                 div()
@@ -662,7 +831,7 @@ impl Render for Workspace {
                                     .flex_col()
                                     .children(rows.into_iter().map(|cells| {
                                         div()
-                                            .h(px(19.0))
+                                            .h(px(CELL_HEIGHT))
                                             .child(styled_terminal_line(&cells))
                                     })),
                             ),
