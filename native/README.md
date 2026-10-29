@@ -40,7 +40,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - Private-key/agent authentication, automatic SSH reconnection/backoff, port forwarding and keepalive. Manual reconnect is available for saved sessions.
 - SFTP file browser/transfers, rz/sz and additional Windows shells/WSL integration.
 - AI provider tools and multi-session automation, conversation storage.
-- Tab drag-reorder, split panes, saved tab restoration, Xshell import, i18n, themes and native installer.
+- Tab drag-reorder, drag-to-split and nested split panes, divider resizing, saved tab restoration, Xshell import, i18n, themes and native installer. A two-pane split prototype exists.
 - End-to-end Windows validation and verified performance comparisons.
 
 ## Non-negotiable migration principles
@@ -162,12 +162,44 @@ After CI uploads the Debug EXE, validate on a disposable Windows development mac
    session in an inactive tab. Verify all PTY sizes adjust correctly.
 5. Close the last tab. Verify a clean local PowerShell tab opens automatically.
 6. Test Cancel/Disconnect/Reconnect, wrong host fingerprints and slow login.
-7. Check memory, p95 input latency and large-output behavior versus Wails
+7. Create left/right and top/bottom splits with two SSH sessions; confirm both continue
+   outputting and window resize sends correct PTY dimensions to each pane. Unsplit
+   and verify neither remote session was interrupted.
+8. Check memory, p95 input latency and large-output behavior versus Wails
    on the same test machine. **These have not yet been measured.**
 
 The desktop prototype does not persist open tabs across restarts and cannot
 yet perform split panes, drag sorting, selection/copy/paste or CJK IME. Only
 use test hosts; do not migrate production credentials into the prototype.
+
+## Split terminal prototype (experimental)
+
+The GPUI workspace now has an explicit **two-pane view** of existing local
+PowerShell or SSH tabs. This is **presentation-only**: splitting never clones,
+reconnects or disconnects either terminal. Each pane retains its own Alacritty
+history, PTY/SSH channel and I/O worker.
+
+- Open at least two terminal tabs. Keep the first tab selected.
+- Use **Split ↔** on another tab to display the two terminals left/right,
+  or **Split ↕** to display them top/bottom. No selection dropdown is used.
+- Click a pane to focus its existing tab; only the focused tab receives keys.
+- Use **Unsplit** to return to the normal single-terminal view without ending
+  either connection.
+- Resizing the main window or changing split orientation updates the visible
+  terminals' PTY row/column dimensions independently.
+- Closing either of the split tabs exits split mode; the confirmation banner
+  still applies to connected tabs.
+
+Implementation boundaries: `terminal_tab.rs` owns connection/cursor/scrollback
+state, `terminal_paint.rs` owns diagnostic rendering and viewport sizing,
+`split_view.rs` owns presentation-only split membership, while
+`ssh_preview.rs` manages the SSH development worker. The GPUI workspace still
+requires additional refactoring before production.
+
+**Not yet available:** dragging a tab onto a pane to create a split, nested
+splits, resizing the divider, separate pane zoom, CJK/IME, correct glyph metrics,
+clipboard, SFTP or AI across panes. The split UI must pass Windows CI and be
+manually tested with concurrent SSH sessions before it can be considered stable.
 
 ## Windows developer preview
 
