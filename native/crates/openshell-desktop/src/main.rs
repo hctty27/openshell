@@ -8,7 +8,7 @@ use gpui::{
 };
 use openshell_core::{LocalShell, LocalTerminal, Session, SessionStore, SshTerminalCommand, TerminalEngine, TerminalSize};
 use openshell_core::native_paths::native_database_path;
-use ssh_preview::{PreviewStatus, start_from_environment};
+use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session};
 use tokio::sync::mpsc;
 use openshell_core::terminal::RenderCell;
 
@@ -92,6 +92,7 @@ struct Workspace {
     scroll_remainder: f32,
     saved_sessions: Vec<Session>,
     sessions_status: String,
+    active_remote_id: Option<String>,
     _session_catalog_task: Task<()>,
 }
 
@@ -174,81 +175,8 @@ impl Workspace {
             });
         });
         let (startup, initial_status, remote_mode) = match start_from_environment(size) {
-            Ok(Some(mut remote)) => {
-                let remote_tx = remote.commands.clone();
-                let startup = cx.spawn(async move |this, cx| {
-                    if this.update(cx, |view, cx| {
-                        view.remote_commands = Some(remote_tx);
-                        cx.notify();
-                    }).is_err() {
-                        return;
-                    }
-
-                    let mut output_open = true;
-                    let mut status_open = true;
-                    while output_open || status_open {
-                        tokio::select! {
-                            packet = remote.output.recv(), if output_open => {
-                                match packet {
-                                    Some(mut bytes) => {
-                                        // Use the same Alacritty parser for local and remote PTYs.
-                                        for _ in 0..7 {
-                                            match remote.output.try_recv() {
-                                                Ok(chunk) => bytes.extend_from_slice(&chunk),
-                                                Err(_) => break,
-                                            }
-                                        }
-                                        if this.update(cx, |view, cx| {
-                                            for reply in view.terminal.feed_pty_replies(&bytes) {
-                                                if let Some(tx) = &view.remote_commands {
-                                                    let _ = tx.try_send(SshTerminalCommand::Input(reply));
-                                                }
-                                            }
-                                            cx.notify();
-                                        }).is_err() {
-                                            break;
-                                        }
-                                    }
-                                    None => output_open = false,
-                                }
-                            }
-                            state = remote.status.recv(), if status_open => {
-                                match state {
-                                    Some(PreviewStatus::Connected) => {
-                                        let _ = this.update(cx, |view, cx| {
-                                            // Cover a window resize that happened during connect.
-                                            if let Some(tx) = &view.remote_commands {
-                                                let size = view.terminal.size();
-                                                let _ = tx.try_send(SshTerminalCommand::resize(size.columns, size.rows));
-                                            }
-                                            view.status = "SSH connected · pinned host key · debug preview".into();
-                                            cx.notify();
-                                        });
-                                    }
-                                    Some(PreviewStatus::Finished(code)) => {
-                                        let _ = this.update(cx, |view, cx| {
-                                            view.remote_commands = None;
-                                            view.status = format!("SSH channel closed · exit status {code:?}");
-                                            cx.notify();
-                                        });
-                                    }
-                                    Some(PreviewStatus::Failed(error)) => {
-                                        let _ = this.update(cx, |view, cx| {
-                                            view.remote_commands = None;
-                                            view.status = format!("SSH preview failed: {error}");
-                                            cx.notify();
-                                        });
-                                    }
-                                    None => status_open = false,
-                                }
-                            }
-                        }
-                    }
-                    let _ = this.update(cx, |view, cx| {
-                        view.remote_commands = None;
-                        cx.notify();
-                    });
-                });
+            Ok(Some(remote)) => {
+                let startup = Self::spawn_remote(remote, cx);
                 (startup, "Connecting to pinned SSH test server...".to_owned(), true)
             }
             Ok(None) => {
@@ -325,7 +253,126 @@ impl Workspace {
             scroll_remainder: 0.0,
             saved_sessions: Vec::new(),
             sessions_status: "Loading saved sessions...".into(),
+            active_remote_id: None,
             _session_catalog_task: catalog_task,
+        }
+    }
+
+    /// Own a single session's event stream in a GPUI Task. Replacing the task
+    /// cancels old GUI event delivery, preventing stale output from repainting
+    /// a newly selected session.
+    fn spawn_remote(mut remote: SshPreview, cx: &mut Context<Self>) -> Task<()> {
+                let remote_tx = remote.commands.clone();
+                cx.spawn(async move |this, cx| {
+                    if this.update(cx, |view, cx| {
+                        view.remote_commands = Some(remote_tx);
+                        cx.notify();
+                    }).is_err() {
+                        return;
+                    }
+
+                    let mut output_open = true;
+                    let mut status_open = true;
+                    while output_open || status_open {
+                        tokio::select! {
+                            packet = remote.output.recv(), if output_open => {
+                                match packet {
+                                    Some(mut bytes) => {
+                                        // Use the same Alacritty parser for local and remote PTYs.
+                                        for _ in 0..7 {
+                                            match remote.output.try_recv() {
+                                                Ok(chunk) => bytes.extend_from_slice(&chunk),
+                                                Err(_) => break,
+                                            }
+                                        }
+                                        if this.update(cx, |view, cx| {
+                                            for reply in view.terminal.feed_pty_replies(&bytes) {
+                                                if let Some(tx) = &view.remote_commands {
+                                                    let _ = tx.try_send(SshTerminalCommand::Input(reply));
+                                                }
+                                            }
+                                            cx.notify();
+                                        }).is_err() {
+                                            break;
+                                        }
+                                    }
+                                    None => output_open = false,
+                                }
+                            }
+                            state = remote.status.recv(), if status_open => {
+                                match state {
+                                    Some(PreviewStatus::Connected) => {
+                                        let _ = this.update(cx, |view, cx| {
+                                            // Cover a window resize that happened during connect.
+                                            if let Some(tx) = &view.remote_commands {
+                                                let size = view.terminal.size();
+                                                let _ = tx.try_send(SshTerminalCommand::resize(size.columns, size.rows));
+                                            }
+                                            view.status = "SSH connected · pinned host key · debug preview".into();
+                                            cx.notify();
+                                        });
+                                    }
+                                    Some(PreviewStatus::Finished(code)) => {
+                                        let _ = this.update(cx, |view, cx| {
+                                            view.remote_commands = None;
+                                            view.status = format!("SSH channel closed · exit status {code:?}");
+                                            cx.notify();
+                                        });
+                                    }
+                                    Some(PreviewStatus::Failed(error)) => {
+                                        let _ = this.update(cx, |view, cx| {
+                                            view.remote_commands = None;
+                                            view.status = format!("SSH preview failed: {error}");
+                                            cx.notify();
+                                        });
+                                    }
+                                    None => status_open = false,
+                                }
+                            }
+                        }
+                    }
+                    let _ = this.update(cx, |view, cx| {
+                        view.remote_commands = None;
+                        cx.notify();
+                    });                })
+    }
+
+    fn connect_saved(&mut self, id: String, cx: &mut Context<Self>) {
+        // Clicking an already active connected session should not terminate it.
+        if self.active_remote_id.as_deref() == Some(id.as_str())
+            && self.remote_commands.is_some()
+        {
+            return;
+        }
+        let size = self.terminal.size();
+        match start_saved_session(id.clone(), size) {
+            Ok(remote) => {
+                // Replacing the task cancels the old output/status consumer.
+                self._startup_task = Self::spawn_remote(remote, cx);
+                // Dropping ConPTY also terminates the local child process.
+                self.local = None;
+                self.remote_commands = None;
+                self.remote_mode = true;
+                self.active_remote_id = Some(id.clone());
+                self.terminal = TerminalEngine::new(size);
+                self.status = format!("Connecting saved SSH session: {id}");
+                self.scroll_remainder = 0.0;
+            }
+            Err(error) => {
+                self.status = format!("Could not start SSH session: {error}");
+            }
+        }
+        cx.notify();
+    }
+
+    fn disconnect_remote(&mut self, cx: &mut Context<Self>) {
+        if let Some(tx) = &self.remote_commands {
+            if tx.try_send(SshTerminalCommand::Close).is_ok() {
+                self.status = "Disconnecting SSH terminal...".into();
+            } else {
+                self.status = "SSH terminal already disconnected or command queue full".into();
+            }
+            cx.notify();
         }
     }
 
@@ -358,8 +405,12 @@ impl Focusable for Workspace {
 impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let rows = self.terminal.render_cells();
-        let session_rows: Vec<String> = self.saved_sessions.iter().map(|session| {
-            format!("{}\n{}@{}:{}", session.name, session.username, session.host, session.port)
+        let session_rows: Vec<(String, String, bool)> = self.saved_sessions.iter().map(|session| {
+            (
+                session.id.clone(),
+                format!("{}\n{}@{}:{}", session.name, session.username, session.host, session.port),
+                self.active_remote_id.as_deref() == Some(session.id.as_str()),
+            )
         }).collect();
         let sessions_status = self.sessions_status.clone();
 
@@ -390,15 +441,21 @@ impl Render for Workspace {
                             .flex()
                             .flex_col()
                             .gap_3()
-                            .child("Saved SSH sessions · read-only")
+                            .child("Saved SSH sessions · click to connect")
                             .child(sessions_status)
-                            .children(session_rows.into_iter().map(|label| {
+                            .children(session_rows.into_iter().enumerate().map(|(index, (id, label, active))| {
                                 div()
+                                    .id(("saved-ssh-session", index))
                                     .p_2()
                                     .rounded_md()
-                                    .bg(rgb(0x1d2633))
+                                    .cursor_pointer()
+                                    .bg(rgb(if active { 0x29435d } else { 0x1d2633 }))
                                     .text_size(px(12.0))
                                     .child(label)
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.connect_saved(id.clone(), cx);
+                                        window.focus(&this.focus_handle(cx));
+                                    }))
                             })),
                     )
                     .child(
@@ -452,7 +509,21 @@ impl Render for Workspace {
                                     .flex()
                                     .items_center()
                                     .bg(rgb(0x161c25))
-                                    .child(self.status.clone()),
+                                    .justify_between()
+                                    .child(self.status.clone())
+                                    .child(
+                                        div()
+                                            .id("disconnect-ssh")
+                                            .px_3()
+                                            .py_1()
+                                            .rounded_md()
+                                            .bg(rgb(0x29435d))
+                                            .cursor_pointer()
+                                            .child(if self.remote_commands.is_some() { "Disconnect SSH" } else { "No SSH connection" })
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.disconnect_remote(cx);
+                                            })),
+                                    ),
                             )
                             .child(
                                 div()
