@@ -13,7 +13,7 @@ pub use session::{Session, SessionError};
 pub use legacy::{LegacySession, preview_legacy_sessions};
 pub use local::{LocalShell, LocalTerminal};
 pub use store::SessionStore;
-pub use ssh::{SshConnection, SshError, SshTerminal};
+pub use ssh::{SshConnection, SshError, SshTerminal, SshTerminalCommand, SshTerminalOutcome};
 pub use terminal::{TerminalEngine, TerminalSize};
 
 pub use workspace::{Split, SplitAxis, Tab, Workspace, WorkspaceError};
