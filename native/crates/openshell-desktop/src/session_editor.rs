@@ -16,6 +16,9 @@ pub(super) struct SessionDraft {
     pub key_path: String,
     pub clear_key: bool,
     pub password: Zeroizing<String>,
+    /// Only a fingerprint independently verified by the user can be approved.
+    pub fingerprint: String,
+    pub fingerprint_confirmed: bool,
     pub selected: usize,
     pub saving: bool,
     pub error: Option<String>,
@@ -28,6 +31,7 @@ impl SessionDraft {
             port: "22".into(), username: String::new(),
             key_path: String::new(), clear_key: false,
             password: Zeroizing::new(String::new()),
+            fingerprint: String::new(), fingerprint_confirmed: false,
             selected: 0, saving: false, error: None,
         }
     }
@@ -39,12 +43,13 @@ impl SessionDraft {
             username: session.username.clone(), selected: 0,
             key_path: String::new(), clear_key: false,
             password: Zeroizing::new(String::new()),
+            fingerprint: String::new(), fingerprint_confirmed: false,
             saving: false, error: None,
         }
     }
 
     /// Only masked password indicators are returned for rendering.
-    pub fn fields(&self) -> [(&'static str, String); 6] {
+    pub fn fields(&self) -> [(&'static str, String); 7] {
         [
             ("Name", self.name.clone()),
             ("Host", self.host.clone()),
@@ -56,6 +61,7 @@ impl SessionDraft {
             } else {
                 "●".repeat(self.password.chars().count().min(24))
             }),
+            ("Verified host fingerprint (SHA256:...)", self.fingerprint.clone()),
         ]
     }
 
@@ -66,12 +72,13 @@ impl SessionDraft {
             2 => &mut self.port,
             3 => &mut self.username,
             4 => &mut self.key_path,
-            _ => &mut *self.password,
+            5 => &mut *self.password,
+            _ => &mut self.fingerprint,
         }
     }
 
     pub fn select(&mut self, field: usize) {
-        self.selected = field.min(5);
+        self.selected = field.min(6);
         self.error = None;
     }
 
@@ -79,8 +86,11 @@ impl SessionDraft {
         let numeric = self.selected == 2;
         let key_path = self.selected == 4;
         let password = self.selected == 5;
+        let fingerprint = self.selected == 6;
         if key_path { self.clear_key = false; }
-        let capacity = if password { 4096 } else if key_path { 1024 } else { MAX_FIELD_LENGTH };
+        if fingerprint { self.fingerprint_confirmed = false; }
+        let capacity = if password { 4096 } else if key_path { 1024 }
+            else if fingerprint { 160 } else { MAX_FIELD_LENGTH };
         let field = self.selected_mut();
         for ch in value.chars() {
             if ch.is_control() || (numeric && !ch.is_ascii_digit()) { continue; }
@@ -97,21 +107,59 @@ impl SessionDraft {
         self.error = None;
     }
 
+    /// This is user attestation, not verification by an online lookup.
+    pub fn toggle_fingerprint_confirmed(&mut self) {
+        if !self.fingerprint.is_empty() {
+            self.fingerprint_confirmed = !self.fingerprint_confirmed;
+            self.error = None;
+        }
+    }
+
+    pub fn checked_fingerprint(&self) -> Result<Option<String>, String> {
+        let value = self.fingerprint.trim();
+        if value.is_empty() {
+            return if self.fingerprint_confirmed {
+                Err("Host-key confirmation requires a fingerprint".into())
+            } else { Ok(None) };
+        }
+        if !self.fingerprint_confirmed {
+            return Err("Verify the host fingerprint independently and check the confirmation before saving".into());
+        }
+        let Some(encoded) = value.strip_prefix("SHA256:") else {
+            return Err("Host fingerprint must begin with SHA256:".into());
+        };
+        let unpadded = encoded.trim_end_matches('=');
+        if unpadded.len() != 43 || !unpadded.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'+' || c == b'/')
+            || encoded.len() > 44
+        {
+            return Err("Invalid SHA256 fingerprint; expected 43 base64 characters".into());
+        }
+        Ok(Some(value.to_owned()))
+    }
+
     pub fn on_key(&mut self, key: &Keystroke) {
         match key.key.as_str() {
-            "tab" => self.select((self.selected + if key.modifiers.shift { 5 } else { 1 }) % 6),
+            "tab" => self.select((self.selected + if key.modifiers.shift { 6 } else { 1 }) % 7),
             "backspace" if self.selected == 5 => {
                 let count = self.password.chars().count().saturating_sub(1);
                 let replacement: String = self.password.chars().take(count).collect();
                 self.password = Zeroizing::new(replacement);
                 self.error = None;
             }
-            "backspace" => { self.selected_mut().pop(); self.error = None; }
+            "backspace" => {
+                if self.selected == 6 { self.fingerprint_confirmed = false; }
+                self.selected_mut().pop();
+                self.error = None;
+            }
             "a" if key.modifiers.control && self.selected == 5 => {
                 self.password = Zeroizing::new(String::new());
                 self.error = None;
             }
-            "a" if key.modifiers.control => { self.selected_mut().clear(); self.error = None; }
+            "a" if key.modifiers.control => {
+                if self.selected == 6 { self.fingerprint_confirmed = false; }
+                self.selected_mut().clear();
+                self.error = None;
+            }
             _ if !key.modifiers.control && !key.modifiers.platform && !key.is_ime_in_progress() => {
                 if let Some(text) = &key.key_char { self.type_text(text); }
             }
@@ -148,6 +196,20 @@ mod tests {
         draft.port = "22".into();
         draft.host = "user@server".into();
         assert!(draft.session("native-1".into()).is_err());
+    }
+
+    #[test]
+    fn host_fingerprint_requires_independent_user_confirmation() {
+        let mut draft = SessionDraft::new();
+        draft.select(6);
+        draft.type_text("SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        assert!(draft.checked_fingerprint().is_err());
+        draft.toggle_fingerprint_confirmed();
+        assert!(draft.checked_fingerprint().unwrap().is_some());
+        draft.type_text("B");
+        assert!(draft.checked_fingerprint().is_err());
+        draft.toggle_fingerprint_confirmed();
+        assert!(draft.checked_fingerprint().is_err());
     }
 
     #[test]

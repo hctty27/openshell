@@ -21,7 +21,7 @@ use gpui::{
     ClipboardItem, IntoElement, KeyDownEvent, Keystroke, MouseButton, Render, Task, Window, WindowBounds,
     WindowOptions, Subscription, ScrollWheelEvent,
 };
-use openshell_core::{CredentialVault, LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize};
+use openshell_core::{CredentialVault, HostIdentity, HostTrustStore, TrustDecision, LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize};
 use openshell_core::native_paths::{native_database_path, ensure_native_data_directory};
 use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session};
 
@@ -242,6 +242,15 @@ impl Workspace {
         }
     }
 
+    fn toggle_fingerprint_confirmation(&mut self, cx: &mut Context<Self>) {
+        if let Some(draft) = &mut self.session_editor {
+            if !draft.saving {
+                draft.toggle_fingerprint_confirmed();
+                cx.notify();
+            }
+        }
+    }
+
     fn save_edit(&mut self, cx: &mut Context<Self>) {
         let Some(draft) = &self.session_editor else { return; };
         if draft.saving { return; }
@@ -265,6 +274,14 @@ impl Workspace {
                 return;
             }
         };
+        let verified_fingerprint = match draft.checked_fingerprint() {
+            Ok(value) => value,
+            Err(error) => {
+                if let Some(draft) = &mut self.session_editor { draft.error = Some(error); }
+                cx.notify();
+                return;
+            }
+        };
         let existing = draft.id.is_some();
         let key_path = draft.key_path.trim().to_owned();
         let clear_key = draft.clear_key;
@@ -282,6 +299,17 @@ impl Workspace {
             if !key_path.is_empty() && !std::path::Path::new(&key_path).is_file() {
                 return Err("The selected SSH private key file does not exist".to_owned());
             }
+            if let Some(fingerprint) = &verified_fingerprint {
+                let identity = HostIdentity::new(&session.host, session.port)
+                    .map_err(|e| e.to_string())?;
+                let trust = HostTrustStore::open(&database).map_err(|e| e.to_string())?;
+                match trust.check(&identity, fingerprint).map_err(|e| e.to_string())? {
+                    TrustDecision::Unknown | TrustDecision::Trusted => {}
+                    TrustDecision::Changed { .. } => {
+                        return Err("Host key differs from the pinned fingerprint; refusing replacement. Verify outside the GUI and use the explicit trust CLI to rotate it.".to_owned());
+                    }
+                }
+            }
             let store = SessionStore::open(&database).map_err(|e| e.to_string())?;
             if existing {
                 store.save(&session).map_err(|e| e.to_string())?;
@@ -294,6 +322,18 @@ impl Workspace {
                     keys.clear(&session.id).map_err(|e| e.to_string())?;
                 } else {
                     keys.set(&session.id, &key_path).map_err(|e| e.to_string())?;
+                }
+            }
+            if let Some(fingerprint) = &verified_fingerprint {
+                let identity = HostIdentity::new(&session.host, session.port)
+                    .map_err(|e| e.to_string())?;
+                let trust = HostTrustStore::open(&database).map_err(|e| e.to_string())?;
+                if matches!(
+                    trust.check(&identity, fingerprint).map_err(|e| e.to_string())?,
+                    TrustDecision::Unknown
+                ) {
+                    trust.record_user_approved(&identity, fingerprint)
+                        .map_err(|e| e.to_string())?;
                 }
             }
             // Windows Credential Manager is the only password persistence
@@ -926,6 +966,7 @@ impl Render for Workspace {
                 .map(|(label, value)| (label.to_string(), value.to_string()))
                 .collect();
             let selected = draft.selected;
+            let fingerprint_confirmed = draft.fingerprint_confirmed;
             let heading = if draft.id.is_some() { "Edit session" } else { "New session" };
             let prompt = draft.error.clone().unwrap_or_else(|| {
                 if draft.saving { "Saving metadata...".into() }
@@ -956,6 +997,20 @@ impl Render for Workspace {
                 .child(prompt)
                 .child("Private key: enter an unencrypted OpenSSH key path. Blank keeps the existing choice.")
                 .child("Password is masked, never loaded back into the form, and stored in Windows Credential Manager. Leave blank to keep the saved password.")
+                .child("Host key: obtain the SHA256 fingerprint from your administrator or the server through an independent trusted channel. Never approve a fingerprint merely because an unknown SSH server presented it.")
+                .child(div()
+                    .id("ssh-host-key-verified")
+                    .cursor_pointer()
+                    .p_2()
+                    .bg(rgb(if fingerprint_confirmed { 0x2c654b } else { 0x29435d }))
+                    .child(if fingerprint_confirmed {
+                        "Verified independently ✓ (click to undo)"
+                    } else {
+                        "I independently verified this host fingerprint"
+                    })
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.toggle_fingerprint_confirmation(cx);
+                    })))
                 .child(div()
                     .id("ssh-session-use-password")
                     .cursor_pointer()
