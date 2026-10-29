@@ -139,6 +139,7 @@ impl Render for Workspace {
                             .flex()
                             .flex_col()
                             .bg(rgb(0x090d12))
+                            .id("terminal-pane")
                             .key_context("OpenShellTerminal")
                             .track_focus(&self.focus_handle)
                             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
