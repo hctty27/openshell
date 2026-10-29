@@ -4,7 +4,7 @@ use std::{
     thread,
 };
 
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize, PtySystem};
+use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use tokio::sync::mpsc as async_mpsc;
 
 use crate::terminal::TerminalSize;
