@@ -926,7 +926,7 @@ impl Render for Workspace {
                     .child(div().id("ssh-session-cancel").cursor_pointer().p_2()
                         .bg(rgb(0x643d3d)).child("Cancel")
                         .on_click(cx.listener(|view, _, _, cx| view.cancel_edit(cx)))))
-        } else { div() };
+        } else { div().id("ssh-session-editor-empty") };
         let sessions_status = self.sessions_status.clone();
         let close_prompt = self.pending_close.and_then(|id| {
             self.tabs.iter().find(|tab| tab.id == id)
