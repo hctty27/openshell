@@ -131,10 +131,10 @@ fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
 impl Workspace {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let viewport = window.viewport_size();
-        let size = terminal_size_for_viewport(viewport.width.0, viewport.height.0);
+        let size = terminal_size_for_viewport(f32::from(viewport.width), f32::from(viewport.height));
         let subscription = cx.observe_window_bounds(window, |view, window, cx| {
             let viewport = window.viewport_size();
-            view.resize_to_viewport(viewport.width.0, viewport.height.0, cx);
+            view.resize_to_viewport(f32::from(viewport.width), f32::from(viewport.height), cx);
         });
         let background = cx.background_spawn(async move {
             LocalTerminal::spawn(LocalShell::PowerShell, size)
@@ -279,7 +279,7 @@ impl Render for Workspace {
                                 }
                             }))
                             .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
-                                let delta = event.delta.pixel_delta(px(CELL_HEIGHT)).y.0;
+                                let delta = f32::from(event.delta.pixel_delta(px(CELL_HEIGHT)).y);
                                 this.scroll_remainder += delta / CELL_HEIGHT;
                                 let lines = this.scroll_remainder.trunc() as i32;
                                 this.scroll_remainder -= lines as f32;
