@@ -81,11 +81,13 @@ impl SshConnection {
         .await
         .map_err(|_| SshError::Timeout)??;
 
-        if !handle
-            .authenticate_password(&session.username, password)
-            .await?
-            .success()
-        {
+        let authentication = timeout(
+            Duration::from_secs(20),
+            handle.authenticate_password(&session.username, password),
+        )
+        .await
+        .map_err(|_| SshError::Timeout)??;
+        if !authentication.success() {
             return Err(SshError::AuthenticationFailed);
         }
 
