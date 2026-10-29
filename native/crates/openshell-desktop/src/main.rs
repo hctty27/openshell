@@ -583,6 +583,11 @@ impl Render for Workspace {
                                     }
                                 }
                                 let Some(data) = terminal_key_bytes(&event.keystroke) else { return };
+                                // Never queue speculative keystrokes for an SSH session
+                                // before host verification and authentication complete.
+                                if this.remote_mode && this.remote_phase != RemotePhase::Connected {
+                                    return;
+                                }
                                 if let Some(tx) = &this.remote_commands {
                                     if tx.try_send(SshTerminalCommand::Input(data)).is_err() {
                                         this.status = "SSH input queue full or closed".into();
