@@ -827,9 +827,9 @@ impl Render for Workspace {
                                             window.focus(&view.focus_handle(cx));
                                         }))
                                         .cursor_move()
-                                        .on_drag(TerminalTabDrag { tab_id: id },
-                                            |dragged: &TerminalTabDrag, _, _, cx| {
-                                                cx.new(|_| *dragged)
+                                        .on_drag(TerminalTabDrag::new(id),
+                                            |dragged: &TerminalTabDrag, position, _, cx| {
+                                                cx.new(|_| dragged.at(position))
                                             })
                                         .on_drop(cx.listener(move |view, dragged: &TerminalTabDrag, _, cx| {
                                             view.reorder_tabs(dragged.tab_id, id, cx);
