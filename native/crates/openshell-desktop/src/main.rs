@@ -145,11 +145,12 @@ impl Workspace {
                     let Some(mut rx) = local.take_output() else { return };
                     if this.update(cx, |view, cx| {
                         // The window may have resized while ConPTY started.
-                        if let Err(err) = local.resize(view.terminal.size()) {
-                            view.status = format!("ConPTY resize failed: {err}");
-                        }
+                        let resize_result = local.resize(view.terminal.size());
                         view.local = Some(local);
-                        view.status = "PowerShell connected · experimental ConPTY".into();
+                        view.status = match resize_result {
+                            Ok(()) => "PowerShell connected · experimental ConPTY".into(),
+                            Err(err) => format!("PowerShell connected; ConPTY resize failed: {err}"),
+                        };
                         cx.notify();
                     }).is_err() {
                         return;
@@ -261,7 +262,7 @@ impl Render for Workspace {
                             .key_context("OpenShellTerminal")
                             .track_focus(&self.focus_handle)
                             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                                if event.keystroke.modifiers.shift {
+                                if event.keystroke.modifiers.shift && !this.terminal.in_alternate_screen() {
                                     let page = this.terminal.size().rows as i32;
                                     match event.keystroke.key.as_str() {
                                         "pageup" => { this.terminal.scroll_history(page); cx.notify(); return; }
