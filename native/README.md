@@ -150,7 +150,7 @@ the test example but cannot authenticate against your private server.
 
 ## Windows multi-tab smoke-test checklist
 
-After CI uploads the Debug EXE, validate on a disposable Windows development machine:
+After CI uploads the standalone Release preview EXE, validate on a disposable Windows development machine:
 
 1. Open two local PowerShell tabs. Run a different long-lived command in each,
    switch repeatedly with Ctrl+Tab and check that output stays independent.
@@ -203,7 +203,7 @@ manually tested with concurrent SSH sessions before it can be considered stable.
 
 ## Windows startup failure: DirectWriteTextSystem
 
-If the unsigned Debug EXE displays **"Failed to launch / Error creating
+If a previous unsigned Debug EXE displays **"Failed to launch / Error creating
 DirectWriteTextSystem"**, the native GPUI window has not been created yet.
 This is a Windows DirectWrite/Direct3D initialization error, **not** an SSH,
 ConPTY, or session data failure. CI only compiles and unit-tests the app;
@@ -239,14 +239,26 @@ This is a read-only diagnostic: it does not disable or install GPU drivers.
 Share the report and the Display tab's driver/feature-level information
 (redact personal PC information if desired) for the exact next fix.
 
-## Windows developer preview
+## Windows developer preview — use RELEASE, not DEBUG
 
-The native CI builds a **debug-only, unsigned** `openshell-native.exe` and uploads it
-as the short-lived `openshell-native-unsigned-debug-windows-x64` GitHub Actions artifact.
-This is for manual keyboard, resize and ConPTY smoke tests only. It is not an
-installer, a release candidate, or a performance benchmark build.
-Only test it on a development machine and do not overwrite the stable Wails app.
+**Important fix (2026-10-29):** The GPUI Windows Debug shader path can use
+`D3DCompileFromFile` and a baked-in absolute `CARGO_MANIFEST_DIR` source
+path (from the GitHub build runner). Moving only the Debug EXE to another
+computer leaves the HLSL source files behind, causing startup to fail with the
+outer error `Error creating DirectWriteTextSystem`.
 
-## Release gates
+**Release mode embeds precompiled HLSL shader bytecode**, and therefore does
+not depend on the original GitHub runner's shader source paths at runtime.
+For Windows user testing, CI now runs `cargo build --release -p openshell-native`
+and uploads the unsigned
+`openshell-native-unsigned-release-preview-windows-x64` artifact.
 
-Compare with the current release on an identical Windows machine and server: cold start, idle and 10-tab memory, streamed-log throughput, p95 keyboard latency, split/tab switch frame time, SFTP large-file and 10,000-entry directory behavior. No untested speed claims.
+This Release **preview** is not a signed installer, not a production release and
+still has incomplete SSH/terminal functionality. It is only the correct portable
+build type to smoke-test GPUI window startup, compared to the previous Debug EXE.
+It retains the `--diagnose` command for DirectWrite/DXGI diagnostics.
+
+If you need local Debug development, run it on the same machine where the
+GPUI source/HLSL shader files were built; never distribute the GitHub runner's
+standalone Debug EXE to end users.
+
