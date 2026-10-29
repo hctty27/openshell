@@ -31,6 +31,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
 - Read-only preview of legacy Wails sessions. An explicit `sessionctl import-legacy` command now creates a consistent SQLite snapshot and imports non-secret session metadata without overwriting existing native sessions; credentials and auth settings must still be configured separately.
 - Native SSH session metadata and explicit SHA256 host trust, Windows Credential Manager password storage, clickable saved-session sidebar and SSH connection lifecycle controls.
+- Optional unencrypted local OpenSSH private-key authentication per saved SSH session, configured by `sessionctl key <id> <path>`. Only the canonical file path is stored in native SQLite, never the key bytes. Key login takes precedence over saved password; `key-clear` restores password login. Host-key pinning is enforced for both modes.
 - Create and edit session metadata directly in the GPUI sidebar; persistence runs off the UI thread. Password and host-key trust management remain CLI-only; session edits take effect on new SSH connections.
 - Concurrent terminal tabs: each owns its Alacritty grid/scrollback, ConPTY or SSH transport, background output task, status and cancellation. Clicking a saved server opens a new SSH tab rather than replacing another session.
 - Tab strip allows select/close, additional local PowerShell tabs, keyboard tab navigation and close confirmation for active running terminals. Closing the final tab creates a fresh local PowerShell.
@@ -39,7 +40,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 
 - Production GPU cell painting, precise monospace glyph measurement, CJK/IME composition, full mouse reporting, mouse-based text selection/copy, and resize performance/accuracy. Basic keyboard clipboard paste and viewport copy are available, but arbitrary selection/copy is not.
 - Complete session management (delete, group, duplicate), host-key approval UI, public-key login and reconnect policy. The initial Windows credential vault and saved-session selection are implemented, but not independently tested through live GUI interactions.
-- Private-key/agent authentication, automatic SSH reconnection/backoff, port forwarding and keepalive. Manual reconnect is available for saved sessions.
+- Encrypted private-key passphrases and SSH Agent authentication, automatic SSH reconnection/backoff, port forwarding and keepalive. Unencrypted local OpenSSH private-key login is available for saved sessions through the `sessionctl key` command. Manual reconnect remains available.
 - SFTP file browser/transfers, rz/sz and additional Windows shells/WSL integration.
 - AI provider tools and multi-session automation, conversation storage.
 - Nested split panes, draggable split divider, visual drag drop zones, saved tab restoration, direct Xshell import, i18n, themes and native installer. Initial tab reorder and two-pane drag-to-split prototypes exist; Wails metadata migration is currently a CLI-only opt-in.
@@ -74,6 +75,9 @@ cargo run -p openshell-core --example sessionctl -- add server1 "My server" exam
 cargo run -p openshell-core --example sessionctl -- list
 cargo run -p openshell-core --example sessionctl -- trust server1 SHA256:YOUR-INDEPENDENTLY-VERIFIED-SERVER-FINGERPRINT
 cargo run -p openshell-core --example sessionctl -- password server1
+# Optional: choose an existing unencrypted OpenSSH private key for this session:
+# cargo run -p openshell-core --example sessionctl -- key server1 "C:\\Users\\me\\.ssh\\id_ed25519"
+# cargo run -p openshell-core --example sessionctl -- key-clear server1
 # Optional Wails migration (safe metadata-only import, no credentials):
 # cargo run -p openshell-core --example sessionctl -- import-legacy "$env:APPDATA\\OpenShell\\state.db"
 cargo run -p openshell-native

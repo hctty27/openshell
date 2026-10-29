@@ -9,6 +9,8 @@
 //!   trust <id> <independently-verified-SHA256-fingerprint>
 //!   password <id>                   (interactive, no terminal echo)
 //!   delete <id>
+//!   key <id> <unencrypted-private-key-file>
+//!   key-clear <id>
 //!   import-legacy <absolute-path-to-Wails-state.db> (metadata only)
 //!
 //! This is not the production session manager UI.
@@ -16,7 +18,7 @@
 use std::{env, error::Error, io::{self, Write}, path::PathBuf, process, time::{SystemTime, UNIX_EPOCH}};
 
 use openshell_core::{
-    CredentialVault, HostIdentity, HostTrustStore, Session, SessionStore,
+    CredentialVault, HostIdentity, HostTrustStore, Session, SessionStore, SessionKeyStore,
     import_legacy_sessions,
     native_paths::{ensure_native_data_directory, native_database_path},
 };
@@ -31,7 +33,7 @@ fn session_by_id(store: &SessionStore, id: &str) -> Result<Session, Box<dyn Erro
 fn command() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() {
-        return Err("expected: list|add|trust|password|delete|import-legacy (use -- separator in cargo run)".into());
+        return Err("expected: list|add|trust|password|key|key-clear|delete|import-legacy (use -- separator in cargo run)".into());
     }
     ensure_native_data_directory()?;
     let database = native_database_path()?;
@@ -111,10 +113,24 @@ fn command() -> Result<(), Box<dyn Error>> {
             println!("Passwords, key paths, agent configuration, groups and API tokens were NOT imported.");
             println!("Set credentials and independently approve host keys in the native client.");
         }
+        "key" if args.len() == 3 => {
+            let session = session_by_id(&sessions, &args[1])?;
+            let keys = SessionKeyStore::open(&database)?;
+            let path = keys.set(&session.id, &args[2])?;
+            println!("Private-key login enabled for {} using {}", session.id, path.display());
+            println!("Only the file path is saved. The key contents stay on disk.");
+            println!("Encrypted private keys and SSH Agent authentication are not supported yet.");
+        }
+        "key-clear" if args.len() == 2 => {
+            let session = session_by_id(&sessions, &args[1])?;
+            SessionKeyStore::open(&database)?.clear(&session.id)?;
+            println!("Private-key preference removed; the next login uses the Windows credential password.");
+        }
         "delete" if args.len() == 2 => {
             // Remove the credential *before* deleting its metadata, so failure
             // cannot orphan a secret through normal CLI operation.
             CredentialVault::delete(&args[1])?;
+            SessionKeyStore::open(&database)?.clear(&args[1])?;
             if sessions.delete(&args[1])? {
                 println!("Removed session metadata and its native credential entry.");
             } else {
@@ -124,7 +140,7 @@ fn command() -> Result<(), Box<dyn Error>> {
             // by deleting an individual account.
         }
         _ => {
-            return Err("usage: list | add <id> <name> <host> <port> <user> | trust <id> <SHA256:...> | password <id> | delete <id> | import-legacy <path-to-state.db>".into());
+            return Err("usage: list | add <id> <name> <host> <port> <user> | trust <id> <SHA256:...> | password <id> | key <id> <private-key-path> | key-clear <id> | delete <id> | import-legacy <path-to-state.db>".into());
         }
     }
     Ok(())

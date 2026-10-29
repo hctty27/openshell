@@ -10,6 +10,7 @@ pub mod host_trust;
 pub mod native_paths;
 pub mod credentials;
 pub mod store;
+pub mod key_auth;
 pub mod terminal;
 pub mod workspace;
 
@@ -18,6 +19,7 @@ pub use legacy::{LegacySession, preview_legacy_sessions};
 pub use migration::{import_legacy_sessions, ImportReport, ImportError};
 pub use local::{LocalShell, LocalTerminal};
 pub use store::SessionStore;
+pub use key_auth::{SessionKeyStore, SessionKeyError};
 pub use credentials::{CredentialVault, CredentialError};
 pub use host_trust::{HostIdentity, HostTrustStore, TrustDecision, HostTrustError};
 pub use ssh::{SshConnection, SshError, SshTerminal, SshTerminalCommand, SshTerminalOutcome};

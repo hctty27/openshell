@@ -6,10 +6,10 @@
 //!
 //! SSH I/O, SQLite and credential manager access happen off the GUI thread.
 
-use std::{env, thread};
+use std::{env, thread, path::PathBuf};
 
 use openshell_core::{
-    CredentialVault, HostIdentity, HostTrustStore, Session, SessionStore,
+    CredentialVault, HostIdentity, HostTrustStore, Session, SessionStore, SessionKeyStore,
     SshConnection, SshTerminalCommand, TerminalSize,
     native_paths::native_database_path,
 };
@@ -47,9 +47,14 @@ async fn wait_for_cancel(cancel: &mut watch::Receiver<bool>) {
     }
 }
 
+enum PreviewAuth {
+    Password(Zeroizing<String>),
+    PrivateKey(PathBuf),
+}
+
 struct PreviewConfig {
     session: Session,
-    password: Zeroizing<String>,
+    auth: PreviewAuth,
     fingerprint: String,
 }
 
@@ -102,7 +107,7 @@ fn read_source() -> Result<Option<PreviewSource>, String> {
     session.validate().map_err(|err| err.to_string())?;
     Ok(Some(PreviewSource::Development(PreviewConfig {
         session,
-        password,
+        auth: PreviewAuth::Password(password),
         fingerprint,
     })))
 }
@@ -122,13 +127,19 @@ fn resolve_stored_session(id: &str) -> Result<PreviewConfig, String> {
     let fingerprint = trusted.trusted_fingerprint(&identity)
         .map_err(|err| err.to_string())?
         .ok_or_else(|| "SSH host key has not been explicitly approved".to_owned())?;
-    let password = CredentialVault::get(&session.id)
-        .map_err(|err| err.to_string())?
-        .ok_or_else(|| "SSH password is missing from Windows Credential Manager".to_owned())?;
+    let keys = SessionKeyStore::open(&database_path).map_err(|err| err.to_string())?;
+    let auth = match keys.get(&session.id).map_err(|err| err.to_string())? {
+        Some(path) => PreviewAuth::PrivateKey(path),
+        None => PreviewAuth::Password(
+            CredentialVault::get(&session.id)
+                .map_err(|err| err.to_string())?
+                .ok_or_else(|| "SSH password is missing from Windows Credential Manager".to_owned())?
+        ),
+    };
 
     Ok(PreviewConfig {
         session,
-        password,
+        auth,
         fingerprint,
     })
 }
@@ -182,12 +193,18 @@ fn start_source(source: PreviewSource, size: TerminalSize) -> Result<SshPreview,
             };
 
             let ssh_flow = async {
-                let connection = SshConnection::connect_password(
-                    &config.session,
-                    &config.password,
-                    &config.fingerprint,
-                )
-                .await
+                let connection = match &config.auth {
+                    PreviewAuth::Password(password) => {
+                        SshConnection::connect_password(
+                            &config.session, password, &config.fingerprint,
+                        ).await
+                    }
+                    PreviewAuth::PrivateKey(path) => {
+                        SshConnection::connect_private_key(
+                            &config.session, path, &config.fingerprint,
+                        ).await
+                    }
+                }
                 .map_err(|err| err.to_string())?;
 
                 let terminal = connection

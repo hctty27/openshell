@@ -1,8 +1,8 @@
-use std::{sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration, path::Path};
 
 use russh::{
     client, ChannelMsg,
-    keys::{HashAlg, PublicKeyOrCertificate},
+    keys::{HashAlg, PublicKeyOrCertificate, load_secret_key, key::PrivateKeyWithHashAlg},
 };
 use thiserror::Error;
 use tokio::{
@@ -21,6 +21,8 @@ pub enum SshError {
     Timeout,
     #[error("SSH authentication failed")]
     AuthenticationFailed,
+    #[error("Private key cannot be loaded (file missing, malformed, or passphrase protected)")]
+    PrivateKeyUnavailable,
     #[error(transparent)]
     Protocol(#[from] russh::Error),
     #[error(transparent)]
@@ -91,6 +93,44 @@ impl SshConnection {
             return Err(SshError::AuthenticationFailed);
         }
 
+        Ok(Self { handle })
+    }
+
+    /// Authenticate with a local unencrypted OpenSSH key. The key bytes are
+    /// never persisted to SQLite or passed to GPUI. Host fingerprint pinning
+    /// is identical to password login; unknown and changed hosts are rejected.
+    pub async fn connect_private_key(
+        session: &Session,
+        key_path: &Path,
+        expected_fingerprint: &str,
+    ) -> Result<Self, SshError> {
+        if !expected_fingerprint.starts_with("SHA256:") {
+            return Err(SshError::FingerprintRequired);
+        }
+        session.validate().map_err(|_| SshError::AuthenticationFailed)?;
+        let private_key = load_secret_key(key_path, None)
+            .map_err(|_| SshError::PrivateKeyUnavailable)?;
+        let config = Arc::new(client::Config::default());
+        let verifier = HostVerifier {
+            expected_fingerprint: expected_fingerprint.to_owned(),
+        };
+        let mut handle = timeout(
+            Duration::from_secs(12),
+            client::connect(config, (session.host.as_str(), session.port), verifier),
+        )
+        .await
+        .map_err(|_| SshError::Timeout)??;
+        let hash_algorithm = handle.best_supported_rsa_hash().await?.flatten();
+        let auth = timeout(
+            Duration::from_secs(20),
+            handle.authenticate_publickey(
+                &session.username,
+                PrivateKeyWithHashAlg::new(Arc::new(private_key), hash_algorithm),
+            ),
+        )
+        .await
+        .map_err(|_| SshError::Timeout)??;
+        if !auth.success() { return Err(SshError::AuthenticationFailed); }
         Ok(Self { handle })
     }
 
@@ -241,6 +281,30 @@ mod tests {
             SshTerminalCommand::resize(120, 40),
             SshTerminalCommand::Resize { columns: 120, rows: 40 }
         );
+    }
+
+    #[tokio::test]
+    async fn private_key_auth_rejects_unknown_host_before_reading_file() {
+        let session = Session {
+            id: "private-key".into(), name: "Key".into(),
+            host: "invalid.example".into(), port: 22, username: "deploy".into(),
+        };
+        let err = SshConnection::connect_private_key(
+            &session, Path::new("/missing/key"), "",
+        ).await.err().unwrap();
+        assert!(matches!(err, SshError::FingerprintRequired));
+    }
+
+    #[tokio::test]
+    async fn private_key_auth_fails_closed_when_file_missing() {
+        let session = Session {
+            id: "private-key".into(), name: "Key".into(),
+            host: "invalid.example".into(), port: 22, username: "deploy".into(),
+        };
+        let err = SshConnection::connect_private_key(
+            &session, Path::new("/missing/key"), "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        ).await.err().unwrap();
+        assert!(matches!(err, SshError::PrivateKeyUnavailable));
     }
 
     #[tokio::test]
