@@ -15,13 +15,11 @@ use gpui::prelude::*;
 use gpui::{
     div, px, rgb, size, App, Application, Bounds, Context, FocusHandle, Focusable,
     IntoElement, KeyDownEvent, Keystroke, Render, Task, Window, WindowBounds,
-    WindowOptions, HighlightStyle, StyledText, FontWeight, Subscription, ScrollWheelEvent,
+    WindowOptions, Subscription, ScrollWheelEvent,
 };
 use openshell_core::{LocalShell, LocalTerminal, Session, SessionStore, SshTerminalCommand, TerminalEngine, TerminalSize};
 use openshell_core::native_paths::native_database_path;
 use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session};
-use tokio::sync::{mpsc, watch};
-use openshell_core::terminal::RenderCell;
 
 
 /// Pure tab navigation for Ctrl+Tab, including wrap-around.
