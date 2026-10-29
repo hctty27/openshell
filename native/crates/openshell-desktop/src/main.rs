@@ -83,6 +83,7 @@ struct Workspace {
     terminal: TerminalEngine,
     local: Option<LocalTerminal>,
     remote_commands: Option<mpsc::Sender<SshTerminalCommand>>,
+    remote_mode: bool,
     _startup_task: Task<()>,
     _resize_subscription: Subscription,
     focus_handle: FocusHandle,
@@ -141,7 +142,7 @@ impl Workspace {
             let viewport = window.viewport_size();
             view.resize_to_viewport(f32::from(viewport.width), f32::from(viewport.height), cx);
         });
-        let (startup, initial_status) = match start_from_environment(size) {
+        let (startup, initial_status, remote_mode) = match start_from_environment(size) {
             Ok(Some(mut remote)) => {
                 let remote_tx = remote.commands.clone();
                 let startup = cx.spawn(async move |this, cx| {
@@ -217,7 +218,7 @@ impl Workspace {
                         cx.notify();
                     });
                 });
-                (startup, "Connecting to pinned SSH test server...".to_owned())
+                (startup, "Connecting to pinned SSH test server...".to_owned(), true)
             }
             Ok(None) => {
             let background = cx.background_spawn(async move {
@@ -274,17 +275,18 @@ impl Workspace {
                     }
                 }
             });
-                    (startup, "Starting PowerShell...".to_owned())
+                    (startup, "Starting PowerShell...".to_owned(), false)
             }
             Err(error) => {
                 let task = cx.spawn(async move |_, _| {});
-                (task, format!("SSH preview configuration error: {error}"))
+                (task, format!("SSH preview configuration error: {error}"), true)
             }
         };
         Self {
             terminal: TerminalEngine::new(size),
             local: None,
             remote_commands: None,
+            remote_mode,
             _startup_task: startup,
             _resize_subscription: subscription,
             focus_handle: cx.focus_handle(),
@@ -336,7 +338,7 @@ impl Render for Workspace {
                     .flex()
                     .items_center()
                     .bg(rgb(0x161c25))
-                    .child("OpenShell Native  |  Local Terminal"),
+                    .child(if self.remote_mode { "OpenShell Native  |  SSH Test Terminal" } else { "OpenShell Native  |  Local Terminal" }),
             )
             .child(
                 div()
