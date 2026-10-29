@@ -9,7 +9,7 @@ use gpui::{
 use openshell_core::{LocalShell, LocalTerminal, Session, SessionStore, SshTerminalCommand, TerminalEngine, TerminalSize};
 use openshell_core::native_paths::native_database_path;
 use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use openshell_core::terminal::RenderCell;
 
 
@@ -80,10 +80,32 @@ fn terminal_size_for_viewport(width: f32, height: f32) -> TerminalSize {
     TerminalSize::new(columns, rows)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RemotePhase {
+    Local,
+    Connecting,
+    Connected,
+    Disconnecting,
+    Disconnected,
+}
+
+fn remote_button_label(phase: RemotePhase, saved_session: bool) -> &'static str {
+    match phase {
+        RemotePhase::Local => "Local terminal",
+        RemotePhase::Connecting => "Cancel connection",
+        RemotePhase::Connected => "Disconnect SSH",
+        RemotePhase::Disconnecting => "Force cancel",
+        RemotePhase::Disconnected if saved_session => "Reconnect SSH",
+        RemotePhase::Disconnected => "SSH disconnected",
+    }
+}
+
 struct Workspace {
     terminal: TerminalEngine,
     local: Option<LocalTerminal>,
     remote_commands: Option<mpsc::Sender<SshTerminalCommand>>,
+    remote_cancel: Option<watch::Sender<bool>>,
+    remote_phase: RemotePhase,
     remote_mode: bool,
     _startup_task: Task<()>,
     _resize_subscription: Subscription,
@@ -148,23 +170,25 @@ impl Workspace {
             view.resize_to_viewport(f32::from(viewport.width), f32::from(viewport.height), cx);
         });
         let catalog_task = Self::spawn_catalog_load(cx);
-        let (startup, initial_status, remote_mode) = match start_from_environment(size) {
+        let (startup, initial_status, remote_mode, remote_phase) = match start_from_environment(size) {
             Ok(Some(remote)) => {
                 let startup = Self::spawn_remote(remote, cx);
-                (startup, "Connecting to pinned SSH test server...".to_owned(), true)
+                (startup, "Connecting to pinned SSH test server...".to_owned(), true, RemotePhase::Connecting)
             }
             Ok(None) => {
-                (Self::spawn_local(size, cx), "Starting PowerShell...".to_owned(), false)
+                (Self::spawn_local(size, cx), "Starting PowerShell...".to_owned(), false, RemotePhase::Local)
             }
             Err(error) => {
                 let task = cx.spawn(async move |_, _| {});
-                (task, format!("SSH preview configuration error: {error}"), true)
+                (task, format!("SSH preview configuration error: {error}"), true, RemotePhase::Disconnected)
             }
         };
         Self {
             terminal: TerminalEngine::new(size),
             local: None,
             remote_commands: None,
+            remote_cancel: None,
+            remote_phase,
             remote_mode,
             _startup_task: startup,
             _resize_subscription: subscription,
@@ -273,10 +297,14 @@ impl Workspace {
     /// Return to a standalone local ConPTY; replacing the GUI task cancels
     /// delivery from any previous remote session.
     fn start_local(&mut self, cx: &mut Context<Self>) {
+        if let Some(cancel) = self.remote_cancel.take() {
+            let _ = cancel.send(true);
+        }
         let size = self.terminal.size();
         self._startup_task = Self::spawn_local(size, cx);
         self.local = None;
         self.remote_commands = None;
+        self.remote_phase = RemotePhase::Local;
         self.remote_mode = false;
         self.active_remote_id = None;
         self.terminal = TerminalEngine::new(size);
@@ -290,9 +318,11 @@ impl Workspace {
     /// a newly selected session.
     fn spawn_remote(mut remote: SshPreview, cx: &mut Context<Self>) -> Task<()> {
                 let remote_tx = remote.commands.clone();
+                let cancel_tx = remote.cancel.clone();
                 cx.spawn(async move |this, cx| {
                     if this.update(cx, |view, cx| {
                         view.remote_commands = Some(remote_tx);
+                        view.remote_cancel = Some(cancel_tx);
                         cx.notify();
                     }).is_err() {
                         return;
@@ -336,6 +366,7 @@ impl Workspace {
                                                 let _ = tx.try_send(SshTerminalCommand::resize(size.columns, size.rows));
                                             }
                                             view.status = "SSH connected · pinned host key · debug preview".into();
+                                            view.remote_phase = RemotePhase::Connected;
                                             cx.notify();
                                         });
                                     }
@@ -343,6 +374,8 @@ impl Workspace {
                                         let _ = this.update(cx, |view, cx| {
                                             view.remote_commands = None;
                                             view.status = format!("SSH channel closed · exit status {code:?}");
+                                            view.remote_phase = RemotePhase::Disconnected;
+                                            view.remote_cancel = None;
                                             cx.notify();
                                         });
                                     }
@@ -350,6 +383,8 @@ impl Workspace {
                                         let _ = this.update(cx, |view, cx| {
                                             view.remote_commands = None;
                                             view.status = format!("SSH preview failed: {error}");
+                                            view.remote_phase = RemotePhase::Disconnected;
+                                            view.remote_cancel = None;
                                             cx.notify();
                                         });
                                     }
@@ -374,11 +409,15 @@ impl Workspace {
         let size = self.terminal.size();
         match start_saved_session(id.clone(), size) {
             Ok(remote) => {
-                // Replacing the task cancels the old output/status consumer.
+                // Cancel the previous worker, not only its GPUI output task.
+                if let Some(cancel) = self.remote_cancel.take() {
+                    let _ = cancel.send(true);
+                }
                 self._startup_task = Self::spawn_remote(remote, cx);
                 // Dropping ConPTY also terminates the local child process.
                 self.local = None;
                 self.remote_commands = None;
+                self.remote_phase = RemotePhase::Connecting;
                 self.remote_mode = true;
                 self.active_remote_id = Some(id.clone());
                 self.terminal = TerminalEngine::new(size);
@@ -392,14 +431,41 @@ impl Workspace {
         cx.notify();
     }
 
-    fn disconnect_remote(&mut self, cx: &mut Context<Self>) {
-        if let Some(tx) = &self.remote_commands {
-            if tx.try_send(SshTerminalCommand::Close).is_ok() {
-                self.status = "Disconnecting SSH terminal...".into();
-            } else {
-                self.status = "SSH terminal already disconnected or command queue full".into();
+    /// Explicitly terminate a pending handshake or force-close a stuck SSH PTY.
+    fn cancel_remote(&mut self, cx: &mut Context<Self>) {
+        if let Some(cancel) = self.remote_cancel.take() {
+            let _ = cancel.send(true);
+        }
+        // Dropping this task also drops SshPreview, signalling its worker.
+        self._startup_task = cx.spawn(async move |_, _| {});
+        self.remote_commands = None;
+        self.remote_phase = RemotePhase::Disconnected;
+        self.status = "SSH operation cancelled".into();
+        cx.notify();
+    }
+
+    fn remote_primary_action(&mut self, cx: &mut Context<Self>) {
+        match self.remote_phase {
+            RemotePhase::Local => {}
+            RemotePhase::Connecting | RemotePhase::Disconnecting => self.cancel_remote(cx),
+            RemotePhase::Connected => {
+                if let Some(tx) = &self.remote_commands {
+                    if tx.try_send(SshTerminalCommand::Close).is_ok() {
+                        self.remote_phase = RemotePhase::Disconnecting;
+                        self.status = "Disconnecting SSH terminal...".into();
+                        cx.notify();
+                    } else {
+                        self.cancel_remote(cx);
+                    }
+                } else {
+                    self.cancel_remote(cx);
+                }
             }
-            cx.notify();
+            RemotePhase::Disconnected => {
+                if let Some(id) = self.active_remote_id.clone() {
+                    self.connect_saved(id, cx);
+                }
+            }
         }
     }
 
@@ -553,27 +619,32 @@ impl Render for Workspace {
                                     .child(self.status.clone())
                                     .child(
                                         div()
-                                            .id("disconnect-ssh")
+                                            .id("ssh-lifecycle")
                                             .px_3()
                                             .py_1()
                                             .rounded_md()
                                             .bg(rgb(0x29435d))
                                             .cursor_pointer()
-                                            .child(if self.remote_commands.is_some() {
-                                                "Disconnect SSH"
-                                            } else if self.remote_mode {
-                                                "Back to local"
-                                            } else {
-                                                "Local terminal"
-                                            })
+                                            .child(remote_button_label(self.remote_phase, self.active_remote_id.is_some()))
                                             .on_click(cx.listener(|this, _, _, cx| {
-                                                if this.remote_commands.is_some() {
-                                                    this.disconnect_remote(cx);
-                                                } else if this.remote_mode {
-                                                    this.start_local(cx);
-                                                }
+                                                this.remote_primary_action(cx);
                                             })),
-                                    ),
+                                    )
+                                    .child(if self.remote_mode {
+                                        div()
+                                            .id("return-to-local")
+                                            .px_3()
+                                            .py_1()
+                                            .rounded_md()
+                                            .bg(rgb(0x213345))
+                                            .cursor_pointer()
+                                            .child("Back to local")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.start_local(cx);
+                                            }))
+                                    } else {
+                                        div()
+                                    }),
                             )
                             .child(
                                 div()
@@ -618,6 +689,15 @@ fn main() {
 mod tests {
     use super::*;
     use gpui::Modifiers;
+
+    #[test]
+    fn lifecycle_button_labels_match_ssh_state() {
+        assert_eq!(remote_button_label(RemotePhase::Connecting, true), "Cancel connection");
+        assert_eq!(remote_button_label(RemotePhase::Connected, true), "Disconnect SSH");
+        assert_eq!(remote_button_label(RemotePhase::Disconnecting, true), "Force cancel");
+        assert_eq!(remote_button_label(RemotePhase::Disconnected, true), "Reconnect SSH");
+        assert_eq!(remote_button_label(RemotePhase::Disconnected, false), "SSH disconnected");
+    }
 
     #[test]
     fn viewport_grid_tracks_size_and_clamps() {
