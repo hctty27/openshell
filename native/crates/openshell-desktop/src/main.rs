@@ -1,3 +1,4 @@
+use gpui::prelude::*;
 use gpui::{
     div, px, rgb, size, App, Application, Bounds, Context, IntoElement,
     Render, Window, WindowBounds, WindowOptions,
