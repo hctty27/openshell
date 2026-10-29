@@ -16,6 +16,8 @@ pub struct Session {
 pub enum SessionError {
     #[error("session ID is required")]
     MissingId,
+    #[error("session ID may contain only ASCII letters, numbers, hyphens, dots and underscores")]
+    InvalidId,
     #[error("session name is required")]
     MissingName,
     #[error("SSH host is required")]
@@ -29,6 +31,7 @@ pub enum SessionError {
 impl Session {
     pub fn validate(&self) -> Result<(), SessionError> {
         if self.id.trim().is_empty() { return Err(SessionError::MissingId); }
+        if self.id.len() > 128 || !self.id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')) { return Err(SessionError::InvalidId); }
         if self.name.trim().is_empty() { return Err(SessionError::MissingName); }
         if self.host.trim().is_empty() { return Err(SessionError::MissingHost); }
         if self.username.trim().is_empty() { return Err(SessionError::MissingUsername); }
@@ -57,6 +60,13 @@ mod tests {
         assert!(s.validate().is_ok());
         s.host = "   ".into();
         assert_eq!(s.validate(), Err(SessionError::MissingHost));
+    }
+
+    #[test]
+    fn invalid_session_ids_cannot_create_unusable_vault_references() {
+        let mut s = valid();
+        s.id = "../other".into();
+        assert_eq!(s.validate(), Err(SessionError::InvalidId));
     }
 
     #[test]
