@@ -62,16 +62,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut received = Vec::new();
         while let Some(chunk) = output_rx.recv().await {
             if received.len() + chunk.len() > 256 * 1024 {
-                return Err("smoke output exceeded 256 KiB".into());
+                return Err::<(), Box<dyn Error>>("smoke output exceeded 256 KiB".into());
             }
             received.extend_from_slice(&chunk);
             if received.windows(b"OPENSHELL_NATIVE_SSH_SMOKE_OK".len())
                 .any(|segment| segment == b"OPENSHELL_NATIVE_SSH_SMOKE_OK")
             {
-                return Ok(());
+                return Ok::<(), Box<dyn Error>>(());
             }
         }
-        Err("SSH channel closed before smoke marker".into())
+        Err::<(), Box<dyn Error>>("SSH channel closed before smoke marker".into())
     }).await;
 
     // Closing the command channel causes an orderly PTY channel close.
@@ -79,10 +79,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if observed.is_err() {
         task.abort();
     }
-    let outcome = observed.map_err(|_| "timed out waiting for remote shell output")??;
+    observed.map_err(|_| "timed out waiting for remote shell output")??;
+    timeout(Duration::from_secs(5), task)
+        .await
+        .map_err(|_| "timed out waiting for SSH channel close")???;
     println!("SSH connection, pinned host key, PTY input/output and resize: OK");
-    let _ = outcome;
-    let _ = task.await?;
     connection.disconnect().await?;
     Ok(())
 }
