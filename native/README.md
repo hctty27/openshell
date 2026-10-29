@@ -29,12 +29,12 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - Bounded byte-oriented Russh/Tokio SSH channel, password authentication requiring previously verified SHA256 host fingerprint.
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
 - Read-only preview of legacy Wails sessions (including auth configuration and credential references). No automatic data migration or credential extraction.
-- Native SSH session metadata and explicit SHA256 host trust, Windows Credential Manager password storage, and a read-only saved-session sidebar.
+- Native SSH session metadata and explicit SHA256 host trust, Windows Credential Manager password storage, clickable saved-session sidebar, refresh and SSH disconnect / return-to-local controls.
 
 ## Not implemented yet
 
 - Production GPU cell painting, precise monospace glyph measurement, CJK/IME composition, full mouse reporting, selection, clipboard, and resize performance/accuracy. Basic input and local scrollback exist only as a prototype.
-- End-user session editor, known_hosts approval UI and system credential vault.
+- End-user session editor, host-key approval UI, public-key login and reconnect policy. The initial Windows credential vault and saved-session selection are implemented, but not independently tested through live GUI interactions.
 - Private-key/agent authentication, SSH reconnection, port forwarding and keepalive.
 - SFTP file browser/transfers, rz/sz and additional Windows shells/WSL integration.
 - AI provider tools and multi-session automation, conversation storage.
@@ -70,9 +70,10 @@ cargo run -p openshell-core --example sessionctl -- add server1 "My server" exam
 cargo run -p openshell-core --example sessionctl -- list
 cargo run -p openshell-core --example sessionctl -- trust server1 SHA256:YOUR-INDEPENDENTLY-VERIFIED-SERVER-FINGERPRINT
 cargo run -p openshell-core --example sessionctl -- password server1
-$env:OPENSHELL_SSH_SESSION_ID = "server1"
 cargo run -p openshell-native
-Remove-Item Env:OPENSHELL_SSH_SESSION_ID
+# Click "server1" in the Saved SSH sessions sidebar to connect.
+# Use "Disconnect SSH" to close the remote terminal.
+# Use "Back to local" to return to a local PowerShell terminal.
 ```
 
 The `trust` command asks for an explicit `TRUST` confirmation. Verify the
@@ -81,10 +82,20 @@ accepted: the Russh connection enforces the stored fingerprint. The `password`
 command reads input without terminal echo; no password is entered on a command
 line or stored in shell history.
 
-The GPUI sidebar lists saved sessions read-only. Selection and the session
-editor are not yet implemented; `OPENSHELL_SSH_SESSION_ID` is a temporary
-development-only selector. The SSH worker reads the stored credential **off
-the UI thread**. Do not use this prototype for production servers.
+The GPUI sidebar lists saved sessions with click-to-connect and a **Refresh list**
+button (useful after adding sessions from the CLI). The status toolbar shows
+remote connect/close/failure and provides **Disconnect SSH**; after disconnect
+select **Back to local** to return to ConPTY. Clicking another saved session
+starts a new terminal session and cancels GUI delivery from the previous session.
+The prior `OPENSHELL_SSH_SESSION_ID` environment variable remains available
+for development-only automated startup but is not required for normal preview
+selection.
+
+The saved-session editor and host-key approval UI are **not yet implemented**.
+The SSH worker reads saved credentials **off the UI thread**. There is no
+guarantee of disconnect responsiveness while the SSH handshake is in progress;
+live Windows GUI testing is still required. Do not use this prototype on
+production servers.
 
 Deleting a saved session from the development CLI also removes its Windows
 credential entry, but keeps host:port trust intact because multiple SSH user
@@ -122,7 +133,8 @@ the password or printing the remote command output.
 
 The normal startup path (variables absent) remains local PowerShell/ConPTY.
 Remote SSH currently has no interactive credential/host approval UI, key/agent
-login, saved session selection or reconnect controls. The Windows CI compiles
+login or automatic reconnect controls. Saved-session selection is available as
+an experimental click-to-connect sidebar. The Windows CI compiles
 the test example but cannot authenticate against your private server.
 
 ## Windows developer preview
