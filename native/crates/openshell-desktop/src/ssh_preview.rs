@@ -194,7 +194,7 @@ fn start_source(source: PreviewSource, size: TerminalSize) -> Result<SshPreview,
         })
         .map_err(|err| format!("failed to start SSH worker: {err}"))?;
 
-    Ok(Some(SshPreview { commands, output, status }))
+    Ok(SshPreview { commands, output, status })
 }
 
 #[cfg(test)]
