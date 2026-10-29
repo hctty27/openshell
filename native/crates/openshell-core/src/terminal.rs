@@ -2,8 +2,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use alacritty_terminal::{
     event::{Event, EventListener},
-    grid::Dimensions,
-    term::{cell::Flags, Config, RenderableContent, Term},
+    grid::{Dimensions, Scroll},
+    term::{cell::Flags, Config, RenderableContent, Term, TermMode},
     vte::ansi::{Color, Processor},
     term::color::Colors,
 };
@@ -146,6 +146,16 @@ impl TerminalEngine {
     }
 
     pub fn size(&self) -> TerminalSize { self.size }
+
+    /// Scroll the primary-screen history without disturbing the running PTY.
+    /// Alternate-screen programs require mouse/key reporting instead.
+    pub fn scroll_history(&mut self, lines: i32) {
+        if lines == 0 || self.term.mode().contains(TermMode::ALT_SCREEN) {
+            return;
+        }
+        self.term.scroll_display(Scroll::Delta(lines));
+    }
+
 
     /// Diagnostic text snapshot of the visible viewport. This is not a
     /// production cell renderer: colors, cursor and glyph metrics are omitted.
@@ -290,6 +300,19 @@ mod tests {
         let mut term = TerminalEngine::new(TerminalSize::new(80, 24));
         let replies = term.feed_pty_replies(b"\x1b[6n");
         assert!(replies.iter().any(|reply| reply.starts_with(b"\x1b[")));
+    }
+
+    #[test]
+    fn scrollback_can_reveal_old_lines() {
+        let mut terminal = TerminalEngine::new(TerminalSize::new(16, 3));
+        for row in 0..14 {
+            terminal.feed(format!("row {row}\r\n").as_bytes());
+        }
+        assert!(!terminal.visible_lines().join("\n").contains("row 0"));
+        terminal.scroll_history(100);
+        assert!(terminal.visible_lines().join("\n").contains("row 0"));
+        terminal.scroll_history(-100);
+        assert!(!terminal.visible_lines().join("\n").contains("row 0"));
     }
 
     #[test]
