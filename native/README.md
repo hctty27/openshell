@@ -50,6 +50,40 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 6. Make a read-only backup of the existing AppData/OpenShell/state.db before migrating data.
 7. Review licenses and provide dependency notices before distribution.
 
+## Opt-in SSH terminal smoke test (development only)
+
+The current GPUI terminal can now use the Russh transport instead of PowerShell
+**only when all explicit SSH test environment variables are present**. It is
+not the future SSH session editor and it never silently imports a stored password.
+
+On **PowerShell 7**, in a fresh terminal, use a disposable test account:
+
+```powershell
+$env:OPENSHELL_SSH_TEST_HOST = "test-server.example"
+$env:OPENSHELL_SSH_TEST_PORT = "22"
+$env:OPENSHELL_SSH_TEST_USER = "test-user"
+$env:OPENSHELL_SSH_TEST_FINGERPRINT = "SHA256:replace-with-independently-verified-fingerprint"
+$env:OPENSHELL_SSH_TEST_PASSWORD = Read-Host "Temporary test SSH password" -MaskInput
+cargo run -p openshell-native
+Remove-Item Env:OPENSHELL_SSH_TEST_PASSWORD
+```
+
+The fingerprint must be verified independently against the server administrator
+or local host public key. Do not derive trust from an unverified network lookup.
+The test password remains in the process environment, so this mode is **not
+suitable for routine use or production deployments**. Never include real
+credentials in shell history, files, bug reports, or CI logs.
+
+For a headless protocol check, run
+`cargo run -p openshell-core --example ssh_smoke` with the same variables.
+It exercises login, shell PTY, input, resize, and output without revealing
+the password or printing the remote command output.
+
+The normal startup path (variables absent) remains local PowerShell/ConPTY.
+Remote SSH currently has no interactive credential/host approval UI, key/agent
+login, saved session selection or reconnect controls. The Windows CI compiles
+the test example but cannot authenticate against your private server.
+
 ## Windows developer preview
 
 The native CI builds a **debug-only, unsigned** `openshell-native.exe` and uploads it
