@@ -1,5 +1,7 @@
 mod terminal_paint;
 mod clipboard_paste;
+mod session_editor;
+use session_editor::SessionDraft;
 use clipboard_paste::{encode_paste, needs_paste_confirmation, MAX_PASTE_BYTES};
 mod terminal_tab;
 mod split_view;
@@ -20,7 +22,7 @@ use gpui::{
     WindowOptions, Subscription, ScrollWheelEvent,
 };
 use openshell_core::{LocalShell, LocalTerminal, Session, SessionStore, SshTerminalCommand, TerminalEngine, TerminalSize};
-use openshell_core::native_paths::native_database_path;
+use openshell_core::native_paths::{native_database_path, ensure_native_data_directory};
 use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session};
 
 
@@ -46,6 +48,8 @@ struct Workspace {
     focus_handle: FocusHandle,
     saved_sessions: Vec<Session>,
     sessions_status: String,
+    session_editor: Option<SessionDraft>,
+    _session_save_task: Option<Task<()>>,
     _session_catalog_task: Task<()>,
 }
 
@@ -138,6 +142,8 @@ impl Workspace {
             focus_handle: cx.focus_handle(),
             saved_sessions: Vec::new(),
             sessions_status: "Loading saved sessions...".into(),
+            session_editor: None,
+            _session_save_task: None,
             _session_catalog_task: catalog_task,
         }
     }
@@ -178,6 +184,109 @@ impl Workspace {
                 cx.notify();
             });
         })
+    }
+
+    fn new_session(&mut self, cx: &mut Context<Self>) {
+        if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return; }
+        self.session_editor = Some(SessionDraft::new());
+        cx.notify();
+    }
+
+    fn edit_session(&mut self, session: Session, cx: &mut Context<Self>) {
+        if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return; }
+        self.session_editor = Some(SessionDraft::edit(&session));
+        cx.notify();
+    }
+
+    fn cancel_edit(&mut self, cx: &mut Context<Self>) {
+        if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return; }
+        self.session_editor = None;
+        cx.notify();
+    }
+
+    fn select_edit_field(&mut self, index: usize, cx: &mut Context<Self>) {
+        if let Some(draft) = &mut self.session_editor {
+            if !draft.saving { draft.select(index); cx.notify(); }
+        }
+    }
+
+    fn editor_keystroke(&mut self, key: &Keystroke, cx: &mut Context<Self>) -> bool {
+        if self.session_editor.is_none() { return false; }
+        if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return true; }
+        match key.key.as_str() {
+            "escape" => self.cancel_edit(cx),
+            "enter" => self.save_edit(cx),
+            "v" if key.modifiers.control => {
+                if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                    if let Some(draft) = &mut self.session_editor { draft.type_text(&text); }
+                    cx.notify();
+                }
+            }
+            _ => {
+                if let Some(draft) = &mut self.session_editor { draft.on_key(key); }
+                cx.notify();
+            }
+        }
+        true
+    }
+
+    fn save_edit(&mut self, cx: &mut Context<Self>) {
+        let Some(draft) = &self.session_editor else { return; };
+        if draft.saving { return; }
+        let id = if let Some(id) = draft.id.clone() {
+            id
+        } else {
+            match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                Ok(time) => format!("native-{:x}", time.as_nanos()),
+                Err(e) => {
+                    if let Some(draft) = &mut self.session_editor { draft.error = Some(e.to_string()); }
+                    cx.notify();
+                    return;
+                }
+            }
+        };
+        let session = match draft.session(id) {
+            Ok(session) => session,
+            Err(err) => {
+                if let Some(draft) = &mut self.session_editor { draft.error = Some(err); }
+                cx.notify();
+                return;
+            }
+        };
+        let existing = draft.id.is_some();
+        if let Some(draft) = &mut self.session_editor {
+            draft.error = None;
+            draft.saving = true;
+        }
+        cx.notify();
+        let work = cx.background_spawn(async move {
+            let dir = ensure_native_data_directory().map_err(|e| e.to_string())?;
+            let store = SessionStore::open(dir.join("native.db")).map_err(|e| e.to_string())?;
+            if existing {
+                store.save(&session).map_err(|e| e.to_string())?;
+            } else if !store.insert_if_absent(&session).map_err(|e| e.to_string())? {
+                return Err("Session ID collision; retry creating the session".to_owned());
+            }
+            Ok::<(), String>(())
+        });
+        self._session_save_task = Some(cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |view, cx| {
+                match result {
+                    Ok(()) => {
+                        view.session_editor = None;
+                        view.refresh_sessions(cx);
+                    }
+                    Err(error) => {
+                        if let Some(draft) = &mut view.session_editor {
+                            draft.saving = false;
+                            draft.error = Some(error);
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        }));
     }
 
     fn refresh_sessions(&mut self, cx: &mut Context<Self>) {
@@ -776,12 +885,48 @@ impl Render for Workspace {
         let tabs: Vec<_> = self.tabs.iter().map(|t| {
             (t.id, t.title.clone(), t.remote_phase, t.id == self.active_id)
         }).collect();
-        let sessions: Vec<_> = self.saved_sessions.iter().map(|session| {
-            (
-                session.id.clone(),
-                format!("{}\n{}@{}:{}", session.name, session.username, session.host, session.port),
-            )
-        }).collect();
+        let sessions = self.saved_sessions.clone();
+        let editor_view = if let Some(draft) = &self.session_editor {
+            let fields: Vec<_> = draft.fields().iter()
+                .map(|(label, value)| (label.to_string(), value.to_string()))
+                .collect();
+            let selected = draft.selected;
+            let heading = if draft.id.is_some() { "Edit session" } else { "New session" };
+            let prompt = draft.error.clone().unwrap_or_else(|| {
+                if draft.saving { "Saving metadata...".into() }
+                else { "Click a field, type; Tab to switch; Enter saves; Esc cancels".into() }
+            });
+            div()
+                .id("ssh-session-metadata-editor")
+                .p_2()
+                .rounded_md()
+                .bg(rgb(0x203248))
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(heading)
+                .children(fields.into_iter().enumerate().map(|(index, (label, value))| {
+                    div()
+                        .id(("ssh-session-editor-field", index))
+                        .cursor_pointer()
+                        .p_2()
+                        .rounded_md()
+                        .bg(rgb(if selected == index { 0x39536e } else { 0x172536 }))
+                        .child(format!("{label}: {value}"))
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            view.select_edit_field(index, cx);
+                            window.focus(&view.focus_handle(cx));
+                        }))
+                }))
+                .child(prompt)
+                .child(div().flex().gap_2()
+                    .child(div().id("ssh-session-save").cursor_pointer().p_2()
+                        .bg(rgb(0x2c654b)).child("Save")
+                        .on_click(cx.listener(|view, _, _, cx| view.save_edit(cx))))
+                    .child(div().id("ssh-session-cancel").cursor_pointer().p_2()
+                        .bg(rgb(0x643d3d)).child("Cancel")
+                        .on_click(cx.listener(|view, _, _, cx| view.cancel_edit(cx)))))
+        } else { div() };
         let sessions_status = self.sessions_status.clone();
         let close_prompt = self.pending_close.and_then(|id| {
             self.tabs.iter().find(|tab| tab.id == id)
@@ -1002,6 +1147,18 @@ impl Render for Workspace {
                             .gap_3()
                             .child("Saved SSH sessions")
                             .child(sessions_status)
+                            .child(div()
+                                .id("new-saved-session")
+                                .cursor_pointer()
+                                .p_2()
+                                .rounded_md()
+                                .bg(rgb(0x29435d))
+                                .child("+ New SSH session")
+                                .on_click(cx.listener(|view, _, window, cx| {
+                                    view.new_session(cx);
+                                    window.focus(&view.focus_handle(cx));
+                                })))
+                            .child(editor_view)
                             .child(
                                 div()
                                     .id("refresh-sessions")
@@ -1015,21 +1172,41 @@ impl Render for Workspace {
                                         view.refresh_sessions(cx);
                                     })),
                             )
-                            .children(sessions.into_iter().enumerate().map(
-                                |(index, (id, label))| {
-                                    div()
-                                        .id(("saved-ssh-session", index))
-                                        .p_2()
-                                        .rounded_md()
+                            .children(sessions.into_iter().enumerate().map(|(index, session)| {
+                                let id = session.id.clone();
+                                let editable = session.clone();
+                                let label = format!("{}
+{}@{}:{}",
+                                    session.name, session.username, session.host, session.port);
+                                div()
+                                    .id(("saved-ssh-session", index))
+                                    .p_2()
+                                    .rounded_md()
+                                    .bg(rgb(0x1d2633))
+                                    .text_size(px(12.0))
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(div()
+                                        .id(("saved-ssh-connect", index))
                                         .cursor_pointer()
-                                        .bg(rgb(0x1d2633))
-                                        .text_size(px(12.0))
+                                        .flex_1()
                                         .child(label)
                                         .on_click(cx.listener(move |view, _, window, cx| {
                                             view.add_ssh_tab(id.clone(), cx);
                                             window.focus(&view.focus_handle(cx));
-                                        }))
-                                },
+                                        })))
+                                    .child(div()
+                                        .id(("saved-ssh-edit", index))
+                                        .cursor_pointer()
+                                        .p_2()
+                                        .rounded_md()
+                                        .bg(rgb(0x29435d))
+                                        .child("Edit")
+                                        .on_click(cx.listener(move |view, _, window, cx| {
+                                            view.edit_session(editable.clone(), cx);
+                                            window.focus(&view.focus_handle(cx));
+                                        })))
                             )),
                     )
                     .child(
@@ -1041,6 +1218,7 @@ impl Render for Workspace {
                             .key_context("OpenShellTerminal")
                             .track_focus(&self.focus_handle)
                             .on_key_down(cx.listener(|view, event: &KeyDownEvent, _, cx| {
+                                if view.editor_keystroke(&event.keystroke, cx) { return; }
                                 if event.keystroke.modifiers.control {
                                     match event.keystroke.key.as_str() {
                                         "v" => { view.paste_from_clipboard(cx); return; }

@@ -31,13 +31,14 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
 - Read-only preview of legacy Wails sessions. An explicit `sessionctl import-legacy` command now creates a consistent SQLite snapshot and imports non-secret session metadata without overwriting existing native sessions; credentials and auth settings must still be configured separately.
 - Native SSH session metadata and explicit SHA256 host trust, Windows Credential Manager password storage, clickable saved-session sidebar and SSH connection lifecycle controls.
+- Create and edit session metadata directly in the GPUI sidebar; persistence runs off the UI thread. Password and host-key trust management remain CLI-only; session edits take effect on new SSH connections.
 - Concurrent terminal tabs: each owns its Alacritty grid/scrollback, ConPTY or SSH transport, background output task, status and cancellation. Clicking a saved server opens a new SSH tab rather than replacing another session.
 - Tab strip allows select/close, additional local PowerShell tabs, keyboard tab navigation and close confirmation for active running terminals. Closing the final tab creates a fresh local PowerShell.
 
 ## Not implemented yet
 
 - Production GPU cell painting, precise monospace glyph measurement, CJK/IME composition, full mouse reporting, mouse-based text selection/copy, and resize performance/accuracy. Basic keyboard clipboard paste and viewport copy are available, but arbitrary selection/copy is not.
-- End-user session editor, host-key approval UI, public-key login and reconnect policy. The initial Windows credential vault and saved-session selection are implemented, but not independently tested through live GUI interactions.
+- Complete session management (delete, group, duplicate), host-key approval UI, public-key login and reconnect policy. The initial Windows credential vault and saved-session selection are implemented, but not independently tested through live GUI interactions.
 - Private-key/agent authentication, automatic SSH reconnection/backoff, port forwarding and keepalive. Manual reconnect is available for saved sessions.
 - SFTP file browser/transfers, rz/sz and additional Windows shells/WSL integration.
 - AI provider tools and multi-session automation, conversation storage.
