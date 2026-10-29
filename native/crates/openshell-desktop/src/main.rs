@@ -7,6 +7,7 @@ use split_view::SplitView;
 use openshell_core::workspace::SplitAxis;
 mod ssh_preview;
 mod startup_diagnostics;
+mod direct3d_diagnostics;
 
 use gpui::prelude::*;
 use gpui::{
