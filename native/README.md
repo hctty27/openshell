@@ -29,6 +29,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - Bounded byte-oriented Russh/Tokio SSH channel, password authentication requiring previously verified SHA256 host fingerprint.
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
 - Read-only preview of legacy Wails sessions (including auth configuration and credential references). No automatic data migration or credential extraction.
+- Native SSH session metadata and explicit SHA256 host trust, Windows Credential Manager password storage, and a read-only saved-session sidebar.
 
 ## Not implemented yet
 
@@ -49,6 +50,46 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 5. Bound every async queue; do not run disk or SSH operations on the GPU frame thread.
 6. Make a read-only backup of the existing AppData/OpenShell/state.db before migrating data.
 7. Review licenses and provide dependency notices before distribution.
+
+## Saved SSH sessions and host verification (developer workflow)
+
+The new native runtime stores non-secret session metadata and explicitly
+approved SHA256 host-key fingerprints in a **separate** SQLite database:
+
+`%LOCALAPPDATA%\OpenShellNative2\native.db`
+
+SSH passwords use the **Windows Credential Manager**, under the service
+`OpenShell.Native2.SSH`. These secrets are not inserted into SQLite or
+recovered from the existing Wails credentials.
+
+With Rust installed, open PowerShell in the repository root:
+
+```powershell
+cd native
+cargo run -p openshell-core --example sessionctl -- add server1 "My server" example.org 22 root
+cargo run -p openshell-core --example sessionctl -- list
+cargo run -p openshell-core --example sessionctl -- trust server1 SHA256:YOUR-INDEPENDENTLY-VERIFIED-SERVER-FINGERPRINT
+cargo run -p openshell-core --example sessionctl -- password server1
+$env:OPENSHELL_SSH_SESSION_ID = "server1"
+cargo run -p openshell-native
+Remove-Item Env:OPENSHELL_SSH_SESSION_ID
+```
+
+The `trust` command asks for an explicit `TRUST` confirmation. Verify the
+fingerprint out-of-band first. A changed or unknown host key cannot be silently
+accepted: the Russh connection enforces the stored fingerprint. The `password`
+command reads input without terminal echo; no password is entered on a command
+line or stored in shell history.
+
+The GPUI sidebar lists saved sessions read-only. Selection and the session
+editor are not yet implemented; `OPENSHELL_SSH_SESSION_ID` is a temporary
+development-only selector. The SSH worker reads the stored credential **off
+the UI thread**. Do not use this prototype for production servers.
+
+Deleting a saved session from the development CLI also removes its Windows
+credential entry, but keeps host:port trust intact because multiple SSH user
+accounts can share a server. Trust revocation and UI confirmation are future
+features.
 
 ## Opt-in SSH terminal smoke test (development only)
 
