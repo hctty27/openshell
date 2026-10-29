@@ -29,7 +29,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - Windows system-clipboard paste using Ctrl+V, Ctrl+Shift+V, Shift+Insert or the Paste button; bracketed paste protocol is honored when enabled by the terminal application. Multiline/large paste requires a confirmation tied to the original terminal tab. Ctrl+Shift+C and Copy viewport copy **visible terminal text**, not a mouse selection. Clipboard escape controls and pasted content over 128 KiB are rejected.
 - Bounded byte-oriented Russh/Tokio SSH channel, password authentication requiring previously verified SHA256 host fingerprint.
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
-- Read-only preview of legacy Wails sessions (including auth configuration and credential references). No automatic data migration or credential extraction.
+- Read-only preview of legacy Wails sessions. An explicit `sessionctl import-legacy` command now creates a consistent SQLite snapshot and imports non-secret session metadata without overwriting existing native sessions; credentials and auth settings must still be configured separately.
 - Native SSH session metadata and explicit SHA256 host trust, Windows Credential Manager password storage, clickable saved-session sidebar and SSH connection lifecycle controls.
 - Concurrent terminal tabs: each owns its Alacritty grid/scrollback, ConPTY or SSH transport, background output task, status and cancellation. Clicking a saved server opens a new SSH tab rather than replacing another session.
 - Tab strip allows select/close, additional local PowerShell tabs, keyboard tab navigation and close confirmation for active running terminals. Closing the final tab creates a fresh local PowerShell.
@@ -41,7 +41,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - Private-key/agent authentication, automatic SSH reconnection/backoff, port forwarding and keepalive. Manual reconnect is available for saved sessions.
 - SFTP file browser/transfers, rz/sz and additional Windows shells/WSL integration.
 - AI provider tools and multi-session automation, conversation storage.
-- Nested split panes, draggable split divider, visual drag drop zones, saved tab restoration, Xshell import, i18n, themes and native installer. Initial tab reorder and two-pane drag-to-split prototypes exist.
+- Nested split panes, draggable split divider, visual drag drop zones, saved tab restoration, direct Xshell import, i18n, themes and native installer. Initial tab reorder and two-pane drag-to-split prototypes exist; Wails metadata migration is currently a CLI-only opt-in.
 - End-to-end Windows validation and verified performance comparisons.
 
 ## Non-negotiable migration principles
@@ -73,6 +73,8 @@ cargo run -p openshell-core --example sessionctl -- add server1 "My server" exam
 cargo run -p openshell-core --example sessionctl -- list
 cargo run -p openshell-core --example sessionctl -- trust server1 SHA256:YOUR-INDEPENDENTLY-VERIFIED-SERVER-FINGERPRINT
 cargo run -p openshell-core --example sessionctl -- password server1
+# Optional Wails migration (safe metadata-only import, no credentials):
+# cargo run -p openshell-core --example sessionctl -- import-legacy "$env:APPDATA\\OpenShell\\state.db"
 cargo run -p openshell-native
 # Click "server1" in the Saved SSH sessions sidebar to open a new SSH tab.
 # Click another server entry to open another independent SSH tab.

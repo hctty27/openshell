@@ -9,13 +9,15 @@
 //!   trust <id> <independently-verified-SHA256-fingerprint>
 //!   password <id>                   (interactive, no terminal echo)
 //!   delete <id>
+//!   import-legacy <absolute-path-to-Wails-state.db> (metadata only)
 //!
 //! This is not the production session manager UI.
 
-use std::{env, error::Error, io::{self, Write}, process};
+use std::{env, error::Error, io::{self, Write}, path::PathBuf, process, time::{SystemTime, UNIX_EPOCH}};
 
 use openshell_core::{
     CredentialVault, HostIdentity, HostTrustStore, Session, SessionStore,
+    import_legacy_sessions,
     native_paths::{ensure_native_data_directory, native_database_path},
 };
 use zeroize::Zeroizing;
@@ -29,7 +31,7 @@ fn session_by_id(store: &SessionStore, id: &str) -> Result<Session, Box<dyn Erro
 fn command() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() {
-        return Err("expected: list|add|trust|password|delete (use -- separator in cargo run)".into());
+        return Err("expected: list|add|trust|password|delete|import-legacy (use -- separator in cargo run)".into());
     }
     ensure_native_data_directory()?;
     let database = native_database_path()?;
@@ -94,6 +96,21 @@ fn command() -> Result<(), Box<dyn Error>> {
             CredentialVault::put(&session.id, &password)?;
             println!("Password stored in Windows Credential Manager.");
         }
+        "import-legacy" if args.len() == 2 => {
+            let source = PathBuf::from(&args[1]);
+            let backup_dir = ensure_native_data_directory()?.join("migration-backups");
+            std::fs::create_dir_all(&backup_dir)?;
+            let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+            let backup = backup_dir.join(format!("legacy-{stamp}-{}.db", process::id()));
+            let report = import_legacy_sessions(&source, &backup, &sessions)?;
+            println!(
+                "Legacy metadata import: {} added, {} existing, {} invalid.",
+                report.imported, report.existing, report.invalid,
+            );
+            println!("Read-only source preserved; SQLite snapshot: {}", report.backup_path.display());
+            println!("Passwords, key paths, agent configuration, groups and API tokens were NOT imported.");
+            println!("Set credentials and independently approve host keys in the native client.");
+        }
         "delete" if args.len() == 2 => {
             // Remove the credential *before* deleting its metadata, so failure
             // cannot orphan a secret through normal CLI operation.
@@ -107,7 +124,7 @@ fn command() -> Result<(), Box<dyn Error>> {
             // by deleting an individual account.
         }
         _ => {
-            return Err("usage: list | add <id> <name> <host> <port> <user> | trust <id> <SHA256:...> | password <id> | delete <id>".into());
+            return Err("usage: list | add <id> <name> <host> <port> <user> | trust <id> <SHA256:...> | password <id> | delete <id> | import-legacy <path-to-state.db>".into());
         }
     }
     Ok(())

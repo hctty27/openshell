@@ -3,6 +3,7 @@
 
 pub mod session;
 pub mod legacy;
+pub mod migration;
 pub mod local;
 pub mod ssh;
 pub mod host_trust;
@@ -14,6 +15,7 @@ pub mod workspace;
 
 pub use session::{Session, SessionError};
 pub use legacy::{LegacySession, preview_legacy_sessions};
+pub use migration::{import_legacy_sessions, ImportReport, ImportError};
 pub use local::{LocalShell, LocalTerminal};
 pub use store::SessionStore;
 pub use credentials::{CredentialVault, CredentialError};

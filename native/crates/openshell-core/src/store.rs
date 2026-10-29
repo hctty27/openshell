@@ -44,6 +44,21 @@ impl SessionStore {
         Ok(())
     }
 
+    /// Insert imported metadata without changing an existing native session
+    /// or its credential reference. No implicit upsert during migration.
+    pub fn insert_if_absent(&self, session: &Session) -> DbResult<bool> {
+        session.validate().map_err(|error| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(error))
+        })?;
+        let changed = self.connection.execute(
+            "INSERT INTO native_sessions (id, name, host, port, username)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(id) DO NOTHING",
+            params![session.id, session.name, session.host, session.port, session.username],
+        )?;
+        Ok(changed == 1)
+    }
+
     pub fn list(&self) -> DbResult<Vec<Session>> {
         let mut statement = self.connection.prepare(
             "SELECT id, name, host, port, username
@@ -73,6 +88,22 @@ impl SessionStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imported_sessions_never_overwrite_existing_metadata() {
+        let store = SessionStore::open(":memory:").unwrap();
+        let original = Session {
+            id: "same".into(), name: "Current".into(),
+            host: "current.example".into(), port: 2222, username: "admin".into(),
+        };
+        let imported = Session {
+            id: "same".into(), name: "Legacy".into(),
+            host: "old.example".into(), port: 22, username: "root".into(),
+        };
+        store.save(&original).unwrap();
+        assert!(!store.insert_if_absent(&imported).unwrap());
+        assert_eq!(store.list().unwrap(), vec![original]);
+    }
 
     #[test]
     fn saves_lists_and_deletes_sessions() {
