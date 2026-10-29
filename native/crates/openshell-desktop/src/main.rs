@@ -1207,7 +1207,7 @@ impl Render for Workspace {
                                             view.edit_session(editable.clone(), cx);
                                             window.focus(&view.focus_handle(cx));
                                         })))
-                            )),
+                            })),
                     )
                     .child(
                         div()
