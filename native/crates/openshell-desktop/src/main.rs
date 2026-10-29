@@ -6,7 +6,8 @@ use gpui::{
     IntoElement, KeyDownEvent, Keystroke, Render, Task, Window, WindowBounds,
     WindowOptions, HighlightStyle, StyledText, FontWeight, Subscription, ScrollWheelEvent,
 };
-use openshell_core::{LocalShell, LocalTerminal, SshTerminalCommand, TerminalEngine, TerminalSize};
+use openshell_core::{LocalShell, LocalTerminal, Session, SessionStore, SshTerminalCommand, TerminalEngine, TerminalSize};
+use openshell_core::native_paths::native_database_path;
 use ssh_preview::{PreviewStatus, start_from_environment};
 use tokio::sync::mpsc;
 use openshell_core::terminal::RenderCell;
@@ -89,6 +90,9 @@ struct Workspace {
     focus_handle: FocusHandle,
     status: String,
     scroll_remainder: f32,
+    saved_sessions: Vec<Session>,
+    sessions_status: String,
+    _session_catalog_task: Task<()>,
 }
 
 fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
@@ -141,6 +145,33 @@ impl Workspace {
         let subscription = cx.observe_window_bounds(window, |view, window, cx| {
             let viewport = window.viewport_size();
             view.resize_to_viewport(f32::from(viewport.width), f32::from(viewport.height), cx);
+        });
+        let catalog_load = cx.background_spawn(async {
+            let database = native_database_path().map_err(|err| err.to_string())?;
+            if !database.exists() {
+                return Ok::<Vec<Session>, String>(Vec::new());
+            }
+            let store = SessionStore::open(database).map_err(|err| err.to_string())?;
+            store.list().map_err(|err| err.to_string())
+        });
+        let catalog_task = cx.spawn(async move |this, cx| {
+            let result = catalog_load.await;
+            let _ = this.update(cx, |view, cx| {
+                match result {
+                    Ok(sessions) => {
+                        view.sessions_status = if sessions.is_empty() {
+                            "No saved sessions".into()
+                        } else {
+                            format!("{} saved sessions", sessions.len())
+                        };
+                        view.saved_sessions = sessions;
+                    }
+                    Err(error) => {
+                        view.sessions_status = format!("Session list unavailable: {error}");
+                    }
+                }
+                cx.notify();
+            });
         });
         let (startup, initial_status, remote_mode) = match start_from_environment(size) {
             Ok(Some(mut remote)) => {
@@ -292,6 +323,9 @@ impl Workspace {
             focus_handle: cx.focus_handle(),
             status: initial_status,
             scroll_remainder: 0.0,
+            saved_sessions: Vec::new(),
+            sessions_status: "Loading saved sessions...".into(),
+            _session_catalog_task: catalog_task,
         }
     }
 
@@ -324,6 +358,10 @@ impl Focusable for Workspace {
 impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let rows = self.terminal.render_cells();
+        let session_rows: Vec<String> = self.saved_sessions.iter().map(|session| {
+            format!("{}\n{}@{}:{}", session.name, session.username, session.host, session.port)
+        }).collect();
+        let sessions_status = self.sessions_status.clone();
 
         div()
             .size_full()
@@ -349,7 +387,20 @@ impl Render for Workspace {
                             .w(px(244.0))
                             .p_4()
                             .bg(rgb(0x121822))
-                            .child("SSH Sessions (coming later)"),
+                            .flex()
+                            .flex_col()
+                            .gap_3()
+                            .child("Saved SSH sessions · read-only")
+                            .child(sessions_status)
+                            .children(session_rows.into_iter().enumerate().map(|(i, label)| {
+                                div()
+                                    .id(("session-row", i))
+                                    .p_2()
+                                    .rounded_md()
+                                    .bg(rgb(0x1d2633))
+                                    .text_size(px(12.0))
+                                    .child(label)
+                            })),
                     )
                     .child(
                         div()
