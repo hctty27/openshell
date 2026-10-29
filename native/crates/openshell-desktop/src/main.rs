@@ -172,10 +172,20 @@ impl Drop for TerminalTab {
     }
 }
 
+/// Pure tab navigation for Ctrl+Tab, including wrap-around.
+fn cycle_id(ids: &[u64], active: u64, direction: i32) -> Option<u64> {
+    if ids.is_empty() { return None; }
+    let current = ids.iter().position(|id| *id == active).unwrap_or(0);
+    let count = ids.len() as i32;
+    let next = (current as i32 + direction).rem_euclid(count) as usize;
+    Some(ids[next])
+}
+
 struct Workspace {
     tabs: Vec<TerminalTab>,
     active_id: u64,
     next_tab_id: u64,
+    pending_close: Option<u64>,
     _resize_subscription: Subscription,
     focus_handle: FocusHandle,
     saved_sessions: Vec<Session>,
@@ -263,6 +273,7 @@ impl Workspace {
             tabs: vec![initial],
             active_id: initial_id,
             next_tab_id: initial_id + 1,
+            pending_close: None,
             _resize_subscription: subscription,
             focus_handle: cx.focus_handle(),
             saved_sessions: Vec::new(),
@@ -504,9 +515,41 @@ impl Workspace {
         }
     }
 
+    fn cycle_active_tab(&mut self, direction: i32, cx: &mut Context<Self>) {
+        let ids: Vec<_> = self.tabs.iter().map(|tab| tab.id).collect();
+        if let Some(next) = cycle_id(&ids, self.active_id, direction) {
+            self.activate_tab(next, cx);
+        }
+    }
+
+    fn request_close_tab(&mut self, id: u64, cx: &mut Context<Self>) {
+        let Some(tab) = self.tabs.iter().find(|tab| tab.id == id) else { return; };
+        let connected = tab.local.is_some()
+            || matches!(tab.remote_phase,
+                RemotePhase::Connecting | RemotePhase::Connected | RemotePhase::Disconnecting);
+        if connected {
+            self.pending_close = Some(id);
+            cx.notify();
+        } else {
+            self.close_tab(id, cx);
+        }
+    }
+
+    fn confirm_close_tab(&mut self, cx: &mut Context<Self>) {
+        if let Some(id) = self.pending_close.take() {
+            self.close_tab(id, cx);
+        }
+    }
+
+    fn cancel_close_tab(&mut self, cx: &mut Context<Self>) {
+        self.pending_close = None;
+        cx.notify();
+    }
+
     fn close_tab(&mut self, id: u64, cx: &mut Context<Self>) {
         let Some(index) = self.tabs.iter().position(|tab| tab.id == id) else { return; };
         let size = self.tabs[index].terminal.size();
+        if self.pending_close == Some(id) { self.pending_close = None; }
         let removed = self.tabs.remove(index);
         drop(removed);
         if self.tabs.is_empty() {
@@ -645,6 +688,10 @@ impl Render for Workspace {
             )
         }).collect();
         let sessions_status = self.sessions_status.clone();
+        let close_prompt = self.pending_close.and_then(|id| {
+            self.tabs.iter().find(|tab| tab.id == id)
+                .map(|tab| tab.title.clone())
+        });
 
         div()
             .size_full()
@@ -659,7 +706,44 @@ impl Render for Workspace {
                     .flex()
                     .items_center()
                     .bg(rgb(0x161c25))
-                    .child("OpenShell Native 2.0 · Multi-tab prototype"),
+                    .child(if let Some(label) = close_prompt {
+                        div()
+                            .id("pending-close-banner")
+                            .flex()
+                            .items_center()
+                            .gap_3()
+                            .child(format!("Close connected terminal '{label}'?"))
+                            .child(
+                                div()
+                                    .id("confirm-close-terminal")
+                                    .px_3()
+                                    .py_1()
+                                    .rounded_md()
+                                    .bg(rgb(0x7b3434))
+                                    .cursor_pointer()
+                                    .child("Close connection")
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.confirm_close_tab(cx);
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .id("cancel-close-terminal")
+                                    .px_3()
+                                    .py_1()
+                                    .rounded_md()
+                                    .bg(rgb(0x29435d))
+                                    .cursor_pointer()
+                                    .child("Cancel")
+                                    .on_click(cx.listener(|view, _, _, cx| {
+                                        view.cancel_close_tab(cx);
+                                    })),
+                            )
+                    } else {
+                        div()
+                            .id("normal-window-title")
+                            .child("OpenShell Native 2.0 · Multi-tab prototype")
+                    }),
             )
             .child(
                 div()
@@ -707,7 +791,7 @@ impl Render for Workspace {
                                         .text_size(px(12.0))
                                         .child("×")
                                         .on_click(cx.listener(move |view, _, _, cx| {
-                                            view.close_tab(id, cx);
+                                            view.request_close_tab(id, cx);
                                         })),
                                 )
                         },
@@ -777,6 +861,22 @@ impl Render for Workspace {
                             .key_context("OpenShellTerminal")
                             .track_focus(&self.focus_handle)
                             .on_key_down(cx.listener(|view, event: &KeyDownEvent, _, cx| {
+                                if event.keystroke.modifiers.control {
+                                    match event.keystroke.key.as_str() {
+                                        "tab" => {
+                                            let direction = if event.keystroke.modifiers.shift { -1 } else { 1 };
+                                            view.cycle_active_tab(direction, cx);
+                                            return;
+                                        }
+                                        "w" => {
+                                            let id = view.active_id;
+                                            view.request_close_tab(id, cx);
+                                            return;
+                                        }
+                                        "t" => { view.add_local_tab(cx); return; }
+                                        _ => {}
+                                    }
+                                }
                                 if event.keystroke.modifiers.shift
                                     && !view.active_tab().terminal.in_alternate_screen()
                                 {
@@ -880,6 +980,26 @@ mod tests {
         assert_eq!(remote_button_label(RemotePhase::Disconnecting, true), "Force cancel");
         assert_eq!(remote_button_label(RemotePhase::Disconnected, true), "Reconnect SSH");
         assert_eq!(remote_button_label(RemotePhase::Disconnected, false), "SSH disconnected");
+    }
+
+    #[test]
+    fn tabs_cycle_both_ways_without_touching_other_terminal_state() {
+        assert_eq!(cycle_id(&[2, 4, 6], 4, 1), Some(6));
+        assert_eq!(cycle_id(&[2, 4, 6], 6, 1), Some(2));
+        assert_eq!(cycle_id(&[2, 4, 6], 2, -1), Some(6));
+        assert_eq!(cycle_id(&[], 1, 1), None);
+    }
+
+    #[test]
+    fn multiple_terminal_tabs_have_independent_alacritty_buffers() {
+        let size = TerminalSize::new(30, 5);
+        let mut first = TerminalTab::local(1, size);
+        let mut second = TerminalTab::local(2, size);
+        first.terminal.feed(b"FIRST");
+        second.terminal.feed(b"SECOND");
+        assert_eq!(first.terminal.visible_lines()[0], "FIRST");
+        assert_eq!(second.terminal.visible_lines()[0], "SECOND");
+        assert_ne!(first.id, second.id);
     }
 
     #[test]
