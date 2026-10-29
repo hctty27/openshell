@@ -1,7 +1,10 @@
 mod terminal_paint;
 mod terminal_tab;
+mod split_view;
 use terminal_paint::*;
 use terminal_tab::{TerminalTab, RemotePhase, remote_button_label};
+use split_view::SplitView;
+use openshell_core::workspace::SplitAxis;
 mod ssh_preview;
 
 use gpui::prelude::*;
@@ -31,6 +34,9 @@ struct Workspace {
     active_id: u64,
     next_tab_id: u64,
     pending_close: Option<u64>,
+    split: Option<SplitView>,
+    viewport_width: f32,
+    viewport_height: f32,
     _resize_subscription: Subscription,
     focus_handle: FocusHandle,
     saved_sessions: Vec<Session>,
@@ -119,6 +125,9 @@ impl Workspace {
             active_id: initial_id,
             next_tab_id: initial_id + 1,
             pending_close: None,
+            split: None,
+            viewport_width: f32::from(viewport.width),
+            viewport_height: f32::from(viewport.height),
             _resize_subscription: subscription,
             focus_handle: cx.focus_handle(),
             saved_sessions: Vec::new(),
@@ -206,7 +215,7 @@ impl Workspace {
                                         }
                                     }
                                 }
-                                if view.active_id == id { cx.notify(); }
+                                if view.is_visible_tab(id) { cx.notify(); }
                             }
                         }).is_err() { break; }
                     }
@@ -238,7 +247,7 @@ impl Workspace {
                 if let Some(tab) = view.tab_mut(id) {
                     tab.remote_commands = Some(commands);
                     tab.remote_cancel = Some(cancel);
-                    if view.active_id == id { cx.notify(); }
+                    if view.is_visible_tab(id) { cx.notify(); }
                 }
             }).is_err() { return; }
 
@@ -261,7 +270,7 @@ impl Workspace {
                                             let _ = tx.try_send(SshTerminalCommand::Input(reply));
                                         }
                                     }
-                                    if view.active_id == id { cx.notify(); }
+                                    if view.is_visible_tab(id) { cx.notify(); }
                                 }
                             }).is_err() { break; }
                         }
@@ -326,16 +335,18 @@ impl Workspace {
     fn add_local_tab(&mut self, cx: &mut Context<Self>) {
         let id = self.next_tab_id;
         self.next_tab_id += 1;
-        let size = self.active_tab().terminal.size();
+        let size = terminal_size_for_viewport(self.viewport_width, self.viewport_height);
         let mut tab = TerminalTab::local(id, size);
         tab.task = Some(Self::spawn_local(id, size, cx));
         self.tabs.push(tab);
         self.active_id = id;
+        self.split = None;
+        self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
         cx.notify();
     }
 
     fn add_ssh_tab(&mut self, session_id: String, cx: &mut Context<Self>) {
-        let size = self.active_tab().terminal.size();
+        let size = terminal_size_for_viewport(self.viewport_width, self.viewport_height);
         match start_saved_session(session_id.clone(), size) {
             Ok(remote) => {
                 let id = self.next_tab_id;
@@ -347,6 +358,8 @@ impl Workspace {
                 tab.task = Some(Self::spawn_remote(id, remote, cx));
                 self.tabs.push(tab);
                 self.active_id = id;
+                self.split = None;
+                self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
             }
             Err(err) => self.active_tab_mut().status = format!("SSH start failed: {err}"),
         }
@@ -356,6 +369,10 @@ impl Workspace {
     fn activate_tab(&mut self, id: u64, cx: &mut Context<Self>) {
         if self.tabs.iter().any(|tab| tab.id == id) {
             self.active_id = id;
+            if self.split.is_some_and(|split| !split.contains(id)) {
+                self.split = None;
+            }
+            self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
             cx.notify();
         }
     }
@@ -395,6 +412,9 @@ impl Workspace {
         let Some(index) = self.tabs.iter().position(|tab| tab.id == id) else { return; };
         let size = self.tabs[index].terminal.size();
         if self.pending_close == Some(id) { self.pending_close = None; }
+        if self.split.is_some_and(|split| split.contains(id)) {
+            self.split = None;
+        }
         let removed = self.tabs.remove(index);
         drop(removed);
         if self.tabs.is_empty() {
@@ -409,6 +429,7 @@ impl Workspace {
         } else if self.active_id == id {
             self.active_id = self.tabs[index.min(self.tabs.len() - 1)].id;
         }
+        self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
         cx.notify();
     }
 
@@ -462,10 +483,45 @@ impl Workspace {
         }
     }
 
+    fn visible_tab_ids(&self) -> Vec<u64> {
+        if let Some(split) = self.split {
+            split.ids().to_vec()
+        } else {
+            vec![self.active_id]
+        }
+    }
+
+    fn is_visible_tab(&self, id: u64) -> bool {
+        self.active_id == id || self.split.is_some_and(|split| split.contains(id))
+    }
+
+    fn split_with(&mut self, second_id: u64, axis: SplitAxis, cx: &mut Context<Self>) {
+        if !self.tabs.iter().any(|tab| tab.id == second_id) { return; }
+        if let Some(split) = SplitView::new(self.active_id, second_id, axis) {
+            self.split = Some(split);
+            self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
+            cx.notify();
+        }
+    }
+
+    fn clear_split(&mut self, cx: &mut Context<Self>) {
+        if self.split.take().is_some() {
+            self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
+            cx.notify();
+        }
+    }
+
     fn resize_to_viewport(&mut self, width: f32, height: f32, cx: &mut Context<Self>) {
-        let size = terminal_size_for_viewport(width, height);
+        self.viewport_width = width;
+        self.viewport_height = height;
+        let full_size = terminal_size_for_viewport(width, height);
+        let split_size = self.split.map(|split| terminal_size_for_split(width, height, split.axis));
         let mut changed = false;
         for tab in &mut self.tabs {
+            let size = match (self.split, split_size) {
+                (Some(split), Some(half)) if split.contains(tab.id) => half,
+                _ => full_size,
+            };
             if tab.terminal.size() == size { continue; }
             tab.terminal.resize(size);
             if let Some(local) = &tab.local {
