@@ -23,6 +23,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - Alacritty terminal parser with partial-sequence state maintained across writes.
 - Bounded byte-oriented Russh/Tokio SSH channel, password authentication requiring previously verified SHA256 host fingerprint.
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
+- Read-only preview of legacy Wails sessions (including auth configuration and credential references). No automatic data migration or credential extraction.
 
 ## Not implemented yet
 
