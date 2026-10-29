@@ -6,9 +6,12 @@ pub mod legacy;
 pub mod ssh;
 pub mod store;
 pub mod terminal;
+pub mod workspace;
 
 pub use session::{Session, SessionError};
 pub use legacy::{LegacySession, preview_legacy_sessions};
 pub use store::SessionStore;
 pub use ssh::{SshConnection, SshError, SshTerminal};
 pub use terminal::{TerminalEngine, TerminalSize};
+
+pub use workspace::{Split, SplitAxis, Tab, Workspace, WorkspaceError};
