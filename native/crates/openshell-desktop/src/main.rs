@@ -15,9 +15,11 @@ struct Workspace {
 }
 
 fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
-    if key.is_ime_in_progress() || key.modifiers.platform {
+    if key.modifiers.platform {
         return None;
     }
+    // GPUI reports key_char=None for nonprintable keys. Such keys must
+    // be processed before checking IME composition state.
     if key.modifiers.control {
         let character = key.key.as_bytes();
         if character.len() == 1 && character[0].is_ascii_alphabetic() {
@@ -25,27 +27,34 @@ fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
         }
         return None;
     }
-    let escape = match key.key.as_str() {
-        "enter" => "\r",
-        "backspace" => "\x7f",
-        "tab" => "\t",
-        "escape" => "\x1b",
-        "up" => "\x1b[A",
-        "down" => "\x1b[B",
-        "right" => "\x1b[C",
-        "left" => "\x1b[D",
-        "home" => "\x1b[H",
-        "end" => "\x1b[F",
-        "delete" => "\x1b[3~",
-        _ => {
-            let character = key.key_char.as_ref()?;
-            if key.modifiers.alt {
-                return Some([b"\x1b".as_slice(), character.as_bytes()].concat());
-            }
-            return Some(character.as_bytes().to_vec());
-        }
+    let control_sequence: Option<&str> = match key.key.as_str() {
+        "enter" => Some("\r"),
+        "backspace" => Some("\x7f"),
+        "tab" => Some("\t"),
+        "escape" => Some("\x1b"),
+        "up" => Some("\x1b[A"),
+        "down" => Some("\x1b[B"),
+        "right" => Some("\x1b[C"),
+        "left" => Some("\x1b[D"),
+        "home" => Some("\x1b[H"),
+        "end" => Some("\x1b[F"),
+        "delete" => Some("\x1b[3~"),
+        "pageup" => Some("\x1b[5~"),
+        "pagedown" => Some("\x1b[6~"),
+        _ => None,
     };
-    Some(escape.as_bytes().to_vec())
+    if let Some(sequence) = control_sequence {
+        return Some(sequence.as_bytes().to_vec());
+    }
+    if key.is_ime_in_progress() {
+        return None;
+    }
+    let character = key.key_char.as_ref()?;
+    let bytes = character.as_bytes();
+    if key.modifiers.alt {
+        return Some([b"\x1b".as_slice(), bytes].concat());
+    }
+    Some(bytes.to_vec())
 }
 
 impl Workspace {
@@ -214,5 +223,9 @@ mod tests {
 
         let ctrl_c = Keystroke { key: "c".into(), key_char: None, modifiers: Modifiers::control() };
         assert_eq!(terminal_key_bytes(&ctrl_c), Some(vec![3]));
+        let plain = Keystroke { key: "a".into(), key_char: Some("a".into()), modifiers: Modifiers::none() };
+        assert_eq!(terminal_key_bytes(&plain), Some(vec![b'a']));
+        let arrow = Keystroke { key: "up".into(), key_char: None, modifiers: Modifiers::none() };
+        assert_eq!(terminal_key_bytes(&arrow), Some(b"\x1b[A".to_vec()));
     }
 }
