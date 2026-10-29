@@ -50,6 +50,14 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 6. Make a read-only backup of the existing AppData/OpenShell/state.db before migrating data.
 7. Review licenses and provide dependency notices before distribution.
 
+## Windows developer preview
+
+The native CI builds a **debug-only, unsigned** `openshell-native.exe` and uploads it
+as the short-lived `openshell-native-unsigned-debug-windows-x64` GitHub Actions artifact.
+This is for manual keyboard, resize and ConPTY smoke tests only. It is not an
+installer, a release candidate, or a performance benchmark build.
+Only test it on a development machine and do not overwrite the stable Wails app.
+
 ## Release gates
 
 Compare with the current release on an identical Windows machine and server: cold start, idle and 10-tab memory, streamed-log throughput, p95 keyboard latency, split/tab switch frame time, SFTP large-file and 10,000-entry directory behavior. No untested speed claims.
