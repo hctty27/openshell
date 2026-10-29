@@ -43,7 +43,7 @@ pub(super) fn styled_terminal_line(cells: &[RenderCell]) -> StyledText {
 
 // Temporary viewport metrics for the diagnostic text renderer.
 // The final renderer must derive cell dimensions from shaped glyph metrics.
-pub(super) const SIDEBAR_WIDTH: f32 = 244.0;
+pub(super) const SIDEBAR_WIDTH: f32 = 300.0;
 pub(super) const TITLEBAR_HEIGHT: f32 = 46.0;
 pub(super) const TABBAR_HEIGHT: f32 = 36.0;
 pub(super) const TOOLBAR_HEIGHT: f32 = 40.0;

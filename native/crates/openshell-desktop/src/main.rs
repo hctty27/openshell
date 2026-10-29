@@ -1244,6 +1244,7 @@ impl Render for Workspace {
                             .bg(rgb(0x121822))
                             .flex()
                             .flex_col()
+                            .overflow_y_scroll()
                             .gap_3()
                             .child("Saved SSH sessions")
                             .child(sessions_status)
