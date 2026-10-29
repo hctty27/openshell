@@ -3,7 +3,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use alacritty_terminal::{
     event::{Event, EventListener},
     grid::Dimensions,
-    term::{Config, RenderableContent, Term},
+    term::{cell::Flags, Config, RenderableContent, Term},
     vte::ansi::Processor,
 };
 
@@ -76,6 +76,29 @@ impl TerminalEngine {
 
     pub fn size(&self) -> TerminalSize { self.size }
 
+    /// Diagnostic text snapshot of the visible viewport. This is not a
+    /// production cell renderer: colors, cursor and glyph metrics are omitted.
+    pub fn visible_lines(&self) -> Vec<String> {
+        let content = self.term.renderable_content();
+        let mut rows = vec![vec![' '; self.size.columns]; self.size.rows];
+        let offset = content.display_offset as i32;
+        for indexed in content.display_iter {
+            let line = indexed.point.line.0 + offset;
+            let col = indexed.point.column.0;
+            if line < 0 || line as usize >= self.size.rows || col >= self.size.columns {
+                continue;
+            }
+            let cell = indexed.cell;
+            let spacer = cell.flags.intersects(
+                Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER,
+            );
+            rows[line as usize][col] = if spacer { ' ' } else { cell.c };
+        }
+        rows.into_iter()
+            .map(|row| row.into_iter().collect::<String>().trim_end().to_owned())
+            .collect()
+    }
+
     pub fn renderable_content(&self) -> RenderableContent<'_> {
         self.term.renderable_content()
     }
@@ -95,6 +118,25 @@ mod tests {
         terminal.feed(b"\x1b[31");
         terminal.feed(b"mhello\x1b[0m");
         assert_eq!(terminal.size(), TerminalSize::new(80, 24));
+    }
+
+    #[test]
+    fn renders_output_across_stream_boundaries() {
+        let mut terminal = TerminalEngine::new(TerminalSize::new(24, 4));
+        terminal.feed(b"hello\r\n\x1b[32");
+        terminal.feed(b"mworld\x1b[0m");
+        let lines = terminal.visible_lines();
+        assert_eq!(lines[0], "hello");
+        assert_eq!(lines[1], "world");
+        assert_eq!(lines.len(), 4);
+    }
+
+    #[test]
+    fn snapshot_does_not_consume_terminal_history() {
+        let mut terminal = TerminalEngine::new(TerminalSize::new(12, 3));
+        terminal.feed(b"abc");
+        assert_eq!(terminal.visible_lines()[0], "abc");
+        assert_eq!(terminal.visible_lines()[0], "abc");
     }
 
     #[test]
