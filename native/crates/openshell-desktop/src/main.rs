@@ -506,10 +506,18 @@ impl Workspace {
 
     fn close_tab(&mut self, id: u64, cx: &mut Context<Self>) {
         let Some(index) = self.tabs.iter().position(|tab| tab.id == id) else { return; };
+        let size = self.tabs[index].terminal.size();
         let removed = self.tabs.remove(index);
         drop(removed);
         if self.tabs.is_empty() {
-            self.add_local_tab(cx);
+            // add_local_tab assumes an active tab; initialize the last-tab
+            // fallback directly so closing the final tab cannot panic.
+            let new_id = self.next_tab_id;
+            self.next_tab_id += 1;
+            let mut tab = TerminalTab::local(new_id, size);
+            tab.task = Some(Self::spawn_local(new_id, size, cx));
+            self.tabs.push(tab);
+            self.active_id = new_id;
         } else if self.active_id == id {
             self.active_id = self.tabs[index.min(self.tabs.len() - 1)].id;
         }
