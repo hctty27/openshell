@@ -1,9 +1,11 @@
 mod terminal_paint;
 mod terminal_tab;
 mod split_view;
+mod tab_drag;
 use terminal_paint::*;
 use terminal_tab::{TerminalTab, RemotePhase, remote_button_label};
 use split_view::SplitView;
+use tab_drag::{TerminalTabDrag, drop_edge, reordered_tab_ids};
 use openshell_core::workspace::SplitAxis;
 mod ssh_preview;
 mod startup_diagnostics;
@@ -506,6 +508,53 @@ impl Workspace {
         }
     }
 
+    /// Dragging one existing tab onto another's title changes order only.
+    /// Session resources move with their TerminalTab; no PTY/SSH restart.
+    fn reorder_tabs(&mut self, source_id: u64, target_id: u64, cx: &mut Context<Self>) {
+        let ids: Vec<u64> = self.tabs.iter().map(|tab| tab.id).collect();
+        if reordered_tab_ids(&ids, source_id, target_id).is_none() { return; }
+        let Some(from) = self.tabs.iter().position(|tab| tab.id == source_id) else { return; };
+        let moved = self.tabs.remove(from);
+        let Some(to) = self.tabs.iter().position(|tab| tab.id == target_id) else {
+            self.tabs.insert(from, moved);
+            return;
+        };
+        self.tabs.insert(to, moved);
+        cx.notify();
+    }
+
+    /// Dragging a tab into a terminal pane links the two *existing* tabs.
+    /// Drop near top/bottom for stacked panes or center for left/right.
+    fn drop_tab_into_pane(
+        &mut self,
+        dragged_id: u64,
+        target_id: u64,
+        pointer_x: f32,
+        pointer_y: f32,
+        cx: &mut Context<Self>,
+    ) {
+        if dragged_id == target_id
+            || !self.tabs.iter().any(|tab| tab.id == dragged_id)
+            || !self.tabs.iter().any(|tab| tab.id == target_id)
+        {
+            return;
+        }
+        let edge = drop_edge(
+            pointer_x, pointer_y,
+            self.viewport_width, self.viewport_height,
+            SIDEBAR_WIDTH, TITLEBAR_HEIGHT + TABBAR_HEIGHT,
+        );
+        let (first, second) = if edge.place_before() {
+            (dragged_id, target_id)
+        } else {
+            (target_id, dragged_id)
+        };
+        self.split = SplitView::new(first, second, edge.axis());
+        self.active_id = dragged_id;
+        self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
+        cx.notify();
+    }
+
     fn clear_split(&mut self, cx: &mut Context<Self>) {
         if self.split.take().is_some() {
             self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
@@ -598,6 +647,14 @@ impl Workspace {
             .flex()
             .flex_col()
             .bg(rgb(if selected { 0x101823 } else { 0x090d12 }))
+            .on_drop(cx.listener(move |view, dragged: &TerminalTabDrag, window, cx| {
+                let pointer = window.mouse_position();
+                view.drop_tab_into_pane(
+                    dragged.tab_id, pane_id,
+                    f32::from(pointer.x), f32::from(pointer.y), cx,
+                );
+                window.focus(&view.focus_handle(cx));
+            }))
             .on_scroll_wheel(cx.listener(move |view, event: &ScrollWheelEvent, _, cx| {
                 let pixels = f32::from(event.delta.pixel_delta(px(CELL_HEIGHT)).y);
                 let Some(tab) = view.tab_mut(pane_id) else { return };
@@ -729,7 +786,7 @@ impl Render for Workspace {
                     } else {
                         div()
                             .id("normal-window-title")
-                            .child("OpenShell Native 2.0 · Split terminal prototype")
+                            .child("OpenShell Native 2.0 · Drag a tab onto a pane to split")
                     }),
             )
             .child(
@@ -768,26 +825,14 @@ impl Render for Workspace {
                                         .on_click(cx.listener(move |view, _, window, cx| {
                                             view.activate_tab(id, cx);
                                             window.focus(&view.focus_handle(cx));
-                                        })),
-                                )
-                                .child(
-                                    div()
-                                        .id(("split-right", index))
-                                        .cursor_pointer()
-                                        .text_size(px(11.0))
-                                        .child("Split ↔")
-                                        .on_click(cx.listener(move |view, _, _, cx| {
-                                            view.split_with(id, SplitAxis::Vertical, cx);
-                                        })),
-                                )
-                                .child(
-                                    div()
-                                        .id(("split-below", index))
-                                        .cursor_pointer()
-                                        .text_size(px(11.0))
-                                        .child("Split ↕")
-                                        .on_click(cx.listener(move |view, _, _, cx| {
-                                            view.split_with(id, SplitAxis::Horizontal, cx);
+                                        }))
+                                        .cursor_move()
+                                        .on_drag(TerminalTabDrag { tab_id: id },
+                                            |dragged: &TerminalTabDrag, _, _, cx| {
+                                                cx.new(|_| *dragged)
+                                            })
+                                        .on_drop(cx.listener(move |view, dragged: &TerminalTabDrag, _, cx| {
+                                            view.reorder_tabs(dragged.tab_id, id, cx);
                                         })),
                                 )
                                 .child(
