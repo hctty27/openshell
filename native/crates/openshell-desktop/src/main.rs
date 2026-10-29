@@ -16,7 +16,7 @@ mod direct3d_diagnostics;
 use gpui::prelude::*;
 use gpui::{
     div, px, rgb, size, App, Application, Bounds, Context, FocusHandle, Focusable,
-    ClipboardItem, IntoElement, KeyDownEvent, Keystroke, Render, Task, Window, WindowBounds,
+    ClipboardItem, IntoElement, KeyDownEvent, Keystroke, MouseButton, Render, Task, Window, WindowBounds,
     WindowOptions, Subscription, ScrollWheelEvent,
 };
 use openshell_core::{LocalShell, LocalTerminal, Session, SessionStore, SshTerminalCommand, TerminalEngine, TerminalSize};
@@ -723,6 +723,12 @@ impl Workspace {
             .on_click(cx.listener(move |view, _, window, cx| {
                 view.activate_tab(pane_id, cx);
                 window.focus(&view.focus_handle(cx));
+            }))
+            .on_mouse_down(MouseButton::Right, cx.listener(move |view, _, window, cx| {
+                view.activate_tab(pane_id, cx);
+                view.paste_from_clipboard(cx);
+                window.focus(&view.focus_handle(cx));
+                cx.stop_propagation();
             }))
             .child(
                 div()
