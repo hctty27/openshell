@@ -1,11 +1,9 @@
 name: Native Rust prototype
 
+# The native feature branch has an open PR. Running both push and PR events
+# would build the same commit twice and cancel one via the shared concurrency
+# group, wasting Windows runner time. Manual dispatch remains available.
 on:
-  push:
-    branches: [feat/native-rust-rewrite]
-    paths:
-      - 'native/**'
-      - '.github/workflows/native-rust.yml'
   pull_request:
     paths:
       - 'native/**'
