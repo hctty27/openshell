@@ -147,33 +147,7 @@ impl Workspace {
             let viewport = window.viewport_size();
             view.resize_to_viewport(f32::from(viewport.width), f32::from(viewport.height), cx);
         });
-        let catalog_load = cx.background_spawn(async {
-            let database = native_database_path().map_err(|err| err.to_string())?;
-            if !database.exists() {
-                return Ok::<Vec<Session>, String>(Vec::new());
-            }
-            let store = SessionStore::open(database).map_err(|err| err.to_string())?;
-            store.list().map_err(|err| err.to_string())
-        });
-        let catalog_task = cx.spawn(async move |this, cx| {
-            let result = catalog_load.await;
-            let _ = this.update(cx, |view, cx| {
-                match result {
-                    Ok(sessions) => {
-                        view.sessions_status = if sessions.is_empty() {
-                            "No saved sessions".into()
-                        } else {
-                            format!("{} saved sessions", sessions.len())
-                        };
-                        view.saved_sessions = sessions;
-                    }
-                    Err(error) => {
-                        view.sessions_status = format!("Session list unavailable: {error}");
-                    }
-                }
-                cx.notify();
-            });
-        });
+        let catalog_task = Self::spawn_catalog_load(cx);
         let (startup, initial_status, remote_mode) = match start_from_environment(size) {
             Ok(Some(remote)) => {
                 let startup = Self::spawn_remote(remote, cx);
@@ -202,6 +176,41 @@ impl Workspace {
             active_remote_id: None,
             _session_catalog_task: catalog_task,
         }
+    }
+
+    fn spawn_catalog_load(cx: &mut Context<Self>) -> Task<()> {
+        let catalog_load = cx.background_spawn(async {
+            let database = native_database_path().map_err(|err| err.to_string())?;
+            if !database.exists() {
+                return Ok::<Vec<Session>, String>(Vec::new());
+            }
+            let store = SessionStore::open(database).map_err(|err| err.to_string())?;
+            store.list().map_err(|err| err.to_string())
+        });
+        cx.spawn(async move |this, cx| {
+            let result = catalog_load.await;
+            let _ = this.update(cx, |view, cx| {
+                match result {
+                    Ok(sessions) => {
+                        view.sessions_status = if sessions.is_empty() {
+                            "No saved sessions".into()
+                        } else {
+                            format!("{} saved sessions", sessions.len())
+                        };
+                        view.saved_sessions = sessions;
+                    }
+                    Err(error) => {
+                        view.sessions_status = format!("Session list unavailable: {error}");
+                    }
+                }
+                cx.notify();
+            });        })
+    }
+
+    fn refresh_sessions(&mut self, cx: &mut Context<Self>) {
+        self._session_catalog_task = Self::spawn_catalog_load(cx);
+        self.sessions_status = "Refreshing sessions...".into();
+        cx.notify();
     }
 
     fn spawn_local(size: TerminalSize, cx: &mut Context<Self>) -> Task<()> {
@@ -459,8 +468,21 @@ impl Render for Workspace {
                             .flex()
                             .flex_col()
                             .gap_3()
-                            .child("Saved SSH sessions · click to connect")
+                            .child("Saved SSH sessions")
                             .child(sessions_status)
+                            .child(
+                                div()
+                                    .id("refresh-saved-sessions")
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_md()
+                                    .bg(rgb(0x29435d))
+                                    .cursor_pointer()
+                                    .child("Refresh list")
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.refresh_sessions(cx);
+                                    })),
+                            )
                             .children(session_rows.into_iter().enumerate().map(|(index, (id, label, active))| {
                                 div()
                                     .id(("saved-ssh-session", index))
