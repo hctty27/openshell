@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use russh::{
-    client,
+    client, ChannelMsg,
     keys::{HashAlg, PublicKeyOrCertificate},
 };
 use thiserror::Error;
@@ -113,6 +113,29 @@ impl SshConnection {
     }
 }
 
+/// Commands accepted by one SSH PTY channel. Resize affects the same channel
+/// as its I/O, and never requires disconnecting the underlying SSH session.
+#[derive(Debug, PartialEq, Eq)]
+pub enum SshTerminalCommand {
+    Input(Vec<u8>),
+    Resize { columns: u32, rows: u32 },
+    Close,
+}
+
+impl SshTerminalCommand {
+    pub fn resize(columns: usize, rows: usize) -> Self {
+        Self::Resize {
+            columns: columns.clamp(2, u32::MAX as usize) as u32,
+            rows: rows.clamp(1, u32::MAX as usize) as u32,
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct SshTerminalOutcome {
+    pub exit_status: Option<u32>,
+}
+
 /// Independent, binary-safe channel. Terminal output is bounded by the receiver
 /// capacity, so slow rendering propagates backpressure to SSH.
 pub struct SshTerminal {
@@ -120,6 +143,57 @@ pub struct SshTerminal {
 }
 
 impl SshTerminal {
+    /// Full-duplex PTY with window-change handling and an explicit close.
+    /// Output and control channels must be bounded at the call site.
+    ///
+    /// Extended data (stderr) is forwarded as terminal bytes. Closing a
+    /// single channel does not disconnect other sessions on the SSH transport.
+    pub async fn run_controlled(
+        self,
+        output: mpsc::Sender<Vec<u8>>,
+        mut commands: mpsc::Receiver<SshTerminalCommand>,
+    ) -> Result<SshTerminalOutcome, SshError> {
+        let (mut reader, writer) = self.channel.split();
+        let mut outcome = SshTerminalOutcome::default();
+
+        loop {
+            tokio::select! {
+                message = reader.wait() => match message {
+                    Some(ChannelMsg::Data { data })
+                    | Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        if !data.is_empty() && output.send(data.to_vec()).await.is_err() {
+                            writer.close().await?;
+                            break;
+                        }
+                    }
+                    Some(ChannelMsg::ExitStatus { exit_status }) => {
+                        outcome.exit_status = Some(exit_status);
+                    }
+                    Some(ChannelMsg::Close) | None => break,
+                    Some(ChannelMsg::Eof) => {
+                        // EOF can precede the exit-status and close messages.
+                    }
+                    _ => {}
+                },
+                command = commands.recv() => match command {
+                    Some(SshTerminalCommand::Input(bytes)) => {
+                        if !bytes.is_empty() {
+                            writer.data_bytes(bytes).await?;
+                        }
+                    }
+                    Some(SshTerminalCommand::Resize { columns, rows }) => {
+                        writer.window_change(columns.max(2), rows.max(1), 0, 0).await?;
+                    }
+                    Some(SshTerminalCommand::Close) | None => {
+                        writer.close().await?;
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(outcome)
+    }
+
     pub async fn run(
         self,
         output: mpsc::Sender<Vec<u8>>,
@@ -154,6 +228,18 @@ impl SshTerminal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resize_commands_are_clamped_before_network_dispatch() {
+        assert_eq!(
+            SshTerminalCommand::resize(0, 0),
+            SshTerminalCommand::Resize { columns: 2, rows: 1 }
+        );
+        assert_eq!(
+            SshTerminalCommand::resize(120, 40),
+            SshTerminalCommand::Resize { columns: 120, rows: 40 }
+        );
+    }
 
     #[tokio::test]
     async fn rejects_missing_host_fingerprint_without_network() {
