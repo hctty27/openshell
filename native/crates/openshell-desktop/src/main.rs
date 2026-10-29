@@ -2,7 +2,7 @@ use gpui::prelude::*;
 use gpui::{
     div, px, rgb, size, App, Application, Bounds, Context, FocusHandle, Focusable,
     IntoElement, KeyDownEvent, Keystroke, Render, Task, Window, WindowBounds,
-    WindowOptions, HighlightStyle, StyledText, FontWeight, Subscription,
+    WindowOptions, HighlightStyle, StyledText, FontWeight, Subscription, ScrollWheelEvent,
 };
 use openshell_core::{LocalShell, LocalTerminal, TerminalEngine, TerminalSize};
 use openshell_core::terminal::RenderCell;
@@ -82,6 +82,7 @@ struct Workspace {
     _resize_subscription: Subscription,
     focus_handle: FocusHandle,
     status: String,
+    scroll_remainder: f32,
 }
 
 fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
@@ -195,6 +196,7 @@ impl Workspace {
             _resize_subscription: subscription,
             focus_handle: cx.focus_handle(),
             status: "Starting PowerShell...".into(),
+            scroll_remainder: 0.0,
         }
     }
 
@@ -259,12 +261,30 @@ impl Render for Workspace {
                             .key_context("OpenShellTerminal")
                             .track_focus(&self.focus_handle)
                             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                                if event.keystroke.modifiers.shift {
+                                    let page = this.terminal.size().rows as i32;
+                                    match event.keystroke.key.as_str() {
+                                        "pageup" => { this.terminal.scroll_history(page); cx.notify(); return; }
+                                        "pagedown" => { this.terminal.scroll_history(-page); cx.notify(); return; }
+                                        _ => {}
+                                    }
+                                }
                                 let Some(data) = terminal_key_bytes(&event.keystroke) else { return };
                                 if let Some(local) = &this.local {
                                     if local.try_write(data).is_err() {
                                         this.status = "Terminal input queue full or closed".into();
                                         cx.notify();
                                     }
+                                }
+                            }))
+                            .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, _, cx| {
+                                let delta = event.delta.pixel_delta(px(CELL_HEIGHT)).y.0;
+                                this.scroll_remainder += delta / CELL_HEIGHT;
+                                let lines = this.scroll_remainder.trunc() as i32;
+                                this.scroll_remainder -= lines as f32;
+                                if lines != 0 {
+                                    this.terminal.scroll_history(lines);
+                                    cx.notify();
                                 }
                             }))
                             .on_click(cx.listener(|this, _, window, cx| {
