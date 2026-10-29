@@ -35,7 +35,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 
 - Production GPU cell painting, precise monospace glyph measurement, CJK/IME composition, full mouse reporting, selection, clipboard, and resize performance/accuracy. Basic input and local scrollback exist only as a prototype.
 - End-user session editor, host-key approval UI, public-key login and reconnect policy. The initial Windows credential vault and saved-session selection are implemented, but not independently tested through live GUI interactions.
-- Private-key/agent authentication, SSH reconnection, port forwarding and keepalive.
+- Private-key/agent authentication, automatic SSH reconnection/backoff, port forwarding and keepalive. Manual reconnect is available for saved sessions.
 - SFTP file browser/transfers, rz/sz and additional Windows shells/WSL integration.
 - AI provider tools and multi-session automation, conversation storage.
 - Xshell import, drag-to-split, i18n, themes and native installer.
@@ -83,18 +83,24 @@ command reads input without terminal echo; no password is entered on a command
 line or stored in shell history.
 
 The GPUI sidebar lists saved sessions with click-to-connect and a **Refresh list**
-button (useful after adding sessions from the CLI). The status toolbar shows
-remote connect/close/failure and provides **Disconnect SSH**; after disconnect
-select **Back to local** to return to ConPTY. Clicking another saved session
-starts a new terminal session and cancels GUI delivery from the previous session.
+button (useful after adding sessions from the CLI). The status toolbar shows connection and termination status. During an SSH
+handshake, **Cancel connection** interrupts the actual Russh worker and not
+just GUI delivery. Once connected, **Disconnect SSH** asks the channel to
+close gracefully; use **Force cancel** if closure stalls. A disconnected saved
+session offers **Reconnect SSH** (manual retry only, with the same independently
+approved host fingerprint). **Back to local** is available to restart ConPTY.
+Clicking another saved session explicitly cancels the previous SSH worker and
+replaces its GUI output stream.
 The prior `OPENSHELL_SSH_SESSION_ID` environment variable remains available
 for development-only automated startup but is not required for normal preview
 selection.
 
 The saved-session editor and host-key approval UI are **not yet implemented**.
-The SSH worker reads saved credentials **off the UI thread**. There is no
-guarantee of disconnect responsiveness while the SSH handshake is in progress;
-live Windows GUI testing is still required. Do not use this prototype on
+The SSH worker reads saved credentials **off the UI thread**. The cancel
+signal can abort network connection, authentication and PTY operation; native
+SQLite and OS credential retrieval remain synchronous inside the worker and
+cannot be pre-empted mid-system call. Live Windows GUI and SSH-server
+acceptance tests are still required. Do not use this prototype on
 production servers.
 
 Deleting a saved session from the development CLI also removes its Windows
