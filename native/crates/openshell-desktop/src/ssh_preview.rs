@@ -117,8 +117,21 @@ fn resolve_stored_session(id: &str) -> Result<PreviewConfig, String> {
     })
 }
 
+/// Start a previously saved session from a GPUI click, without putting a
+/// password or host-key fingerprint into the GUI's state.
+pub fn start_saved_session(id: String, size: TerminalSize) -> Result<SshPreview, String> {
+    if id.is_empty() {
+        return Err("saved SSH session ID is required".into());
+    }
+    start_source(PreviewSource::StoredSession(id), size)
+}
+
 pub fn start_from_environment(size: TerminalSize) -> Result<Option<SshPreview>, String> {
     let Some(source) = read_source()? else { return Ok(None); };
+    start_source(source, size).map(Some)
+}
+
+fn start_source(source: PreviewSource, size: TerminalSize) -> Result<SshPreview, String> {
     let (commands, command_rx) = mpsc::channel(MAX_PENDING_PACKETS);
     let (output_tx, output) = mpsc::channel(MAX_PENDING_PACKETS);
     let (status_tx, status) = mpsc::channel(8);
