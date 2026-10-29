@@ -33,3 +33,5 @@ jobs:
         run: cargo test -p openshell-core
       - name: GPUI desktop compile check
         run: cargo check -p openshell-native
+      - name: Native desktop key encoding tests
+        run: cargo test -p openshell-native
