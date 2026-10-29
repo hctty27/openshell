@@ -1,0 +1,35 @@
+name: Native Rust prototype
+
+on:
+  push:
+    branches: [feat/native-rust-rewrite]
+    paths:
+      - 'native/**'
+      - '.github/workflows/native-rust.yml'
+  pull_request:
+    paths:
+      - 'native/**'
+      - '.github/workflows/native-rust.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: native-rust
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+      - name: Rust core tests
+        run: cargo test -p openshell-core
+      - name: GPUI desktop compile check
+        run: cargo check -p openshell-native
