@@ -2,7 +2,7 @@ use gpui::prelude::*;
 use gpui::{
     div, px, rgb, size, App, Application, Bounds, Context, FocusHandle, Focusable,
     IntoElement, KeyDownEvent, Keystroke, Render, Task, Window, WindowBounds,
-    WindowOptions, HighlightStyle, StyledText, FontWeight,
+    WindowOptions, HighlightStyle, StyledText, FontWeight, Subscription,
 };
 use openshell_core::{LocalShell, LocalTerminal, TerminalEngine, TerminalSize};
 use openshell_core::terminal::RenderCell;
@@ -47,10 +47,39 @@ fn styled_terminal_line(cells: &[RenderCell]) -> StyledText {
     StyledText::new(text).with_highlights(highlights)
 }
 
+
+// Temporary viewport metrics for the diagnostic text renderer.
+// The final renderer must derive cell dimensions from shaped glyph metrics.
+const SIDEBAR_WIDTH: f32 = 244.0;
+const TITLEBAR_HEIGHT: f32 = 46.0;
+const TOOLBAR_HEIGHT: f32 = 40.0;
+const CONTENT_PADDING: f32 = 32.0;
+const CELL_WIDTH: f32 = 8.5;
+const CELL_HEIGHT: f32 = 19.0;
+const MAX_COLUMNS: usize = 500;
+const MAX_ROWS: usize = 300;
+
+fn terminal_size_for_viewport(width: f32, height: f32) -> TerminalSize {
+    // On window minimization and invalid geometry, do not create huge grids.
+    let width = if width.is_finite() { width.max(0.0) } else { 0.0 };
+    let height = if height.is_finite() { height.max(0.0) } else { 0.0 };
+    let columns = ((width - SIDEBAR_WIDTH - CONTENT_PADDING) / CELL_WIDTH)
+        .floor()
+        .max(2.0)
+        .min(MAX_COLUMNS as f32) as usize;
+    let rows = ((height - TITLEBAR_HEIGHT - TOOLBAR_HEIGHT - CONTENT_PADDING)
+        / CELL_HEIGHT)
+        .floor()
+        .max(1.0)
+        .min(MAX_ROWS as f32) as usize;
+    TerminalSize::new(columns, rows)
+}
+
 struct Workspace {
     terminal: TerminalEngine,
     local: Option<LocalTerminal>,
     _startup_task: Task<()>,
+    _resize_subscription: Subscription,
     focus_handle: FocusHandle,
     status: String,
 }
@@ -99,8 +128,13 @@ fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
 }
 
 impl Workspace {
-    fn new(cx: &mut Context<Self>) -> Self {
-        let size = TerminalSize::new(80, 26);
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let viewport = window.viewport_size();
+        let size = terminal_size_for_viewport(viewport.width.0, viewport.height.0);
+        let subscription = cx.observe_window_bounds(window, |view, window, cx| {
+            let viewport = window.viewport_size();
+            view.resize_to_viewport(viewport.width.0, viewport.height.0, cx);
+        });
         let background = cx.background_spawn(async move {
             LocalTerminal::spawn(LocalShell::PowerShell, size)
         });
@@ -109,6 +143,10 @@ impl Workspace {
                 Ok(mut local) => {
                     let Some(mut rx) = local.take_output() else { return };
                     if this.update(cx, |view, cx| {
+                        // The window may have resized while ConPTY started.
+                        if let Err(err) = local.resize(view.terminal.size()) {
+                            view.status = format!("ConPTY resize failed: {err}");
+                        }
                         view.local = Some(local);
                         view.status = "PowerShell connected · experimental ConPTY".into();
                         cx.notify();
@@ -154,9 +192,24 @@ impl Workspace {
             terminal: TerminalEngine::new(size),
             local: None,
             _startup_task: startup,
+            _resize_subscription: subscription,
             focus_handle: cx.focus_handle(),
             status: "Starting PowerShell...".into(),
         }
+    }
+
+    fn resize_to_viewport(&mut self, width: f32, height: f32, cx: &mut Context<Self>) {
+        let size = terminal_size_for_viewport(width, height);
+        if size == self.terminal.size() {
+            return;
+        }
+        self.terminal.resize(size);
+        if let Some(local) = &self.local {
+            if let Err(err) = local.resize(size) {
+                self.status = format!("ConPTY resize failed: {err}");
+            }
+        }
+        cx.notify();
     }
 }
 
@@ -256,7 +309,7 @@ fn main() {
             ..Default::default()
         };
         let window = cx
-            .open_window(options, |_window, cx| cx.new(Workspace::new))
+            .open_window(options, |window, cx| cx.new(|cx| Workspace::new(window, cx)))
             .expect("failed to open OpenShell native window");
         window.update(cx, |view, window, cx| {
             window.focus(&view.focus_handle(cx));
@@ -269,6 +322,19 @@ fn main() {
 mod tests {
     use super::*;
     use gpui::Modifiers;
+
+    #[test]
+    fn viewport_grid_tracks_size_and_clamps() {
+        let small = terminal_size_for_viewport(100.0, 100.0);
+        assert_eq!(small, TerminalSize::new(2, 1));
+        let large = terminal_size_for_viewport(1200.0, 760.0);
+        assert!(large.columns > 80);
+        assert!(large.rows > 26);
+        assert_eq!(terminal_size_for_viewport(1200.0, 760.0), large);
+        assert_eq!(terminal_size_for_viewport(f32::NAN, f32::INFINITY), small);
+        let huge = terminal_size_for_viewport(100_000.0, 100_000.0);
+        assert_eq!(huge, TerminalSize::new(MAX_COLUMNS, MAX_ROWS));
+    }
 
     #[test]
     fn ascii_and_control_keys_encode_as_terminal_bytes() {
