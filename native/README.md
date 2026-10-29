@@ -219,9 +219,12 @@ dxdiag
 ```
 
 The --diagnose mode deliberately **does not construct GPUI or open an SSH
-connection**. It separately tests DirectWrite Factory5, its in-memory font
-loader, font-set builder and system font collection, reporting the first
-Windows HRESULT error. It also writes a local text file in the Temp folder.
+connection**. It tests DirectWrite Factory5, font-loader and collections,
+**then enumerates DXGI GPU adapters in GPUI's order** and attempts a D3D11
+device plus StructuredBuffer capability check on each adapter. It reports the
+first GPU that satisfies the basic GPUI requirements and individual Windows
+HRESULT failures, and writes the complete results to a text file in Temp.
+This is a read-only diagnostic: it does not disable or install GPU drivers.
 
 - If DirectWrite initialization fails, the report identifies the failing
   Windows API and HRESULT. Check OS version/Windows font services.
