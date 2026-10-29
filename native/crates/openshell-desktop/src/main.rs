@@ -180,10 +180,35 @@ impl Workspace {
                 (startup, "Connecting to pinned SSH test server...".to_owned(), true)
             }
             Ok(None) => {
-            let background = cx.background_spawn(async move {
+                (Self::spawn_local(size, cx), "Starting PowerShell...".to_owned(), false)
+            }
+            Err(error) => {
+                let task = cx.spawn(async move |_, _| {});
+                (task, format!("SSH preview configuration error: {error}"), true)
+            }
+        };
+        Self {
+            terminal: TerminalEngine::new(size),
+            local: None,
+            remote_commands: None,
+            remote_mode,
+            _startup_task: startup,
+            _resize_subscription: subscription,
+            focus_handle: cx.focus_handle(),
+            status: initial_status,
+            scroll_remainder: 0.0,
+            saved_sessions: Vec::new(),
+            sessions_status: "Loading saved sessions...".into(),
+            active_remote_id: None,
+            _session_catalog_task: catalog_task,
+        }
+    }
+
+    fn spawn_local(size: TerminalSize, cx: &mut Context<Self>) -> Task<()> {
+        let background = cx.background_spawn(async move {
                 LocalTerminal::spawn(LocalShell::PowerShell, size)
             });
-            let startup = cx.spawn(async move |this, cx| {
+        cx.spawn(async move |this, cx| {
                 match background.await {
                     Ok(mut local) => {
                         let Some(mut rx) = local.take_output() else { return };
@@ -233,29 +258,22 @@ impl Workspace {
                         });
                     }
                 }
-            });
-                    (startup, "Starting PowerShell...".to_owned(), false)
-            }
-            Err(error) => {
-                let task = cx.spawn(async move |_, _| {});
-                (task, format!("SSH preview configuration error: {error}"), true)
-            }
-        };
-        Self {
-            terminal: TerminalEngine::new(size),
-            local: None,
-            remote_commands: None,
-            remote_mode,
-            _startup_task: startup,
-            _resize_subscription: subscription,
-            focus_handle: cx.focus_handle(),
-            status: initial_status,
-            scroll_remainder: 0.0,
-            saved_sessions: Vec::new(),
-            sessions_status: "Loading saved sessions...".into(),
-            active_remote_id: None,
-            _session_catalog_task: catalog_task,
-        }
+        })
+    }
+
+    /// Return to a standalone local ConPTY; replacing the GUI task cancels
+    /// delivery from any previous remote session.
+    fn start_local(&mut self, cx: &mut Context<Self>) {
+        let size = self.terminal.size();
+        self._startup_task = Self::spawn_local(size, cx);
+        self.local = None;
+        self.remote_commands = None;
+        self.remote_mode = false;
+        self.active_remote_id = None;
+        self.terminal = TerminalEngine::new(size);
+        self.status = "Starting local PowerShell...".into();
+        self.scroll_remainder = 0.0;
+        cx.notify();
     }
 
     /// Own a single session's event stream in a GPUI Task. Replacing the task
@@ -519,9 +537,19 @@ impl Render for Workspace {
                                             .rounded_md()
                                             .bg(rgb(0x29435d))
                                             .cursor_pointer()
-                                            .child(if self.remote_commands.is_some() { "Disconnect SSH" } else { "No SSH connection" })
+                                            .child(if self.remote_commands.is_some() {
+                                                "Disconnect SSH"
+                                            } else if self.remote_mode {
+                                                "Back to local"
+                                            } else {
+                                                "Local terminal"
+                                            })
                                             .on_click(cx.listener(|this, _, _, cx| {
-                                                this.disconnect_remote(cx);
+                                                if this.remote_commands.is_some() {
+                                                    this.disconnect_remote(cx);
+                                                } else if this.remote_mode {
+                                                    this.start_local(cx);
+                                                }
                                             })),
                                     ),
                             )
