@@ -6,6 +6,7 @@ pub mod legacy;
 pub mod local;
 pub mod ssh;
 pub mod host_trust;
+pub mod native_paths;
 pub mod credentials;
 pub mod store;
 pub mod terminal;
