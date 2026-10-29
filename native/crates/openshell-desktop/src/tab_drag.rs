@@ -1,6 +1,6 @@
 //! GPUI-native tab drag payload and checked drop geometry. Dragged tabs
 //! are IDs only; a drop never copies or recreates a live SSH/ConPTY session.
-use gpui::{div, px, rgb, Context, IntoElement, Render, Window, Point, Pixels, Styled};
+use gpui::{div, px, rgb, Context, IntoElement, Render, Window, Point, Pixels, Styled, ParentElement};
 use openshell_core::workspace::SplitAxis;
 
 #[derive(Clone, Copy, Debug)]
