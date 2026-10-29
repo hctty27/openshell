@@ -100,7 +100,7 @@ impl Workspace {
         let catalog_task = Self::spawn_catalog_load(cx);
 
         let initial_id = 1;
-        let mut initial = match start_from_environment(size) {
+        let initial = match start_from_environment(size) {
             Ok(Some(remote)) => {
                 let mut tab = TerminalTab::remote(initial_id, "SSH test".into(), None, size);
                 tab.task = Some(Self::spawn_remote(initial_id, remote, cx));
@@ -580,7 +580,7 @@ impl Workspace {
         pane_id: u64,
         pane_index: usize,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> gpui::Stateful<gpui::Div> {
         let tab = self.tabs.iter().find(|tab| tab.id == pane_id)
             .expect("visible pane must reference an existing tab");
         let rows = tab.terminal.render_cells();
