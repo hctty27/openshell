@@ -5,6 +5,8 @@ pub mod session;
 pub mod legacy;
 pub mod local;
 pub mod ssh;
+pub mod host_trust;
+pub mod credentials;
 pub mod store;
 pub mod terminal;
 pub mod workspace;
@@ -13,6 +15,8 @@ pub use session::{Session, SessionError};
 pub use legacy::{LegacySession, preview_legacy_sessions};
 pub use local::{LocalShell, LocalTerminal};
 pub use store::SessionStore;
+pub use credentials::{CredentialVault, CredentialError};
+pub use host_trust::{HostIdentity, HostTrustStore, TrustDecision, HostTrustError};
 pub use ssh::{SshConnection, SshError, SshTerminal, SshTerminalCommand, SshTerminalOutcome};
 pub use terminal::{TerminalEngine, TerminalSize};
 
