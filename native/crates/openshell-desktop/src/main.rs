@@ -571,14 +571,87 @@ impl Focusable for Workspace {
     }
 }
 
-impl Render for Workspace {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let tab = self.active_tab();
+
+impl Workspace {
+    /// Render an existing terminal tab in a pane without duplicating its
+    /// SSH, ConPTY, scrollback, or async task state.
+    fn render_terminal_pane(
+        &self,
+        pane_id: u64,
+        pane_index: usize,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let tab = self.tabs.iter().find(|tab| tab.id == pane_id)
+            .expect("visible pane must reference an existing tab");
         let rows = tab.terminal.render_cells();
-        let title = tab.title.clone();
         let status = tab.status.clone();
+        let title = tab.title.clone();
         let phase = tab.remote_phase;
         let saved = tab.session_id.is_some();
+        let selected = pane_id == self.active_id;
+
+        div()
+            .id(("terminal-pane", pane_index))
+            .flex_1()
+            .flex()
+            .flex_col()
+            .bg(rgb(if selected { 0x101823 } else { 0x090d12 }))
+            .on_scroll_wheel(cx.listener(move |view, event: &ScrollWheelEvent, _, cx| {
+                let pixels = f32::from(event.delta.pixel_delta(px(CELL_HEIGHT)).y);
+                let Some(tab) = view.tab_mut(pane_id) else { return };
+                tab.scroll_remainder += pixels / CELL_HEIGHT;
+                let lines = tab.scroll_remainder.trunc() as i32;
+                tab.scroll_remainder -= lines as f32;
+                tab.terminal.scroll_history(lines);
+                if lines != 0 { cx.notify(); }
+            }))
+            .on_click(cx.listener(move |view, _, window, cx| {
+                view.activate_tab(pane_id, cx);
+                window.focus(&view.focus_handle(cx));
+            }))
+            .child(
+                div()
+                    .h(px(TOOLBAR_HEIGHT))
+                    .px_4()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .bg(rgb(if selected { 0x203248 } else { 0x161c25 }))
+                    .child(format!("{title} · {status}"))
+                    .child(
+                        div()
+                            .id(("pane-lifecycle", pane_index))
+                            .px_3()
+                            .py_1()
+                            .rounded_md()
+                            .bg(rgb(0x29435d))
+                            .cursor_pointer()
+                            .child(remote_button_label(phase, saved))
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                view.activate_tab(pane_id, cx);
+                                view.remote_primary_action(cx);
+                            })),
+                    ),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .p_4()
+                    .text_size(px(14.0))
+                    .font_family("Consolas")
+                    .flex()
+                    .flex_col()
+                    .children(rows.into_iter().map(|cells| {
+                        div()
+                            .h(px(CELL_HEIGHT))
+                            .child(styled_terminal_line(&cells))
+                    })),
+            )
+    }
+}
+
+impl Render for Workspace {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tabs: Vec<_> = self.tabs.iter().map(|t| {
             (t.id, t.title.clone(), t.remote_phase, t.id == self.active_id)
         }).collect();
@@ -593,6 +666,17 @@ impl Render for Workspace {
             self.tabs.iter().find(|tab| tab.id == id)
                 .map(|tab| tab.title.clone())
         });
+        let split = self.split;
+        let pane_nodes: Vec<_> = self.visible_tab_ids()
+            .into_iter()
+            .enumerate()
+            .map(|(index, id)| self.render_terminal_pane(id, index, cx))
+            .collect();
+        let pane_layout = if split.is_some_and(|s| s.axis == SplitAxis::Horizontal) {
+            div().flex().flex_1().flex_col().gap_1()
+        } else {
+            div().flex().flex_1().flex_row().gap_1()
+        };
 
         div()
             .size_full()
@@ -643,7 +727,7 @@ impl Render for Workspace {
                     } else {
                         div()
                             .id("normal-window-title")
-                            .child("OpenShell Native 2.0 · Multi-tab prototype")
+                            .child("OpenShell Native 2.0 · Split terminal prototype")
                     }),
             )
             .child(
@@ -686,6 +770,26 @@ impl Render for Workspace {
                                 )
                                 .child(
                                     div()
+                                        .id(("split-right", index))
+                                        .cursor_pointer()
+                                        .text_size(px(11.0))
+                                        .child("Split ↔")
+                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                            view.split_with(id, SplitAxis::Vertical, cx);
+                                        })),
+                                )
+                                .child(
+                                    div()
+                                        .id(("split-below", index))
+                                        .cursor_pointer()
+                                        .text_size(px(11.0))
+                                        .child("Split ↕")
+                                        .on_click(cx.listener(move |view, _, _, cx| {
+                                            view.split_with(id, SplitAxis::Horizontal, cx);
+                                        })),
+                                )
+                                .child(
+                                    div()
                                         .id(("terminal-tab-close", index))
                                         .cursor_pointer()
                                         .px_1()
@@ -705,6 +809,16 @@ impl Render for Workspace {
                             .child("+ Local")
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.add_local_tab(cx);
+                            })),
+                    )
+                    .child(
+                        div()
+                            .id("unsplit-panes")
+                            .cursor_pointer()
+                            .px_3()
+                            .child(if split.is_some() { "Unsplit" } else { "Single view" })
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.clear_split(cx);
                             })),
                     ),
             )
@@ -754,11 +868,10 @@ impl Render for Workspace {
                     )
                     .child(
                         div()
+                            .id("terminal-keyboard-region")
                             .flex_1()
                             .flex()
                             .flex_col()
-                            .bg(rgb(0x090d12))
-                            .id("terminal-pane")
                             .key_context("OpenShellTerminal")
                             .track_focus(&self.focus_handle)
                             .on_key_down(cx.listener(|view, event: &KeyDownEvent, _, cx| {
@@ -792,58 +905,7 @@ impl Render for Workspace {
                                     view.send_input(bytes, cx);
                                 }
                             }))
-                            .on_scroll_wheel(cx.listener(
-                                |view, event: &ScrollWheelEvent, _, cx| {
-                                    let pixels = f32::from(
-                                        event.delta.pixel_delta(px(CELL_HEIGHT)).y,
-                                    );
-                                    let tab = view.active_tab_mut();
-                                    tab.scroll_remainder += pixels / CELL_HEIGHT;
-                                    let lines = tab.scroll_remainder.trunc() as i32;
-                                    tab.scroll_remainder -= lines as f32;
-                                    view.scroll_active(lines, cx);
-                                },
-                            ))
-                            .on_click(cx.listener(|view, _, window, cx| {
-                                window.focus(&view.focus_handle(cx));
-                            }))
-                            .child(
-                                div()
-                                    .h(px(TOOLBAR_HEIGHT))
-                                    .px_4()
-                                    .flex()
-                                    .items_center()
-                                    .justify_between()
-                                    .bg(rgb(0x161c25))
-                                    .child(format!("{title}  ·  {status}"))
-                                    .child(
-                                        div()
-                                            .id("active-tab-lifecycle")
-                                            .px_3()
-                                            .py_1()
-                                            .rounded_md()
-                                            .bg(rgb(0x29435d))
-                                            .cursor_pointer()
-                                            .child(remote_button_label(phase, saved))
-                                            .on_click(cx.listener(|view, _, _, cx| {
-                                                view.remote_primary_action(cx);
-                                            })),
-                                    ),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .p_4()
-                                    .text_size(px(14.0))
-                                    .font_family("Consolas")
-                                    .flex()
-                                    .flex_col()
-                                    .children(rows.into_iter().map(|cells| {
-                                        div()
-                                            .h(px(CELL_HEIGHT))
-                                            .child(styled_terminal_line(&cells))
-                                    })),
-                            ),
+                            .child(pane_layout.children(pane_nodes)),
                     ),
             )
     }
