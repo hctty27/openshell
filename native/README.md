@@ -23,14 +23,16 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - GPU-backed GPUI workspace with an experimental read-only text-cell snapshot.
 - Alacritty terminal parser with partial-sequence state maintained across writes, plus renderer-neutral cell colors, text style, cursor state and device-status replies.
 - PowerShell startup through portable-pty/Windows ConPTY in an off-UI worker, bounded I/O, ANSI-styled text output displayed in GPUI and basic direct keyboard input.
-- Grouped GPUI text highlights and coalesced PTY output to reduce redundant frame work. Run the ANSI microbenchmark before claiming speedups.
+- Grouped GPUI text highlights and coalesced PTY output to reduce redundant frame work.
+- GPUI window bounds now update the terminal grid and ConPTY dimensions. Temporary column widths are estimates, not font-shaped metrics.
+- Primary-screen scrollback with wheel and Shift+PageUp/PageDown; alternate-screen mouse reporting remains incomplete. Run the ANSI microbenchmark before claiming speedups.
 - Bounded byte-oriented Russh/Tokio SSH channel, password authentication requiring previously verified SHA256 host fingerprint.
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
 - Read-only preview of legacy Wails sessions (including auth configuration and credential references). No automatic data migration or credential extraction.
 
 ## Not implemented yet
 
-- Production terminal cell painting, ANSI colors/cursor, CJK/IME composition, mouse, clipboard, scrollback and dynamic resizing. Basic ASCII keyboard handling exists only in the prototype.
+- Production GPU cell painting, precise monospace glyph measurement, CJK/IME composition, full mouse reporting, selection, clipboard, and resize performance/accuracy. Basic input and local scrollback exist only as a prototype.
 - End-user session editor, known_hosts approval UI and system credential vault.
 - Private-key/agent authentication, SSH reconnection, port forwarding and keepalive.
 - SFTP file browser/transfers, rz/sz and additional Windows shells/WSL integration.
