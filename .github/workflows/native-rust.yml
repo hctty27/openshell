@@ -31,6 +31,8 @@ jobs:
           workspaces: native
       - name: Rust core tests
         run: cargo test -p openshell-core
+      - name: Compile native SSH and terminal benchmark examples
+        run: cargo check -p openshell-core --examples
       - name: GPUI desktop compile check
         run: cargo check -p openshell-native
       - name: Native desktop key encoding tests
