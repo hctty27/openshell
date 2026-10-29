@@ -22,6 +22,8 @@ pub fn run() -> String {
     #[cfg(not(windows))]
     report.push_str("DirectWrite is only supported on Windows.\n");
 
+    crate::direct3d_diagnostics::append(&mut report);
+
     let path = report_path();
     match fs::write(&path, &report) {
         Ok(()) => {
