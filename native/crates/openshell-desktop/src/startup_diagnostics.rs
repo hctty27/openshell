@@ -92,7 +92,7 @@ fn probe_directwrite(report: &mut String) {
         Ok(())
     })();
 
-    if let Err(err) = checks {
+    if let Err(err) = &checks {
         let _ = writeln!(
             report, "DirectWrite initialization probe: FAILED ({err}, HRESULT={:#010X})",
             err.code().0 as u32,
