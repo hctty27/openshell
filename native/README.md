@@ -16,12 +16,14 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
     cargo test -p openshell-core
     cargo check -p openshell-native
     cargo run -p openshell-native
+    cargo run --release -p openshell-core --example terminal_bench
 
 ## Implemented
 
 - GPU-backed GPUI workspace with an experimental read-only text-cell snapshot.
-- Alacritty terminal parser with partial-sequence state maintained across writes.
-- PowerShell startup through portable-pty/Windows ConPTY in an off-UI worker, bounded I/O, output displayed in GPUI and basic direct keyboard input.
+- Alacritty terminal parser with partial-sequence state maintained across writes, plus renderer-neutral cell colors, text style, cursor state and device-status replies.
+- PowerShell startup through portable-pty/Windows ConPTY in an off-UI worker, bounded I/O, ANSI-styled text output displayed in GPUI and basic direct keyboard input.
+- Grouped GPUI text highlights and coalesced PTY output to reduce redundant frame work. Run the ANSI microbenchmark before claiming speedups.
 - Bounded byte-oriented Russh/Tokio SSH channel, password authentication requiring previously verified SHA256 host fingerprint.
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
 - Read-only preview of legacy Wails sessions (including auth configuration and credential references). No automatic data migration or credential extraction.
