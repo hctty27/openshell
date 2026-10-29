@@ -1,16 +1,30 @@
 //! GPUI-native tab drag payload and checked drop geometry. Dragged tabs
 //! are IDs only; a drop never copies or recreates a live SSH/ConPTY session.
-use gpui::{div, px, rgb, Context, IntoElement, Render, Window};
+use gpui::{div, px, rgb, Context, IntoElement, Render, Window, Point, Pixels};
 use openshell_core::workspace::SplitAxis;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct TerminalTabDrag {
     pub(super) tab_id: u64,
+    position: Point<Pixels>,
+}
+
+impl TerminalTabDrag {
+    pub(super) fn new(tab_id: u64) -> Self {
+        Self { tab_id, position: Point::default() }
+    }
+
+    pub(super) fn at(mut self, position: Point<Pixels>) -> Self {
+        self.position = position;
+        self
+    }
 }
 
 impl Render for TerminalTabDrag {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
+            .pl(self.position.x - px(78.0))
+            .pt(self.position.y - px(16.0))
             .px_4()
             .py_2()
             .rounded_md()
