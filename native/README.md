@@ -5,7 +5,7 @@ A new Rust implementation alongside the existing Go/Wails version. **Not a repla
 ## Architecture
 
 - openshell-core: validated session domain, local SQLite metadata, Alacritty ANSI state machine, Russh/Tokio SSH transport.
-- openshell-native: native GPUI desktop window. Currently the **experimental local terminal preview**; terminal rendering integration is not complete.
+- openshell-native: experimental GPUI desktop with multiple concurrently running terminal tabs. Rendering is still a styled-text prototype, not a production GPU cell renderer.
 - Windows x64 primary target.
 
 ## Build on Windows
@@ -20,7 +20,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 
 ## Implemented
 
-- GPU-backed GPUI workspace with an experimental read-only text-cell snapshot.
+- GPU-backed GPUI workspace with an experimental ANSI-styled text-cell snapshot and independent local/remote tab state.
 - Alacritty terminal parser with partial-sequence state maintained across writes, plus renderer-neutral cell colors, text style, cursor state and device-status replies.
 - PowerShell startup through portable-pty/Windows ConPTY in an off-UI worker, bounded I/O, ANSI-styled text output displayed in GPUI and basic direct keyboard input.
 - Grouped GPUI text highlights and coalesced PTY output to reduce redundant frame work.
@@ -29,7 +29,9 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - Bounded byte-oriented Russh/Tokio SSH channel, password authentication requiring previously verified SHA256 host fingerprint.
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
 - Read-only preview of legacy Wails sessions (including auth configuration and credential references). No automatic data migration or credential extraction.
-- Native SSH session metadata and explicit SHA256 host trust, Windows Credential Manager password storage, clickable saved-session sidebar, refresh and SSH disconnect / return-to-local controls.
+- Native SSH session metadata and explicit SHA256 host trust, Windows Credential Manager password storage, clickable saved-session sidebar and SSH connection lifecycle controls.
+- Concurrent terminal tabs: each owns its Alacritty grid/scrollback, ConPTY or SSH transport, background output task, status and cancellation. Clicking a saved server opens a new SSH tab rather than replacing another session.
+- Tab strip allows select/close, additional local PowerShell tabs, keyboard tab navigation and close confirmation for active running terminals. Closing the final tab creates a fresh local PowerShell.
 
 ## Not implemented yet
 
@@ -38,7 +40,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - Private-key/agent authentication, automatic SSH reconnection/backoff, port forwarding and keepalive. Manual reconnect is available for saved sessions.
 - SFTP file browser/transfers, rz/sz and additional Windows shells/WSL integration.
 - AI provider tools and multi-session automation, conversation storage.
-- Xshell import, drag-to-split, i18n, themes and native installer.
+- Tab drag-reorder, split panes, saved tab restoration, Xshell import, i18n, themes and native installer.
 - End-to-end Windows validation and verified performance comparisons.
 
 ## Non-negotiable migration principles
@@ -71,9 +73,12 @@ cargo run -p openshell-core --example sessionctl -- list
 cargo run -p openshell-core --example sessionctl -- trust server1 SHA256:YOUR-INDEPENDENTLY-VERIFIED-SERVER-FINGERPRINT
 cargo run -p openshell-core --example sessionctl -- password server1
 cargo run -p openshell-native
-# Click "server1" in the Saved SSH sessions sidebar to connect.
-# Use "Disconnect SSH" to close the remote terminal.
-# Use "Back to local" to return to a local PowerShell terminal.
+# Click "server1" in the Saved SSH sessions sidebar to open a new SSH tab.
+# Click another server entry to open another independent SSH tab.
+# Click "+ Local" to open another PowerShell tab.
+# Use Ctrl+Tab / Ctrl+Shift+Tab to switch, Ctrl+T for local, Ctrl+W to close.
+# Closing a running terminal asks for confirmation.
+# The active SSH tab has Cancel / Disconnect / Reconnect controls.
 ```
 
 The `trust` command asks for an explicit `TRUST` confirmation. Verify the
@@ -82,8 +87,8 @@ accepted: the Russh connection enforces the stored fingerprint. The `password`
 command reads input without terminal echo; no password is entered on a command
 line or stored in shell history.
 
-The GPUI sidebar lists saved sessions with click-to-connect and a **Refresh list**
-button (useful after adding sessions from the CLI). The status toolbar shows connection and termination status. During an SSH
+The GPUI sidebar lists saved sessions with click-to-open-in-a-new-tab and a **Refresh list**
+button (useful after adding sessions from the CLI). The active tab status toolbar shows connection and termination status. During an SSH
 handshake, **Cancel connection** interrupts the actual Russh worker and not
 just GUI delivery. Once connected, **Disconnect SSH** asks the channel to
 close gracefully; use **Force cancel** if closure stalls. A disconnected saved
@@ -142,6 +147,27 @@ Remote SSH currently has no interactive credential/host approval UI, key/agent
 login or automatic reconnect controls. Saved-session selection is available as
 an experimental click-to-connect sidebar. The Windows CI compiles
 the test example but cannot authenticate against your private server.
+
+## Windows multi-tab smoke-test checklist
+
+After CI uploads the Debug EXE, validate on a disposable Windows development machine:
+
+1. Open two local PowerShell tabs. Run a different long-lived command in each,
+   switch repeatedly with Ctrl+Tab and check that output stays independent.
+2. Add two disposable SSH test servers via `sessionctl`, then click both in
+   the sidebar. Confirm each retains its own cursor, shell history and status.
+3. Close a running SSH tab, reject the close confirmation, then explicitly
+   confirm it. Verify only the selected SSH connection is disconnected.
+4. Resize the window while several terminal sessions run, including an SSH
+   session in an inactive tab. Verify all PTY sizes adjust correctly.
+5. Close the last tab. Verify a clean local PowerShell tab opens automatically.
+6. Test Cancel/Disconnect/Reconnect, wrong host fingerprints and slow login.
+7. Check memory, p95 input latency and large-output behavior versus Wails
+   on the same test machine. **These have not yet been measured.**
+
+The desktop prototype does not persist open tabs across restarts and cannot
+yet perform split panes, drag sorting, selection/copy/paste or CJK IME. Only
+use test hosts; do not migrate production credentials into the prototype.
 
 ## Windows developer preview
 
