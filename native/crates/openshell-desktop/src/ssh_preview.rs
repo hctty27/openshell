@@ -1,13 +1,20 @@
-//! Opt-in remote SSH GUI smoke mode. Explicit fingerprint pinning is mandatory.
+//! Native SSH preview transport.
+//! - OPENSHELL_SSH_SESSION_ID: native saved session, approved host key and
+//!   Windows credential manager password. No secret in the environment.
+//! - OPENSHELL_SSH_TEST_HOST: legacy one-off development-only environment
+//!   configuration. Must not be used for everyday or production credentials.
 //!
-//! No UI password editor or credential storage exists yet. This mode is only
-//! available when OPENSHELL_SSH_TEST_HOST is set in the launching environment.
-//! The OS user must first verify the server fingerprint independently.
+//! SSH I/O, SQLite and credential manager access happen off the GUI thread.
 
 use std::{env, thread};
 
-use openshell_core::{Session, SshConnection, SshTerminalCommand, TerminalSize};
+use openshell_core::{
+    CredentialVault, HostIdentity, HostTrustStore, Session, SessionStore,
+    SshConnection, SshTerminalCommand, TerminalSize,
+    native_paths::native_database_path,
+};
 use tokio::sync::mpsc;
+use zeroize::Zeroizing;
 
 const MAX_PENDING_PACKETS: usize = 64;
 
@@ -26,23 +33,41 @@ pub struct SshPreview {
 
 struct PreviewConfig {
     session: Session,
-    password: String,
+    password: Zeroizing<String>,
     fingerprint: String,
+}
+
+enum PreviewSource {
+    StoredSession(String),
+    Development(PreviewConfig),
 }
 
 fn required_env(name: &str) -> Result<String, String> {
     env::var(name).map_err(|_| format!("{name} is required for SSH preview"))
 }
 
-fn read_configuration() -> Result<Option<PreviewConfig>, String> {
-    let host = match env::var("OPENSHELL_SSH_TEST_HOST") {
-        Ok(host) => host,
-        Err(env::VarError::NotPresent) => return Ok(None),
-        Err(_) => return Err("OPENSHELL_SSH_TEST_HOST must be Unicode".into()),
-    };
+fn read_source() -> Result<Option<PreviewSource>, String> {
+    let stored_id = env::var("OPENSHELL_SSH_SESSION_ID").ok();
+    let dev_host = env::var("OPENSHELL_SSH_TEST_HOST").ok();
+    if stored_id.is_some() && dev_host.is_some() {
+        return Err(
+            "configure either OPENSHELL_SSH_SESSION_ID or OPENSHELL_SSH_TEST_HOST, not both"
+                .into(),
+        );
+    }
+    if let Some(id) = stored_id {
+        if id.trim().is_empty() {
+            return Err("OPENSHELL_SSH_SESSION_ID cannot be empty".into());
+        }
+        return Ok(Some(PreviewSource::StoredSession(id)));
+    }
 
+    let host = match dev_host {
+        Some(host) => host,
+        None => return Ok(None),
+    };
     let username = required_env("OPENSHELL_SSH_TEST_USER")?;
-    let password = required_env("OPENSHELL_SSH_TEST_PASSWORD")?;
+    let password = Zeroizing::new(required_env("OPENSHELL_SSH_TEST_PASSWORD")?);
     let fingerprint = required_env("OPENSHELL_SSH_TEST_FINGERPRINT")?;
     if !fingerprint.starts_with("SHA256:") {
         return Err("OPENSHELL_SSH_TEST_FINGERPRINT must be a verified SHA256 fingerprint".into());
@@ -59,11 +84,41 @@ fn read_configuration() -> Result<Option<PreviewConfig>, String> {
         username,
     };
     session.validate().map_err(|err| err.to_string())?;
-    Ok(Some(PreviewConfig { session, password, fingerprint }))
+    Ok(Some(PreviewSource::Development(PreviewConfig {
+        session,
+        password,
+        fingerprint,
+    })))
+}
+
+/// Read saved session metadata and credentials only on the SSH worker thread.
+/// A missing or changed host trust record prevents connection.
+fn resolve_stored_session(id: &str) -> Result<PreviewConfig, String> {
+    let database_path = native_database_path().map_err(|err| err.to_string())?;
+    let sessions = SessionStore::open(&database_path).map_err(|err| err.to_string())?;
+    let session = sessions.list().map_err(|err| err.to_string())?
+        .into_iter()
+        .find(|session| session.id == id)
+        .ok_or_else(|| "saved SSH session does not exist".to_owned())?;
+    let identity = HostIdentity::new(&session.host, session.port)
+        .map_err(|err| err.to_string())?;
+    let trusted = HostTrustStore::open(&database_path).map_err(|err| err.to_string())?;
+    let fingerprint = trusted.trusted_fingerprint(&identity)
+        .map_err(|err| err.to_string())?
+        .ok_or_else(|| "SSH host key has not been explicitly approved".to_owned())?;
+    let password = CredentialVault::get(&session.id)
+        .map_err(|err| err.to_string())?
+        .ok_or_else(|| "SSH password is missing from Windows Credential Manager".to_owned())?;
+
+    Ok(PreviewConfig {
+        session,
+        password,
+        fingerprint,
+    })
 }
 
 pub fn start_from_environment(size: TerminalSize) -> Result<Option<SshPreview>, String> {
-    let Some(config) = read_configuration()? else { return Ok(None); };
+    let Some(source) = read_source()? else { return Ok(None); };
     let (commands, command_rx) = mpsc::channel(MAX_PENDING_PACKETS);
     let (output_tx, output) = mpsc::channel(MAX_PENDING_PACKETS);
     let (status_tx, status) = mpsc::channel(8);
@@ -71,6 +126,18 @@ pub fn start_from_environment(size: TerminalSize) -> Result<Option<SshPreview>, 
     thread::Builder::new()
         .name("openshell-ssh-preview".into())
         .spawn(move || {
+            let config = match source {
+                PreviewSource::StoredSession(id) => resolve_stored_session(&id),
+                PreviewSource::Development(config) => Ok(config),
+            };
+            let config = match config {
+                Ok(config) => config,
+                Err(error) => {
+                    let _ = status_tx.blocking_send(PreviewStatus::Failed(error));
+                    return;
+                }
+            };
+
             let runtime = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
@@ -122,9 +189,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preview_config_is_opt_in() {
-        // The preview is explicitly configured by the launching process.
-        // Do not set/clear process-global environment in unit tests.
+    fn preview_configuration_has_bounded_queues() {
         assert_eq!(MAX_PENDING_PACKETS, 64);
     }
 }
