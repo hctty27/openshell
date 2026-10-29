@@ -147,6 +147,10 @@ impl TerminalEngine {
 
     pub fn size(&self) -> TerminalSize { self.size }
 
+    pub fn in_alternate_screen(&self) -> bool {
+        self.term.mode().contains(TermMode::ALT_SCREEN)
+    }
+
     /// Scroll the primary-screen history without disturbing the running PTY.
     /// Alternate-screen programs require mouse/key reporting instead.
     pub fn scroll_history(&mut self, lines: i32) {
@@ -300,6 +304,18 @@ mod tests {
         let mut term = TerminalEngine::new(TerminalSize::new(80, 24));
         let replies = term.feed_pty_replies(b"\x1b[6n");
         assert!(replies.iter().any(|reply| reply.starts_with(b"\x1b[")));
+    }
+
+    #[test]
+    fn alternate_screen_does_not_scroll_primary_history() {
+        let mut terminal = TerminalEngine::new(TerminalSize::new(20, 3));
+        terminal.feed(b"\x1b[?1049h");
+        assert!(terminal.in_alternate_screen());
+        let before = terminal.visible_lines();
+        terminal.scroll_history(30);
+        assert_eq!(terminal.visible_lines(), before);
+        terminal.feed(b"\x1b[?1049l");
+        assert!(!terminal.in_alternate_screen());
     }
 
     #[test]
