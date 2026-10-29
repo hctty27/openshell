@@ -648,7 +648,8 @@ impl Render for Workspace {
                                                 this.start_local(cx);
                                             }))
                                     } else {
-                                        div()
+                                        // Keep both branches as Stateful<Div>.
+                                        div().id("return-to-local-placeholder")
                                     }),
                             )
                             .child(
