@@ -134,6 +134,14 @@ impl SshConnection {
         Ok(Self { handle })
     }
 
+    /// Open a separate SSH session channel for the SFTP subsystem.
+    /// The PTY channel is not modified or replaced.
+    pub async fn open_sftp_channel(&self) -> Result<russh::Channel<client::Msg>, SshError> {
+        let channel = self.handle.channel_open_session().await?;
+        channel.request_subsystem(true, "sftp").await?;
+        Ok(channel)
+    }
+
     pub async fn open_terminal(
         &self,
         columns: u32,

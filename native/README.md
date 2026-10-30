@@ -278,3 +278,28 @@ If you need local Debug development, run it on the same machine where the
 GPUI source/HLSL shader files were built; never distribute the GitHub runner's
 standalone Debug EXE to end users.
 
+
+
+## Native SFTP transport (experimental)
+
+SFTP now uses a dedicated authenticated Russh channel and the `russh-sftp`
+subsystem, not the terminal's PTY. This first step exposes asynchronous
+directory listing and streaming upload/download from a developer CLI.
+No full SFTP GUI, file picker, transfer dock, cancellation/progress UI, rz/sz,
+remote directory tracking or drag-and-drop has been implemented yet.
+
+Use on a disposable test server only:
+
+```powershell
+cd native
+cargo run -p openshell-core --example sftpctl -- list server1 .
+cargo run -p openshell-core --example sftpctl -- download server1 /tmp/test.txt "$env:TEMP\test.txt"
+cargo run -p openshell-core --example sftpctl -- upload server1 "$env:TEMP\test.txt" /tmp/new-test.txt
+```
+
+SFTP shares the saved session's pinned host key and uses either its Windows
+Credential Manager password or configured local OpenSSH private key. Uploads
+use CREATE + EXCL and do not overwrite an existing remote target. Downloads
+use create_new and do not overwrite existing local files; failed transfers
+attempt to delete their partial local output. A long-running interrupted
+upload may leave a partial remote file requiring manual cleanup.

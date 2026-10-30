@@ -6,6 +6,7 @@ pub mod legacy;
 pub mod migration;
 pub mod local;
 pub mod ssh;
+pub mod sftp;
 pub mod host_trust;
 pub mod native_paths;
 pub mod credentials;
@@ -26,3 +27,5 @@ pub use ssh::{SshConnection, SshError, SshTerminal, SshTerminalCommand, SshTermi
 pub use terminal::{TerminalEngine, TerminalSize};
 
 pub use workspace::{Split, SplitAxis, Tab, Workspace, WorkspaceError};
+
+pub use sftp::{NativeSftp, NativeSftpError};
