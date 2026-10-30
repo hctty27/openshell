@@ -9,7 +9,11 @@ pub(super) fn styled_terminal_line(cells: &[RenderCell]) -> StyledText {
     let mut start = 0;
 
     for cell in cells {
-        let (fg, bg) = if cell.cursor { (cell.bg, cell.fg) } else { (cell.fg, cell.bg) };
+        let (fg, bg) = if cell.cursor || cell.selected {
+            (cell.bg, cell.fg)
+        } else {
+            (cell.fg, cell.bg)
+        };
         let style = (fg, bg, cell.bold);
         if last_style.is_some_and(|previous| previous != style) {
             let previous = last_style.expect("previous style");
