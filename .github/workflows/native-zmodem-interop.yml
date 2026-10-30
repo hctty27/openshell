@@ -37,3 +37,89 @@ jobs:
         run: cargo build -p openshell-core --example zmodem_lrzsz_stdio
       - name: Verify real rz/sz with SHA-256 over raw PTY
         run: python3 tests/zmodem_lrzsz_interop.py target/debug/examples/zmodem_lrzsz_stdio
+
+
+  ssh-pty-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+      - name: Install OpenSSH daemon and lrzsz
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends openssh-server lrzsz
+      - name: Start ephemeral localhost-only SSH server with pinned host key
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo useradd -m -s /bin/bash openshell-e2e
+          pass="$(openssl rand -hex 24)"
+          echo "::add-mask::$pass"
+          printf 'openshell-e2e:%s\n' "$pass" | sudo chpasswd
+          mkdir -p "$RUNNER_TEMP/openshell-sshd"
+          ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/openshell-sshd/host_ed25519"
+          cat > "$RUNNER_TEMP/openshell-sshd/sshd_config" <<EOF
+          Port 22322
+          ListenAddress 127.0.0.1
+          AddressFamily inet
+          HostKey $RUNNER_TEMP/openshell-sshd/host_ed25519
+          PidFile $RUNNER_TEMP/openshell-sshd/sshd.pid
+          PasswordAuthentication yes
+          PubkeyAuthentication no
+          KbdInteractiveAuthentication no
+          UsePAM no
+          PermitRootLogin no
+          PermitEmptyPasswords no
+          AllowUsers openshell-e2e
+          LogLevel ERROR
+          PrintMotd no
+          AllowTcpForwarding no
+          X11Forwarding no
+          EOF
+          sudo mkdir -p /run/sshd
+          sudo /usr/sbin/sshd -t -f "$RUNNER_TEMP/openshell-sshd/sshd_config"
+          sudo /usr/sbin/sshd -f "$RUNNER_TEMP/openshell-sshd/sshd_config" -E "$RUNNER_TEMP/openshell-sshd/server.log"
+          fingerprint="$(ssh-keygen -lf "$RUNNER_TEMP/openshell-sshd/host_ed25519.pub" -E sha256 | awk '{ print $2 }')"
+          {
+            echo "OPENSHELL_SSH_TEST_HOST=127.0.0.1"
+            echo "OPENSHELL_SSH_TEST_PORT=22322"
+            echo "OPENSHELL_SSH_TEST_USER=openshell-e2e"
+            echo "OPENSHELL_SSH_TEST_PASSWORD=$pass"
+            echo "OPENSHELL_SSH_TEST_FINGERPRINT=$fingerprint"
+          } >> "$GITHUB_ENV"
+          # Every test file is ephemeral; no real account or host credentials.
+          mkdir -p "$RUNNER_TEMP/openshell-ssh-e2e/download"
+          python3 - <<'PY'
+          import os, pathlib, random
+          p = pathlib.Path(os.environ["RUNNER_TEMP"]) / "openshell-ssh-e2e"
+          rng = random.Random(20261030)
+          data = bytes(rng.randrange(256) for _ in range(64 * 1024 + 47))
+          (p / "from-rz.bin").write_bytes(data)
+          (p / "from-sz.bin").write_bytes(data)
+          PY
+          sudo install -o openshell-e2e -g openshell-e2e -m 0644 "$RUNNER_TEMP/openshell-ssh-e2e/from-sz.bin" /home/openshell-e2e/from-sz.bin
+      - name: Compile SSH PTY ZMODEM end-to-end example
+        run: cargo build -p openshell-core --example ssh_zmodem_e2e
+      - name: Download through real SSH PTY and check hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          export OPENSHELL_E2E_MODE=receive
+          export OPENSHELL_E2E_PATH="$RUNNER_TEMP/openshell-ssh-e2e/download"
+          timeout 60s target/debug/examples/ssh_zmodem_e2e
+          cmp "$RUNNER_TEMP/openshell-ssh-e2e/from-sz.bin" "$RUNNER_TEMP/openshell-ssh-e2e/download/from-sz.bin"
+      - name: Upload through real SSH PTY, verify integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          export OPENSHELL_E2E_MODE=send
+          export OPENSHELL_E2E_PATH="$RUNNER_TEMP/openshell-ssh-e2e/from-rz.bin"
+          timeout 60s target/debug/examples/ssh_zmodem_e2e
+          cmp "$RUNNER_TEMP/openshell-ssh-e2e/from-rz.bin" /home/openshell-e2e/from-rz.bin
