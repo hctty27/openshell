@@ -26,7 +26,7 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 - Grouped GPUI text highlights and coalesced PTY output to reduce redundant frame work.
 - GPUI window bounds now update the terminal grid and ConPTY dimensions. Temporary column widths are estimates, not font-shaped metrics.
 - Primary-screen scrollback with wheel and Shift+PageUp/PageDown; alternate-screen mouse reporting remains incomplete. Run the ANSI microbenchmark before claiming speedups.
-- Windows system-clipboard paste using Ctrl+V, Ctrl+Shift+V, Shift+Insert, terminal right-click or the Paste button; bracketed paste protocol is honored when enabled by the terminal application. Multiline/large paste requires a confirmation tied to the original terminal tab. Ctrl+Shift+C and Copy viewport copy **visible terminal text**, not a mouse selection. Clipboard escape controls and pasted content over 128 KiB are rejected.
+- Windows system-clipboard paste using Ctrl+V, Ctrl+Shift+V, Shift+Insert, terminal right-click or the Paste button; bracketed paste protocol is honored when enabled by the terminal application. Multiline/large paste requires a confirmation tied to the original terminal tab. Ctrl+Shift+C and the toolbar Copy action prefer an experimental mouse selection, falling back to visible terminal text when nothing is selected; glyph hit testing remains approximate. Clipboard escape controls and pasted content over 128 KiB are rejected.
 - Bounded byte-oriented Russh/Tokio SSH channel, password authentication requiring previously verified SHA256 host fingerprint.
 - SQLite CRUD of non-secret session metadata in independent native_sessions table.
 - Read-only preview of legacy Wails sessions. An explicit `sessionctl import-legacy` command now creates a consistent SQLite snapshot and imports non-secret session metadata without overwriting existing native sessions; credentials and auth settings must still be configured separately.
@@ -39,10 +39,10 @@ Install stable Rust and Visual Studio C++ Build Tools with the Windows SDK. From
 
 ## Not implemented yet
 
-- Production GPU cell painting, precise monospace glyph measurement, CJK/IME composition, full mouse reporting, mouse-based text selection/copy, and resize performance/accuracy. Basic keyboard clipboard paste and viewport copy are available, but arbitrary selection/copy is not.
-- Complete session management (delete, group, duplicate), host-key approval UI, public-key login and reconnect policy. The initial Windows credential vault and saved-session selection are implemented, but not independently tested through live GUI interactions.
+- Production GPU cell painting, precise monospace glyph measurement, CJK/IME composition, full mouse reporting, pixel-accurate mouse selection and resize performance/accuracy. Experimental grid-based selection and clipboard operations are available but need real Windows/DPI validation.
+- Complete GUI session management (delete, group, duplicate) and automatic reconnect policy. Explicit pinned host-key approval and unencrypted private-key login are implemented but still need Windows GUI acceptance tests.
 - Encrypted private-key passphrases and SSH Agent authentication, automatic SSH reconnection/backoff, port forwarding and keepalive. Unencrypted local OpenSSH private-key login is available for saved sessions through the `sessionctl key` command. Manual reconnect remains available.
-- SFTP file browser/transfers, rz/sz and additional Windows shells/WSL integration.
+- Production SFTP/rz/sz acceptance on real Windows, interruption/cancellation resilience, drag-and-drop transfers, transfer resumption and additional Windows shells/WSL integration. Experimental SFTP browsing/transfers and rz/sz over SSH are implemented.
 - AI provider tools and multi-session automation, conversation storage.
 - Nested split panes, draggable split divider, visual drag drop zones, saved tab restoration, direct Xshell import, i18n, themes and native installer. Initial tab reorder and two-pane drag-to-split prototypes exist; Wails metadata migration is currently a CLI-only opt-in.
 - End-to-end Windows validation and verified performance comparisons.
@@ -103,13 +103,14 @@ just GUI delivery. Once connected, **Disconnect SSH** asks the channel to
 close gracefully; use **Force cancel** if closure stalls. A disconnected saved
 session offers **Reconnect SSH** (manual retry only, with the same independently
 approved host fingerprint). **Back to local** is available to restart ConPTY.
-Clicking another saved session explicitly cancels the previous SSH worker and
-replaces its GUI output stream.
+Clicking another saved session opens an independent SSH tab; it does not cancel
+or replace the transport in an existing tab.
 The prior `OPENSHELL_SSH_SESSION_ID` environment variable remains available
 for development-only automated startup but is not required for normal preview
 selection.
 
-The saved-session editor and host-key approval UI are **not yet implemented**.
+The saved-session editor, masked password entry, unencrypted private-key path
+and explicit pinned host-key approval UI are implemented experimentally.
 The SSH worker reads saved credentials **off the UI thread**. The cancel
 signal can abort network connection, authentication and PTY operation; native
 SQLite and OS credential retrieval remain synchronous inside the worker and
@@ -152,9 +153,9 @@ It exercises login, shell PTY, input, resize, and output without revealing
 the password or printing the remote command output.
 
 The normal startup path (variables absent) remains local PowerShell/ConPTY.
-Remote SSH currently has no interactive credential/host approval UI, key/agent
-login or automatic reconnect controls. Saved-session selection is available as
-an experimental click-to-connect sidebar. The Windows CI compiles
+Remote SSH supports experimental GUI password and pinned host-key approval,
+plus unencrypted private-key login. SSH agent authentication, encrypted-key
+passphrase entry and automatic reconnect remain outstanding. The Windows CI compiles
 the test example but cannot authenticate against your private server.
 
 ## Windows multi-tab smoke-test checklist
@@ -283,10 +284,10 @@ standalone Debug EXE to end users.
 ## Native SFTP transport (experimental)
 
 SFTP now uses a dedicated authenticated Russh channel and the `russh-sftp`
-subsystem, not the terminal's PTY. This first step exposes asynchronous
-directory listing and streaming upload/download from a developer CLI.
-No full SFTP GUI, file picker, transfer dock, cancellation/progress UI, rz/sz,
-remote directory tracking or drag-and-drop has been implemented yet.
+subsystem, not the terminal's PTY. The native GPUI browser now provides directory navigation, a system file picker,
+streaming upload/download, byte progress, cancellation, a bounded transfer queue
+and per-tab OSC 7/strict OSC 0/2 terminal-directory following. Drag-and-drop,
+transfer resumption and full real-Windows SFTP acceptance remain outstanding.
 
 Use on a disposable test server only:
 
@@ -310,9 +311,8 @@ upload may leave a partial remote file requiring manual cleanup.
 Each saved SSH session now has an **SFTP** action. A right-side GPUI browser
 lists the remote directory, supports folder navigation, Up and Refresh, and
 uses a separate SSH connection so the currently running terminal is not
-restarted. Directory enumeration runs on a background worker using one persistent SSH/SFTP channel for the lifetime of the panel (refresh and folder changes reuse it; errors allow explicit reconnect on Refresh). This initial
-GUI does **not** yet implement file picker upload/download or transfer
-progress; use `sftpctl` for initial transfer testing.
+restarted. Directory enumeration runs on a background worker using one persistent SSH/SFTP channel for the lifetime of the panel (refresh and folder changes reuse it; errors allow explicit reconnect on Refresh). The experimental GUI also supports upload/download file pickers, transfer
+progress and cancellation; `sftpctl` remains available for isolated testing.
 
 
 ### Native SFTP queue (experimental)
@@ -401,13 +401,13 @@ The native terminal panel displays per-file progress bytes, an optional
 percentage and completion/error status through a separate bounded event
 channel; user actions can cancel the active transfer. The receiver enforces
 a 256 KiB pending-wire buffer, bounded file offsets, protocol timeouts and
-manual file acceptance. This **is not the same as a production-grade
-ZMODEM integration**: real `lrzsz` interoperability, reliable multiple-file
-sessions, CRC recovery, transfer resumption, file pickers under all Windows
-configurations, and real disconnect/cancel flows have **not yet been verified**.
+manual file acceptance. This **is not yet production-grade ZMODEM**. Ubuntu CI has verified actual
+`lrzsz` multi-file (including Chinese names) binary transfers over a local raw
+PTY and both directions over a real pinned-host-key OpenSSH PTY, including
+SHA-256/file comparisons and post-transfer shell recovery. This does **not**
+validate Windows GPUI file-picker behavior, large-file flow control, interrupted
+SSH sessions, cancellation cleanup, transfer resumption or all terminal modes.
 The progress is an inline terminal indicator, not Xshell's full task dialog.
 
-**Do not use experimental ZMODEM for important files.** Prefer SFTP until
-end-to-end testing against an actual Linux `lrzsz` sender/receiver and file
-hash comparisons succeed. CI compilation alone does not demonstrate
-interoperability.
+**Do not use experimental ZMODEM for important files.** Prefer SFTP for routine
+transfers until live Windows and interrupted-transfer acceptance are complete.
