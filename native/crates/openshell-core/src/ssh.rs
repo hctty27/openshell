@@ -642,6 +642,9 @@ impl SshTerminal {
                         if let Some(active) = download.as_mut() {
                             if !data.is_empty() { active.timeouts = 0; }
                             if active.pending.len().saturating_add(data.len()) > 256 * 1024 {
+                                let _ = progress.try_send(ZmodemTransferStatus::Failed(
+                                    "ZMODEM receive buffer overflow".into(),
+                                ));
                                 active.clean_partial().await;
                                 let _ = active.protocol.abort();
                                 download = None;
@@ -653,6 +656,9 @@ impl SshTerminal {
                             }
                         } else if let Some(active) = upload.as_mut() {
                             if active.pending.len().saturating_add(data.len()) > 256 * 1024 {
+                                let _ = progress.try_send(ZmodemTransferStatus::Failed(
+                                    "ZMODEM upload buffer overflow".into(),
+                                ));
                                 let _ = active.protocol.abort();
                                 upload = None;
                                 let _ = output.send(
@@ -695,6 +701,7 @@ impl SshTerminal {
                                 ).await;
                             }
                             Err(error) => {
+                                let _ = progress.try_send(ZmodemTransferStatus::Failed(error.to_string()));
                                 let _ = output.send(format!(
                                     "\r\n[OpenShell] Cannot start ZMODEM: {error}\r\n"
                                 ).into_bytes()).await;
@@ -712,6 +719,7 @@ impl SshTerminal {
                                 ).await;
                             }
                             Err(error) => {
+                                let _ = progress.try_send(ZmodemTransferStatus::Failed(error.to_string()));
                                 let _ = output.send(format!(
                                     "\r\n[OpenShell] Cannot start ZMODEM download: {error}\r\n"
                                 ).into_bytes()).await;
@@ -765,6 +773,9 @@ impl SshTerminal {
                     if let Some(active) = download.as_mut() {
                         active.timeouts = active.timeouts.saturating_add(1);
                         if active.timeouts > 5 {
+                            let _ = progress.try_send(ZmodemTransferStatus::Failed(
+                                "ZMODEM receive timed out".into(),
+                            ));
                             let _ = active.protocol.abort();
                             active.clean_partial().await;
                             download = None;
@@ -772,6 +783,7 @@ impl SshTerminal {
                                 b"\r\n[OpenShell] ZMODEM receive timed out\r\n".to_vec(),
                             ).await;
                         } else if let Err(error) = active.protocol.timeout() {
+                            let _ = progress.try_send(ZmodemTransferStatus::Failed(error.to_string()));
                             active.clean_partial().await;
                             download = None;
                             let _ = output.send(format!(
@@ -784,11 +796,15 @@ impl SshTerminal {
                     if let Some(active) = upload.as_mut() {
                         active.timeouts += 1;
                         if active.timeouts > 5 {
+                            let _ = progress.try_send(ZmodemTransferStatus::Failed(
+                                "ZMODEM upload timed out".into(),
+                            ));
                             upload = None;
                             let _ = output.send(
                                 b"\r\n[OpenShell] ZMODEM upload timed out\r\n".to_vec(),
                             ).await;
                         } else if let Err(error) = active.protocol.timeout() {
+                            let _ = progress.try_send(ZmodemTransferStatus::Failed(error.to_string()));
                             upload = None;
                             let _ = output.send(format!(
                                 "\r\n[OpenShell] ZMODEM timeout error: {error}\r\n",
