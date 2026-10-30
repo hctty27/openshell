@@ -84,7 +84,7 @@ impl TerminalTab {
     /// does not consume or rewrite the transport: future ZMODEM engines must
     /// acquire exclusive binary-stream ownership before file I/O is enabled.
     pub(super) fn observe_zmodem(&mut self, data: &[u8]) -> bool {
-        if self.zmodem_silenced || self.remote_phase != RemotePhase::Connected {
+        if self.zmodem_silenced || matches!(self.remote_phase, RemotePhase::Local | RemotePhase::Disconnected) {
             return false;
         }
         if let Some(kind) = self.zmodem_probe.feed(data) {
