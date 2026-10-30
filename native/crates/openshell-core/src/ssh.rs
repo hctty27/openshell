@@ -18,6 +18,35 @@ use crate::{session::Session, zmodem_engine::{ZmodemEngine, ZmodemAction, Zmodem
 const ZMODEM_ATTENTION: &[u8] = b"\x03";
 const ZMODEM_CANCEL_SEQUENCE: &[u8] = b"\x18\x18\x18\x18\x18\x18\x18\x18\x18\x18\x08\x08\x08\x08\x08\x08\x08\x08\x08\x08";
 
+// Bash and several interactive shells re-enable bracketed paste when the
+// foreground transfer program returns to the prompt. Discard stale ZMODEM
+// frames until this recognizable boundary or the input stream goes quiet.
+const SHELL_BRACKETED_PASTE_READY: &[u8] = b"\x1b[?2004h";
+
+#[derive(Default)]
+struct ZmodemCancelRecovery {
+    suffix: Vec<u8>,
+}
+
+impl ZmodemCancelRecovery {
+    // Keep only a short suffix: a remote sender may have megabytes already
+    // queued when it receives cancellation. Never buffer those bytes.
+    fn feed(&mut self, bytes: &[u8]) -> Option<Vec<u8>> {
+        for (position, byte) in bytes.iter().copied().enumerate() {
+            self.suffix.push(byte);
+            if self.suffix.ends_with(SHELL_BRACKETED_PASTE_READY) {
+                let mut visible = SHELL_BRACKETED_PASTE_READY.to_vec();
+                visible.extend_from_slice(&bytes[position + 1..]);
+                return Some(visible);
+            }
+            if self.suffix.len() >= SHELL_BRACKETED_PASTE_READY.len() {
+                self.suffix.remove(0);
+            }
+        }
+        None
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum SshError {
     #[error("SSH server fingerprint must be an explicitly trusted SHA256 fingerprint")]
@@ -391,6 +420,7 @@ impl SshTerminal {
         let mut outcome = SshTerminalOutcome::default();
         let mut upload: Option<ZmodemUpload> = None;
         let mut download: Option<ZmodemDownload> = None;
+        let mut cancel_recovery: Option<ZmodemCancelRecovery> = None;
 
         loop {
             // Drain engine actions before reading more SSH packets. This
@@ -677,7 +707,17 @@ impl SshTerminal {
                 message = reader.wait() => match message {
                     Some(ChannelMsg::Data { data })
                     | Some(ChannelMsg::ExtendedData { data, .. }) => {
-                        if let Some(active) = download.as_mut() {
+                        if let Some(recovery) = cancel_recovery.as_mut() {
+                            // Never render stale binary file data as terminal
+                            // text after a transfer was cancelled.
+                            if let Some(visible) = recovery.feed(&data) {
+                                cancel_recovery = None;
+                                if output.send(visible).await.is_err() {
+                                    writer.close().await?;
+                                    break;
+                                }
+                            }
+                        } else if let Some(active) = download.as_mut() {
                             if !data.is_empty() { active.timeouts = 0; }
                             if active.pending.len().saturating_add(data.len()) > 256 * 1024 {
                                 let _ = progress.try_send(ZmodemTransferStatus::Failed(
@@ -718,7 +758,7 @@ impl SshTerminal {
                     _ => {}
                 },
                 command = commands.recv() => match command {
-                    Some(SshTerminalCommand::Input(bytes)) if upload.is_none() && download.is_none() => {
+                    Some(SshTerminalCommand::Input(bytes)) if upload.is_none() && download.is_none() && cancel_recovery.is_none() => {
                         if !bytes.is_empty() {
                             writer.data_bytes(bytes).await?;
                         }
@@ -729,7 +769,7 @@ impl SshTerminal {
                     Some(SshTerminalCommand::Resize { columns, rows }) => {
                         writer.window_change(columns.max(2), rows.max(1), 0, 0).await?;
                     }
-                    Some(SshTerminalCommand::ZmodemUpload(path)) if upload.is_none() && download.is_none() => {
+                    Some(SshTerminalCommand::ZmodemUpload(path)) if upload.is_none() && download.is_none() && cancel_recovery.is_none() => {
                         match ZmodemUpload::open(path).await {
                             Ok(active) => {
                                 upload = Some(active);
@@ -747,7 +787,7 @@ impl SshTerminal {
                         }
                     }
                     Some(SshTerminalCommand::ZmodemUpload(_)) => {}
-                    Some(SshTerminalCommand::ZmodemDownload(directory)) if upload.is_none() && download.is_none() => {
+                    Some(SshTerminalCommand::ZmodemDownload(directory)) if upload.is_none() && download.is_none() && cancel_recovery.is_none() => {
                         match ZmodemDownload::open(directory).await {
                             Ok(active) => {
                                 download = Some(active);
@@ -773,6 +813,7 @@ impl SshTerminal {
                             // before the session abort bytes are transmitted.
                             writer.data_bytes(ZMODEM_ATTENTION.to_vec()).await?;
                             writer.data_bytes(ZMODEM_CANCEL_SEQUENCE.to_vec()).await?;
+                            cancel_recovery = Some(ZmodemCancelRecovery::default());
                         }
                         if let Some(mut active) = download.take() {
                             let _ = active.protocol.abort();
@@ -802,6 +843,15 @@ impl SshTerminal {
                         writer.close().await?;
                         break;
                     }
+                },
+                _ = tokio::time::sleep(Duration::from_millis(750)), if cancel_recovery.is_some() => {
+                    // Shells without bracketed-paste prompts can still recover
+                    // after the transport becomes quiet. The prompt may need
+                    // to be redrawn manually by pressing Enter.
+                    cancel_recovery = None;
+                    let _ = output.send(
+                        b"\r\n[OpenShell] ZMODEM output quiet; press Enter if no prompt appears.\r\n".to_vec(),
+                    ).await;
                 },
                 _ = tokio::time::sleep(Duration::from_secs(12)), if download.is_some() => {
                     if let Some(active) = download.as_mut() {
@@ -888,6 +938,24 @@ impl SshTerminal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cancelled_zmodem_suppresses_binary_until_shell_prompt_across_packets() {
+        let mut recovery = ZmodemCancelRecovery::default();
+        assert!(recovery.feed(b"\xff\x00binary\x1b[?20").is_none());
+        assert_eq!(
+            recovery.feed(b"04huser@host:~$ "),
+            Some(b"\x1b[?2004huser@host:~$ ".to_vec())
+        );
+    }
+
+    #[test]
+    fn cancelled_zmodem_never_accumulates_large_stream_buffers() {
+        let mut recovery = ZmodemCancelRecovery::default();
+        assert!(recovery.feed(&vec![0xff; 1024 * 1024]).is_none());
+        assert!(recovery.suffix.len() < SHELL_BRACKETED_PASTE_READY.len());
+    }
+
 
     #[tokio::test]
     async fn download_target_creation_never_overwrites_existing_content() {
