@@ -349,3 +349,22 @@ and PTY remain separate connections; no hidden `pwd` command is executed.
 Shell integration is required to emit OSC 7 or a matching title. Nested SSH,
 tmux, or other remote applications may report paths for a different machine;
 users should verify that the SFTP server is the intended host.
+
+
+### Experimental native terminal mouse selection
+
+The terminal now uses Alacritty's own per-grid selection state rather than
+copying the whole viewport for every mouse gesture. Left-button drag selects
+cells and highlights the selection; releasing copies the non-empty selection
+to the Windows clipboard. Ctrl+Shift+C and the toolbar Copy action prefer
+the active selection, falling back to visible-viewport copy when no selection
+is present. Each SSH/PowerShell tab owns an independent selection, including
+while scrolling history. Right-click paste is unchanged.
+
+The current GPUI diagnostic renderer still estimates glyph columns using a
+fixed 8.5 px width; **pointer accuracy for proportional glyphs, CJK width,
+DPI scaling, split panes and the SFTP dock is not production-quality yet**.
+Terminal applications that advertise mouse mode reserve ordinary mouse
+gestures; holding Shift allows a forced text selection. Full application
+mouse event forwarding, IME and pixel-accurate glyph hit testing remain
+release blockers. This is not yet a replacement for Xshell's selection UX.
