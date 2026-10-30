@@ -1295,6 +1295,18 @@ impl Workspace {
         }
     }
 
+    fn zmodem_use_sftp(&mut self, id: u64, cx: &mut Context<Self>) {
+        let saved_id = self.tabs.iter().find(|tab| tab.id == id)
+            .and_then(|tab| tab.session_id.clone());
+        // Cancelling rz/sz sends Ctrl+C only to this session, not its peers.
+        self.cancel_zmodem_request(id, cx);
+        if let Some(session) = saved_id
+            .and_then(|id| self.saved_sessions.iter().find(|s| s.id == id).cloned())
+        {
+            self.open_sftp_browser(session, cx);
+        }
+    }
+
     fn render_terminal_pane(
         &self,
         pane_id: u64,
@@ -1337,6 +1349,19 @@ impl Workspace {
                         .child("Cancel remote rz/sz")
                         .on_click(cx.listener(move |view, _, _, cx| {
                             view.cancel_zmodem_request(pane_id, cx);
+                        })),
+                )
+                .child(
+                    div()
+                        .id(("zmodem-sftp-fallback", pane_index))
+                        .cursor_pointer()
+                        .px_2()
+                        .py_1()
+                        .rounded_md()
+                        .bg(rgb(0x29435d))
+                        .child(if saved { "Cancel rz/sz + Open SFTP" } else { "SFTP requires a saved session" })
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            if saved { view.zmodem_use_sftp(pane_id, cx); }
                         })),
                 )
                 .child(
