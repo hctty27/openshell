@@ -43,11 +43,11 @@ def exchange(binary, mode, source, destination, remote_files=()):
     master, slave = pty.openpty()
     tty.setraw(slave, termios.TCSANOW)
     if mode == "receive":
-        command = ["sz", "-q", "-e", *remote_files]
+        command = ["sz", "-q", *remote_files]
         cwd = source
         local_arg = destination
     else:
-        command = ["rz", "-q", "-e"]
+        command = ["rz", "-q"]
         cwd = destination
         local_arg = source
 
