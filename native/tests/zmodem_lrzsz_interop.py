@@ -85,6 +85,12 @@ def exchange(binary, mode, source, destination, remote_files=()):
                     f"{mode}: lrzsz exited {remote.returncode}, Rust exited {local.returncode}"
                 )
         except Exception:
+            print(f"Process status: Rust={local.poll()} lrzsz={remote.poll()}")
+            print("Destination files:", [
+                (f.name, f.stat().st_size) for f in pathlib.Path(destination).glob("*")
+            ] if mode == "receive" else [
+                (f.name, f.stat().st_size) for f in pathlib.Path(destination).glob("*")
+            ])
             local_err.seek(0)
             remote_err.seek(0)
             print("Rust stderr:", local_err.read().decode(errors="replace")[-3000:])
