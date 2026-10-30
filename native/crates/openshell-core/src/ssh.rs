@@ -13,6 +13,10 @@ use tokio::{
 
 use crate::{session::Session, zmodem_engine::{ZmodemEngine, ZmodemAction, ZmodemEvent, ZmodemRole, ZmodemEngineError, MAX_FILE_IO_CHUNK, safe_filename}};
 
+// Standard ZMODEM session cancellation: eight CAN bytes followed by
+// ten backspaces. Remote lrzsz can otherwise remain stuck in streaming mode.
+const ZMODEM_CANCEL_SEQUENCE: &[u8] = b"\x18\x18\x18\x18\x18\x18\x18\x18\x08\x08\x08\x08\x08\x08\x08\x08\x08\x08";
+
 #[derive(Debug, Error)]
 pub enum SshError {
     #[error("SSH server fingerprint must be an explicitly trusted SHA256 fingerprint")]
@@ -762,33 +766,26 @@ impl SshTerminal {
                     Some(SshTerminalCommand::ZmodemDownload(_)) => {}
                     Some(SshTerminalCommand::CancelZmodem) => {
                         if upload.is_some() || download.is_some() {
-                            let _ = progress.try_send(ZmodemTransferStatus::Cancelled);
+                            // A protocol-local abort event alone does not stop
+                            // a remote sender that is actively streaming data.
+                            // Send the interoperable cancel sequence on this PTY
+                            // before returning control to the interactive shell.
+                            writer.data_bytes(ZMODEM_CANCEL_SEQUENCE.to_vec()).await?;
                         }
                         if let Some(mut active) = download.take() {
                             let _ = active.protocol.abort();
                             active.clean_partial().await;
-                            for _ in 0..4 {
-                                let Ok(ZmodemAction::Wire(bytes)) = active.protocol.next_action() else { break };
-                                let len = bytes.len();
-                                writer.data_bytes(bytes).await?;
-                                active.protocol.wire_written(len);
-                            }
                             let _ = output.send(
                                 b"\r\n[OpenShell] ZMODEM download cancelled\r\n".to_vec(),
                             ).await;
                         }
                         if let Some(mut active) = upload.take() {
                             let _ = active.protocol.abort();
-                            for _ in 0..4 {
-                                let Ok(ZmodemAction::Wire(bytes)) = active.protocol.next_action() else { break; };
-                                let count = bytes.len();
-                                writer.data_bytes(bytes).await?;
-                                active.protocol.wire_written(count);
-                            }
                             let _ = output.send(
                                 b"\r\n[OpenShell] ZMODEM upload cancelled\r\n".to_vec(),
                             ).await;
                         }
+                        let _ = progress.try_send(ZmodemTransferStatus::Cancelled);
                     }
                     Some(SshTerminalCommand::Close) | None => {
                         if let Some(mut active) = download.take() {
