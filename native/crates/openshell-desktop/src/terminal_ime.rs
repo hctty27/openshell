@@ -7,6 +7,17 @@ use gpui::{
 };
 use crate::{Workspace, terminal_paint::{CELL_HEIGHT, CELL_WIDTH, CONTENT_PADDING}};
 
+/// Match the 14px Consolas used by the provisional diagnostic renderer.
+pub(super) fn terminal_cell_advance(cx: &gpui::App) -> f32 {
+    let font_id = cx.text_system().resolve_font(&gpui::font("Consolas"));
+    cx.text_system()
+        .ch_advance(font_id, px(14.0))
+        .ok()
+        .map(f32::from)
+        .filter(|width| width.is_finite() && *width > 0.0)
+        .unwrap_or(CELL_WIDTH)
+}
+
 #[derive(Default)]
 pub(super) struct TerminalImeState {
     pub(super) text: String,
@@ -160,13 +171,7 @@ impl EntityInputHandler for Workspace {
         // Use the actual Consolas advance at the same 14px size as the
         // diagnostic terminal renderer. The old fixed width drifted with
         // system font metrics; fall back only if the glyph is unavailable.
-        let font_id = cx.text_system().resolve_font(&gpui::font("Consolas"));
-        let measured_width = cx.text_system()
-            .ch_advance(font_id, px(14.0))
-            .ok()
-            .map(f32::from)
-            .filter(|width| width.is_finite() && *width > 0.0)
-            .unwrap_or(CELL_WIDTH);
+        let measured_width = terminal_cell_advance(cx);
         Some(Bounds::new(
             point(
                 element_bounds.left() + px(CONTENT_PADDING / 2.0 + column as f32 * measured_width),
