@@ -162,14 +162,22 @@ impl EntityInputHandler for Workspace {
 
     fn bounds_for_range(
         &mut self, _range: Range<usize>, element_bounds: Bounds<Pixels>,
-        _window: &mut Window, _cx: &mut Context<Self>,
+        _window: &mut Window, cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
         let (row, column) = self.active_tab().terminal.visible_cursor_cell();
-        // Diagnostic renderer only: real glyph metrics and split-pane bounds
-        // must replace these estimates before claiming pixel-accurate IME UI.
+        // Use the actual Consolas advance at the same 14px size as the
+        // diagnostic terminal renderer. The old fixed width drifted with
+        // system font metrics; fall back only if the glyph is unavailable.
+        let font_id = cx.text_system().resolve_font(&gpui::font("Consolas"));
+        let measured_width = cx.text_system()
+            .ch_advance(font_id, px(14.0))
+            .ok()
+            .map(f32::from)
+            .filter(|width| width.is_finite() && *width > 0.0)
+            .unwrap_or(CELL_WIDTH);
         Some(Bounds::new(
             point(
-                element_bounds.left() + px(16.0 + column as f32 * CELL_WIDTH),
+                element_bounds.left() + px(CONTENT_PADDING / 2.0 + column as f32 * measured_width),
                 element_bounds.top() + px(CONTENT_PADDING / 2.0 + row as f32 * CELL_HEIGHT),
             ),
             size(px(2.0), px(CELL_HEIGHT)),
