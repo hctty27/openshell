@@ -541,11 +541,12 @@ impl SshTerminal {
                             Ok(())
                         }
                         ZmodemAction::Event(ZmodemEvent::OfferedFile { name, size }) => {
+                            let offered_name = name.clone();
                             let accepted = active.offer(name, size).await?;
                             if !accepted {
-                                if let Some(name) = active.current.as_ref().map(|file| file.name.clone()) {
-                                    let _ = progress.try_send(ZmodemTransferStatus::Skipped { name });
-                                }
+                                let _ = progress.try_send(ZmodemTransferStatus::Skipped {
+                                    name: offered_name,
+                                });
                                 let _ = output.try_send(
                                     b"\r\n[OpenShell] Skipped existing ZMODEM file\r\n".to_vec(),
                                 );
