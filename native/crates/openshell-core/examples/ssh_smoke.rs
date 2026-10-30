@@ -46,9 +46,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let terminal = connection.open_terminal(80, 24).await?;
     let (output_tx, mut output_rx) = mpsc::channel(64);
     let (command_tx, command_rx) = mpsc::channel(64);
+    let (progress_tx, _progress_rx) = mpsc::channel(8);
 
     let task = tokio::spawn(async move {
-        terminal.run_controlled(output_tx, command_rx).await
+        terminal.run_controlled(output_tx, command_rx, progress_tx).await
     });
 
     command_tx.send(SshTerminalCommand::resize(100, 30)).await?;
