@@ -329,3 +329,23 @@ file copies do not interrupt terminal output or folder navigation. The
 queue is in-memory only (not resumed across restarts); overwrite remains
 explicitly forbidden. Real Windows interaction and SSH/SFTP server tests
 are still required before a production release.
+
+
+### SFTP current directory follows the SSH terminal (experimental)
+
+Native terminals now parse OSC 7 (file://host/absolute/path) and strict OSC 0/2
+titles such as `user@server:/data/app`. OSC 7 takes precedence once observed.
+The state machine handles split transport chunks, BEL/ST terminators, escaped
+UTF-8 path components and bounded OSC payloads. Arbitrary title strings are
+not interpreted as paths.
+
+Opening the right-side SFTP browser for a saved SSH session uses the current
+directory of that session's connected terminal tab, if one has reported a
+valid path. Otherwise SFTP opens its normal server directory. While following
+is enabled, new directory reports update the SFTP path. Explicit SFTP folder
+navigation pauses following until the user enables it again. The SFTP browser
+and PTY remain separate connections; no hidden `pwd` command is executed.
+
+Shell integration is required to emit OSC 7 or a matching title. Nested SSH,
+tmux, or other remote applications may report paths for a different machine;
+users should verify that the SFTP server is the intended host.
