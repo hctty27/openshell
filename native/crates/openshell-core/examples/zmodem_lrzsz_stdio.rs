@@ -130,9 +130,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     protocol.file_written(bytes.len())?;
                 }
                 ZmodemAction::Event(ZmodemEvent::FileCompleted) if send => {
+                    eprintln!("PROTO sender FileCompleted");
                     should_finish = true;
                 }
                 ZmodemAction::Event(ZmodemEvent::FileCompleted) => {
+                    eprintln!("PROTO receiver FileCompleted");
                     if let Some((_, file, expected, written)) = current.take() {
                         if expected.is_some_and(|n| n != written) {
                             return Err("file shorter than declared ZFILE length".into());
@@ -141,6 +143,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 ZmodemAction::Event(ZmodemEvent::SessionCompleted) => {
+                    eprintln!("PROTO SessionCompleted");
                     if current.is_some() { return Err("incomplete file at session end".into()); }
                     completed = true;
                     break;
