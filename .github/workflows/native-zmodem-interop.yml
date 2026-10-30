@@ -104,8 +104,11 @@ jobs:
           data = bytes(rng.randrange(256) for _ in range(1024 * 1024 + 47))
           (p / "from-rz.bin").write_bytes(data)
           (p / "from-sz.bin").write_bytes(data)
+          (p / "large-from-sz.bin").write_bytes(os.urandom(16 * 1024 * 1024 + 53))
           PY
           sudo install -o openshell-e2e -g openshell-e2e -m 0644 "$RUNNER_TEMP/openshell-ssh-e2e/from-sz.bin" /home/openshell-e2e/from-sz.bin
+          sudo install -o openshell-e2e -g openshell-e2e -m 0644 "$RUNNER_TEMP/openshell-ssh-e2e/large-from-sz.bin" /home/openshell-e2e/large-from-sz.bin
+          mkdir -p "$RUNNER_TEMP/openshell-ssh-e2e/cancel"
       - name: Compile SSH PTY ZMODEM end-to-end example
         run: cargo build -p openshell-core --example ssh_zmodem_e2e
       - name: Download through real SSH PTY and check hash
@@ -124,3 +127,11 @@ jobs:
           export OPENSHELL_E2E_PATH="$RUNNER_TEMP/openshell-ssh-e2e/from-rz.bin"
           timeout 60s target/debug/examples/ssh_zmodem_e2e
           cmp "$RUNNER_TEMP/openshell-ssh-e2e/from-rz.bin" /home/openshell-e2e/from-rz.bin
+      - name: Cancel real SSH PTY sz mid-transfer and verify cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          export OPENSHELL_E2E_MODE=cancel-receive
+          export OPENSHELL_E2E_PATH="$RUNNER_TEMP/openshell-ssh-e2e/cancel"
+          timeout 60s target/debug/examples/ssh_zmodem_e2e
+          test ! -e "$OPENSHELL_E2E_PATH/large-from-sz.bin"
