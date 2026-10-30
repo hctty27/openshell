@@ -118,6 +118,7 @@ pub struct TerminalEngine {
     parser: Processor,
     events: Receiver<Event>,
     size: TerminalSize,
+    cwd: crate::cwd::CwdTracker,
 }
 
 impl TerminalEngine {
@@ -129,12 +130,14 @@ impl TerminalEngine {
             parser: Processor::new(),
             events,
             size,
+            cwd: crate::cwd::CwdTracker::default(),
         }
     }
 
     /// Parser state is retained between calls, including partial UTF-8 and CSI.
     /// Return terminal-generated events such as PtyWrite to the transport.
     pub fn feed(&mut self, bytes: &[u8]) -> Vec<Event> {
+        self.cwd.feed(bytes);
         self.parser.advance(&mut self.term, bytes);
         self.events.try_iter().collect()
     }
@@ -146,6 +149,10 @@ impl TerminalEngine {
     }
 
     pub fn size(&self) -> TerminalSize { self.size }
+
+    pub fn current_directory(&self) -> Option<&str> {
+        self.cwd.path()
+    }
 
     pub fn in_alternate_screen(&self) -> bool {
         self.term.mode().contains(TermMode::ALT_SCREEN)

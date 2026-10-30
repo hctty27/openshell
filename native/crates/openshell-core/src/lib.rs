@@ -13,6 +13,7 @@ pub mod credentials;
 pub mod store;
 pub mod key_auth;
 pub mod terminal;
+pub mod cwd;
 pub mod workspace;
 
 pub use session::{Session, SessionError};
