@@ -13,9 +13,10 @@ use tokio::{
 
 use crate::{session::Session, zmodem_engine::{ZmodemEngine, ZmodemAction, ZmodemEvent, ZmodemRole, ZmodemEngineError, MAX_FILE_IO_CHUNK, safe_filename}};
 
-// Standard ZMODEM session cancellation: eight CAN bytes followed by
-// ten backspaces. Remote lrzsz can otherwise remain stuck in streaming mode.
-const ZMODEM_CANCEL_SEQUENCE: &[u8] = b"\x18\x18\x18\x18\x18\x18\x18\x18\x08\x08\x08\x08\x08\x08\x08\x08\x08\x08";
+// Interrupt streaming on the remote PTY before transmitting the ZMODEM
+// cancel sequence. lrzsz uses ten CAN bytes followed by ten backspaces.
+const ZMODEM_ATTENTION: &[u8] = b"\x03";
+const ZMODEM_CANCEL_SEQUENCE: &[u8] = b"\x18\x18\x18\x18\x18\x18\x18\x18\x18\x18\x08\x08\x08\x08\x08\x08\x08\x08\x08\x08";
 
 #[derive(Debug, Error)]
 pub enum SshError {
@@ -767,10 +768,10 @@ impl SshTerminal {
                     Some(SshTerminalCommand::CancelZmodem) => {
                         let was_active = upload.is_some() || download.is_some();
                         if was_active {
-                            // A protocol-local abort event alone does not stop
-                            // a remote sender that is actively streaming data.
-                            // Send the interoperable cancel sequence on this PTY
-                            // before returning control to the interactive shell.
+                            // The ZMODEM specification requires an attention
+                            // signal to interrupt an active streaming sender
+                            // before the session abort bytes are transmitted.
+                            writer.data_bytes(ZMODEM_ATTENTION.to_vec()).await?;
                             writer.data_bytes(ZMODEM_CANCEL_SEQUENCE.to_vec()).await?;
                         }
                         if let Some(mut active) = download.take() {
