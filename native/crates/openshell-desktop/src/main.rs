@@ -63,9 +63,27 @@ struct Workspace {
     next_sftp_generation: u64,
 }
 
-fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
-    if key.modifiers.platform {
+/// Some Windows layouts report AltGr as Ctrl+Alt. Preserve a committed,
+/// layout-specific printable character instead of encoding it as Ctrl+key.
+fn altgr_character(key: &Keystroke) -> Option<&str> {
+    if !key.modifiers.control || !key.modifiers.alt {
         return None;
+    }
+    let text = key.key_char.as_deref()?;
+    if text.is_empty() || text.chars().any(char::is_control)
+        || text.eq_ignore_ascii_case(&key.key)
+    {
+        return None;
+    }
+    Some(text)
+}
+
+fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
+    if key.modifiers.platform || key.is_ime_in_progress() {
+        return None;
+    }
+    if let Some(text) = altgr_character(key) {
+        return Some(text.as_bytes().to_vec());
     }
     // GPUI reports key_char=None for nonprintable keys. Such keys must
     // be processed before checking IME composition state.
@@ -94,9 +112,6 @@ fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
     };
     if let Some(sequence) = control_sequence {
         return Some(sequence.as_bytes().to_vec());
-    }
-    if key.is_ime_in_progress() {
-        return None;
     }
     let character = key.key_char.as_ref()?;
     let bytes = character.as_bytes();
@@ -544,6 +559,11 @@ impl Workspace {
     fn editor_keystroke(&mut self, key: &Keystroke, cx: &mut Context<Self>) -> bool {
         if self.session_editor.is_none() { return false; }
         if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return true; }
+        if let Some(text) = altgr_character(key) {
+            if let Some(draft) = &mut self.session_editor { draft.type_text(text); }
+            cx.notify();
+            return true;
+        }
         match key.key.as_str() {
             "escape" => self.cancel_edit(cx),
             "enter" => self.save_edit(cx),
@@ -2170,7 +2190,9 @@ impl Render for Workspace {
                             .track_focus(&self.focus_handle)
                             .on_key_down(cx.listener(|view, event: &KeyDownEvent, _, cx| {
                                 if view.editor_keystroke(&event.keystroke, cx) { return; }
-                                if event.keystroke.modifiers.control {
+                                if event.keystroke.modifiers.control
+                                    && !event.keystroke.modifiers.alt
+                                {
                                     match event.keystroke.key.as_str() {
                                         "v" => { view.paste_from_clipboard(cx); return; }
                                         "c" if event.keystroke.modifiers.shift => {
@@ -2289,6 +2311,43 @@ mod tests {
         assert_eq!(terminal_size_for_viewport(f32::NAN, f32::INFINITY), small);
         let huge = terminal_size_for_viewport(100_000.0, 100_000.0);
         assert_eq!(huge, TerminalSize::new(MAX_COLUMNS, MAX_ROWS));
+    }
+
+    #[test]
+    fn altgr_printable_characters_do_not_become_control_bytes() {
+        let mut modifiers = Modifiers::none();
+        modifiers.control = true;
+        modifiers.alt = true;
+        let at_sign = Keystroke {
+            key: "q".into(), key_char: Some("@".into()), modifiers,
+        };
+        assert_eq!(altgr_character(&at_sign), Some("@"));
+        assert_eq!(terminal_key_bytes(&at_sign), Some(b"@".to_vec()));
+
+        let euro = Keystroke {
+            key: "e".into(), key_char: Some("€".into()), modifiers,
+        };
+        assert_eq!(terminal_key_bytes(&euro), Some("€".as_bytes().to_vec()));
+
+        let regular_ctrl_alt = Keystroke {
+            key: "a".into(), key_char: Some("a".into()), modifiers,
+        };
+        assert_eq!(altgr_character(&regular_ctrl_alt), None);
+        assert_eq!(terminal_key_bytes(&regular_ctrl_alt), Some(vec![1]));
+    }
+
+    #[test]
+    fn committed_unicode_text_is_encoded_in_utf8() {
+        let input = Keystroke {
+            key: "unknown".into(),
+            key_char: Some("中文".into()),
+            modifiers: Modifiers::none(),
+        };
+        assert_eq!(terminal_key_bytes(&input), Some("中文".as_bytes().to_vec()));
+        let composing = Keystroke {
+            key: "a".into(), key_char: None, modifiers: Modifiers::none(),
+        };
+        assert_eq!(terminal_key_bytes(&composing), None);
     }
 
     #[test]
