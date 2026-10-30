@@ -225,6 +225,17 @@ impl ZmodemUpload {
 }
 
 
+
+async fn create_received_target(
+    directory: &Path,
+    basename: &str,
+) -> Result<(PathBuf, tokio::fs::File), std::io::Error> {
+    let path = directory.join(basename);
+    let file = tokio::fs::OpenOptions::new()
+        .write(true).create_new(true).open(&path).await?;
+    Ok((path, file))
+}
+
 struct ZmodemReceivedFile {
     path: PathBuf,
     file: tokio::fs::File,
@@ -269,12 +280,9 @@ impl ZmodemDownload {
                 std::io::ErrorKind::InvalidData, "received nested ZFILE",
             ).into());
         }
-        let path = self.directory.join(&basename);
         // Atomic no-overwrite prevents a pre-existing file being corrupted.
-        match tokio::fs::OpenOptions::new()
-            .write(true).create_new(true).open(&path).await
-        {
-            Ok(file) => {
+        match create_received_target(&self.directory, &basename).await {
+            Ok((path, file)) => {
                 self.current = Some(ZmodemReceivedFile {
                     path, file, expected: size, written: 0, name: basename,
                 });
@@ -786,6 +794,25 @@ impl SshTerminal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn download_target_creation_never_overwrites_existing_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let output = temp.path().join("日志.txt");
+        tokio::fs::write(&output, b"existing user data").await.unwrap();
+        let error = create_received_target(temp.path(), "日志.txt")
+            .await.err().unwrap();
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(tokio::fs::read(&output).await.unwrap(), b"existing user data");
+
+        let (path, mut file) = create_received_target(temp.path(), "new.txt")
+            .await.unwrap();
+        file.write_all(b"partial").await.unwrap();
+        drop(file);
+        tokio::fs::remove_file(&path).await.unwrap();
+        assert!(!path.exists());
+        assert_eq!(tokio::fs::read(&output).await.unwrap(), b"existing user data");
+    }
 
     #[test]
     fn resize_commands_are_clamped_before_network_dispatch() {
