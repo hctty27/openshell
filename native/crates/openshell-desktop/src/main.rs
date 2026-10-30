@@ -6,7 +6,9 @@ use sftp_browser::{SftpBrowser, SftpTransferView, QueuedSftpTransfer, remote_des
 use session_editor::SessionDraft;
 use clipboard_paste::{encode_paste, needs_paste_confirmation, MAX_PASTE_BYTES};
 mod terminal_tab;
+mod terminal_ime;
 mod split_view;
+use terminal_ime::TerminalImeState;
 mod tab_drag;
 use terminal_paint::*;
 use terminal_tab::{TerminalTab, RemotePhase, remote_button_label};
@@ -49,6 +51,7 @@ struct Workspace {
     viewport_height: f32,
     _resize_subscription: Subscription,
     focus_handle: FocusHandle,
+    ime: TerminalImeState,
     saved_sessions: Vec<Session>,
     sessions_status: String,
     session_editor: Option<SessionDraft>,
@@ -76,6 +79,14 @@ fn altgr_character(key: &Keystroke) -> Option<&str> {
         return None;
     }
     Some(text)
+}
+
+/// Let the platform text service commit printable input, including IME
+/// candidates. Terminal key encoding remains responsible for control keys.
+fn uses_native_text_input(key: &Keystroke) -> bool {
+    altgr_character(key).is_some()
+        || (!key.modifiers.control && !key.modifiers.alt
+            && !key.modifiers.platform && key.key_char.is_some())
 }
 
 fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
@@ -166,6 +177,7 @@ impl Workspace {
             viewport_height: f32::from(viewport.height),
             _resize_subscription: subscription,
             focus_handle: cx.focus_handle(),
+            ime: TerminalImeState::default(),
             saved_sessions: Vec::new(),
             sessions_status: "Loading saved sessions...".into(),
             session_editor: None,
@@ -559,9 +571,9 @@ impl Workspace {
     fn editor_keystroke(&mut self, key: &Keystroke, cx: &mut Context<Self>) -> bool {
         if self.session_editor.is_none() { return false; }
         if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return true; }
-        if let Some(text) = altgr_character(key) {
-            if let Some(draft) = &mut self.session_editor { draft.type_text(text); }
-            cx.notify();
+        if uses_native_text_input(key) || key.is_ime_in_progress() {
+            // The GPUI InputHandler receives the committed text after
+            // key dispatch; do not insert a duplicate from keydown.
             return true;
         }
         match key.key.as_str() {
@@ -927,6 +939,7 @@ impl Workspace {
     fn add_local_tab(&mut self, cx: &mut Context<Self>) {
         let id = self.next_tab_id;
         self.next_tab_id += 1;
+        self.ime.reset();
         let size = terminal_size_for_viewport(self.viewport_width, self.viewport_height);
         let mut tab = TerminalTab::local(id, size);
         tab.task = Some(Self::spawn_local(id, size, cx));
@@ -949,6 +962,7 @@ impl Workspace {
                 let mut tab = TerminalTab::remote(id, title, Some(session_id), size);
                 tab.task = Some(Self::spawn_remote(id, remote, cx));
                 self.tabs.push(tab);
+                self.ime.reset();
                 self.active_id = id;
                 self.split = None;
                 self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
@@ -960,7 +974,11 @@ impl Workspace {
 
     fn activate_tab(&mut self, id: u64, cx: &mut Context<Self>) {
         if self.tabs.iter().any(|tab| tab.id == id) {
-            if self.active_id != id { self.pending_paste = None; self.selecting_tab = None; }
+            if self.active_id != id {
+                self.pending_paste = None;
+                self.selecting_tab = None;
+                self.ime.reset();
+            }
             self.active_id = id;
             if self.split.is_some_and(|split| !split.contains(id)) {
                 self.split = None;
@@ -1003,6 +1021,7 @@ impl Workspace {
 
     fn close_tab(&mut self, id: u64, cx: &mut Context<Self>) {
         let Some(index) = self.tabs.iter().position(|tab| tab.id == id) else { return; };
+        if self.ime.tab_id == Some(id) { self.ime.reset(); }
         if self.pending_paste.as_ref().is_some_and(|(target, _)| *target == id) {
             self.pending_paste = None;
         }
@@ -1143,6 +1162,7 @@ impl Workspace {
             (target_id, dragged_id)
         };
         self.split = SplitView::new(first, second, edge.axis());
+        if self.active_id != dragged_id { self.ime.reset(); }
         self.active_id = dragged_id;
         self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
         cx.notify();
@@ -1709,6 +1729,8 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let ime_entity = cx.entity();
+        let ime_focus = self.focus_handle.clone();
         let tabs: Vec<_> = self.tabs.iter().map(|t| {
             (t.id, t.title.clone(), t.remote_phase, t.id == self.active_id)
         }).collect();
@@ -2183,12 +2205,14 @@ impl Render for Workspace {
                     .child(
                         div()
                             .id("terminal-keyboard-region")
+                            .relative()
                             .flex_1()
                             .flex()
                             .flex_col()
                             .key_context("OpenShellTerminal")
                             .track_focus(&self.focus_handle)
                             .on_key_down(cx.listener(|view, event: &KeyDownEvent, _, cx| {
+                                if view.ime.is_composing() { return; }
                                 if view.editor_keystroke(&event.keystroke, cx) { return; }
                                 if event.keystroke.modifiers.control
                                     && !event.keystroke.modifiers.alt
@@ -2229,11 +2253,22 @@ impl Render for Workspace {
                                         _ => {}
                                     }
                                 }
+                                if uses_native_text_input(&event.keystroke) { return; }
                                 if let Some(bytes) = terminal_key_bytes(&event.keystroke) {
                                     view.send_input(bytes, cx);
                                 }
                             }))
-                            .child(pane_layout.children(pane_nodes)),
+                            .child(pane_layout.children(pane_nodes))
+                            .child(gpui::canvas(
+                                |_, _, _| (),
+                                move |bounds, (), window, cx| {
+                                    window.handle_input(
+                                        &ime_focus,
+                                        gpui::ElementInputHandler::new(bounds, ime_entity),
+                                        cx,
+                                    );
+                                },
+                            ).absolute().top_0().left_0().w_full().h_full()),
                     )
                     .child(browser_view),
             )
