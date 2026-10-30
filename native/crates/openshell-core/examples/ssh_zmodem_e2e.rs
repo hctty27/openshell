@@ -17,8 +17,8 @@ fn required(name: &str) -> Result<String, Box<dyn Error>> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let mode = required("OPENSHELL_E2E_MODE")?;
-    if mode != "send" && mode != "receive" {
-        return Err("OPENSHELL_E2E_MODE must be send or receive".into());
+    if !matches!(mode.as_str(), "send" | "receive" | "cancel-receive") {
+        return Err("OPENSHELL_E2E_MODE must be send, receive or cancel-receive".into());
     }
     let session = Session {
         id: "ssh-zmodem-e2e".into(),
@@ -45,6 +45,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // post-transfer marker. The commands execute in a real authenticated PTY.
     let remote_command: &[u8] = if mode == "send" {
         b"stty -echo; rz -q\r"
+    } else if mode == "cancel-receive" {
+        b"stty -echo; sz -q large-from-sz.bin\r"
     } else {
         b"stty -echo; sz -q from-sz.bin\r"
     };
@@ -62,6 +64,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut recent_output = Vec::new();
     let mut initial_output = Vec::new();
     let mut progress_events = 0_usize;
+    let mut cancel_sent = false;
 
     let test_result = timeout(Duration::from_secs(45), async {
         loop {
@@ -101,10 +104,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     match state.ok_or("SSH ZMODEM event channel closed")? {
                         ZmodemTransferStatus::Started { uploading } =>
                             eprintln!("SSH test transfer started: uploading={uploading}"),
+                        ZmodemTransferStatus::Progress { bytes, .. } if mode == "cancel-receive" && !cancel_sent && bytes >= 256 * 1024 => {
+                            cancel_sent = true;
+                            commands.send(SshTerminalCommand::CancelZmodem).await?;
+                            eprintln!("SSH test requested cancellation after {bytes} bytes");
+                        }
                         ZmodemTransferStatus::Progress { .. } => {}
                         ZmodemTransferStatus::Skipped { name } =>
                             return Err(format!("file was skipped unexpectedly: {name}").into()),
                         ZmodemTransferStatus::Completed { files } => {
+                            if mode == "cancel-receive" {
+                                return Err("ZMODEM completed instead of cancelling".into());
+                            }
                             if files == 0 { return Err("ZMODEM finished without files".into()); }
                             completed = true;
                             eprintln!("SSH test ZMODEM protocol completed: files={files}");
@@ -119,8 +130,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                         ZmodemTransferStatus::Failed(error) =>
                             return Err(format!("ZMODEM failed: {error}").into()),
+                        ZmodemTransferStatus::Cancelled if mode == "cancel-receive" && cancel_sent => {
+                            completed = true;
+                            eprintln!("SSH test ZMODEM cancellation acknowledged");
+                            tokio::time::sleep(Duration::from_millis(1000)).await;
+                            commands.send(SshTerminalCommand::Input(
+                                b"printf 'OPENSHELL_ZMODEM_SSH_POST_TRANSFER_OK\\n'\r".to_vec()
+                            )).await?;
+                        }
                         ZmodemTransferStatus::Cancelled =>
-                            return Err("ZMODEM was cancelled".into()),
+                            return Err("ZMODEM was cancelled unexpectedly".into()),
                     }
                 }
             }
@@ -140,10 +159,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     connection.disconnect().await.ok();
     test_result.map_err(|_| "SSH ZMODEM test timed out")??;
     joined.map_err(|_| "SSH worker failed to stop")???;
+    if mode == "cancel-receive" && input_path.join("large-from-sz.bin").exists() {
+        return Err("cancelled ZMODEM download left a partial file behind".into());
+    }
 
     println!(
         "PASS real SSH PTY: {} via lrzsz, framed transfer and shell recovery",
-        if mode == "send" { "rz upload" } else { "sz download" }
+        match mode.as_str() {
+            "send" => "rz upload",
+            "cancel-receive" => "sz download cancellation and shell recovery",
+            _ => "sz download",
+        }
     );
     Ok(())
 }
