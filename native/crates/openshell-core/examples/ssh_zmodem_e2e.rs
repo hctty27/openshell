@@ -108,8 +108,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             if files == 0 { return Err("ZMODEM finished without files".into()); }
                             completed = true;
                             eprintln!("SSH test ZMODEM protocol completed: files={files}");
-                            // Verify the authenticated remote shell is still
-                            // usable after ZFIN, rather than only counting bytes.
+                            // Completion is emitted after queued ZFIN/OO wire bytes
+                            // are written, but the remote sz/rz process may not
+                            // have exited yet. Avoid racing its final read()
+                            // with the next shell command.
+                            tokio::time::sleep(Duration::from_millis(500)).await;
                             commands.send(SshTerminalCommand::Input(
                                 b"printf 'OPENSHELL_ZMODEM_SSH_POST_TRANSFER_OK\\n'\r".to_vec()
                             )).await?;
