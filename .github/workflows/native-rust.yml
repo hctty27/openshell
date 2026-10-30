@@ -1,0 +1,53 @@
+name: Native Rust prototype
+
+# The native feature branch has an open PR. Running both push and PR events
+# would build the same commit twice and cancel one via the shared concurrency
+# group, wasting Windows runner time. Manual dispatch remains available.
+on:
+  pull_request:
+    paths:
+      - 'native/**'
+      - '.github/workflows/native-rust.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: native-rust
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+      - name: Rust core tests
+        run: cargo test -p openshell-core
+      - name: Compile native SSH and terminal benchmark examples
+        run: cargo check -p openshell-core --examples
+      - name: GPUI desktop compile check
+        run: cargo check -p openshell-native
+      - name: Native desktop key encoding tests
+        run: cargo test -p openshell-native
+      # GPUI's Windows Debug shader pipeline reads HLSL files using
+      # a compile-machine CARGO_MANIFEST_DIR absolute path at launch.
+      # A standalone EXE artifact cannot satisfy that dependency.
+      # Release embeds shader bytecode; use it for transferable builds.
+      - name: Build self-contained Windows Release preview
+        run: cargo build --release -p openshell-native
+      - name: Test embedded-shader Release diagnostic on Windows runner
+        run: |
+          .\target\release\openshell-native.exe --diagnose
+      - name: Upload unsigned Release preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: openshell-native-unsigned-release-preview-windows-x64
+          path: native/target/release/openshell-native.exe
+          if-no-files-found: error
+          retention-days: 7
