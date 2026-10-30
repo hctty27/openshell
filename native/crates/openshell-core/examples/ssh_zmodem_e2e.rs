@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let remote_command: &[u8] = if mode == "send" {
         b"stty -echo; rz -q\r"
     } else if mode == "cancel-receive" {
-        b"stty -echo; PROMPT_COMMAND='printf \"OPENSHELL_ZMODEM_SSH_PROMPT_READY\\n\"'; sz -q large-from-sz.bin\r"
+        b"stty -echo; sz -q large-from-sz.bin\r"
     } else {
         b"stty -echo; sz -q from-sz.bin\r"
     };
@@ -61,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut started = false;
     let mut completed = false;
     let marker = b"OPENSHELL_ZMODEM_SSH_POST_TRANSFER_OK";
-    let prompt_marker = b"OPENSHELL_ZMODEM_SSH_PROMPT_READY";
+    let prompt_marker = b"\x1b[?2004h";
     let mut prompt_seen = false;
     let mut recent_output = Vec::new();
     let mut initial_output = Vec::new();
@@ -105,7 +105,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             && recent_output.windows(prompt_marker.len()).any(|window| window == prompt_marker)
                         {
                             prompt_seen = true;
-                            eprintln!("SSH test observed remote Bash prompt after cancellation");
+                            eprintln!("SSH test observed remote Bash bracketed-paste prompt after cancellation");
                             recent_output.clear();
                             commands.send(SshTerminalCommand::Input(
                                 b"printf 'OPENSHELL_ZMODEM_SSH_POST_TRANSFER_OK\\n'\r".to_vec()
