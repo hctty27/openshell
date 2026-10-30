@@ -1,6 +1,17 @@
 //! Presentation state for the native SFTP browser. No SSH I/O runs in render.
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::{collections::VecDeque, path::PathBuf, sync::{Arc, atomic::{AtomicBool, Ordering}}};
+use crate::ssh_preview::SftpTransferDirection;
 use openshell_core::SftpEntry;
+
+pub(super) const MAX_PENDING_TRANSFERS: usize = 12;
+const MAX_RECENT_TRANSFERS: usize = 6;
+
+pub(super) struct QueuedSftpTransfer {
+    pub direction: SftpTransferDirection,
+    pub local: PathBuf,
+    pub remote: String,
+    pub total: Option<u64>,
+}
 
 pub(super) struct SftpTransferView {
     pub cancel: Arc<AtomicBool>,
@@ -33,6 +44,8 @@ pub(super) struct SftpBrowser {
     pub generation: u64,
     pub picker_open: bool,
     pub transfer: Option<SftpTransferView>,
+    pub pending: VecDeque<QueuedSftpTransfer>,
+    pub recent: VecDeque<String>,
 }
 
 impl SftpBrowser {
@@ -42,6 +55,7 @@ impl SftpBrowser {
             entries: Vec::new(), status: "Loading remote directory...".into(),
             loading: true, revision: 0, generation,
             picker_open: false, transfer: None,
+            pending: VecDeque::new(), recent: VecDeque::new(),
         }
     }
 
@@ -51,6 +65,24 @@ impl SftpBrowser {
 
     pub fn transfer_running(&self) -> bool {
         self.transfer.as_ref().is_some_and(|transfer| transfer.running)
+    }
+
+    pub fn enqueue(&mut self, transfer: QueuedSftpTransfer) -> Result<usize, ()> {
+        if self.pending.len() >= MAX_PENDING_TRANSFERS {
+            return Err(());
+        }
+        self.pending.push_back(transfer);
+        Ok(self.pending.len())
+    }
+
+    pub fn finish(&mut self, description: String) -> Option<QueuedSftpTransfer> {
+        self.recent.push_front(description);
+        self.recent.truncate(MAX_RECENT_TRANSFERS);
+        self.pending.pop_front()
+    }
+
+    pub fn clear_pending(&mut self) {
+        self.pending.clear();
     }
 
     pub fn cancel_transfer(&mut self) {
@@ -113,6 +145,30 @@ mod tests {
         for invalid in ["", "..", "../evil", "a/b", "a\\b", "a\n"] {
             assert!(remote_destination("/data", invalid).is_none());
         }
+    }
+
+    #[test]
+    fn queue_is_bounded_and_tracks_recent_results() {
+        let mut browser = SftpBrowser::new("id".into(), "SSH".into(), 1);
+        for i in 0..MAX_PENDING_TRANSFERS {
+            let queued = QueuedSftpTransfer {
+                direction: SftpTransferDirection::Upload,
+                local: PathBuf::from(format!("test-{i}")),
+                remote: format!("/tmp/test-{i}"), total: None,
+            };
+            assert_eq!(browser.enqueue(queued).unwrap(), i + 1);
+        }
+        assert!(browser.enqueue(QueuedSftpTransfer {
+            direction: SftpTransferDirection::Download,
+            local: PathBuf::from("overflow"), remote: "/tmp/o".into(), total: None,
+        }).is_err());
+        for i in 0..10 {
+            assert!(browser.finish(format!("complete-{i}")).is_some());
+        }
+        assert_eq!(browser.recent.len(), MAX_RECENT_TRANSFERS);
+        assert_eq!(browser.recent.front().unwrap(), "complete-9");
+        browser.clear_pending();
+        assert!(browser.pending.is_empty());
     }
 
     #[test]
