@@ -5,7 +5,7 @@ use std::ops::Range;
 use gpui::{
     point, px, size, Bounds, Context, EntityInputHandler, Pixels, Point, UTF16Selection, Window,
 };
-use crate::{Workspace, terminal_paint::{CELL_HEIGHT, CELL_WIDTH}};
+use crate::{Workspace, terminal_paint::{CELL_HEIGHT, CELL_WIDTH, CONTENT_PADDING}};
 
 #[derive(Default)]
 pub(super) struct TerminalImeState {
@@ -13,6 +13,8 @@ pub(super) struct TerminalImeState {
     pub(super) selected: Range<usize>,
     pub(super) tab_id: Option<u64>,
     pub(super) editor_field: Option<usize>,
+    // A stale platform commit can arrive after focus switches tabs.
+    reject_stale_commit: bool,
 }
 
 impl TerminalImeState {
@@ -25,11 +27,26 @@ impl TerminalImeState {
         self.selected = 0..0;
         self.tab_id = None;
         self.editor_field = None;
+        self.reject_stale_commit = false;
+    }
+
+    /// Reject a delayed IME confirmation from a tab or editor that lost focus.
+    pub(super) fn invalidate_target(&mut self) {
+        let was_composing = self.is_composing();
+        self.reset();
+        self.reject_stale_commit = was_composing;
+    }
+
+    fn consume_stale_commit(&mut self) -> bool {
+        if !self.reject_stale_commit { return false; }
+        self.reset();
+        true
     }
 
     fn set_marked(&mut self, text: &str, selection: Option<Range<usize>>, tab_id: u64, editor_field: Option<usize>) {
         self.text.clear();
         self.text.push_str(text);
+        self.reject_stale_commit = false;
         let length = self.text.encode_utf16().count();
         self.selected = selection
             .filter(|r| r.start <= r.end && r.end <= length)
@@ -78,6 +95,10 @@ impl EntityInputHandler for Workspace {
         &mut self, _range: Option<Range<usize>>, text: &str,
         _window: &mut Window, cx: &mut Context<Self>,
     ) {
+        if self.ime.consume_stale_commit() {
+            cx.notify();
+            return;
+        }
         let target = self.ime.tab_id;
         let editor_field = self.ime.editor_field;
         self.ime.reset();
@@ -124,6 +145,10 @@ impl EntityInputHandler for Workspace {
     }
 
     fn unmark_text(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.ime.consume_stale_commit() {
+            cx.notify();
+            return;
+        }
         // The platform can finalize a composition by unmarking it without
         // a separate replace callback. Deliver it once, not per keystroke.
         let text = self.ime.text.clone();
@@ -145,7 +170,7 @@ impl EntityInputHandler for Workspace {
         Some(Bounds::new(
             point(
                 element_bounds.left() + px(16.0 + column as f32 * CELL_WIDTH),
-                element_bounds.top() + px(row as f32 * CELL_HEIGHT),
+                element_bounds.top() + px(CONTENT_PADDING / 2.0 + row as f32 * CELL_HEIGHT),
             ),
             size(px(2.0), px(CELL_HEIGHT)),
         ))
@@ -171,6 +196,20 @@ mod tests {
         assert_eq!(byte_offset_for_utf16(text, 2), None);
         assert_eq!(byte_offset_for_utf16(text, 3), Some(7));
         assert_eq!(byte_offset_for_utf16(text, 5), Some(text.len()));
+    }
+
+    #[test]
+    fn focus_change_discards_delayed_commit_but_allows_new_composition() {
+        let mut ime = TerminalImeState::default();
+        ime.set_marked("ni", None, 7, None);
+        ime.invalidate_target();
+        assert!(!ime.is_composing());
+        assert!(ime.consume_stale_commit());
+        assert!(!ime.consume_stale_commit());
+
+        ime.set_marked("hao", None, 8, None);
+        assert!(!ime.consume_stale_commit());
+        assert_eq!(ime.tab_id, Some(8));
     }
 
     #[test]
