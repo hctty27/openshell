@@ -327,6 +327,7 @@ pub fn start_saved_sftp_transfer(
                 let config = resolve_stored_session(&session_id)?;
                 let runtime = tokio::runtime::Builder::new_current_thread()
                     .enable_all().build().map_err(|e| e.to_string())?;
+                let progress_sender = sender.clone();
                 runtime.block_on(async move {
                     let connection = match &config.auth {
                         PreviewAuth::Password(password) =>
@@ -344,7 +345,7 @@ pub fn start_saved_sftp_transfer(
                     let mut on_progress = |bytes: u64| {
                         if bytes.saturating_sub(last_reported) >= 256 * 1024 {
                             last_reported = bytes;
-                            let _ = sender.try_send(SftpTransferEvent::Progress(bytes));
+                            let _ = progress_sender.try_send(SftpTransferEvent::Progress(bytes));
                         }
                     };
                     let outcome = match direction {
