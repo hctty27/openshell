@@ -313,3 +313,19 @@ uses a separate SSH connection so the currently running terminal is not
 restarted. Directory enumeration runs on a background worker using one persistent SSH/SFTP channel for the lifetime of the panel (refresh and folder changes reuse it; errors allow explicit reconnect on Refresh). This initial
 GUI does **not** yet implement file picker upload/download or transfer
 progress; use `sftpctl` for initial transfer testing.
+
+
+### Native SFTP queue (experimental)
+
+The right-side SFTP panel now retains one authenticated browser connection
+for directory changes, and maintains a sequential transfer queue of up to
+12 waiting file uploads/downloads. It shows byte progress for the active
+file and a bounded six-entry result history. A new upload/download selection
+made during an active transfer goes into the queue. The user can cancel the
+running transfer independently or clear the pending queue. Closing the
+SFTP panel cancels the active operation and discards queued work. Transfer
+jobs use independent SSH connections from the shared browser session, so
+file copies do not interrupt terminal output or folder navigation. The
+queue is in-memory only (not resumed across restarts); overwrite remains
+explicitly forbidden. Real Windows interaction and SSH/SFTP server tests
+are still required before a production release.

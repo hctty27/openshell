@@ -435,6 +435,11 @@ impl Workspace {
                 if finished { break; }
             }
         }));
+        // Only one transfer runs at a time; older handles are completed.
+        // Bound retained GPUI task handles during long-lived SFTP sessions.
+        if self._sftp_transfer_tasks.len() > 32 {
+            self._sftp_transfer_tasks.remove(0);
+        }
     }
 
     fn clear_sftp_queue(&mut self, cx: &mut Context<Self>) {
