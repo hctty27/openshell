@@ -561,28 +561,28 @@ impl Workspace {
 
     fn new_session(&mut self, cx: &mut Context<Self>) {
         if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return; }
-        self.ime.reset();
+        self.ime.invalidate_target();
         self.session_editor = Some(SessionDraft::new());
         cx.notify();
     }
 
     fn edit_session(&mut self, session: Session, cx: &mut Context<Self>) {
         if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return; }
-        self.ime.reset();
+        self.ime.invalidate_target();
         self.session_editor = Some(SessionDraft::edit(&session));
         cx.notify();
     }
 
     fn cancel_edit(&mut self, cx: &mut Context<Self>) {
         if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return; }
-        self.ime.reset();
+        self.ime.invalidate_target();
         self.session_editor = None;
         cx.notify();
     }
 
     fn select_edit_field(&mut self, index: usize, cx: &mut Context<Self>) {
         if self.session_editor.as_ref().is_some_and(|draft| draft.selected != index) {
-            self.ime.reset();
+            self.ime.invalidate_target();
         }
         if let Some(draft) = &mut self.session_editor {
             if !draft.saving { draft.select(index); cx.notify(); }
@@ -960,7 +960,7 @@ impl Workspace {
     fn add_local_tab(&mut self, cx: &mut Context<Self>) {
         let id = self.next_tab_id;
         self.next_tab_id += 1;
-        self.ime.reset();
+        self.ime.invalidate_target();
         let size = terminal_size_for_viewport(self.viewport_width, self.viewport_height);
         let mut tab = TerminalTab::local(id, size);
         tab.task = Some(Self::spawn_local(id, size, cx));
@@ -983,7 +983,7 @@ impl Workspace {
                 let mut tab = TerminalTab::remote(id, title, Some(session_id), size);
                 tab.task = Some(Self::spawn_remote(id, remote, cx));
                 self.tabs.push(tab);
-                self.ime.reset();
+                self.ime.invalidate_target();
                 self.active_id = id;
                 self.split = None;
                 self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
@@ -998,7 +998,7 @@ impl Workspace {
             if self.active_id != id {
                 self.pending_paste = None;
                 self.selecting_tab = None;
-                self.ime.reset();
+                self.ime.invalidate_target();
             }
             self.active_id = id;
             if self.split.is_some_and(|split| !split.contains(id)) {
@@ -1042,7 +1042,7 @@ impl Workspace {
 
     fn close_tab(&mut self, id: u64, cx: &mut Context<Self>) {
         let Some(index) = self.tabs.iter().position(|tab| tab.id == id) else { return; };
-        if self.ime.tab_id == Some(id) { self.ime.reset(); }
+        if self.ime.tab_id == Some(id) { self.ime.invalidate_target(); }
         if self.pending_paste.as_ref().is_some_and(|(target, _)| *target == id) {
             self.pending_paste = None;
         }
@@ -1183,7 +1183,7 @@ impl Workspace {
             (target_id, dragged_id)
         };
         self.split = SplitView::new(first, second, edge.axis());
-        if self.active_id != dragged_id { self.ime.reset(); }
+        if self.active_id != dragged_id { self.ime.invalidate_target(); }
         self.active_id = dragged_id;
         self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
         cx.notify();
