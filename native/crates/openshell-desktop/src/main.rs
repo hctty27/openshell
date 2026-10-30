@@ -1552,6 +1552,8 @@ impl Workspace {
         let phase = tab.remote_phase;
         let saved = tab.session_id.is_some();
         let selected = pane_id == self.active_id;
+        let pane_ime_entity = cx.entity();
+        let pane_ime_focus = self.focus_handle.clone();
         let columns = tab.terminal.size().columns;
         let split_axis = self.split.map(|split| split.axis);
         let width = self.viewport_width;
@@ -1714,6 +1716,7 @@ impl Workspace {
             )
             .child(
                 div()
+                    .relative()
                     .flex_1()
                     .p_4()
                     .text_size(px(14.0))
@@ -1743,15 +1746,27 @@ impl Workspace {
                                 );
                             }))
                             .child(styled_terminal_line(&cells))
-                    })),
+                    }))
+                    // Bind IME candidate geometry to the active terminal's
+                    // actual content pane, including split layouts and toolbar.
+                    .child(gpui::canvas(
+                        |_, _, _| (),
+                        move |bounds, (), window, cx| {
+                            if selected {
+                                window.handle_input(
+                                    &pane_ime_focus,
+                                    gpui::ElementInputHandler::new(bounds, pane_ime_entity),
+                                    cx,
+                                );
+                            }
+                        },
+                    ).absolute().top_0().left_0().w_full().h_full()),
             )
     }
 }
 
 impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let ime_entity = cx.entity();
-        let ime_focus = self.focus_handle.clone();
         let tabs: Vec<_> = self.tabs.iter().map(|t| {
             (t.id, t.title.clone(), t.remote_phase, t.id == self.active_id)
         }).collect();
@@ -2279,17 +2294,7 @@ impl Render for Workspace {
                                     view.send_input(bytes, cx);
                                 }
                             }))
-                            .child(pane_layout.children(pane_nodes))
-                            .child(gpui::canvas(
-                                |_, _, _| (),
-                                move |bounds, (), window, cx| {
-                                    window.handle_input(
-                                        &ime_focus,
-                                        gpui::ElementInputHandler::new(bounds, ime_entity),
-                                        cx,
-                                    );
-                                },
-                            ).absolute().top_0().left_0().w_full().h_full()),
+                            .child(pane_layout.children(pane_nodes)),
                     )
                     .child(browser_view),
             )
