@@ -98,10 +98,12 @@ fn parse_header(hex: &[u8; HEX_CHARACTERS]) -> Option<ZmodemRequest> {
     }
 }
 
-// ZMODEM CRC16/CCITT, finalized with two zero bytes (lrzsz updcrc16).
+// ZMODEM HEX headers carry CRC16 over the five decoded header bytes.
+// Do NOT append two zero bytes here: lrzsz's actual ZRINIT with flags 0x23
+// has CRC BE50, while zero-padding would incorrectly produce 67F7.
 fn crc16_zmodem(input: &[u8]) -> u16 {
     let mut crc = 0_u16;
-    for byte in input.iter().copied().chain([0_u8, 0]) {
+    for byte in input.iter().copied() {
         crc ^= u16::from(byte) << 8;
         for _ in 0..8 {
             crc = if crc & 0x8000 != 0 { (crc << 1) ^ 0x1021 } else { crc << 1 };
@@ -123,6 +125,17 @@ mod tests {
         }
         data.extend_from_slice(b"\r\n\x11");
         data
+    }
+
+    #[test]
+    fn recognizes_real_lrzsz_zrinit_with_nonzero_capabilities() {
+        // Captured from a real OpenSSH PTY + Ubuntu lrzsz session.
+        // ZRINIT frame type 01, capability bytes 00 00 00 23, CRC be50.
+        let frame = b"**\x18B0100000023be50\r\x8a\x11";
+        let mut probe = ZmodemProbe::default();
+        assert_eq!(probe.feed(&frame[..6]), None);
+        assert_eq!(probe.feed(&frame[6..]), Some(ZmodemRequest::Send));
+        assert_eq!(crc16_zmodem(&[0x01, 0x00, 0x00, 0x00, 0x23]), 0xbe50);
     }
 
     #[test]
