@@ -276,10 +276,16 @@ impl ZmodemDownload {
     async fn offer(&mut self, name: String, size: Option<u32>) -> Result<bool, SshError> {
         // No paths, alternate data streams, device names or control chars.
         let basename = safe_filename(name.as_bytes())?;
-        if self.current.is_some() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData, "received nested ZFILE",
-            ).into());
+        if let Some(current) = &self.current {
+            if current.name != basename || current.expected != size {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData, "different ZFILE during active transfer",
+                ).into());
+            }
+            // Remote sender retried the same header. Resume at the durable
+            // in-memory write offset, never truncate the file we just created.
+            self.protocol.accept_received_file_at(current.written as u32)?;
+            return Ok(true);
         }
         // Atomic no-overwrite prevents a pre-existing file being corrupted.
         match create_received_target(&self.directory, &basename).await {
