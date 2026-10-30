@@ -89,8 +89,20 @@ fn uses_native_text_input(key: &Keystroke) -> bool {
             && !key.modifiers.platform && key.key_char.is_some())
 }
 
+/// Keep escape, enter and navigation functional even when GPUI reports no
+/// committed text; the generic IME heuristic is too broad for those keys.
+fn pending_ime_printable_key(key: &Keystroke) -> bool {
+    key.is_ime_in_progress()
+        && !matches!(
+            key.key.as_str(),
+            "enter" | "escape" | "tab" | "backspace" | "delete"
+                | "up" | "down" | "left" | "right"
+                | "home" | "end" | "pageup" | "pagedown"
+        )
+}
+
 fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
-    if key.modifiers.platform || key.is_ime_in_progress() {
+    if key.modifiers.platform {
         return None;
     }
     if let Some(text) = altgr_character(key) {
@@ -123,6 +135,9 @@ fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
     };
     if let Some(sequence) = control_sequence {
         return Some(sequence.as_bytes().to_vec());
+    }
+    if key.is_ime_in_progress() {
+        return None;
     }
     let character = key.key_char.as_ref()?;
     let bytes = character.as_bytes();
@@ -577,7 +592,7 @@ impl Workspace {
     fn editor_keystroke(&mut self, key: &Keystroke, cx: &mut Context<Self>) -> bool {
         if self.session_editor.is_none() { return false; }
         if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return true; }
-        if uses_native_text_input(key) || key.is_ime_in_progress() {
+        if uses_native_text_input(key) || pending_ime_printable_key(key) {
             // The GPUI InputHandler receives the committed text after
             // key dispatch; do not insert a duplicate from keydown.
             return true;
@@ -2395,6 +2410,7 @@ mod tests {
     fn ascii_and_control_keys_encode_as_terminal_bytes() {
         let enter = Keystroke { key: "enter".into(), key_char: None, modifiers: Modifiers::none() };
         assert_eq!(terminal_key_bytes(&enter), Some(vec![b'\r']));
+        assert!(!pending_ime_printable_key(&enter));
 
         let ctrl_c = Keystroke { key: "c".into(), key_char: None, modifiers: Modifiers::control() };
         assert_eq!(terminal_key_bytes(&ctrl_c), Some(vec![3]));
