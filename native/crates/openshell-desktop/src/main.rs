@@ -546,23 +546,29 @@ impl Workspace {
 
     fn new_session(&mut self, cx: &mut Context<Self>) {
         if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return; }
+        self.ime.reset();
         self.session_editor = Some(SessionDraft::new());
         cx.notify();
     }
 
     fn edit_session(&mut self, session: Session, cx: &mut Context<Self>) {
         if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return; }
+        self.ime.reset();
         self.session_editor = Some(SessionDraft::edit(&session));
         cx.notify();
     }
 
     fn cancel_edit(&mut self, cx: &mut Context<Self>) {
         if self.session_editor.as_ref().is_some_and(|draft| draft.saving) { return; }
+        self.ime.reset();
         self.session_editor = None;
         cx.notify();
     }
 
     fn select_edit_field(&mut self, index: usize, cx: &mut Context<Self>) {
+        if self.session_editor.as_ref().is_some_and(|draft| draft.selected != index) {
+            self.ime.reset();
+        }
         if let Some(draft) = &mut self.session_editor {
             if !draft.saving { draft.select(index); cx.notify(); }
         }
