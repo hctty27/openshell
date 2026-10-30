@@ -298,6 +298,7 @@ pub enum SftpTransferDirection { Upload, Download }
 
 #[derive(Debug)]
 pub enum SftpTransferEvent {
+    Total(u64),
     Progress(u64),
     Completed(Result<u64, String>),
 }
@@ -323,6 +324,11 @@ pub fn start_saved_sftp_transfer(
             let result = (|| -> Result<u64, String> {
                 if worker_cancel.load(Ordering::Acquire) {
                     return Err("Transfer cancelled".into());
+                }
+                if direction == SftpTransferDirection::Upload {
+                    if let Ok(metadata) = std::fs::metadata(&local_path) {
+                        let _ = sender.try_send(SftpTransferEvent::Total(metadata.len()));
+                    }
                 }
                 let config = resolve_stored_session(&session_id)?;
                 let runtime = tokio::runtime::Builder::new_current_thread()
