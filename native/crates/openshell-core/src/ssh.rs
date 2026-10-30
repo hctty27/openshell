@@ -430,6 +430,7 @@ impl SshTerminal {
                             break;
                         }
                     };
+                    let idle = matches!(action, ZmodemAction::Idle);
                     let result: Result<(), SshError> = async { match action {
                         ZmodemAction::Wire(bytes) => {
                             let count = bytes.len();
@@ -475,13 +476,13 @@ impl SshTerminal {
                         ZmodemAction::WriteFile(_) => {
                             Err(ZmodemEngineError::WrongRole.into())
                         }
-                        ZmodemAction::Idle => break,
+                        ZmodemAction::Idle => Ok(()),
                     } }.await;
                     if let Err(error) = result {
                         failed = Some(error.to_string());
                         break;
                     }
-                    if completed || failed.is_some() { break; }
+                    if idle || completed || failed.is_some() { break; }
                 }
             }
             if completed {
@@ -533,6 +534,7 @@ impl SshTerminal {
                             break;
                         }
                     };
+                    let idle = matches!(action, ZmodemAction::Idle);
                     let outcome: Result<(), SshError> = async { match action {
                         ZmodemAction::Wire(bytes) => {
                             let count = bytes.len();
@@ -597,13 +599,13 @@ impl SshTerminal {
                         ZmodemAction::ReadFile { .. } => {
                             Err(ZmodemEngineError::WrongRole.into())
                         }
-                        ZmodemAction::Idle => break,
+                        ZmodemAction::Idle => Ok(()),
                     } }.await;
                     if let Err(error) = outcome {
                         receiver_error = Some(error.to_string());
                         break;
                     }
-                    if receiver_completed || receiver_error.is_some() { break; }
+                    if idle || receiver_completed || receiver_error.is_some() { break; }
                 }
             }
             if receiver_completed {
