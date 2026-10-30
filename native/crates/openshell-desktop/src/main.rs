@@ -1315,6 +1315,51 @@ impl Workspace {
         }));
     }
 
+    fn choose_zmodem_download_directory(&mut self, id: u64, cx: &mut Context<Self>) {
+        let eligible = self.tabs.iter().any(|tab| tab.id == id
+            && tab.zmodem_prompt == Some(ZmodemRequest::Receive)
+            && tab.remote_phase == RemotePhase::Connected);
+        if !eligible { return; }
+        let picker = cx.prompt_for_paths(PathPromptOptions {
+            files: false, directories: true, multiple: false,
+            prompt: Some("Select a download directory for remote sz".into()),
+        });
+        self._zmodem_picker_task = Some(cx.spawn(async move |this, cx| {
+            let selected = picker.await;
+            let _ = this.update(cx, |view, cx| {
+                match selected {
+                    Ok(Ok(Some(paths))) => {
+                        if let Some(directory) = paths.into_iter().next() {
+                            let Some(tab) = view.tab_mut(id) else { return };
+                            if tab.remote_phase != RemotePhase::Connected
+                                || tab.zmodem_prompt != Some(ZmodemRequest::Receive)
+                            {
+                                return;
+                            }
+                            let started = tab.remote_commands.as_ref()
+                                .is_some_and(|commands| commands.try_send(
+                                    SshTerminalCommand::ZmodemDownload(directory)
+                                ).is_ok());
+                            tab.status = if started {
+                                "ZMODEM download requested; existing files will be skipped".into()
+                            } else {
+                                "Cannot start ZMODEM download: command queue unavailable".into()
+                            };
+                            cx.notify();
+                        }
+                    }
+                    Ok(Ok(None)) => {}
+                    _ => {
+                        if let Some(tab) = view.tab_mut(id) {
+                            tab.status = "ZMODEM download directory chooser failed".into();
+                            cx.notify();
+                        }
+                    }
+                }
+            });
+        }));
+    }
+
     fn cancel_zmodem_upload(&mut self, id: u64, cx: &mut Context<Self>) {
         if let Some(tab) = self.tab_mut(id) {
             if let Some(commands) = &tab.remote_commands {
@@ -1396,7 +1441,7 @@ impl Workspace {
                 .flex()
                 .items_center()
                 .gap_2()
-                .child(format!("{summary} · Native ZMODEM transfer is not yet supported; use SFTP."))
+                .child(format!("{summary} · Experimental ZMODEM; verify transfer integrity before relying on it."))
                 .child(
                     div()
                         .id(("zmodem-native-upload", pane_index))
@@ -1408,13 +1453,13 @@ impl Workspace {
                         .child(if request == ZmodemRequest::Send {
                             "Choose upload file..."
                         } else {
-                            "Download via SFTP for now"
+                            "Choose download folder..."
                         })
                         .on_click(cx.listener(move |view, _, _, cx| {
                             if request == ZmodemRequest::Send {
                                 view.choose_zmodem_upload(pane_id, cx);
                             } else {
-                                view.zmodem_use_sftp(pane_id, cx);
+                                view.choose_zmodem_download_directory(pane_id, cx);
                             }
                         })),
                 )
@@ -1424,7 +1469,7 @@ impl Workspace {
                         .cursor_pointer()
                         .px_2()
                         .py_1()
-                        .child("Cancel ZMODEM upload")
+                        .child("Cancel ZMODEM transfer")
                         .on_click(cx.listener(move |view, _, _, cx| {
                             view.cancel_zmodem_upload(pane_id, cx);
                         })),
