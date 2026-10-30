@@ -23,7 +23,7 @@ use gpui::{
     ClipboardItem, IntoElement, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PathPromptOptions, Render, Task, Window, WindowBounds,
     WindowOptions, Subscription, ScrollWheelEvent,
 };
-use openshell_core::{CredentialVault, HostIdentity, HostTrustStore, TrustDecision, LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize, zmodem::ZmodemRequest};
+use openshell_core::{CredentialVault, HostIdentity, HostTrustStore, TrustDecision, LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize, ssh::ZmodemTransferStatus, zmodem::ZmodemRequest};
 use openshell_core::native_paths::{native_database_path, ensure_native_data_directory};
 use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session, start_saved_sftp_browser, SftpBrowseWorker, start_saved_sftp_transfer, SftpTransferDirection, SftpTransferEvent};
 
@@ -775,7 +775,8 @@ impl Workspace {
 
             let mut output_open = true;
             let mut status_open = true;
-            while output_open || status_open {
+            let mut zmodem_open = true;
+            while output_open || status_open || zmodem_open {
                 tokio::select! {
                     message = remote.output.recv(), if output_open => match message {
                         Some(mut bytes) => {
@@ -807,6 +808,43 @@ impl Workspace {
                             }).is_err() { break; }
                         }
                         None => output_open = false,
+                    },
+                    transfer = remote.zmodem.recv(), if zmodem_open => match transfer {
+                        Some(transfer) => {
+                            let _ = this.update(cx, |view, cx| {
+                                if let Some(tab) = view.tab_mut(id) {
+                                    match &transfer {
+                                        ZmodemTransferStatus::Started { uploading } => {
+                                            tab.status = if *uploading {
+                                                "ZMODEM uploading...".into()
+                                            } else {
+                                                "ZMODEM receiving...".into()
+                                            };
+                                        }
+                                        ZmodemTransferStatus::Completed { files } => {
+                                            tab.status = format!("ZMODEM completed: {files} file(s)");
+                                            tab.zmodem_prompt = None;
+                                            tab.zmodem_silenced = true;
+                                        }
+                                        ZmodemTransferStatus::Failed(reason) => {
+                                            tab.status = format!("ZMODEM failed: {reason}");
+                                        }
+                                        ZmodemTransferStatus::Cancelled => {
+                                            tab.status = "ZMODEM transfer cancelled".into();
+                                            tab.zmodem_prompt = None;
+                                            tab.zmodem_silenced = true;
+                                        }
+                                        ZmodemTransferStatus::Skipped { name } => {
+                                            tab.status = format!("Skipped existing file: {name}");
+                                        }
+                                        ZmodemTransferStatus::Progress { .. } => {}
+                                    }
+                                    tab.zmodem_status = Some(transfer);
+                                    if view.is_visible_tab(id) { cx.notify(); }
+                                }
+                            });
+                        }
+                        None => zmodem_open = false,
                     },
                     state = remote.status.recv(), if status_open => match state {
                         Some(PreviewStatus::Connected) => {
@@ -1422,6 +1460,29 @@ impl Workspace {
         let rows = tab.terminal.render_cells();
         let status = tab.status.clone();
         let detected_zmodem = tab.zmodem_prompt;
+        let transfer_label = match tab.zmodem_status.as_ref() {
+            Some(ZmodemTransferStatus::Started { uploading: true }) =>
+                Some("ZMODEM: uploading...".to_owned()),
+            Some(ZmodemTransferStatus::Started { uploading: false }) =>
+                Some("ZMODEM: receiving...".to_owned()),
+            Some(ZmodemTransferStatus::Progress { name, bytes, total }) =>
+                Some(match total {
+                    Some(total) if *total > 0 => format!(
+                        "ZMODEM: {name} · {bytes}/{total} bytes · {}%",
+                        bytes.saturating_mul(100).checked_div(*total).unwrap_or(0).min(100),
+                    ),
+                    _ => format!("ZMODEM: {name} · {bytes} bytes"),
+                }),
+            Some(ZmodemTransferStatus::Skipped { name }) =>
+                Some(format!("ZMODEM: skipped existing {name}")),
+            Some(ZmodemTransferStatus::Completed { files }) =>
+                Some(format!("ZMODEM: completed {files} file(s)")),
+            Some(ZmodemTransferStatus::Cancelled) =>
+                Some("ZMODEM: cancelled".to_owned()),
+            Some(ZmodemTransferStatus::Failed(reason)) =>
+                Some(format!("ZMODEM: failed · {reason}")),
+            None => None,
+        };
         let title = tab.title.clone();
         let phase = tab.remote_phase;
         let saved = tab.session_id.is_some();
@@ -1579,6 +1640,13 @@ impl Workspace {
                     ),
             )
             .child(zmodem_banner)
+            .child(
+                div()
+                    .id(("zmodem-transfer-progress", pane_index))
+                    .px_3()
+                    .bg(rgb(0x15283b))
+                    .child(transfer_label.unwrap_or_default()),
+            )
             .child(
                 div()
                     .flex_1()
