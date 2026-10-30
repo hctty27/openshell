@@ -37,6 +37,8 @@ pub(super) struct SftpBrowser {
     pub session_id: String,
     pub session_name: String,
     pub path: String,
+    pub linked_tab_id: Option<u64>,
+    pub follow_terminal: bool,
     pub entries: Vec<SftpEntry>,
     pub status: String,
     pub loading: bool,
@@ -52,6 +54,7 @@ impl SftpBrowser {
     pub fn new(session_id: String, session_name: String, generation: u64) -> Self {
         Self {
             session_id, session_name, path: ".".into(),
+            linked_tab_id: None, follow_terminal: true,
             entries: Vec::new(), status: "Loading remote directory...".into(),
             loading: true, revision: 0, generation,
             picker_open: false, transfer: None,
@@ -61,6 +64,22 @@ impl SftpBrowser {
 
     pub fn parent(&self) -> String {
         parent_path(&self.path)
+    }
+
+    pub fn navigate(&mut self, path: String) {
+        self.path = path;
+        self.follow_terminal = false;
+    }
+
+    pub fn apply_terminal_directory(&mut self, tab_id: u64, path: &str) -> bool {
+        if self.follow_terminal && self.linked_tab_id == Some(tab_id)
+            && self.path != path
+        {
+            self.path = path.to_owned();
+            true
+        } else {
+            false
+        }
     }
 
     pub fn transfer_running(&self) -> bool {
@@ -145,6 +164,18 @@ mod tests {
         for invalid in ["", "..", "../evil", "a/b", "a\\b", "a\n"] {
             assert!(remote_destination("/data", invalid).is_none());
         }
+    }
+
+    #[test]
+    fn terminal_follow_is_tab_scoped_and_pauses_on_manual_navigation() {
+        let mut b = SftpBrowser::new("session".into(), "SSH".into(), 3);
+        b.linked_tab_id = Some(5);
+        assert!(!b.apply_terminal_directory(9, "/wrong"));
+        assert!(b.apply_terminal_directory(5, "/var/log"));
+        b.navigate("/tmp".into());
+        assert!(!b.follow_terminal);
+        assert!(!b.apply_terminal_directory(5, "/wrong"));
+        assert_eq!(b.path, "/tmp");
     }
 
     #[test]
