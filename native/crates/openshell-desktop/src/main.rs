@@ -200,14 +200,33 @@ impl Workspace {
         })
     }
 
+    fn linked_ssh_directory(&self, session_id: &str) -> Option<(u64, Option<String>)> {
+        let tab = self.tabs.iter()
+            .find(|tab| tab.id == self.active_id
+                && tab.session_id.as_deref() == Some(session_id)
+                && tab.remote_phase == RemotePhase::Connected)
+            .or_else(|| self.tabs.iter().find(|tab|
+                tab.session_id.as_deref() == Some(session_id)
+                    && tab.remote_phase == RemotePhase::Connected))?;
+        Some((tab.id, tab.terminal.current_directory().map(str::to_owned)))
+    }
+
     fn open_sftp_browser(&mut self, session: Session, cx: &mut Context<Self>) {
         self._sftp_picker_task = None;
         self._sftp_transfer_tasks.clear();
         self._sftp_browse_task = None;
         self.sftp_connection = None;
+        let linked = self.linked_ssh_directory(&session.id);
         let generation = self.next_sftp_generation;
         self.next_sftp_generation = self.next_sftp_generation.wrapping_add(1);
-        self.sftp_browser = Some(SftpBrowser::new(session.id, session.name, generation));
+        let mut browser = SftpBrowser::new(session.id, session.name, generation);
+        if let Some((tab_id, directory)) = linked {
+            browser.linked_tab_id = Some(tab_id);
+            if let Some(directory) = directory {
+                browser.path = directory;
+            }
+        }
+        self.sftp_browser = Some(browser);
         self.refresh_sftp_browser(cx);
     }
 
@@ -273,8 +292,46 @@ impl Workspace {
 
     fn sftp_navigate(&mut self, path: String, cx: &mut Context<Self>) {
         let Some(browser) = &mut self.sftp_browser else { return };
-        browser.path = path;
+        browser.navigate(path);
         self.refresh_sftp_browser(cx);
+    }
+
+    fn follow_remote_directory(&mut self, tab_id: u64, directory: &str, cx: &mut Context<Self>) {
+        if self.sftp_browser.as_mut()
+            .is_some_and(|browser| browser.apply_terminal_directory(tab_id, directory))
+        {
+            self.refresh_sftp_browser(cx);
+        }
+    }
+
+    fn toggle_sftp_terminal_follow(&mut self, cx: &mut Context<Self>) {
+        let Some(session_id) = self.sftp_browser.as_ref()
+            .map(|browser| browser.session_id.clone()) else { return };
+        if self.sftp_browser.as_ref().is_some_and(|browser| browser.follow_terminal) {
+            if let Some(browser) = &mut self.sftp_browser {
+                browser.follow_terminal = false;
+                cx.notify();
+            }
+            return;
+        }
+        let linked = self.linked_ssh_directory(&session_id);
+        if let Some(browser) = &mut self.sftp_browser {
+            if let Some((id, directory)) = linked {
+                browser.linked_tab_id = Some(id);
+                browser.follow_terminal = true;
+                if directory.as_ref()
+                    .is_some_and(|path| browser.apply_terminal_directory(id, path))
+                {
+                    self.refresh_sftp_browser(cx);
+                } else {
+                    browser.status = "Waiting for SSH working-directory report".into();
+                    cx.notify();
+                }
+            } else {
+                browser.status = "No connected SSH terminal for this session".into();
+                cx.notify();
+            }
+        }
     }
 
     fn sftp_up(&mut self, cx: &mut Context<Self>) {
@@ -725,14 +782,21 @@ impl Workspace {
                                 }
                             }
                             if this.update(cx, |view, cx| {
-                                if let Some(tab) = view.tab_mut(id) {
+                                let directory = if let Some(tab) = view.tab_mut(id) {
+                                    let before = tab.terminal.current_directory().map(str::to_owned);
                                     for reply in tab.terminal.feed_pty_replies(&bytes) {
                                         if let Some(tx) = &tab.remote_commands {
                                             let _ = tx.try_send(SshTerminalCommand::Input(reply));
                                         }
                                     }
-                                    if view.is_visible_tab(id) { cx.notify(); }
+                                    tab.terminal.current_directory()
+                                        .filter(|path| before.as_deref() != Some(*path))
+                                        .map(str::to_owned)
+                                } else { None };
+                                if let Some(directory) = directory {
+                                    view.follow_remote_directory(id, &directory, cx);
                                 }
+                                if view.is_visible_tab(id) { cx.notify(); }
                             }).is_err() { break; }
                         }
                         None => output_open = false,
@@ -1235,6 +1299,7 @@ impl Render for Workspace {
         let browser_view = if let Some(browser) = &self.sftp_browser {
             let name = browser.session_name.clone();
             let path = browser.path.clone();
+            let follow_terminal = browser.follow_terminal;
             let status = browser.status.clone();
             let entries = browser.entries.clone();
             let loading = browser.loading;
@@ -1259,6 +1324,18 @@ impl Render for Workspace {
                         .p_2().child("×")
                         .on_click(cx.listener(|view, _, _, cx| view.close_sftp_browser(cx)))))
                 .child(format!("Remote: {path}"))
+                .child(div().id("sftp-follow-terminal")
+                    .cursor_pointer()
+                    .p_2()
+                    .bg(rgb(if follow_terminal { 0x2c654b } else { 0x29435d }))
+                    .child(if follow_terminal {
+                        "Following SSH terminal · click to pause"
+                    } else {
+                        "Follow SSH terminal directory"
+                    })
+                    .on_click(cx.listener(|view, _, _, cx| {
+                        view.toggle_sftp_terminal_follow(cx);
+                    })))
                 .child(status)
                 .child("Click a folder to open it, or a file to download it.")
                 .child(div().id("sftp-upload-file")
