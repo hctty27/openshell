@@ -1,5 +1,5 @@
 use gpui::Task;
-use openshell_core::{LocalTerminal, TerminalEngine, TerminalSize, SshTerminalCommand, zmodem::{ZmodemProbe, ZmodemRequest}};
+use openshell_core::{LocalTerminal, TerminalEngine, TerminalSize, SshTerminalCommand, ssh::ZmodemTransferStatus, zmodem::{ZmodemProbe, ZmodemRequest}};
 use tokio::sync::{mpsc, watch};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,6 +38,7 @@ pub(super) struct TerminalTab {
     pub(super) zmodem_probe: ZmodemProbe,
     pub(super) zmodem_prompt: Option<ZmodemRequest>,
     pub(super) zmodem_silenced: bool,
+    pub(super) zmodem_status: Option<ZmodemTransferStatus>,
     pub(super) task: Option<Task<()>>,
 }
 
@@ -57,6 +58,7 @@ impl TerminalTab {
             zmodem_probe: ZmodemProbe::default(),
             zmodem_prompt: None,
             zmodem_silenced: false,
+            zmodem_status: None,
             task: None,
         }
     }
@@ -76,6 +78,7 @@ impl TerminalTab {
             zmodem_probe: ZmodemProbe::default(),
             zmodem_prompt: None,
             zmodem_silenced: false,
+            zmodem_status: None,
             task: None,
         }
     }
@@ -103,6 +106,7 @@ impl TerminalTab {
         self.zmodem_probe.reset();
         self.zmodem_prompt = None;
         self.zmodem_silenced = false;
+        self.zmodem_status = None;
     }
 
     pub(super) fn is_remote(&self) -> bool {
