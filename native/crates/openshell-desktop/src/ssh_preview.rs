@@ -6,7 +6,7 @@
 //!
 //! SSH I/O, SQLite and credential manager access happen off the GUI thread.
 
-use std::{env, thread, path::PathBuf};
+use std::{env, thread, path::PathBuf, sync::{Arc, atomic::{AtomicBool, Ordering}}};
 
 use openshell_core::{
     CredentialVault, HostIdentity, HostTrustStore, Session, SessionStore, SessionKeyStore,
@@ -291,4 +291,78 @@ pub fn browse_saved_sftp(
         browser.close().await.map_err(|e| e.to_string())?;
         Ok((path, entries))
     })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SftpTransferDirection { Upload, Download }
+
+#[derive(Debug)]
+pub enum SftpTransferEvent {
+    Progress(u64),
+    Completed(Result<u64, String>),
+}
+
+/// One transfer per worker, never reusing or disconnecting an interactive PTY.
+/// A bounded channel limits queued progress events if the window is obscured.
+pub struct SftpTransfer {
+    pub events: mpsc::Receiver<SftpTransferEvent>,
+    pub cancel: Arc<AtomicBool>,
+}
+
+pub fn start_saved_sftp_transfer(
+    session_id: String,
+    direction: SftpTransferDirection,
+    local_path: PathBuf,
+    remote_path: String,
+) -> Result<SftpTransfer, String> {
+    let (sender, events) = mpsc::channel(24);
+    let cancel = Arc::new(AtomicBool::new(false));
+    let worker_cancel = cancel.clone();
+    thread::Builder::new().name("openshell-sftp-transfer".into())
+        .spawn(move || {
+            let result = (|| -> Result<u64, String> {
+                if worker_cancel.load(Ordering::Acquire) {
+                    return Err("Transfer cancelled".into());
+                }
+                let config = resolve_stored_session(&session_id)?;
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all().build().map_err(|e| e.to_string())?;
+                runtime.block_on(async move {
+                    let connection = match &config.auth {
+                        PreviewAuth::Password(password) =>
+                            SshConnection::connect_password(
+                                &config.session, password, &config.fingerprint,
+                            ).await,
+                        PreviewAuth::PrivateKey(path) =>
+                            SshConnection::connect_private_key(
+                                &config.session, path, &config.fingerprint,
+                            ).await,
+                    }.map_err(|e| e.to_string())?;
+                    let client = NativeSftp::open(connection).await
+                        .map_err(|e| e.to_string())?;
+                    let mut last_reported = 0_u64;
+                    let mut on_progress = |bytes: u64| {
+                        if bytes.saturating_sub(last_reported) >= 256 * 1024 {
+                            last_reported = bytes;
+                            let _ = sender.try_send(SftpTransferEvent::Progress(bytes));
+                        }
+                    };
+                    let outcome = match direction {
+                        SftpTransferDirection::Upload =>
+                            client.upload_with_progress(
+                                &local_path, &remote_path, &worker_cancel, &mut on_progress,
+                            ).await,
+                        SftpTransferDirection::Download =>
+                            client.download_with_progress(
+                                &remote_path, &local_path, &worker_cancel, &mut on_progress,
+                            ).await,
+                    }.map_err(|e| e.to_string());
+                    let _ = client.close().await;
+                    outcome
+                })
+            })();
+            let _ = sender.blocking_send(SftpTransferEvent::Completed(result));
+        })
+        .map_err(|error| format!("cannot create SFTP transfer worker: {error}"))?;
+    Ok(SftpTransfer { events, cancel })
 }
