@@ -3,6 +3,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use alacritty_terminal::{
     event::{Event, EventListener},
     grid::{Dimensions, Scroll},
+    index::{Column, Line, Point, Side},
+    selection::{Selection, SelectionType},
     term::{cell::Flags, Config, RenderableContent, Term, TermMode},
     vte::ansi::{Color, Processor},
     term::color::Colors,
@@ -28,6 +30,7 @@ pub struct RenderCell {
     pub italic: bool,
     pub underline: bool,
     pub cursor: bool,
+    pub selected: bool,
 }
 
 impl Default for RenderCell {
@@ -40,6 +43,7 @@ impl Default for RenderCell {
             italic: false,
             underline: false,
             cursor: false,
+            selected: false,
         }
     }
 }
@@ -158,6 +162,42 @@ impl TerminalEngine {
         self.term.mode().contains(TermMode::ALT_SCREEN)
     }
 
+    /// Let terminal applications (vim, less, etc.) receive mouse gestures
+    /// when they enable mouse reporting. Holding Shift can override that mode.
+    pub fn application_mouse_mode(&self) -> bool {
+        self.term.mode().intersects(TermMode::MOUSE_MODE)
+    }
+
+    /// Coordinates are visible cell indices, not pixels. Translate through
+    /// display_offset to preserve correct selection in scrolled history.
+    fn point_for_visible(&self, row: usize, column: usize) -> Point {
+        let offset = self.term.grid().display_offset() as i32;
+        Point::new(
+            Line(row.min(self.size.rows - 1) as i32 - offset),
+            Column(column.min(self.size.columns - 1)),
+        )
+    }
+
+    pub fn begin_selection(&mut self, row: usize, column: usize) {
+        let point = self.point_for_visible(row, column);
+        self.term.selection = Some(Selection::new(SelectionType::Simple, point, Side::Left));
+    }
+
+    pub fn update_selection(&mut self, row: usize, column: usize) {
+        let point = self.point_for_visible(row, column);
+        if let Some(selection) = self.term.selection.as_mut() {
+            selection.update(point, Side::Right);
+        }
+    }
+
+    pub fn selected_text(&self) -> Option<String> {
+        self.term.selection_to_string().filter(|text| !text.is_empty())
+    }
+
+    pub fn clear_selection(&mut self) {
+        self.term.selection = None;
+    }
+
     pub fn bracketed_paste(&self) -> bool {
         self.term.mode().contains(TermMode::BRACKETED_PASTE)
     }
@@ -212,6 +252,7 @@ impl TerminalEngine {
     pub fn render_cells(&self) -> Vec<Vec<RenderCell>> {
         let content = self.term.renderable_content();
         let colors = content.colors;
+        let selected = self.term.selection.as_ref().and_then(|sel| sel.to_range(&self.term));
         let offset = content.display_offset as i32;
         let mut rows = vec![vec![RenderCell::default(); self.size.columns]; self.size.rows];
 
@@ -248,6 +289,7 @@ impl TerminalEngine {
                 italic: cell.flags.contains(Flags::ITALIC),
                 underline: cell.flags.intersects(Flags::ALL_UNDERLINES),
                 cursor: false,
+                selected: selected.as_ref().is_some_and(|range| range.contains(indexed.point)),
             };
         }
 
@@ -350,6 +392,31 @@ mod tests {
         assert!(terminal.bracketed_paste());
         terminal.feed(b"\x1b[?2004l");
         assert!(!terminal.bracketed_paste());
+    }
+
+    #[test]
+    fn selection_copies_exact_range_and_renders_highlight() {
+        let mut term = TerminalEngine::new(TerminalSize::new(20, 3));
+        term.feed("hello 中文 world".as_bytes());
+        term.begin_selection(0, 0);
+        term.update_selection(0, 4);
+        assert_eq!(term.selected_text().as_deref(), Some("hello"));
+        assert!(term.render_cells()[0][0].selected);
+        assert!(!term.render_cells()[0][10].selected);
+        term.clear_selection();
+        assert!(term.selected_text().is_none());
+    }
+
+    #[test]
+    fn selection_is_scoped_to_its_terminal_grid() {
+        let mut first = TerminalEngine::new(TerminalSize::new(20, 3));
+        let mut second = TerminalEngine::new(TerminalSize::new(20, 3));
+        first.feed(b"server one");
+        second.feed(b"server two");
+        first.begin_selection(0, 0);
+        first.update_selection(0, 5);
+        assert_eq!(first.selected_text().as_deref(), Some("server"));
+        assert_eq!(second.selected_text(), None);
     }
 
     #[test]
