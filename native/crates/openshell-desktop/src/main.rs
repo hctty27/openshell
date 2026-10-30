@@ -20,7 +20,7 @@ mod direct3d_diagnostics;
 use gpui::prelude::*;
 use gpui::{
     div, px, rgb, size, App, Application, Bounds, Context, FocusHandle, Focusable,
-    ClipboardItem, IntoElement, KeyDownEvent, Keystroke, MouseButton, PathPromptOptions, Render, Task, Window, WindowBounds,
+    ClipboardItem, IntoElement, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PathPromptOptions, Render, Task, Window, WindowBounds,
     WindowOptions, Subscription, ScrollWheelEvent,
 };
 use openshell_core::{CredentialVault, HostIdentity, HostTrustStore, TrustDecision, LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize};
@@ -43,6 +43,7 @@ struct Workspace {
     next_tab_id: u64,
     pending_close: Option<u64>,
     pending_paste: Option<(u64, String)>,
+    selecting_tab: Option<u64>,
     split: Option<SplitView>,
     viewport_width: f32,
     viewport_height: f32,
@@ -143,6 +144,7 @@ impl Workspace {
             next_tab_id: initial_id + 1,
             pending_close: None,
             pending_paste: None,
+            selecting_tab: None,
             split: None,
             viewport_width: f32::from(viewport.width),
             viewport_height: f32::from(viewport.height),
@@ -893,7 +895,7 @@ impl Workspace {
 
     fn activate_tab(&mut self, id: u64, cx: &mut Context<Self>) {
         if self.tabs.iter().any(|tab| tab.id == id) {
-            if self.active_id != id { self.pending_paste = None; }
+            if self.active_id != id { self.pending_paste = None; self.selecting_tab = None; }
             self.active_id = id;
             if self.split.is_some_and(|split| !split.contains(id)) {
                 self.split = None;
@@ -1134,6 +1136,63 @@ impl Workspace {
     }
 
 
+    /// Copy an Alacritty selection when present; preserve the legacy visible
+    /// viewport fallback when there is no selection.
+    fn copy_selected_or_viewport(&mut self, cx: &mut Context<Self>) {
+        if let Some(selected) = self.active_tab().terminal.selected_text() {
+            cx.write_to_clipboard(ClipboardItem::new_string(selected));
+            self.active_tab_mut().status = "Selected terminal text copied".into();
+            cx.notify();
+        } else {
+            self.copy_visible_terminal(cx);
+        }
+    }
+
+    fn mouse_selection_start(
+        &mut self, id: u64, row: usize, window_x: f32, pane_index: usize,
+        shift: bool, cx: &mut Context<Self>,
+    ) {
+        let split_axis = self.split.map(|split| split.axis);
+        let width = self.viewport_width;
+        let Some(tab) = self.tab_mut(id) else { return; };
+        if tab.terminal.application_mouse_mode() && !shift { return; }
+        let column = pointer_column(
+            window_x, pane_index, split_axis, width, tab.terminal.size().columns,
+        );
+        tab.terminal.begin_selection(row, column);
+        self.selecting_tab = Some(id);
+        cx.notify();
+    }
+
+    fn mouse_selection_update(
+        &mut self, id: u64, row: usize, window_x: f32,
+        pane_index: usize, cx: &mut Context<Self>,
+    ) {
+        if self.selecting_tab != Some(id) { return; }
+        let split_axis = self.split.map(|split| split.axis);
+        let width = self.viewport_width;
+        if let Some(tab) = self.tab_mut(id) {
+            let column = pointer_column(
+                window_x, pane_index, split_axis, width, tab.terminal.size().columns,
+            );
+            tab.terminal.update_selection(row, column);
+            cx.notify();
+        }
+    }
+
+    fn mouse_selection_finish(&mut self, id: u64, cx: &mut Context<Self>) {
+        if self.selecting_tab.take() != Some(id) { return; }
+        if let Some(text) = self.tabs.iter().find(|tab| tab.id == id)
+            .and_then(|tab| tab.terminal.selected_text())
+        {
+            cx.write_to_clipboard(ClipboardItem::new_string(text));
+            if let Some(tab) = self.tab_mut(id) {
+                tab.status = "Selection copied to clipboard".into();
+            }
+        }
+        cx.notify();
+    }
+
     fn copy_visible_terminal(&mut self, cx: &mut Context<Self>) {
         let mut lines = self.active_tab().terminal.visible_lines();
         while lines.last().is_some_and(String::is_empty) {
@@ -1215,6 +1274,9 @@ impl Workspace {
         let phase = tab.remote_phase;
         let saved = tab.session_id.is_some();
         let selected = pane_id == self.active_id;
+        let columns = tab.terminal.size().columns;
+        let split_axis = self.split.map(|split| split.axis);
+        let width = self.viewport_width;
 
         div()
             .id(("terminal-pane", pane_index))
@@ -1249,6 +1311,12 @@ impl Workspace {
                 window.focus(&view.focus_handle(cx));
                 cx.stop_propagation();
             }))
+            .on_mouse_up(MouseButton::Left, cx.listener(move |view, _, _, cx| {
+                view.mouse_selection_finish(pane_id, cx);
+            }))
+            .on_mouse_up_out(MouseButton::Left, cx.listener(move |view, _, _, cx| {
+                view.mouse_selection_finish(pane_id, cx);
+            }))
             .child(
                 div()
                     .h(px(TOOLBAR_HEIGHT))
@@ -1281,9 +1349,28 @@ impl Workspace {
                     .font_family("Consolas")
                     .flex()
                     .flex_col()
-                    .children(rows.into_iter().map(|cells| {
+                    .children(rows.into_iter().enumerate().map(|(row, cells)| {
                         div()
+                            .id(("terminal-selectable-row", pane_index * MAX_ROWS + row))
                             .h(px(CELL_HEIGHT))
+                            .on_mouse_down(MouseButton::Left, cx.listener(move |view, event: &MouseDownEvent, _, cx| {
+                                view.mouse_selection_start(
+                                    pane_id, row, f32::from(event.position.x), pane_index,
+                                    event.modifiers.shift, cx,
+                                );
+                            }))
+                            .on_mouse_move(cx.listener(move |view, event: &MouseMoveEvent, _, cx| {
+                                if event.pressed_button == Some(MouseButton::Left) {
+                                    view.mouse_selection_update(
+                                        pane_id, row, f32::from(event.position.x), pane_index, cx,
+                                    );
+                                }
+                            }))
+                            .on_mouse_up(MouseButton::Left, cx.listener(move |view, event: &MouseUpEvent, _, cx| {
+                                view.mouse_selection_update(
+                                    pane_id, row, f32::from(event.position.x), pane_index, cx,
+                                );
+                            }))
                             .child(styled_terminal_line(&cells))
                     })),
             )
@@ -1658,9 +1745,9 @@ impl Render for Workspace {
                             .id("copy-terminal-viewport")
                             .cursor_pointer()
                             .px_3()
-                            .child("Copy viewport")
+                            .child("Copy selection / viewport")
                             .on_click(cx.listener(|view, _, _, cx| {
-                                view.copy_visible_terminal(cx);
+                                view.copy_selected_or_viewport(cx);
                             })),
                     )
                     .child(
@@ -1777,7 +1864,7 @@ impl Render for Workspace {
                                     match event.keystroke.key.as_str() {
                                         "v" => { view.paste_from_clipboard(cx); return; }
                                         "c" if event.keystroke.modifiers.shift => {
-                                            view.copy_visible_terminal(cx);
+                                            view.copy_selected_or_viewport(cx);
                                             return;
                                         }
                                         "tab" => {
