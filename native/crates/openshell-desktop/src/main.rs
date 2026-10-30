@@ -23,7 +23,7 @@ use gpui::{
     ClipboardItem, IntoElement, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PathPromptOptions, Render, Task, Window, WindowBounds,
     WindowOptions, Subscription, ScrollWheelEvent,
 };
-use openshell_core::{CredentialVault, HostIdentity, HostTrustStore, TrustDecision, LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize};
+use openshell_core::{CredentialVault, HostIdentity, HostTrustStore, TrustDecision, LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize, zmodem::ZmodemRequest};
 use openshell_core::native_paths::{native_database_path, ensure_native_data_directory};
 use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session, start_saved_sftp_browser, SftpBrowseWorker, start_saved_sftp_transfer, SftpTransferDirection, SftpTransferEvent};
 
@@ -786,6 +786,9 @@ impl Workspace {
                             if this.update(cx, |view, cx| {
                                 let directory = if let Some(tab) = view.tab_mut(id) {
                                     let before = tab.terminal.current_directory().map(str::to_owned);
+                                    if tab.observe_zmodem(&bytes) {
+                                        tab.status = "ZMODEM handshake detected · select a recovery action".into();
+                                    }
                                     for reply in tab.terminal.feed_pty_replies(&bytes) {
                                         if let Some(tx) = &tab.remote_commands {
                                             let _ = tx.try_send(SshTerminalCommand::Input(reply));
@@ -813,7 +816,9 @@ impl Workspace {
                                             size.columns, size.rows,
                                         ));
                                     }
-                                    tab.status = "SSH connected · pinned host key".into();
+                                    if tab.zmodem_prompt.is_none() {
+                                        tab.status = "SSH connected · pinned host key".into();
+                                    }
                                     tab.remote_phase = RemotePhase::Connected;
                                     cx.notify();
                                 }
@@ -1000,6 +1005,7 @@ impl Workspace {
                             let tab = self.active_tab_mut();
                             tab.cancel_transport();
                             tab.terminal = TerminalEngine::new(size);
+                            tab.reset_zmodem();
                             tab.remote_phase = RemotePhase::Connecting;
                             tab.status = "Reconnecting SSH...".into();
                             tab.task = Some(task);
@@ -1260,6 +1266,35 @@ impl Focusable for Workspace {
 impl Workspace {
     /// Render an existing terminal tab in a pane without duplicating its
     /// SSH, ConPTY, scrollback, or async task state.
+    fn dismiss_zmodem_notice(&mut self, id: u64, cx: &mut Context<Self>) {
+        if let Some(tab) = self.tab_mut(id) {
+            tab.dismiss_zmodem();
+            cx.notify();
+        }
+    }
+
+    /// Abort only the indicated SSH tab, never the active/other split pane.
+    /// Until a full binary ZMODEM engine is installed, this provides a safe
+    /// recovery path from remote rz/sz waiting for a protocol response.
+    fn cancel_zmodem_request(&mut self, id: u64, cx: &mut Context<Self>) {
+        if let Some(tab) = self.tab_mut(id) {
+            if tab.zmodem_prompt.is_none() {
+                return;
+            }
+            let submitted = tab.remote_commands.as_ref()
+                .is_some_and(|commands| {
+                    commands.try_send(SshTerminalCommand::Input(vec![0x03])).is_ok()
+                });
+            tab.dismiss_zmodem();
+            tab.status = if submitted {
+                "Sent Ctrl+C to remote rz/sz; native ZMODEM transfer is not enabled".into()
+            } else {
+                "Could not cancel remote rz/sz; try Ctrl+C in the SSH terminal".into()
+            };
+            cx.notify();
+        }
+    }
+
     fn render_terminal_pane(
         &self,
         pane_id: u64,
@@ -1270,6 +1305,7 @@ impl Workspace {
             .expect("visible pane must reference an existing tab");
         let rows = tab.terminal.render_cells();
         let status = tab.status.clone();
+        let detected_zmodem = tab.zmodem_prompt;
         let title = tab.title.clone();
         let phase = tab.remote_phase;
         let saved = tab.session_id.is_some();
@@ -1277,6 +1313,46 @@ impl Workspace {
         let columns = tab.terminal.size().columns;
         let split_axis = self.split.map(|split| split.axis);
         let width = self.viewport_width;
+        let zmodem_banner = if let Some(request) = detected_zmodem {
+            let summary = match request {
+                ZmodemRequest::Receive => "Remote sz detected (server sending a file)",
+                ZmodemRequest::Send => "Remote rz detected (server waiting for a file)",
+            };
+            div()
+                .id(("zmodem-prompt", pane_index))
+                .p_2()
+                .bg(rgb(0x4b3a20))
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(format!("{summary} · Native ZMODEM transfer is not yet supported; use SFTP."))
+                .child(
+                    div()
+                        .id(("zmodem-cancel-remote", pane_index))
+                        .cursor_pointer()
+                        .px_2()
+                        .py_1()
+                        .rounded_md()
+                        .bg(rgb(0x733a38))
+                        .child("Cancel remote rz/sz")
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.cancel_zmodem_request(pane_id, cx);
+                        })),
+                )
+                .child(
+                    div()
+                        .id(("zmodem-dismiss", pane_index))
+                        .cursor_pointer()
+                        .px_2()
+                        .py_1()
+                        .child("Dismiss")
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.dismiss_zmodem_notice(pane_id, cx);
+                        })),
+                )
+        } else {
+            div().id(("zmodem-prompt-empty", pane_index))
+        };
 
         div()
             .id(("terminal-pane", pane_index))
@@ -1341,6 +1417,7 @@ impl Workspace {
                             })),
                     ),
             )
+            .child(zmodem_banner)
             .child(
                 div()
                     .flex_1()
