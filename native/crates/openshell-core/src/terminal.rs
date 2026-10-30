@@ -212,11 +212,12 @@ impl TerminalEngine {
     }
 
 
-    /// Diagnostic text snapshot of the visible viewport. This is not a
-    /// production cell renderer: colors, cursor and glyph metrics are omitted.
+    /// Copy a logical visible text snapshot without leaking extra spaces
+    /// from wide-character spacer cells or losing combining characters.
+    /// This remains a diagnostic snapshot, not a positioned GPU renderer.
     pub fn visible_lines(&self) -> Vec<String> {
         let content = self.term.renderable_content();
-        let mut rows = vec![vec![' '; self.size.columns]; self.size.rows];
+        let mut rows = vec![vec![String::from(" "); self.size.columns]; self.size.rows];
         let offset = content.display_offset as i32;
         for indexed in content.display_iter {
             let line = indexed.point.line.0 + offset;
@@ -225,13 +226,25 @@ impl TerminalEngine {
                 continue;
             }
             let cell = indexed.cell;
-            let spacer = cell.flags.intersects(
+            if cell.flags.intersects(
                 Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER,
-            );
-            rows[line as usize][col] = if spacer { ' ' } else { cell.c };
+            ) {
+                rows[line as usize][col].clear();
+                continue;
+            }
+            let text = &mut rows[line as usize][col];
+            text.clear();
+            if cell.flags.contains(Flags::HIDDEN) {
+                text.push(' ');
+            } else {
+                text.push(cell.c);
+                if let Some(zero_width) = cell.zerowidth() {
+                    text.extend(zero_width.iter());
+                }
+            }
         }
         rows.into_iter()
-            .map(|row| row.into_iter().collect::<String>().trim_end().to_owned())
+            .map(|row| row.concat().trim_end().to_owned())
             .collect()
     }
 
@@ -333,6 +346,17 @@ mod tests {
         assert_eq!(lines[0], "hello");
         assert_eq!(lines[1], "world");
         assert_eq!(lines.len(), 4);
+    }
+
+    #[test]
+    fn viewport_copy_preserves_cjk_width_and_combining_marks() {
+        let mut terminal = TerminalEngine::new(TerminalSize::new(40, 3));
+        let text = "hello 中文 e\u{301} café";
+        terminal.feed(text.as_bytes());
+        assert_eq!(terminal.visible_lines()[0], text);
+        let cells = &terminal.render_cells()[0];
+        assert_eq!(cells[6].text, "中");
+        assert!(cells[7].text.is_empty());
     }
 
     #[test]
