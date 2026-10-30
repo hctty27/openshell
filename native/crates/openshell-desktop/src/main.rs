@@ -58,6 +58,7 @@ struct Workspace {
     sftp_connection: Option<SftpBrowseWorker>,
     _sftp_browse_task: Option<Task<()>>,
     _sftp_picker_task: Option<Task<()>>,
+    _zmodem_picker_task: Option<Task<()>>,
     _sftp_transfer_tasks: Vec<Task<()>>,
     next_sftp_generation: u64,
 }
@@ -159,6 +160,7 @@ impl Workspace {
             sftp_connection: None,
             _sftp_browse_task: None,
             _sftp_picker_task: None,
+            _zmodem_picker_task: None,
             _sftp_transfer_tasks: Vec::new(),
             next_sftp_generation: 1,
         }
@@ -1266,6 +1268,63 @@ impl Focusable for Workspace {
 impl Workspace {
     /// Render an existing terminal tab in a pane without duplicating its
     /// SSH, ConPTY, scrollback, or async task state.
+    fn choose_zmodem_upload(&mut self, id: u64, cx: &mut Context<Self>) {
+        let eligible = self.tabs.iter().any(|tab|
+            tab.id == id
+                && tab.zmodem_prompt == Some(ZmodemRequest::Send)
+                && tab.remote_phase == RemotePhase::Connected
+        );
+        if !eligible { return; }
+        let picker = cx.prompt_for_paths(PathPromptOptions {
+            files: true, directories: false, multiple: false,
+            prompt: Some("Select a file for remote rz".into()),
+        });
+        self._zmodem_picker_task = Some(cx.spawn(async move |this, cx| {
+            let result = picker.await;
+            let _ = this.update(cx, |view, cx| {
+                match result {
+                    Ok(Ok(Some(paths))) => {
+                        if let Some(path) = paths.into_iter().next() {
+                            let Some(tab) = view.tab_mut(id) else { return };
+                            if tab.remote_phase != RemotePhase::Connected
+                                || tab.zmodem_prompt != Some(ZmodemRequest::Send)
+                            {
+                                return;
+                            }
+                            let started = tab.remote_commands.as_ref()
+                                .is_some_and(|commands| commands.try_send(
+                                    SshTerminalCommand::ZmodemUpload(path),
+                                ).is_ok());
+                            tab.status = if started {
+                                "ZMODEM upload requested; cancel or dismiss when finished".into()
+                            } else {
+                                "ZMODEM upload command queue is full or disconnected".into()
+                            };
+                            cx.notify();
+                        }
+                    }
+                    Ok(Ok(None)) => {}
+                    _ => {
+                        if let Some(tab) = view.tab_mut(id) {
+                            tab.status = "ZMODEM file chooser failed".into();
+                            cx.notify();
+                        }
+                    }
+                }
+            });
+        }));
+    }
+
+    fn cancel_zmodem_upload(&mut self, id: u64, cx: &mut Context<Self>) {
+        if let Some(tab) = self.tab_mut(id) {
+            if let Some(commands) = &tab.remote_commands {
+                let _ = commands.try_send(SshTerminalCommand::CancelZmodem);
+            }
+            tab.dismiss_zmodem();
+            cx.notify();
+        }
+    }
+
     fn dismiss_zmodem_notice(&mut self, id: u64, cx: &mut Context<Self>) {
         if let Some(tab) = self.tab_mut(id) {
             tab.dismiss_zmodem();
@@ -1338,6 +1397,38 @@ impl Workspace {
                 .items_center()
                 .gap_2()
                 .child(format!("{summary} · Native ZMODEM transfer is not yet supported; use SFTP."))
+                .child(
+                    div()
+                        .id(("zmodem-native-upload", pane_index))
+                        .cursor_pointer()
+                        .px_2()
+                        .py_1()
+                        .rounded_md()
+                        .bg(rgb(0x2c654b))
+                        .child(if request == ZmodemRequest::Send {
+                            "Choose upload file..."
+                        } else {
+                            "Download via SFTP for now"
+                        })
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            if request == ZmodemRequest::Send {
+                                view.choose_zmodem_upload(pane_id, cx);
+                            } else {
+                                view.zmodem_use_sftp(pane_id, cx);
+                            }
+                        })),
+                )
+                .child(
+                    div()
+                        .id(("zmodem-cancel-upload", pane_index))
+                        .cursor_pointer()
+                        .px_2()
+                        .py_1()
+                        .child("Cancel ZMODEM upload")
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.cancel_zmodem_upload(pane_id, cx);
+                        })),
+                )
                 .child(
                     div()
                         .id(("zmodem-cancel-remote", pane_index))
