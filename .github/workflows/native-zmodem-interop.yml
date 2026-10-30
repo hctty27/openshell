@@ -133,5 +133,9 @@ jobs:
           set -euo pipefail
           export OPENSHELL_E2E_MODE=cancel-receive
           export OPENSHELL_E2E_PATH="$RUNNER_TEMP/openshell-ssh-e2e/cancel"
-          timeout 60s target/debug/examples/ssh_zmodem_e2e
+          if ! timeout 60s target/debug/examples/ssh_zmodem_e2e; then
+            echo "SSH cancellation failed; ephemeral test-server process names:"
+            ps -eo pid,ppid,stat,etime,comm | grep -E '(^ *PID|[ /](sz|bash|sshd)$)' || true
+            exit 1
+          fi
           test ! -e "$OPENSHELL_E2E_PATH/large-from-sz.bin"
