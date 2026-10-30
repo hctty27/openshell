@@ -153,8 +153,14 @@ impl ZmodemEngine {
     /// Accept a safely named file after the client has created a new local
     /// temporary target with create_new; never overwrite existing files.
     pub fn accept_received_file(&mut self) -> Result<(), ZmodemEngineError> {
+        self.accept_received_file_at(0)
+    }
+
+    /// Repeated ZFILE headers must be acknowledged idempotently. Preserve
+    /// already received bytes and request a resume at the confirmed offset.
+    pub fn accept_received_file_at(&mut self, offset: u32) -> Result<(), ZmodemEngineError> {
         match &mut self.state {
-            State::Receiving(receiver) => Ok(receiver.accept_file_at(0)?),
+            State::Receiving(receiver) => Ok(receiver.accept_file_at(offset)?),
             State::Sending(_) => Err(ZmodemEngineError::WrongRole),
         }
     }
