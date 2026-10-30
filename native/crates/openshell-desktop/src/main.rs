@@ -1552,6 +1552,17 @@ impl Workspace {
         let phase = tab.remote_phase;
         let saved = tab.session_id.is_some();
         let selected = pane_id == self.active_id;
+        let preedit = if selected && self.session_editor.is_none()
+            && self.ime.tab_id == Some(pane_id)
+        {
+            self.ime.text.clone()
+        } else {
+            String::new()
+        };
+        let (cursor_row, cursor_column) = tab.terminal.visible_cursor_cell();
+        let cell_advance = terminal_ime::terminal_cell_advance(cx);
+        let preedit_x = CONTENT_PADDING / 2.0 + cursor_column as f32 * cell_advance;
+        let preedit_y = CONTENT_PADDING / 2.0 + cursor_row as f32 * CELL_HEIGHT;
         let pane_ime_entity = cx.entity();
         let pane_ime_focus = self.focus_handle.clone();
         let columns = tab.terminal.size().columns;
@@ -1747,6 +1758,21 @@ impl Workspace {
                             }))
                             .child(styled_terminal_line(&cells))
                     }))
+                    // Show the uncommitted preedit at the same cell anchor as
+                    // the native candidate window. Never send it to the PTY
+                    // until GPUI reports a committed replacement.
+                    .child(
+                        div()
+                            .id(("ime-preedit", pane_index))
+                            .absolute()
+                            .left(px(preedit_x))
+                            .top(px(preedit_y))
+                            .text_size(px(14.0))
+                            .font_family("Consolas")
+                            .bg(rgb(0x23344c))
+                            .text_color(rgb(0xe1ecfa))
+                            .child(preedit),
+                    )
                     // Bind IME candidate geometry to the active terminal's
                     // actual content pane, including split layouts and toolbar.
                     .child(gpui::canvas(
