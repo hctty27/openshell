@@ -15,6 +15,7 @@ pub mod key_auth;
 pub mod terminal;
 pub mod cwd;
 pub mod zmodem;
+pub mod zmodem_engine;
 pub mod workspace;
 
 pub use session::{Session, SessionError};
