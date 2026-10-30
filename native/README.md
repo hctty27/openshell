@@ -361,9 +361,11 @@ the active selection, falling back to visible-viewport copy when no selection
 is present. Each SSH/PowerShell tab owns an independent selection, including
 while scrolling history. Right-click paste is unchanged.
 
-The current GPUI diagnostic renderer still estimates glyph columns using a
-fixed 8.5 px width; **pointer accuracy for proportional glyphs, CJK width,
-DPI scaling, split panes and the SFTP dock is not production-quality yet**.
+The diagnostic renderer now shares GPUI-measured Consolas character advance
+between IME placement, PTY column sizing and mouse hit testing, and recalculates
+columns when the SFTP dock opens or closes. **Fixed row-height, CJK glyph
+shaping, zoom/DPI, split-pane precision and full-screen mouse mode are still
+not production-ready without interactive Windows verification**.
 Terminal applications that advertise mouse mode reserve ordinary mouse
 gestures; holding Shift allows a forced text selection. Full application
 mouse event forwarding, IME and pixel-accurate glyph hit testing remain

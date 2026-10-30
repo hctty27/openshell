@@ -54,14 +54,19 @@ pub(super) const TOOLBAR_HEIGHT: f32 = 40.0;
 pub(super) const CONTENT_PADDING: f32 = 32.0;
 pub(super) const CELL_WIDTH: f32 = 8.5;
 pub(super) const CELL_HEIGHT: f32 = 19.0;
+pub(super) const SFTP_DOCK_WIDTH: f32 = 315.0;
+
+fn safe_cell_width(value: f32) -> f32 {
+    if value.is_finite() && value > 0.0 { value } else { CELL_WIDTH }
+}
 pub(super) const MAX_COLUMNS: usize = 500;
 pub(super) const MAX_ROWS: usize = 300;
 
-pub(super) fn terminal_size_for_viewport(width: f32, height: f32) -> TerminalSize {
+pub(super) fn terminal_size_for_viewport_with_cell(width: f32, height: f32, cell_width: f32) -> TerminalSize {
     // On window minimization and invalid geometry, do not create huge grids.
     let width = if width.is_finite() { width.max(0.0) } else { 0.0 };
     let height = if height.is_finite() { height.max(0.0) } else { 0.0 };
-    let columns = ((width - SIDEBAR_WIDTH - CONTENT_PADDING) / CELL_WIDTH)
+    let columns = ((width - SIDEBAR_WIDTH - CONTENT_PADDING) / safe_cell_width(cell_width))
         .floor()
         .max(2.0)
         .min(MAX_COLUMNS as f32) as usize;
@@ -73,18 +78,23 @@ pub(super) fn terminal_size_for_viewport(width: f32, height: f32) -> TerminalSiz
     TerminalSize::new(columns, rows)
 }
 
+#[cfg(test)]
+pub(super) fn terminal_size_for_viewport(width: f32, height: f32) -> TerminalSize {
+    terminal_size_for_viewport_with_cell(width, height, CELL_WIDTH)
+}
 
 const SPLIT_GUTTER: f32 = 6.0;
 
 /// Prototype mapping of window X coordinates to monospaced terminal columns.
 /// The final renderer must replace these estimates with measured GPUI bounds
 /// and actual glyph widths before production selection can be exact.
-pub(super) fn pointer_column(
+pub(super) fn pointer_column_with_cell(
     window_x: f32,
     pane_index: usize,
     axis: Option<SplitAxis>,
     window_width: f32,
     columns: usize,
+    cell_width: f32,
 ) -> usize {
     if columns == 0 { return 0; }
     let half = ((window_width - SIDEBAR_WIDTH - SPLIT_GUTTER).max(0.0)) / 2.0;
@@ -94,32 +104,41 @@ pub(super) fn pointer_column(
         _ => SIDEBAR_WIDTH,
     };
     let content_left = pane_left + CONTENT_PADDING / 2.0;
-    let position = ((window_x - content_left) / CELL_WIDTH).floor();
+    let position = ((window_x - content_left) / safe_cell_width(cell_width)).floor();
     if !position.is_finite() { return 0; }
     (position.max(0.0) as usize).min(columns - 1)
 }
 
+#[cfg(test)]
+pub(super) fn pointer_column(
+    x: f32, pane: usize, axis: Option<SplitAxis>, width: f32, columns: usize,
+) -> usize {
+    pointer_column_with_cell(x, pane, axis, width, columns, CELL_WIDTH)
+}
 
 /// The split is only a view into existing terminal tabs; each visible PTY
 /// must be resized to its actual pane instead of retaining full-width columns.
-pub(super) fn terminal_size_for_split(
-    width: f32,
-    height: f32,
-    axis: SplitAxis,
+pub(super) fn terminal_size_for_split_with_cell(
+    width: f32, height: f32, axis: SplitAxis, cell_width: f32,
 ) -> TerminalSize {
     match axis {
         // Vertical divider: two panes side by side.
         SplitAxis::Vertical => {
             let usable = ((width - SIDEBAR_WIDTH - SPLIT_GUTTER).max(0.0)) / 2.0;
-            terminal_size_for_viewport(usable + SIDEBAR_WIDTH, height)
+            terminal_size_for_viewport_with_cell(usable + SIDEBAR_WIDTH, height, cell_width)
         }
         // Horizontal divider: top and bottom panes.
         SplitAxis::Horizontal => {
             let usable = ((height - TITLEBAR_HEIGHT - TABBAR_HEIGHT - SPLIT_GUTTER)
                 .max(0.0)) / 2.0;
-            terminal_size_for_viewport(width, usable + TITLEBAR_HEIGHT + TABBAR_HEIGHT)
+            terminal_size_for_viewport_with_cell(width, usable + TITLEBAR_HEIGHT + TABBAR_HEIGHT, cell_width)
         }
     }
+}
+
+#[cfg(test)]
+fn terminal_size_for_split(width: f32, height: f32, axis: SplitAxis) -> TerminalSize {
+    terminal_size_for_split_with_cell(width, height, axis, CELL_WIDTH)
 }
 
 #[cfg(test)]
@@ -138,6 +157,26 @@ mod split_size_tests {
         assert_eq!(pointer_column(second_left, 1, Some(SplitAxis::Vertical), 1200.0, 50), 0);
         assert_eq!(pointer_column(second_left + 2.0 * CELL_WIDTH, 1,
             Some(SplitAxis::Vertical), 1200.0, 50), 2);
+    }
+
+    #[test]
+    fn measured_width_controls_grid_and_selection_consistently() {
+        let wide = terminal_size_for_viewport_with_cell(1200.0, 760.0, 11.0);
+        let narrow = terminal_size_for_viewport_with_cell(1200.0, 760.0, 7.0);
+        assert!(narrow.columns > wide.columns);
+        let left = SIDEBAR_WIDTH + CONTENT_PADDING / 2.0;
+        assert_eq!(pointer_column_with_cell(left + 33.0, 0, None, 1200.0, 80, 11.0), 3);
+        assert_eq!(pointer_column_with_cell(left + 33.0, 0, None, 1200.0, 80, 7.0), 4);
+        assert_eq!(terminal_size_for_viewport_with_cell(1200.0, 760.0, 0.0),
+                   terminal_size_for_viewport(1200.0, 760.0));
+    }
+
+    #[test]
+    fn dock_reduces_grid_width() {
+        let full = terminal_size_for_viewport_with_cell(1250.0, 760.0, 8.5);
+        let dock = terminal_size_for_viewport_with_cell(1250.0 - SFTP_DOCK_WIDTH, 760.0, 8.5);
+        assert!(dock.columns < full.columns);
+        assert_eq!(dock.rows, full.rows);
     }
 
     #[test]

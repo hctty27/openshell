@@ -43,9 +43,15 @@ impl TerminalImeState {
 
     /// Reject a delayed IME confirmation from a tab or editor that lost focus.
     pub(super) fn invalidate_target(&mut self) {
-        let was_composing = self.is_composing();
+        let reject = self.is_composing() || self.reject_stale_commit;
         self.reset();
-        self.reject_stale_commit = was_composing;
+        self.reject_stale_commit = reject;
+    }
+
+    fn clear_mark_without_commit(&mut self) {
+        let reject = self.reject_stale_commit;
+        self.reset();
+        self.reject_stale_commit = reject;
     }
 
     fn consume_stale_commit(&mut self) -> bool {
@@ -159,19 +165,19 @@ impl EntityInputHandler for Workspace {
         // unmarkText ends the marked range, but is not a text-commit event.
         // Only replace_text_in_range may deliver characters to the PTY.
         // In particular, Escape must not execute unfinished Pinyin preedit.
-        self.ime.reset();
+        self.ime.clear_mark_without_commit();
         cx.notify();
     }
 
     fn bounds_for_range(
         &mut self, _range: Range<usize>, element_bounds: Bounds<Pixels>,
-        _window: &mut Window, cx: &mut Context<Self>,
+        _window: &mut Window, _cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
         let (row, column) = self.active_tab().terminal.visible_cursor_cell();
         // Use the actual Consolas advance at the same 14px size as the
         // diagnostic terminal renderer. The old fixed width drifted with
         // system font metrics; fall back only if the glyph is unavailable.
-        let measured_width = terminal_cell_advance(cx);
+        let measured_width = self.cell_width;
         Some(Bounds::new(
             point(
                 element_bounds.left() + px(CONTENT_PADDING / 2.0 + column as f32 * measured_width),
@@ -218,6 +224,8 @@ mod tests {
         ime.set_marked("ni", None, 7, None);
         ime.invalidate_target();
         assert!(!ime.is_composing());
+        ime.invalidate_target();
+        ime.clear_mark_without_commit();
         assert!(ime.consume_stale_commit());
         assert!(!ime.consume_stale_commit());
 

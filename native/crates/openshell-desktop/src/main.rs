@@ -49,6 +49,7 @@ struct Workspace {
     split: Option<SplitView>,
     viewport_width: f32,
     viewport_height: f32,
+    cell_width: f32,
     _resize_subscription: Subscription,
     focus_handle: FocusHandle,
     ime: TerminalImeState,
@@ -150,8 +151,9 @@ fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
 impl Workspace {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let viewport = window.viewport_size();
-        let size = terminal_size_for_viewport(
-            f32::from(viewport.width), f32::from(viewport.height),
+        let cell_width = terminal_ime::terminal_cell_advance(cx);
+        let size = terminal_size_for_viewport_with_cell(
+            f32::from(viewport.width), f32::from(viewport.height), cell_width,
         );
         let subscription = cx.observe_window_bounds(window, |view, window, cx| {
             let size = window.viewport_size();
@@ -190,6 +192,7 @@ impl Workspace {
             split: None,
             viewport_width: f32::from(viewport.width),
             viewport_height: f32::from(viewport.height),
+            cell_width,
             _resize_subscription: subscription,
             focus_handle: cx.focus_handle(),
             ime: TerminalImeState::default(),
@@ -273,6 +276,7 @@ impl Workspace {
             }
         }
         self.sftp_browser = Some(browser);
+        self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
         self.refresh_sftp_browser(cx);
     }
 
@@ -282,6 +286,7 @@ impl Workspace {
         self._sftp_transfer_tasks.clear();
         self.sftp_connection = None;
         self.sftp_browser = None;
+        self.resize_to_viewport(self.viewport_width, self.viewport_height, cx);
         cx.notify();
     }
 
@@ -961,7 +966,11 @@ impl Workspace {
         let id = self.next_tab_id;
         self.next_tab_id += 1;
         self.ime.invalidate_target();
-        let size = terminal_size_for_viewport(self.viewport_width, self.viewport_height);
+        let usable_width = self.viewport_width -
+            if self.sftp_browser.is_some() { SFTP_DOCK_WIDTH } else { 0.0 };
+        let size = terminal_size_for_viewport_with_cell(
+            usable_width, self.viewport_height, self.cell_width,
+        );
         let mut tab = TerminalTab::local(id, size);
         tab.task = Some(Self::spawn_local(id, size, cx));
         self.tabs.push(tab);
@@ -972,7 +981,11 @@ impl Workspace {
     }
 
     fn add_ssh_tab(&mut self, session_id: String, cx: &mut Context<Self>) {
-        let size = terminal_size_for_viewport(self.viewport_width, self.viewport_height);
+        let usable_width = self.viewport_width -
+            if self.sftp_browser.is_some() { SFTP_DOCK_WIDTH } else { 0.0 };
+        let size = terminal_size_for_viewport_with_cell(
+            usable_width, self.viewport_height, self.cell_width,
+        );
         match start_saved_session(session_id.clone(), size) {
             Ok(remote) => {
                 let id = self.next_tab_id;
@@ -1199,8 +1212,13 @@ impl Workspace {
     fn resize_to_viewport(&mut self, width: f32, height: f32, cx: &mut Context<Self>) {
         self.viewport_width = width;
         self.viewport_height = height;
-        let full_size = terminal_size_for_viewport(width, height);
-        let split_size = self.split.map(|split| terminal_size_for_split(width, height, split.axis));
+        self.cell_width = terminal_ime::terminal_cell_advance(cx);
+        let usable_width = width -
+            if self.sftp_browser.is_some() { SFTP_DOCK_WIDTH } else { 0.0 };
+        let full_size = terminal_size_for_viewport_with_cell(usable_width, height, self.cell_width);
+        let split_size = self.split.map(|split| terminal_size_for_split_with_cell(
+            usable_width, height, split.axis, self.cell_width,
+        ));
         let mut changed = false;
         for tab in &mut self.tabs {
             let size = match (self.split, split_size) {
@@ -1260,11 +1278,13 @@ impl Workspace {
         shift: bool, cx: &mut Context<Self>,
     ) {
         let split_axis = self.split.map(|split| split.axis);
-        let width = self.viewport_width;
+        let width = self.viewport_width -
+            if self.sftp_browser.is_some() { SFTP_DOCK_WIDTH } else { 0.0 };
+        let cell_width = self.cell_width;
         let Some(tab) = self.tab_mut(id) else { return; };
         if tab.terminal.application_mouse_mode() && !shift { return; }
-        let column = pointer_column(
-            window_x, pane_index, split_axis, width, tab.terminal.size().columns,
+        let column = pointer_column_with_cell(
+            window_x, pane_index, split_axis, width, tab.terminal.size().columns, cell_width,
         );
         tab.terminal.begin_selection(row, column);
         self.selecting_tab = Some(id);
@@ -1277,10 +1297,12 @@ impl Workspace {
     ) {
         if self.selecting_tab != Some(id) { return; }
         let split_axis = self.split.map(|split| split.axis);
-        let width = self.viewport_width;
+        let width = self.viewport_width -
+            if self.sftp_browser.is_some() { SFTP_DOCK_WIDTH } else { 0.0 };
+        let cell_width = self.cell_width;
         if let Some(tab) = self.tab_mut(id) {
-            let column = pointer_column(
-                window_x, pane_index, split_axis, width, tab.terminal.size().columns,
+            let column = pointer_column_with_cell(
+                window_x, pane_index, split_axis, width, tab.terminal.size().columns, cell_width,
             );
             tab.terminal.update_selection(row, column);
             cx.notify();
@@ -1560,7 +1582,7 @@ impl Workspace {
             String::new()
         };
         let (cursor_row, cursor_column) = tab.terminal.visible_cursor_cell();
-        let cell_advance = terminal_ime::terminal_cell_advance(cx);
+        let cell_advance = self.cell_width;
         let preedit_x = CONTENT_PADDING / 2.0 + cursor_column as f32 * cell_advance;
         let preedit_y = CONTENT_PADDING / 2.0 + cursor_row as f32 * CELL_HEIGHT;
         let pane_ime_entity = cx.entity();
