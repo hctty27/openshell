@@ -198,6 +198,7 @@ struct ZmodemUpload {
     finish_requested: bool,
     pending: Vec<u8>,
     timeouts: u8,
+    reported: u64,
 }
 
 impl ZmodemUpload {
@@ -219,7 +220,7 @@ impl ZmodemUpload {
             protocol: ZmodemEngine::new(ZmodemRole::Send)?,
             file, file_name: name, file_size: stat.len(),
             file_started: false, finish_requested: false,
-            pending: Vec::new(), timeouts: 0,
+            pending: Vec::new(), timeouts: 0, reported: 0,
         })
     }
 }
@@ -342,6 +343,16 @@ impl ZmodemDownload {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ZmodemTransferStatus {
+    Started { uploading: bool },
+    Progress { name: String, bytes: u64, total: Option<u64> },
+    Skipped { name: String },
+    Completed { files: usize },
+    Failed(String),
+    Cancelled,
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct SshTerminalOutcome {
     pub exit_status: Option<u32>,
@@ -363,6 +374,7 @@ impl SshTerminal {
         self,
         output: mpsc::Sender<Vec<u8>>,
         mut commands: mpsc::Receiver<SshTerminalCommand>,
+        progress: mpsc::Sender<ZmodemTransferStatus>,
     ) -> Result<SshTerminalOutcome, SshError> {
         let (mut reader, writer) = self.channel.split();
         let mut outcome = SshTerminalOutcome::default();
@@ -436,6 +448,14 @@ impl SshTerminal {
                                 ).into())
                             } else {
                                 active.protocol.submit_file(&data[..count])?;
+                                let bytes = u64::from(offset) + count as u64;
+                                if bytes / (256 * 1024) > active.reported / (256 * 1024) {
+                                    let _ = progress.try_send(ZmodemTransferStatus::Progress {
+                                        name: active.file_name.clone(), bytes,
+                                        total: Some(active.file_size),
+                                    });
+                                }
+                                active.reported = active.reported.max(bytes);
                                 Ok(())
                             }
                         }
@@ -466,8 +486,10 @@ impl SshTerminal {
             }
             if completed {
                 upload = None;
+                let _ = progress.try_send(ZmodemTransferStatus::Completed { files: 1 });
                 let _ = output.send(b"\r\n[OpenShell] ZMODEM upload complete\r\n".to_vec()).await;
             } else if let Some(error) = failed {
+                let _ = progress.try_send(ZmodemTransferStatus::Failed(error.clone()));
                 if let Some(mut transfer) = upload.take() {
                     let _ = transfer.protocol.abort();
                     for _ in 0..4 {
@@ -521,20 +543,30 @@ impl SshTerminal {
                         ZmodemAction::Event(ZmodemEvent::OfferedFile { name, size }) => {
                             let accepted = active.offer(name, size).await?;
                             if !accepted {
+                                if let Some(name) = active.current.as_ref().map(|file| file.name.clone()) {
+                                    let _ = progress.try_send(ZmodemTransferStatus::Skipped { name });
+                                }
                                 let _ = output.try_send(
                                     b"\r\n[OpenShell] Skipped existing ZMODEM file\r\n".to_vec(),
                                 );
+                            } else if let Some(file) = &active.current {
+                                let _ = progress.try_send(ZmodemTransferStatus::Progress {
+                                    name: file.name.clone(), bytes: 0,
+                                    total: file.expected.map(u64::from),
+                                });
                             }
                             Ok(())
                         }
                         ZmodemAction::WriteFile(bytes) => {
                             let previous = active.current.as_ref().map_or(0, |file| file.written);
                             let written = active.write(&bytes).await?;
-                            if written / (1024 * 1024) > previous / (1024 * 1024) {
-                                let _ = output.try_send(format!(
-                                    "\r\n[OpenShell] ZMODEM received {} MiB\r\n",
-                                    written / (1024 * 1024),
-                                ).into_bytes());
+                            if written / (256 * 1024) > previous / (256 * 1024) {
+                                if let Some(file) = &active.current {
+                                    let _ = progress.try_send(ZmodemTransferStatus::Progress {
+                                        name: file.name.clone(), bytes: written,
+                                        total: file.expected.map(u64::from),
+                                    });
+                                }
                             }
                             Ok(())
                         }
@@ -575,12 +607,16 @@ impl SshTerminal {
             }
             if receiver_completed {
                 if let Some(active) = download.take() {
+                    let _ = progress.try_send(ZmodemTransferStatus::Completed {
+                        files: active.completed,
+                    });
                     let _ = output.send(format!(
                         "\r\n[OpenShell] ZMODEM download complete ({} file(s))\r\n",
                         active.completed,
                     ).into_bytes()).await;
                 }
             } else if let Some(error) = receiver_error {
+                let _ = progress.try_send(ZmodemTransferStatus::Failed(error.clone()));
                 if let Some(mut active) = download.take() {
                     let _ = active.protocol.abort();
                     active.clean_partial().await;
@@ -652,6 +688,7 @@ impl SshTerminal {
                         match ZmodemUpload::open(path).await {
                             Ok(active) => {
                                 upload = Some(active);
+                                let _ = progress.try_send(ZmodemTransferStatus::Started { uploading: true });
                                 let _ = output.send(
                                     b"\r\n[OpenShell] Starting ZMODEM upload...\r\n".to_vec(),
                                 ).await;
@@ -668,6 +705,7 @@ impl SshTerminal {
                         match ZmodemDownload::open(directory).await {
                             Ok(active) => {
                                 download = Some(active);
+                                let _ = progress.try_send(ZmodemTransferStatus::Started { uploading: false });
                                 let _ = output.send(
                                     b"\r\n[OpenShell] Receiving ZMODEM into selected directory...\r\n".to_vec(),
                                 ).await;
@@ -681,6 +719,9 @@ impl SshTerminal {
                     }
                     Some(SshTerminalCommand::ZmodemDownload(_)) => {}
                     Some(SshTerminalCommand::CancelZmodem) => {
+                        if upload.is_some() || download.is_some() {
+                            let _ = progress.try_send(ZmodemTransferStatus::Cancelled);
+                        }
                         if let Some(mut active) = download.take() {
                             let _ = active.protocol.abort();
                             active.clean_partial().await;
