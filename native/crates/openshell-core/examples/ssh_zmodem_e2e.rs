@@ -60,13 +60,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut completed = false;
     let marker = b"OPENSHELL_ZMODEM_SSH_POST_TRANSFER_OK";
     let mut recent_output = Vec::new();
+    let mut initial_output = Vec::new();
+    let mut progress_events = 0_usize;
 
     let test_result = timeout(Duration::from_secs(45), async {
         loop {
             tokio::select! {
                 data = output_rx.recv() => {
                     let bytes = data.ok_or("SSH output closed before completion")?;
+                    if !started {
+                        if initial_output.len() < 192 {
+                            initial_output.extend_from_slice(
+                                &bytes[..bytes.len().min(192 - initial_output.len())]
+                            );
+                        }
+                    }
                     if !started && probe.feed(&bytes) == Some(expected_request) {
+                        eprintln!("SSH test observed a validated remote ZMODEM startup header");
                         let request = if mode == "send" {
                             SshTerminalCommand::ZmodemUpload(input_path.clone())
                         } else {
@@ -87,14 +97,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
                 state = progress_rx.recv() => {
+                    progress_events += 1;
                     match state.ok_or("SSH ZMODEM event channel closed")? {
-                        ZmodemTransferStatus::Started { .. } => {}
+                        ZmodemTransferStatus::Started { uploading } =>
+                            eprintln!("SSH test transfer started: uploading={uploading}"),
                         ZmodemTransferStatus::Progress { .. } => {}
                         ZmodemTransferStatus::Skipped { name } =>
                             return Err(format!("file was skipped unexpectedly: {name}").into()),
                         ZmodemTransferStatus::Completed { files } => {
                             if files == 0 { return Err("ZMODEM finished without files".into()); }
                             completed = true;
+                            eprintln!("SSH test ZMODEM protocol completed: files={files}");
                             // Verify the authenticated remote shell is still
                             // usable after ZFIN, rather than only counting bytes.
                             commands.send(SshTerminalCommand::Input(
@@ -112,6 +125,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }).await;
 
     // Always attempt to close the PTY on failure as well as success.
+    if test_result.is_err() {
+        eprintln!(
+            "SSH test timeout diagnostics: mode={mode}, detected={started},              completed={completed}, events={progress_events}, first_pty_bytes={}",
+            initial_output.iter().map(|b| format!("{b:02x}")).collect::<String>()
+        );
+    }
     let _ = commands.send(SshTerminalCommand::Close).await;
     drop(commands);
     let joined = timeout(Duration::from_secs(5), worker).await;
