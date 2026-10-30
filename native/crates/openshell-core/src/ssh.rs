@@ -765,7 +765,8 @@ impl SshTerminal {
                     }
                     Some(SshTerminalCommand::ZmodemDownload(_)) => {}
                     Some(SshTerminalCommand::CancelZmodem) => {
-                        if upload.is_some() || download.is_some() {
+                        let was_active = upload.is_some() || download.is_some();
+                        if was_active {
                             // A protocol-local abort event alone does not stop
                             // a remote sender that is actively streaming data.
                             // Send the interoperable cancel sequence on this PTY
@@ -785,7 +786,9 @@ impl SshTerminal {
                                 b"\r\n[OpenShell] ZMODEM upload cancelled\r\n".to_vec(),
                             ).await;
                         }
-                        let _ = progress.try_send(ZmodemTransferStatus::Cancelled);
+                        if was_active {
+                            let _ = progress.try_send(ZmodemTransferStatus::Cancelled);
+                        }
                     }
                     Some(SshTerminalCommand::Close) | None => {
                         if let Some(mut active) = download.take() {
