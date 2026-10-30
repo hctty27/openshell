@@ -180,8 +180,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     connection.disconnect().await.ok();
     test_result.map_err(|_| "SSH ZMODEM test timed out")??;
     joined.map_err(|_| "SSH worker failed to stop")???;
-    if mode == "cancel-receive" && input_path.join("large-from-sz.bin").exists() {
-        return Err("cancelled ZMODEM download left a partial file behind".into());
+    if mode == "cancel-receive" {
+        if input_path.join("large-from-sz.bin").exists() {
+            return Err("cancelled ZMODEM download left a partial file behind".into());
+        }
+        // A 16 MiB aborted transfer must not render its queued binary payload
+        // into the user's terminal after the cancellation request.
+        if post_cancel_bytes > 8 * 1024 {
+            return Err(format!(
+                "cancelled ZMODEM leaked {post_cancel_bytes} bytes into terminal output"
+            ).into());
+        }
     }
 
     println!(
