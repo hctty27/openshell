@@ -1,0 +1,39 @@
+name: Native ZMODEM lrzsz interoperability
+
+on:
+  pull_request:
+    paths:
+      - 'native/**'
+      - '.github/workflows/native-zmodem-interop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-zmodem-interop
+  cancel-in-progress: true
+
+jobs:
+  interop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+      - name: Install real lrzsz tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends lrzsz
+          command -v rz
+          command -v sz
+      - name: Build Unix ZMODEM wire adapter
+        run: cargo build -p openshell-core --example zmodem_lrzsz_stdio
+      - name: Verify real rz/sz with SHA-256 over raw PTY
+        run: python3 tests/zmodem_lrzsz_interop.py target/debug/examples/zmodem_lrzsz_stdio
