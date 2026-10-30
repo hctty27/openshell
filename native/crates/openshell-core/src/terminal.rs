@@ -154,6 +154,19 @@ impl TerminalEngine {
 
     pub fn size(&self) -> TerminalSize { self.size }
 
+    /// Current cursor position within the visible viewport, in terminal cells.
+    /// Used as a provisional anchor for native IME candidate placement.
+    pub fn visible_cursor_cell(&self) -> (usize, usize) {
+        let content = self.term.renderable_content();
+        let line = content.cursor.point.line.0 + content.display_offset as i32;
+        let row = line.max(0) as usize;
+        let column = content.cursor.point.column.0;
+        (
+            row.min(self.size.rows - 1),
+            column.min(self.size.columns - 1),
+        )
+    }
+
     pub fn current_directory(&self) -> Option<&str> {
         self.cwd.path()
     }
@@ -374,6 +387,15 @@ mod tests {
         let row = &term.render_cells()[0];
         assert_eq!(row[0].fg, ANSI_PALETTE[1]);
         assert_eq!(row[1].fg, 0x010203);
+    }
+
+    #[test]
+    fn visible_cursor_cell_tracks_printable_utf8_columns() {
+        let mut term = TerminalEngine::new(TerminalSize::new(20, 4));
+        term.feed("中a".as_bytes());
+        assert_eq!(term.visible_cursor_cell(), (0, 3));
+        term.feed(b"\r\nnext");
+        assert_eq!(term.visible_cursor_cell(), (1, 4));
     }
 
     #[test]
