@@ -410,7 +410,7 @@ impl SshTerminal {
                             break;
                         }
                     };
-                    let result: Result<(), SshError> = match action {
+                    let result: Result<(), SshError> = async { match action {
                         ZmodemAction::Wire(bytes) => {
                             let count = bytes.len();
                             writer.data_bytes(bytes).await?;
@@ -448,7 +448,7 @@ impl SshTerminal {
                             Err(ZmodemEngineError::WrongRole.into())
                         }
                         ZmodemAction::Idle => break,
-                    };
+                    } }.await;
                     if let Err(error) = result {
                         failed = Some(error.to_string());
                         break;
@@ -502,7 +502,7 @@ impl SshTerminal {
                             break;
                         }
                     };
-                    let outcome: Result<(), SshError> = match action {
+                    let outcome: Result<(), SshError> = async { match action {
                         ZmodemAction::Wire(bytes) => {
                             let count = bytes.len();
                             writer.data_bytes(bytes).await?;
@@ -519,7 +519,14 @@ impl SshTerminal {
                             Ok(())
                         }
                         ZmodemAction::WriteFile(bytes) => {
-                            active.write(&bytes).await?;
+                            let previous = active.current.as_ref().map_or(0, |file| file.written);
+                            let written = active.write(&bytes).await?;
+                            if written / (1024 * 1024) > previous / (1024 * 1024) {
+                                let _ = output.try_send(format!(
+                                    "\r\n[OpenShell] ZMODEM received {} MiB\r\n",
+                                    written / (1024 * 1024),
+                                ).into_bytes());
+                            }
                             Ok(())
                         }
                         ZmodemAction::Event(ZmodemEvent::FileCompleted) => {
@@ -549,7 +556,7 @@ impl SshTerminal {
                             Err(ZmodemEngineError::WrongRole.into())
                         }
                         ZmodemAction::Idle => break,
-                    };
+                    } }.await;
                     if let Err(error) = outcome {
                         receiver_error = Some(error.to_string());
                         break;
@@ -586,14 +593,13 @@ impl SshTerminal {
                     Some(ChannelMsg::Data { data })
                     | Some(ChannelMsg::ExtendedData { data, .. }) => {
                         if let Some(active) = download.as_mut() {
+                            if !data.is_empty() { active.timeouts = 0; }
                             if active.pending.len().saturating_add(data.len()) > 256 * 1024 {
                                 active.clean_partial().await;
                                 let _ = active.protocol.abort();
                                 download = None;
                                 let _ = output.send(
-                                    b"
-[OpenShell] ZMODEM receive buffer limit exceeded
-".to_vec()
+                                    b"\r\n[OpenShell] ZMODEM receive buffer limit exceeded\r\n".to_vec()
                                 ).await;
                             } else {
                                 active.pending.extend_from_slice(&data);
@@ -653,16 +659,12 @@ impl SshTerminal {
                             Ok(active) => {
                                 download = Some(active);
                                 let _ = output.send(
-                                    b"
-[OpenShell] Receiving ZMODEM into selected directory...
-".to_vec(),
+                                    b"\r\n[OpenShell] Receiving ZMODEM into selected directory...\r\n".to_vec(),
                                 ).await;
                             }
                             Err(error) => {
                                 let _ = output.send(format!(
-                                    "
-[OpenShell] Cannot start ZMODEM download: {error}
-"
+                                    "\r\n[OpenShell] Cannot start ZMODEM download: {error}\r\n"
                                 ).into_bytes()).await;
                             }
                         }
@@ -679,9 +681,7 @@ impl SshTerminal {
                                 active.protocol.wire_written(len);
                             }
                             let _ = output.send(
-                                b"
-[OpenShell] ZMODEM download cancelled
-".to_vec(),
+                                b"\r\n[OpenShell] ZMODEM download cancelled\r\n".to_vec(),
                             ).await;
                         }
                         if let Some(mut active) = upload.take() {
@@ -709,6 +709,25 @@ impl SshTerminal {
                         break;
                     }
                 },
+                _ = tokio::time::sleep(Duration::from_secs(12)), if download.is_some() => {
+                    if let Some(active) = download.as_mut() {
+                        active.timeouts = active.timeouts.saturating_add(1);
+                        if active.timeouts > 5 {
+                            let _ = active.protocol.abort();
+                            active.clean_partial().await;
+                            download = None;
+                            let _ = output.send(
+                                b"\r\n[OpenShell] ZMODEM receive timed out\r\n".to_vec(),
+                            ).await;
+                        } else if let Err(error) = active.protocol.timeout() {
+                            active.clean_partial().await;
+                            download = None;
+                            let _ = output.send(format!(
+                                "\r\n[OpenShell] ZMODEM receive timeout: {error}\r\n"
+                            ).into_bytes()).await;
+                        }
+                    }
+                },
                 _ = tokio::time::sleep(Duration::from_secs(12)), if upload.is_some() => {
                     if let Some(active) = upload.as_mut() {
                         active.timeouts += 1;
@@ -724,19 +743,6 @@ impl SshTerminal {
                             ).into_bytes()).await;
                         }
                     }
-                }
-            }
-            if let Some(active) = download.as_mut() {
-                // Receiver I/O can have no remote reply for a complete timeout
-                // interval, but does not abort on every sparse packet.
-                if active.timeouts > 5 {
-                    active.clean_partial().await;
-                    download = None;
-                    let _ = output.send(
-                        b"
-[OpenShell] ZMODEM download timed out
-".to_vec(),
-                    ).await;
                 }
             }
         }
