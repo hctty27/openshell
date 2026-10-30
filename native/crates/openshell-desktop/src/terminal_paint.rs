@@ -76,6 +76,30 @@ pub(super) fn terminal_size_for_viewport(width: f32, height: f32) -> TerminalSiz
 
 const SPLIT_GUTTER: f32 = 6.0;
 
+/// Prototype mapping of window X coordinates to monospaced terminal columns.
+/// The final renderer must replace these estimates with measured GPUI bounds
+/// and actual glyph widths before production selection can be exact.
+pub(super) fn pointer_column(
+    window_x: f32,
+    pane_index: usize,
+    axis: Option<SplitAxis>,
+    window_width: f32,
+    columns: usize,
+) -> usize {
+    if columns == 0 { return 0; }
+    let half = ((window_width - SIDEBAR_WIDTH - SPLIT_GUTTER).max(0.0)) / 2.0;
+    let pane_left = match axis {
+        Some(SplitAxis::Vertical) if pane_index == 1 =>
+            SIDEBAR_WIDTH + half + SPLIT_GUTTER,
+        _ => SIDEBAR_WIDTH,
+    };
+    let content_left = pane_left + CONTENT_PADDING / 2.0;
+    let position = ((window_x - content_left) / CELL_WIDTH).floor();
+    if !position.is_finite() { return 0; }
+    (position.max(0.0) as usize).min(columns - 1)
+}
+
+
 /// The split is only a view into existing terminal tabs; each visible PTY
 /// must be resized to its actual pane instead of retaining full-width columns.
 pub(super) fn terminal_size_for_split(
@@ -101,6 +125,20 @@ pub(super) fn terminal_size_for_split(
 #[cfg(test)]
 mod split_size_tests {
     use super::*;
+
+
+    #[test]
+    fn pointer_column_clamps_and_respects_vertical_split() {
+        assert_eq!(pointer_column(-100.0, 0, None, 1200.0, 80), 0);
+        assert_eq!(pointer_column(100_000.0, 0, None, 1200.0, 80), 79);
+        assert_eq!(pointer_column(f32::NAN, 0, None, 1200.0, 80), 0);
+        let second_left = SIDEBAR_WIDTH
+            + (1200.0 - SIDEBAR_WIDTH - SPLIT_GUTTER) / 2.0
+            + SPLIT_GUTTER + CONTENT_PADDING / 2.0;
+        assert_eq!(pointer_column(second_left, 1, Some(SplitAxis::Vertical), 1200.0, 50), 0);
+        assert_eq!(pointer_column(second_left + 2.0 * CELL_WIDTH, 1,
+            Some(SplitAxis::Vertical), 1200.0, 50), 2);
+    }
 
     #[test]
     fn split_halves_the_relevant_dimension_and_keeps_bounds() {
