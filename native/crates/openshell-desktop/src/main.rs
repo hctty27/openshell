@@ -2,7 +2,7 @@ mod terminal_paint;
 mod clipboard_paste;
 mod session_editor;
 mod sftp_browser;
-use sftp_browser::{SftpBrowser, SftpTransferView, remote_destination};
+use sftp_browser::{SftpBrowser, SftpTransferView, QueuedSftpTransfer, remote_destination};
 use session_editor::SessionDraft;
 use clipboard_paste::{encode_paste, needs_paste_confirmation, MAX_PASTE_BYTES};
 mod terminal_tab;
@@ -57,7 +57,7 @@ struct Workspace {
     sftp_connection: Option<SftpBrowseWorker>,
     _sftp_browse_task: Option<Task<()>>,
     _sftp_picker_task: Option<Task<()>>,
-    _sftp_transfer_task: Option<Task<()>>,
+    _sftp_transfer_tasks: Vec<Task<()>>,
     next_sftp_generation: u64,
 }
 
@@ -157,7 +157,7 @@ impl Workspace {
             sftp_connection: None,
             _sftp_browse_task: None,
             _sftp_picker_task: None,
-            _sftp_transfer_task: None,
+            _sftp_transfer_tasks: Vec::new(),
             next_sftp_generation: 1,
         }
     }
@@ -202,7 +202,7 @@ impl Workspace {
 
     fn open_sftp_browser(&mut self, session: Session, cx: &mut Context<Self>) {
         self._sftp_picker_task = None;
-        self._sftp_transfer_task = None;
+        self._sftp_transfer_tasks.clear();
         self._sftp_browse_task = None;
         self.sftp_connection = None;
         let generation = self.next_sftp_generation;
@@ -214,7 +214,7 @@ impl Workspace {
     fn close_sftp_browser(&mut self, cx: &mut Context<Self>) {
         self._sftp_browse_task = None;
         self._sftp_picker_task = None;
-        self._sftp_transfer_task = None;
+        self._sftp_transfer_tasks.clear();
         self.sftp_connection = None;
         self.sftp_browser = None;
         cx.notify();
@@ -286,7 +286,7 @@ impl Workspace {
 
     fn choose_sftp_upload(&mut self, cx: &mut Context<Self>) {
         let Some(browser) = &mut self.sftp_browser else { return; };
-        if browser.loading || browser.picker_open || browser.transfer_running() { return; }
+        if browser.loading || browser.picker_open { return; }
         browser.picker_open = true;
         let generation = browser.generation;
         let picker = cx.prompt_for_paths(PathPromptOptions {
@@ -330,7 +330,7 @@ impl Workspace {
         &mut self, remote: String, filename: String, size: u64, cx: &mut Context<Self>,
     ) {
         let Some(browser) = &mut self.sftp_browser else { return; };
-        if browser.loading || browser.picker_open || browser.transfer_running() { return; }
+        if browser.loading || browser.picker_open { return; }
         browser.picker_open = true;
         let generation = browser.generation;
         let destination_dir = std::env::var_os("USERPROFILE")
@@ -365,7 +365,15 @@ impl Workspace {
         remote: String, total: Option<u64>, cx: &mut Context<Self>,
     ) {
         let Some(browser) = &mut self.sftp_browser else { return; };
-        if browser.transfer_running() { return; }
+        if browser.transfer_running() {
+            let queued = QueuedSftpTransfer { direction, local, remote, total };
+            match browser.enqueue(queued) {
+                Ok(position) => browser.status = format!("Queued transfer #{position}"),
+                Err(()) => browser.status = "Transfer queue full (12 waiting files)".into(),
+            }
+            cx.notify();
+            return;
+        }
         let generation = browser.generation;
         let session_id = browser.session_id.clone();
         let verb = match direction {
@@ -385,35 +393,55 @@ impl Workspace {
             bytes: 0, total, running: true,
         });
         cx.notify();
-        self._sftp_transfer_task = Some(cx.spawn(async move |this, cx| {
+        self._sftp_transfer_tasks.push(cx.spawn(async move |this, cx| {
             while let Some(event) = transfer.events.recv().await {
                 let finished = matches!(&event, SftpTransferEvent::Completed(_));
                 let _ = this.update(cx, |view, cx| {
                     let Some(browser) = &mut view.sftp_browser else { return; };
                     if browser.generation != generation { return; }
                     let Some(state) = browser.transfer.as_mut() else { return; };
+                    let mut next = None;
+                    let mut refresh = false;
                     match event {
                         SftpTransferEvent::Total(total) => state.total = Some(total),
                         SftpTransferEvent::Progress(bytes) => state.bytes = bytes,
                         SftpTransferEvent::Completed(result) => {
                             state.running = false;
-                            match result {
+                            let description = match result {
                                 Ok(bytes) => {
                                     state.bytes = bytes;
                                     state.status = "Transfer completed".into();
-                                    view.refresh_sftp_browser(cx);
+                                    refresh = true;
+                                    format!("Completed: {bytes} bytes")
                                 }
                                 Err(error) => {
                                     state.status = format!("Transfer failed: {error}");
+                                    format!("Failed: {error}")
                                 }
-                            }
+                            };
+                            next = browser.finish(description);
                         }
                     }
                     cx.notify();
+                    if refresh {
+                        view.refresh_sftp_browser(cx);
+                    }
+                    if let Some(next) = next {
+                        view.start_sftp_transfer(
+                            next.direction, next.local, next.remote, next.total, cx,
+                        );
+                    }
                 });
                 if finished { break; }
             }
         }));
+    }
+
+    fn clear_sftp_queue(&mut self, cx: &mut Context<Self>) {
+        if let Some(browser) = &mut self.sftp_browser {
+            browser.clear_pending();
+            cx.notify();
+        }
     }
 
     fn cancel_sftp_transfer(&mut self, cx: &mut Context<Self>) {
@@ -1207,6 +1235,8 @@ impl Render for Workspace {
             let loading = browser.loading;
             let picker_open = browser.picker_open;
             let transfer_running = browser.transfer_running();
+            let queue_count = browser.pending.len();
+            let recent = browser.recent.iter().cloned().collect::<Vec<_>>();
             let transfer_label = browser.transfer.as_ref()
                 .map(SftpTransferView::progress_label)
                 .unwrap_or_else(|| "No active transfer".to_owned());
@@ -1229,13 +1259,24 @@ impl Render for Workspace {
                 .child(div().id("sftp-upload-file")
                     .cursor_pointer().p_2().rounded_md()
                     .bg(rgb(0x29435d))
-                    .child(if loading || picker_open || transfer_running {
-                        "Upload unavailable"
+                    .child(if loading || picker_open {
+                        "Choose file unavailable"
+                    } else if transfer_running {
+                        "Queue upload..."
                     } else {
                         "Upload file..."
                     })
                     .on_click(cx.listener(|view, _, _, cx| view.choose_sftp_upload(cx))))
                 .child(transfer_label)
+                .child(format!("Pending transfers: {queue_count}"))
+                .child(div().id("sftp-clear-transfer-queue")
+                    .cursor_pointer().p_2()
+                    .bg(rgb(0x29435d))
+                    .child("Clear waiting transfers")
+                    .on_click(cx.listener(|view, _, _, cx| view.clear_sftp_queue(cx))))
+                .children(recent.into_iter().enumerate().map(|(index, item)| {
+                    div().id(("sftp-recent-transfer", index)).child(item)
+                }))
                 .child(div().id("sftp-cancel-transfer")
                     .cursor_pointer().p_2()
                     .bg(rgb(if transfer_running { 0x693c3c } else { 0x141f2c }))
