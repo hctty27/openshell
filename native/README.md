@@ -380,22 +380,34 @@ The GPUI pane displays the detected operation and offers **Cancel remote
 rz/sz** (Ctrl+C on that exact SSH channel) and, for saved connections,
 **Cancel rz/sz + Open SFTP** as a supported file-transfer alternative.
 
-### Experimental ZMODEM sender (remote rz)
+### Experimental ZMODEM file transfer (remote rz and sz)
 
-The core now uses `zmodem2 = 0.7.3` for a poll-driven ZMODEM sender/receiver
-adapter, with conservative filename validation (including Windows device names),
-manual receive-file acceptance, explicit cancel and timeout operations. When
-a remote `rz` ZRINIT is detected, the native UI can prompt for a **single**
-local file. OpenShell sends it through the **same SSH PTY** with temporary
-exclusive binary-stream ownership; during this upload, normal keyboard input
-is suppressed and binary frames are not rendered into the terminal. The
-transfer enforces a 256 KiB inbound buffer ceiling, 32-bit ZMODEM file-size
-limit, and up to five protocol-response retries.
+Native now integrates `zmodem2 = 0.7.3` with the existing, authenticated
+SSH PTY. Remote `rz` prompts for a single local upload file; remote `sz`
+prompts for a **download directory**. Both directions temporarily take
+exclusive ownership of the SSH binary data stream, suppressing ordinary
+keyboard/paste traffic and preventing binary file blocks from being rendered
+in the terminal.
 
-This implementation is **experimental and NOT yet verified against a real
-lrzsz server**. Its progress is not yet exposed as a proper embedded task
-panel; failure cleanup may require remote intervention. Remote `sz`
-download, multiple-file protocol sessions, full resume/CRC interoperability,
-and precise cancel/reconnect behavior remain **not implemented or unverified**.
-For production transfers, prefer the existing SFTP panel. Never treat
-successful Rust/Windows CI as an lrzsz interoperability test.
+The receiver validates each remote filename (path traversal, separators,
+control characters, Windows reserved names), creates files using
+`create_new(true)` and skips existing names rather than overwriting them.
+Invalid/incomplete files, timeout, cancellation and write failures trigger
+best-effort deletion only of the current newly created partial file.
+Completed earlier files are retained. Rust tests exercise no-overwrite,
+partial cleanup and declared-size mismatch handling.
+
+The native terminal panel displays per-file progress bytes, an optional
+percentage and completion/error status through a separate bounded event
+channel; user actions can cancel the active transfer. The receiver enforces
+a 256 KiB pending-wire buffer, bounded file offsets, protocol timeouts and
+manual file acceptance. This **is not the same as a production-grade
+ZMODEM integration**: real `lrzsz` interoperability, reliable multiple-file
+sessions, CRC recovery, transfer resumption, file pickers under all Windows
+configurations, and real disconnect/cancel flows have **not yet been verified**.
+The progress is an inline terminal indicator, not Xshell's full task dialog.
+
+**Do not use experimental ZMODEM for important files.** Prefer SFTP until
+end-to-end testing against an actual Linux `lrzsz` sender/receiver and file
+hash comparisons succeed. CI compilation alone does not demonstrate
+interoperability.
