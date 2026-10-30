@@ -121,6 +121,35 @@ impl TerminalTab {
     }
 }
 
+
+#[cfg(test)]
+mod zmodem_tests {
+    use super::*;
+
+    #[test]
+    fn pending_request_is_isolated_to_the_correct_ssh_tab() {
+        let size = TerminalSize::new(80, 24);
+        let mut a = TerminalTab::remote(7, "server one".into(), Some("one".into()), size);
+        let b = TerminalTab::remote(8, "server two".into(), Some("two".into()), size);
+        // ZRQINIT, zero flags and zero CRC; HEX 16-bit header.
+        let handshake = b"**\x18B00000000000000\r\n\x11";
+        assert!(a.observe_zmodem(handshake));
+        assert_eq!(a.zmodem_prompt, Some(ZmodemRequest::Receive));
+        assert_eq!(b.zmodem_prompt, None);
+        a.dismiss_zmodem();
+        assert!(!a.observe_zmodem(handshake));
+        a.reset_zmodem();
+        assert!(a.observe_zmodem(handshake));
+    }
+
+    #[test]
+    fn local_terminal_does_not_trigger_zmodem() {
+        let mut tab = TerminalTab::local(1, TerminalSize::new(80, 24));
+        assert!(!tab.observe_zmodem(b"**\x18B00000000000000\r\n\x11"));
+        assert!(tab.zmodem_prompt.is_none());
+    }
+}
+
 impl Drop for TerminalTab {
     fn drop(&mut self) {
         self.cancel_transport();

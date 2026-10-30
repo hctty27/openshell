@@ -368,3 +368,21 @@ Terminal applications that advertise mouse mode reserve ordinary mouse
 gestures; holding Shift allows a forced text selection. Full application
 mouse event forwarding, IME and pixel-accurate glyph hit testing remain
 release blockers. This is not yet a replacement for Xshell's selection UX.
+
+### ZMODEM rz/sz handshake recognition (first native integration stage)
+
+The Rust core now detects valid CRC16 ZMODEM **HEX startup headers** (ZRQINIT
+from remote `sz`, ZRINIT from remote `rz`) across arbitrarily split SSH
+transport chunks. Detection state belongs to each SSH tab and is reset on
+reconnect. Ordinary terminal data is not consumed or rewritten, so a ZMODEM
+frame cannot silently switch an interactive terminal into a binary transfer.
+The GPUI pane displays the detected operation and offers **Cancel remote
+rz/sz** (Ctrl+C on that exact SSH channel) and, for saved connections,
+**Cancel rz/sz + Open SFTP** as a supported file-transfer alternative.
+
+**This is detection and recovery, not rz/sz file transfer.** No automated
+ZMODEM sender, receiver, file picker or binary-stream ownership exists yet.
+Do not claim `rz` or `sz` uploads/downloads are supported until the
+protocol state machine has been integrated and tested with actual `lrzsz`.
+Protocol adoption will require exclusive binary stream dispatch, CRC/timeout
+handling, explicit local destination, progress, cancellation, and cleanup.
