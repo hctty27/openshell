@@ -33,6 +33,14 @@ fn checked_remote_path(value: &str) -> Result<&str, NativeSftpError> {
     Ok(value)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SftpEntry {
+    pub name: String,
+    pub path: String,
+    pub directory: bool,
+    pub size: u64,
+}
+
 /// Owns one authenticated SSH connection and one independent SFTP subsystem.
 /// Callers must create this on an asynchronous background worker, never in a
 /// GPUI render callback. No credentials are retained by this type.
@@ -57,13 +65,27 @@ impl NativeSftp {
     }
 
     pub async fn list(&self, directory: &str) -> Result<Vec<String>, NativeSftpError> {
-        let mut names = self.session.read_dir(checked_remote_path(directory)?)
+        Ok(self.list_entries(directory).await?
+            .into_iter().map(|entry| entry.name).collect())
+    }
+
+    pub async fn list_entries(&self, directory: &str) -> Result<Vec<SftpEntry>, NativeSftpError> {
+        let mut entries = self.session.read_dir(checked_remote_path(directory)?)
             .await?.into_iter()
-            .map(|entry| entry.file_name().to_string())
-            .filter(|name| name != "." && name != "..")
-            .collect::<Vec<_>>();
-        names.sort_unstable_by_key(|name| name.to_lowercase());
-        Ok(names)
+            .map(|entry| {
+                let attributes = entry.metadata();
+                SftpEntry {
+                    name: entry.file_name(),
+                    path: entry.path(),
+                    directory: entry.file_type().is_dir(),
+                    size: attributes.len(),
+                }
+            }).collect::<Vec<_>>();
+        entries.sort_by(|a, b| {
+            b.directory.cmp(&a.directory)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
+        Ok(entries)
     }
 
     /// Does not overwrite an existing local file. On failed/aborted copies

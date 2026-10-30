@@ -10,7 +10,7 @@ use std::{env, thread, path::PathBuf};
 
 use openshell_core::{
     CredentialVault, HostIdentity, HostTrustStore, Session, SessionStore, SessionKeyStore,
-    SshConnection, SshTerminalCommand, TerminalSize,
+    SshConnection, SshTerminalCommand, TerminalSize, NativeSftp, SftpEntry,
     native_paths::native_database_path,
 };
 use tokio::sync::{mpsc, watch};
@@ -265,4 +265,30 @@ mod tests {
     fn preview_configuration_has_bounded_queues() {
         assert_eq!(MAX_PENDING_PACKETS, 64);
     }
+}
+
+
+/// One-shot native SFTP directory listing for a saved session.
+/// SQLite, Credential Manager, SSH handshake and SFTP I/O all run on a GPUI
+/// background worker. A fresh connection cannot interfere with terminal I/O.
+pub fn browse_saved_sftp(
+    session_id: String,
+    directory: String,
+) -> Result<(String, Vec<SftpEntry>), String> {
+    let config = resolve_stored_session(&session_id)?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all().build().map_err(|e| e.to_string())?;
+    runtime.block_on(async move {
+        let connection = match &config.auth {
+            PreviewAuth::Password(password) =>
+                SshConnection::connect_password(&config.session, password, &config.fingerprint).await,
+            PreviewAuth::PrivateKey(path) =>
+                SshConnection::connect_private_key(&config.session, path, &config.fingerprint).await,
+        }.map_err(|e| e.to_string())?;
+        let browser = NativeSftp::open(connection).await.map_err(|e| e.to_string())?;
+        let path = browser.session_path(&directory).await.map_err(|e| e.to_string())?;
+        let entries = browser.list_entries(&path).await.map_err(|e| e.to_string())?;
+        browser.close().await.map_err(|e| e.to_string())?;
+        Ok((path, entries))
+    })
 }

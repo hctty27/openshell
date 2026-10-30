@@ -303,3 +303,13 @@ use CREATE + EXCL and do not overwrite an existing remote target. Downloads
 use create_new and do not overwrite existing local files; failed transfers
 attempt to delete their partial local output. A long-running interrupted
 upload may leave a partial remote file requiring manual cleanup.
+
+
+### Native GUI SFTP directory preview
+
+Each saved SSH session now has an **SFTP** action. A right-side GPUI browser
+lists the remote directory, supports folder navigation, Up and Refresh, and
+uses a separate SSH connection so the currently running terminal is not
+restarted. Directory enumeration runs on a background worker. This initial
+GUI does **not** yet implement file picker upload/download or transfer
+progress; use `sftpctl` for initial transfer testing.

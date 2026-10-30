@@ -28,4 +28,4 @@ pub use terminal::{TerminalEngine, TerminalSize};
 
 pub use workspace::{Split, SplitAxis, Tab, Workspace, WorkspaceError};
 
-pub use sftp::{NativeSftp, NativeSftpError};
+pub use sftp::{NativeSftp, NativeSftpError, SftpEntry};

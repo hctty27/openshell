@@ -1,6 +1,8 @@
 mod terminal_paint;
 mod clipboard_paste;
 mod session_editor;
+mod sftp_browser;
+use sftp_browser::SftpBrowser;
 use session_editor::SessionDraft;
 use clipboard_paste::{encode_paste, needs_paste_confirmation, MAX_PASTE_BYTES};
 mod terminal_tab;
@@ -23,7 +25,7 @@ use gpui::{
 };
 use openshell_core::{CredentialVault, HostIdentity, HostTrustStore, TrustDecision, LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize};
 use openshell_core::native_paths::{native_database_path, ensure_native_data_directory};
-use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session};
+use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session, browse_saved_sftp};
 
 
 /// Pure tab navigation for Ctrl+Tab, including wrap-around.
@@ -51,6 +53,8 @@ struct Workspace {
     session_editor: Option<SessionDraft>,
     _session_save_task: Option<Task<()>>,
     _session_catalog_task: Task<()>,
+    sftp_browser: Option<SftpBrowser>,
+    _sftp_browse_task: Option<Task<()>>,
 }
 
 fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
@@ -145,6 +149,8 @@ impl Workspace {
             session_editor: None,
             _session_save_task: None,
             _session_catalog_task: catalog_task,
+            sftp_browser: None,
+            _sftp_browse_task: None,
         }
     }
 
@@ -184,6 +190,64 @@ impl Workspace {
                 cx.notify();
             });
         })
+    }
+
+    fn open_sftp_browser(&mut self, session: Session, cx: &mut Context<Self>) {
+        self.sftp_browser = Some(SftpBrowser::new(session.id, session.name));
+        self.refresh_sftp_browser(cx);
+    }
+
+    fn close_sftp_browser(&mut self, cx: &mut Context<Self>) {
+        self._sftp_browse_task = None;
+        self.sftp_browser = None;
+        cx.notify();
+    }
+
+    fn refresh_sftp_browser(&mut self, cx: &mut Context<Self>) {
+        let Some(browser) = &mut self.sftp_browser else { return };
+        browser.revision = browser.revision.wrapping_add(1);
+        let revision = browser.revision;
+        let session_id = browser.session_id.clone();
+        let directory = browser.path.clone();
+        browser.status = "Opening a separate SSH/SFTP channel...".into();
+        browser.loading = true;
+        cx.notify();
+
+        let work = cx.background_spawn(async move {
+            browse_saved_sftp(session_id, directory)
+        });
+        self._sftp_browse_task = Some(cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |view, cx| {
+                let Some(browser) = &mut view.sftp_browser else { return };
+                if browser.revision != revision { return; }
+                browser.loading = false;
+                match result {
+                    Ok((path, entries)) => {
+                        browser.status = format!("{} item(s)", entries.len());
+                        browser.path = path;
+                        browser.entries = entries;
+                    }
+                    Err(error) => {
+                        browser.status = format!("SFTP error: {error}");
+                        browser.entries.clear();
+                    }
+                }
+                cx.notify();
+            });
+        }));
+    }
+
+    fn sftp_navigate(&mut self, path: String, cx: &mut Context<Self>) {
+        let Some(browser) = &mut self.sftp_browser else { return };
+        browser.path = path;
+        self.refresh_sftp_browser(cx);
+    }
+
+    fn sftp_up(&mut self, cx: &mut Context<Self>) {
+        let Some(browser) = &self.sftp_browser else { return };
+        let parent = browser.parent();
+        self.sftp_navigate(parent, cx);
     }
 
     fn new_session(&mut self, cx: &mut Context<Self>) {
@@ -962,6 +1026,60 @@ impl Render for Workspace {
             (t.id, t.title.clone(), t.remote_phase, t.id == self.active_id)
         }).collect();
         let sessions = self.saved_sessions.clone();
+        let browser_view = if let Some(browser) = &self.sftp_browser {
+            let name = browser.session_name.clone();
+            let path = browser.path.clone();
+            let status = browser.status.clone();
+            let entries = browser.entries.clone();
+            let loading = browser.loading;
+            div()
+                .id("native-sftp-browser")
+                .w(px(315.0))
+                .p_3()
+                .bg(rgb(0x141f2c))
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(div().flex().items_center().justify_between()
+                    .child(format!("SFTP · {name}"))
+                    .child(div().id("sftp-close").cursor_pointer()
+                        .p_2().child("×")
+                        .on_click(cx.listener(|view, _, _, cx| view.close_sftp_browser(cx)))))
+                .child(format!("Remote: {path}"))
+                .child(status)
+                .child(div().flex().gap_2()
+                    .child(div().id("sftp-up").cursor_pointer()
+                        .p_2().bg(rgb(0x29435d)).child("Up")
+                        .on_click(cx.listener(|view, _, _, cx| view.sftp_up(cx))))
+                    .child(div().id("sftp-refresh").cursor_pointer()
+                        .p_2().bg(rgb(0x29435d))
+                        .child(if loading { "Loading..." } else { "Refresh" })
+                        .on_click(cx.listener(|view, _, _, cx| view.refresh_sftp_browser(cx)))))
+                .child(div()
+                    .id("sftp-entry-list")
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .children(entries.into_iter().enumerate().map(|(index, entry)| {
+                        let directory = entry.directory;
+                        let next = entry.path;
+                        div()
+                            .id(("sftp-remote-entry", index))
+                            .cursor_pointer()
+                            .p_2()
+                            .bg(rgb(if directory { 0x283c52 } else { 0x1a2939 }))
+                            .child(format!("{} {}{}", if directory { "DIR" } else { "FILE" },
+                                entry.name, if directory { "".to_owned() }
+                                else { format!(" ({} bytes)", entry.size) }))
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                if directory { view.sftp_navigate(next.clone(), cx); }
+                            }))
+                    })))
+        } else {
+            div().id("sftp-browser-closed")
+        };
         let editor_view = if let Some(draft) = &self.session_editor {
             let fields: Vec<_> = draft.fields().iter()
                 .map(|(label, value)| (label.to_string(), value.to_string()))
@@ -1277,6 +1395,7 @@ impl Render for Workspace {
                             .children(sessions.into_iter().enumerate().map(|(index, session)| {
                                 let id = session.id.clone();
                                 let editable = session.clone();
+                                let for_sftp = session.clone();
                                 let label = format!("{}
 {}@{}:{}",
                                     session.name, session.username, session.host, session.port);
@@ -1307,6 +1426,16 @@ impl Render for Workspace {
                                         .child("Edit")
                                         .on_click(cx.listener(move |view, _, window, cx| {
                                             view.edit_session(editable.clone(), cx);
+                                            window.focus(&view.focus_handle(cx));
+                                        })))
+                                    .child(div()
+                                        .id(("saved-ssh-sftp", index))
+                                        .cursor_pointer()
+                                        .p_2()
+                                        .bg(rgb(0x29435d))
+                                        .child("SFTP")
+                                        .on_click(cx.listener(move |view, _, window, cx| {
+                                            view.open_sftp_browser(for_sftp.clone(), cx);
                                             window.focus(&view.focus_handle(cx));
                                         })))
                             })),
@@ -1363,7 +1492,8 @@ impl Render for Workspace {
                                 }
                             }))
                             .child(pane_layout.children(pane_nodes)),
-                    ),
+                    )
+                    .child(browser_view),
             )
     }
 }
