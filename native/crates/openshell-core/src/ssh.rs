@@ -445,11 +445,11 @@ impl SshTerminal {
                         }
                         ZmodemAction::Event(ZmodemEvent::SessionCompleted) => {
                             completed = true;
-                            break;
+                            Ok(())
                         }
                         ZmodemAction::Event(ZmodemEvent::Aborted) => {
                             failed = Some("remote cancelled the transfer".into());
-                            break;
+                            Ok(())
                         }
                         ZmodemAction::Event(_) => Ok(()),
                         ZmodemAction::WriteFile(_) => {
@@ -461,6 +461,7 @@ impl SshTerminal {
                         failed = Some(error.to_string());
                         break;
                     }
+                    if completed || failed.is_some() { break; }
                 }
             }
             if completed {
@@ -553,11 +554,11 @@ impl SshTerminal {
                             } else {
                                 receiver_completed = true;
                             }
-                            break;
+                            Ok(())
                         }
                         ZmodemAction::Event(ZmodemEvent::Aborted) => {
                             receiver_error = Some("remote aborted ZMODEM download".into());
-                            break;
+                            Ok(())
                         }
                         ZmodemAction::Event(_) => Ok(()),
                         ZmodemAction::ReadFile { .. } => {
@@ -569,6 +570,7 @@ impl SshTerminal {
                         receiver_error = Some(error.to_string());
                         break;
                     }
+                    if receiver_completed || receiver_error.is_some() { break; }
                 }
             }
             if receiver_completed {
