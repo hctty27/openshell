@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration, path::Path};
+use std::{sync::Arc, time::Duration, path::{Path, PathBuf}, io::SeekFrom};
 
 use russh::{
     client, ChannelMsg,
@@ -6,12 +6,12 @@ use russh::{
 };
 use thiserror::Error;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWriteExt, AsyncSeekExt},
     sync::mpsc,
     time::timeout,
 };
 
-use crate::session::Session;
+use crate::{session::Session, zmodem_engine::{ZmodemEngine, ZmodemAction, ZmodemEvent, ZmodemRole, ZmodemEngineError, MAX_FILE_IO_CHUNK, safe_filename}};
 
 #[derive(Debug, Error)]
 pub enum SshError {
@@ -27,6 +27,8 @@ pub enum SshError {
     Protocol(#[from] russh::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Zmodem(#[from] ZmodemEngineError),
 }
 
 struct HostVerifier {
@@ -169,6 +171,8 @@ impl SshConnection {
 pub enum SshTerminalCommand {
     Input(Vec<u8>),
     Resize { columns: u32, rows: u32 },
+    ZmodemUpload(PathBuf),
+    CancelZmodem,
     Close,
 }
 
@@ -178,6 +182,44 @@ impl SshTerminalCommand {
             columns: columns.clamp(2, u32::MAX as usize) as u32,
             rows: rows.clamp(1, u32::MAX as usize) as u32,
         }
+    }
+}
+
+
+/// One ZMODEM sender bound to the *existing* PTY channel. The terminal and
+/// SFTP are never allowed to read this channel while it owns the binary flow.
+struct ZmodemUpload {
+    protocol: ZmodemEngine,
+    file: tokio::fs::File,
+    file_name: String,
+    file_size: u64,
+    file_started: bool,
+    finish_requested: bool,
+    pending: Vec<u8>,
+    timeouts: u8,
+}
+
+impl ZmodemUpload {
+    async fn open(path: PathBuf) -> Result<Self, SshError> {
+        let file = tokio::fs::File::open(&path).await?;
+        let stat = file.metadata().await?;
+        if !stat.is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput, "ZMODEM source must be a regular file",
+            ).into());
+        }
+        if stat.len() > u32::MAX as u64 {
+            return Err(ZmodemEngineError::FileTooLarge.into());
+        }
+        let name = path.file_name().and_then(|name| name.to_str())
+            .ok_or(ZmodemEngineError::UnsafeName)?;
+        let name = safe_filename(name.as_bytes())?;
+        Ok(Self {
+            protocol: ZmodemEngine::new(ZmodemRole::Send)?,
+            file, file_name: name, file_size: stat.len(),
+            file_started: false, finish_requested: false,
+            pending: Vec::new(), timeouts: 0,
+        })
     }
 }
 
@@ -205,13 +247,136 @@ impl SshTerminal {
     ) -> Result<SshTerminalOutcome, SshError> {
         let (mut reader, writer) = self.channel.split();
         let mut outcome = SshTerminalOutcome::default();
+        let mut upload: Option<ZmodemUpload> = None;
 
         loop {
+            // Drain engine actions before reading more SSH packets. This
+            // prevents concurrent terminal rendering from stealing binary
+            // ZMODEM bytes and bounds pending data during backpressure.
+            let mut completed = false;
+            let mut failed: Option<String> = None;
+            if let Some(active) = upload.as_mut() {
+                for _ in 0..128 {
+                    if !active.pending.is_empty() {
+                        match active.protocol.submit_wire(&active.pending) {
+                            Ok(consumed) if consumed > 0 => {
+                                active.pending.drain(..consumed);
+                                active.timeouts = 0;
+                            }
+                            Ok(_) => {}
+                            Err(error) => {
+                                failed = Some(error.to_string());
+                                break;
+                            }
+                        }
+                    }
+                    if !active.file_started {
+                        match active.protocol.start_file(&active.file_name, active.file_size) {
+                            Ok(()) => active.file_started = true,
+                            Err(ZmodemEngineError::Protocol(zmodem2::Error::Backpressure)) => {}
+                            Err(error) => {
+                                failed = Some(error.to_string());
+                                break;
+                            }
+                        }
+                    }
+                    if active.finish_requested {
+                        match active.protocol.finish() {
+                            Ok(()) => active.finish_requested = false,
+                            Err(ZmodemEngineError::Protocol(zmodem2::Error::Backpressure)) => {}
+                            Err(error) => {
+                                failed = Some(error.to_string());
+                                break;
+                            }
+                        }
+                    }
+
+                    let action = match active.protocol.next_action() {
+                        Ok(action) => action,
+                        Err(error) => {
+                            failed = Some(error.to_string());
+                            break;
+                        }
+                    };
+                    let result: Result<(), SshError> = match action {
+                        ZmodemAction::Wire(bytes) => {
+                            let count = bytes.len();
+                            writer.data_bytes(bytes).await?;
+                            active.protocol.wire_written(count);
+                            Ok(())
+                        }
+                        ZmodemAction::ReadFile { offset, max_len } => {
+                            let mut data = vec![0_u8; max_len.min(MAX_FILE_IO_CHUNK)];
+                            active.file.seek(SeekFrom::Start(u64::from(offset))).await?;
+                            let count = active.file.read(&mut data).await?;
+                            if count == 0 {
+                                Err(std::io::Error::new(
+                                    std::io::ErrorKind::UnexpectedEof,
+                                    "ZMODEM source file changed during transfer",
+                                ).into())
+                            } else {
+                                active.protocol.submit_file(&data[..count])?;
+                                Ok(())
+                            }
+                        }
+                        ZmodemAction::Event(ZmodemEvent::FileCompleted) => {
+                            active.finish_requested = true;
+                            Ok(())
+                        }
+                        ZmodemAction::Event(ZmodemEvent::SessionCompleted) => {
+                            completed = true;
+                            break;
+                        }
+                        ZmodemAction::Event(ZmodemEvent::Aborted) => {
+                            failed = Some("remote cancelled the transfer".into());
+                            break;
+                        }
+                        ZmodemAction::Event(_) => Ok(()),
+                        ZmodemAction::WriteFile(_) => {
+                            Err(ZmodemEngineError::WrongRole.into())
+                        }
+                        ZmodemAction::Idle => break,
+                    };
+                    if let Err(error) = result {
+                        failed = Some(error.to_string());
+                        break;
+                    }
+                }
+            }
+            if completed {
+                upload = None;
+                let _ = output.send(b"\r\n[OpenShell] ZMODEM upload complete\r\n".to_vec()).await;
+            } else if let Some(error) = failed {
+                if let Some(mut transfer) = upload.take() {
+                    let _ = transfer.protocol.abort();
+                    for _ in 0..4 {
+                        let Ok(ZmodemAction::Wire(bytes)) = transfer.protocol.next_action() else {
+                            break;
+                        };
+                        let count = bytes.len();
+                        writer.data_bytes(bytes).await?;
+                        transfer.protocol.wire_written(count);
+                    }
+                }
+                let message = format!("\r\n[OpenShell] ZMODEM upload failed: {error}\r\n");
+                let _ = output.send(message.into_bytes()).await;
+            }
+
             tokio::select! {
                 message = reader.wait() => match message {
                     Some(ChannelMsg::Data { data })
                     | Some(ChannelMsg::ExtendedData { data, .. }) => {
-                        if !data.is_empty() && output.send(data.to_vec()).await.is_err() {
+                        if let Some(active) = upload.as_mut() {
+                            if active.pending.len().saturating_add(data.len()) > 256 * 1024 {
+                                let _ = active.protocol.abort();
+                                upload = None;
+                                let _ = output.send(
+                                    b"\r\n[OpenShell] ZMODEM buffer limit exceeded; transfer cancelled\r\n".to_vec(),
+                                ).await;
+                            } else {
+                                active.pending.extend_from_slice(&data);
+                            }
+                        } else if !data.is_empty() && output.send(data.to_vec()).await.is_err() {
                             writer.close().await?;
                             break;
                         }
@@ -220,23 +385,73 @@ impl SshTerminal {
                         outcome.exit_status = Some(exit_status);
                     }
                     Some(ChannelMsg::Close) | None => break,
-                    Some(ChannelMsg::Eof) => {
-                        // EOF can precede the exit-status and close messages.
-                    }
+                    Some(ChannelMsg::Eof) => {}
                     _ => {}
                 },
                 command = commands.recv() => match command {
-                    Some(SshTerminalCommand::Input(bytes)) => {
+                    Some(SshTerminalCommand::Input(bytes)) if upload.is_none() => {
                         if !bytes.is_empty() {
                             writer.data_bytes(bytes).await?;
                         }
                     }
+                    Some(SshTerminalCommand::Input(_)) => {
+                        // Do not inject keyboard/paste bytes into active ZMODEM.
+                    }
                     Some(SshTerminalCommand::Resize { columns, rows }) => {
                         writer.window_change(columns.max(2), rows.max(1), 0, 0).await?;
                     }
+                    Some(SshTerminalCommand::ZmodemUpload(path)) if upload.is_none() => {
+                        match ZmodemUpload::open(path).await {
+                            Ok(active) => {
+                                upload = Some(active);
+                                let _ = output.send(
+                                    b"\r\n[OpenShell] Starting ZMODEM upload...\r\n".to_vec(),
+                                ).await;
+                            }
+                            Err(error) => {
+                                let _ = output.send(format!(
+                                    "\r\n[OpenShell] Cannot start ZMODEM: {error}\r\n"
+                                ).into_bytes()).await;
+                            }
+                        }
+                    }
+                    Some(SshTerminalCommand::ZmodemUpload(_)) => {}
+                    Some(SshTerminalCommand::CancelZmodem) => {
+                        if let Some(mut active) = upload.take() {
+                            let _ = active.protocol.abort();
+                            for _ in 0..4 {
+                                let Ok(ZmodemAction::Wire(bytes)) = active.protocol.next_action() else { break; };
+                                let count = bytes.len();
+                                writer.data_bytes(bytes).await?;
+                                active.protocol.wire_written(count);
+                            }
+                            let _ = output.send(
+                                b"\r\n[OpenShell] ZMODEM upload cancelled\r\n".to_vec(),
+                            ).await;
+                        }
+                    }
                     Some(SshTerminalCommand::Close) | None => {
+                        if let Some(mut active) = upload.take() {
+                            let _ = active.protocol.abort();
+                        }
                         writer.close().await?;
                         break;
+                    }
+                },
+                _ = tokio::time::sleep(Duration::from_secs(12)), if upload.is_some() => {
+                    if let Some(active) = upload.as_mut() {
+                        active.timeouts += 1;
+                        if active.timeouts > 5 {
+                            upload = None;
+                            let _ = output.send(
+                                b"\r\n[OpenShell] ZMODEM upload timed out\r\n".to_vec(),
+                            ).await;
+                        } else if let Err(error) = active.protocol.timeout() {
+                            upload = None;
+                            let _ = output.send(format!(
+                                "\r\n[OpenShell] ZMODEM timeout error: {error}\r\n",
+                            ).into_bytes()).await;
+                        }
                     }
                 }
             }
