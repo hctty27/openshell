@@ -200,12 +200,13 @@ pub fn safe_filename(raw: &[u8]) -> Result<String, ZmodemEngineError> {
         return Err(ZmodemEngineError::UnsafeName);
     }
     let basename = name.split('.').next().unwrap_or_default().trim_end();
+    let device = basename.as_bytes();
+    let serial_device = device.len() == 4
+        && (device[..3].eq_ignore_ascii_case(b"COM")
+            || device[..3].eq_ignore_ascii_case(b"LPT"))
+        && (b'1'..=b'9').contains(&device[3]);
     if ["CON", "PRN", "AUX", "NUL"].iter().any(|x| basename.eq_ignore_ascii_case(x))
-        || (basename.len() == 4
-            && (basename[..3].eq_ignore_ascii_case("COM")
-                || basename[..3].eq_ignore_ascii_case("LPT"))
-            && basename.as_bytes()[3].is_ascii_digit()
-            && basename.as_bytes()[3] != b'0')
+        || serial_device
     {
         return Err(ZmodemEngineError::UnsafeName);
     }
@@ -226,6 +227,7 @@ mod tests {
             assert!(safe_filename(invalid.as_bytes()).is_err(), "{invalid}");
         }
         assert_eq!(safe_filename("中文 report.txt".as_bytes()).unwrap(), "中文 report.txt");
+        assert_eq!(safe_filename("éé".as_bytes()).unwrap(), "éé");
         assert!(safe_filename(&[0xff, 0xfe]).is_err());
     }
 
