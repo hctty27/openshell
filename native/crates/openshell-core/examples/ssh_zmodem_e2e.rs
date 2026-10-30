@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let remote_command: &[u8] = if mode == "send" {
         b"stty -echo; rz -q\r"
     } else if mode == "cancel-receive" {
-        b"stty -echo; sz -q large-from-sz.bin\r"
+        b"stty -echo; PROMPT_COMMAND='printf \"OPENSHELL_ZMODEM_SSH_PROMPT_READY\\n\"'; sz -q large-from-sz.bin\r"
     } else {
         b"stty -echo; sz -q from-sz.bin\r"
     };
@@ -61,6 +61,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut started = false;
     let mut completed = false;
     let marker = b"OPENSHELL_ZMODEM_SSH_POST_TRANSFER_OK";
+    let prompt_marker = b"OPENSHELL_ZMODEM_SSH_PROMPT_READY";
+    let mut prompt_seen = false;
     let mut recent_output = Vec::new();
     let mut initial_output = Vec::new();
     let mut progress_events = 0_usize;
@@ -99,7 +101,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                     if completed {
                         recent_output.extend_from_slice(&bytes);
-                        if recent_output.windows(marker.len()).any(|window| window == marker) {
+                        if mode == "cancel-receive" && !prompt_seen
+                            && recent_output.windows(prompt_marker.len()).any(|window| window == prompt_marker)
+                        {
+                            prompt_seen = true;
+                            eprintln!("SSH test observed remote Bash prompt after cancellation");
+                            recent_output.clear();
+                            commands.send(SshTerminalCommand::Input(
+                                b"printf 'OPENSHELL_ZMODEM_SSH_POST_TRANSFER_OK\\n'\r".to_vec()
+                            )).await?;
+                        }
+                        if (mode != "cancel-receive" || prompt_seen)
+                            && recent_output.windows(marker.len()).any(|window| window == marker)
+                        {
                             return Ok::<(), Box<dyn Error>>(());
                         }
                         if recent_output.len() > 16384 {
@@ -141,11 +155,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             return Err(format!("ZMODEM failed: {error}").into()),
                         ZmodemTransferStatus::Cancelled if mode == "cancel-receive" && cancel_sent => {
                             completed = true;
-                            eprintln!("SSH test ZMODEM cancellation acknowledged");
-                            tokio::time::sleep(Duration::from_millis(1000)).await;
-                            commands.send(SshTerminalCommand::Input(
-                                b"printf 'OPENSHELL_ZMODEM_SSH_POST_TRANSFER_OK\\n'\r".to_vec()
-                            )).await?;
+                            eprintln!("SSH test ZMODEM cancellation acknowledged; waiting for remote shell prompt");
                         }
                         ZmodemTransferStatus::Cancelled =>
                             return Err("ZMODEM was cancelled unexpectedly".into()),
@@ -157,7 +167,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Always attempt to close the PTY on failure as well as success.
     if test_result.is_err() {
-        eprintln!("SSH cancellation diagnostics: post_cancel_bytes={post_cancel_bytes}, tail_hex={}",
+        eprintln!("SSH cancellation diagnostics: prompt_seen={prompt_seen}, post_cancel_bytes={post_cancel_bytes}, tail_hex={}",
             post_cancel_tail.iter().map(|b| format!("{b:02x}")).collect::<String>());
         eprintln!(
             "SSH test timeout diagnostics: mode={mode}, detected={started},              completed={completed}, events={progress_events}, first_pty_bytes={}",
