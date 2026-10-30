@@ -1239,6 +1239,7 @@ impl Render for Workspace {
                     .flex()
                     .child(
                         div()
+                            .id("native-saved-session-sidebar")
                             .w(px(SIDEBAR_WIDTH))
                             .p_4()
                             .bg(rgb(0x121822))
