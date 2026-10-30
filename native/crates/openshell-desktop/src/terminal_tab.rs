@@ -1,5 +1,5 @@
 use gpui::Task;
-use openshell_core::{LocalTerminal, TerminalEngine, TerminalSize, SshTerminalCommand};
+use openshell_core::{LocalTerminal, TerminalEngine, TerminalSize, SshTerminalCommand, zmodem::{ZmodemProbe, ZmodemRequest}};
 use tokio::sync::{mpsc, watch};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,6 +35,9 @@ pub(super) struct TerminalTab {
     pub(super) remote_phase: RemotePhase,
     pub(super) status: String,
     pub(super) scroll_remainder: f32,
+    pub(super) zmodem_probe: ZmodemProbe,
+    pub(super) zmodem_prompt: Option<ZmodemRequest>,
+    pub(super) zmodem_silenced: bool,
     pub(super) task: Option<Task<()>>,
 }
 
@@ -51,6 +54,9 @@ impl TerminalTab {
             remote_phase: RemotePhase::Local,
             status: "Starting PowerShell...".into(),
             scroll_remainder: 0.0,
+            zmodem_probe: ZmodemProbe::default(),
+            zmodem_prompt: None,
+            zmodem_silenced: false,
             task: None,
         }
     }
@@ -67,8 +73,36 @@ impl TerminalTab {
             remote_phase: RemotePhase::Connecting,
             status: "Connecting to SSH server...".into(),
             scroll_remainder: 0.0,
+            zmodem_probe: ZmodemProbe::default(),
+            zmodem_prompt: None,
+            zmodem_silenced: false,
             task: None,
         }
+    }
+
+    /// Observe raw SSH bytes before sending them into Alacritty. This
+    /// does not consume or rewrite the transport: future ZMODEM engines must
+    /// acquire exclusive binary-stream ownership before file I/O is enabled.
+    pub(super) fn observe_zmodem(&mut self, data: &[u8]) -> bool {
+        if self.zmodem_silenced || self.remote_phase != RemotePhase::Connected {
+            return false;
+        }
+        if let Some(kind) = self.zmodem_probe.feed(data) {
+            self.zmodem_prompt = Some(kind);
+            return true;
+        }
+        false
+    }
+
+    pub(super) fn dismiss_zmodem(&mut self) {
+        self.zmodem_prompt = None;
+        self.zmodem_silenced = true;
+    }
+
+    pub(super) fn reset_zmodem(&mut self) {
+        self.zmodem_probe.reset();
+        self.zmodem_prompt = None;
+        self.zmodem_silenced = false;
     }
 
     pub(super) fn is_remote(&self) -> bool {
