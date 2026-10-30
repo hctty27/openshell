@@ -310,6 +310,6 @@ upload may leave a partial remote file requiring manual cleanup.
 Each saved SSH session now has an **SFTP** action. A right-side GPUI browser
 lists the remote directory, supports folder navigation, Up and Refresh, and
 uses a separate SSH connection so the currently running terminal is not
-restarted. Directory enumeration runs on a background worker. This initial
+restarted. Directory enumeration runs on a background worker using one persistent SSH/SFTP channel for the lifetime of the panel (refresh and folder changes reuse it; errors allow explicit reconnect on Refresh). This initial
 GUI does **not** yet implement file picker upload/download or transfer
 progress; use `sftpctl` for initial transfer testing.

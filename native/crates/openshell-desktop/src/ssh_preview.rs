@@ -13,7 +13,7 @@ use openshell_core::{
     SshConnection, SshTerminalCommand, TerminalSize, NativeSftp, SftpEntry,
     native_paths::native_database_path,
 };
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 use zeroize::Zeroizing;
 
 const MAX_PENDING_PACKETS: usize = 64;
@@ -268,29 +268,77 @@ mod tests {
 }
 
 
-/// One-shot native SFTP directory listing for a saved session.
-/// SQLite, Credential Manager, SSH handshake and SFTP I/O all run on a GPUI
-/// background worker. A fresh connection cannot interfere with terminal I/O.
-pub fn browse_saved_sftp(
-    session_id: String,
+/// A bounded directory-request channel owns one long-lived SFTP connection.
+/// It never borrows the interactive terminal's SSH handle or PTY.
+#[derive(Clone)]
+pub struct SftpBrowseWorker {
+    tx: mpsc::Sender<SftpBrowseRequest>,
+}
+
+struct SftpBrowseRequest {
     directory: String,
-) -> Result<(String, Vec<SftpEntry>), String> {
-    let config = resolve_stored_session(&session_id)?;
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all().build().map_err(|e| e.to_string())?;
-    runtime.block_on(async move {
-        let connection = match &config.auth {
-            PreviewAuth::Password(password) =>
-                SshConnection::connect_password(&config.session, password, &config.fingerprint).await,
-            PreviewAuth::PrivateKey(path) =>
-                SshConnection::connect_private_key(&config.session, path, &config.fingerprint).await,
-        }.map_err(|e| e.to_string())?;
-        let browser = NativeSftp::open(connection).await.map_err(|e| e.to_string())?;
-        let path = browser.session_path(&directory).await.map_err(|e| e.to_string())?;
-        let entries = browser.list_entries(&path).await.map_err(|e| e.to_string())?;
-        browser.close().await.map_err(|e| e.to_string())?;
-        Ok((path, entries))
-    })
+    reply: oneshot::Sender<Result<(String, Vec<SftpEntry>), String>>,
+}
+
+impl SftpBrowseWorker {
+    /// Every directory change reuses the same authenticated SSH/SFTP channel.
+    /// Dropping the last worker sender closes the connection after pending
+    /// requests have completed. No credential material leaves the worker thread.
+    pub async fn list(&self, directory: String) -> Result<(String, Vec<SftpEntry>), String> {
+        let (reply, receive) = oneshot::channel();
+        self.tx.send(SftpBrowseRequest { directory, reply })
+            .await.map_err(|_| "SFTP browser worker disconnected".to_owned())?;
+        receive.await.map_err(|_| "SFTP directory request interrupted".to_owned())?
+    }
+}
+
+pub fn start_saved_sftp_browser(session_id: String) -> Result<SftpBrowseWorker, String> {
+    let (tx, mut requests) = mpsc::channel::<SftpBrowseRequest>(16);
+    thread::Builder::new()
+        .name("openshell-sftp-browser".into())
+        .spawn(move || {
+            let result = (|| -> Result<(), String> {
+                let config = resolve_stored_session(&session_id)?;
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all().build().map_err(|error| error.to_string())?;
+                runtime.block_on(async {
+                    let connection = match &config.auth {
+                        PreviewAuth::Password(password) =>
+                            SshConnection::connect_password(
+                                &config.session, password, &config.fingerprint,
+                            ).await,
+                        PreviewAuth::PrivateKey(path) =>
+                            SshConnection::connect_private_key(
+                                &config.session, path, &config.fingerprint,
+                            ).await,
+                    }.map_err(|error| error.to_string())?;
+                    let browser = NativeSftp::open(connection).await
+                        .map_err(|error| error.to_string())?;
+                    while let Some(request) = requests.recv().await {
+                        let result = async {
+                            let path = browser.session_path(&request.directory).await
+                                .map_err(|error| error.to_string())?;
+                            let entries = browser.list_entries(&path).await
+                                .map_err(|error| error.to_string())?;
+                            Ok((path, entries))
+                        }.await;
+                        let _ = request.reply.send(result);
+                    }
+                    browser.close().await.map_err(|error| error.to_string())?;
+                    Ok(())
+                })
+            })();
+
+            // Propagate startup/auth errors to any pending or subsequent request
+            // instead of leaving a GUI directory picker hanging.
+            if let Err(error) = result {
+                while let Some(request) = requests.blocking_recv() {
+                    let _ = request.reply.send(Err(error.clone()));
+                }
+            }
+        })
+        .map_err(|error| format!("cannot launch SFTP browser worker: {error}"))?;
+    Ok(SftpBrowseWorker { tx })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

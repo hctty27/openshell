@@ -25,7 +25,7 @@ use gpui::{
 };
 use openshell_core::{CredentialVault, HostIdentity, HostTrustStore, TrustDecision, LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize};
 use openshell_core::native_paths::{native_database_path, ensure_native_data_directory};
-use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session, browse_saved_sftp, start_saved_sftp_transfer, SftpTransferDirection, SftpTransferEvent};
+use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session, start_saved_sftp_browser, SftpBrowseWorker, start_saved_sftp_transfer, SftpTransferDirection, SftpTransferEvent};
 
 
 /// Pure tab navigation for Ctrl+Tab, including wrap-around.
@@ -54,6 +54,7 @@ struct Workspace {
     _session_save_task: Option<Task<()>>,
     _session_catalog_task: Task<()>,
     sftp_browser: Option<SftpBrowser>,
+    sftp_connection: Option<SftpBrowseWorker>,
     _sftp_browse_task: Option<Task<()>>,
     _sftp_picker_task: Option<Task<()>>,
     _sftp_transfer_task: Option<Task<()>>,
@@ -153,6 +154,7 @@ impl Workspace {
             _session_save_task: None,
             _session_catalog_task: catalog_task,
             sftp_browser: None,
+            sftp_connection: None,
             _sftp_browse_task: None,
             _sftp_picker_task: None,
             _sftp_transfer_task: None,
@@ -202,6 +204,7 @@ impl Workspace {
         self._sftp_picker_task = None;
         self._sftp_transfer_task = None;
         self._sftp_browse_task = None;
+        self.sftp_connection = None;
         let generation = self.next_sftp_generation;
         self.next_sftp_generation = self.next_sftp_generation.wrapping_add(1);
         self.sftp_browser = Some(SftpBrowser::new(session.id, session.name, generation));
@@ -212,6 +215,7 @@ impl Workspace {
         self._sftp_browse_task = None;
         self._sftp_picker_task = None;
         self._sftp_transfer_task = None;
+        self.sftp_connection = None;
         self.sftp_browser = None;
         cx.notify();
     }
@@ -223,12 +227,26 @@ impl Workspace {
         let generation = browser.generation;
         let session_id = browser.session_id.clone();
         let directory = browser.path.clone();
-        browser.status = "Opening a separate SSH/SFTP channel...".into();
+        browser.status = "Loading remote directory...".into();
         browser.loading = true;
+        let worker = match self.sftp_connection.clone() {
+            Some(worker) => worker,
+            None => match start_saved_sftp_browser(session_id) {
+                Ok(worker) => {
+                    self.sftp_connection = Some(worker.clone());
+                    worker
+                }
+                Err(error) => {
+                    browser.loading = false;
+                    browser.status = format!("Cannot start SFTP browser: {error}");
+                    cx.notify();
+                    return;
+                }
+            },
+        };
         cx.notify();
-
         let work = cx.background_spawn(async move {
-            browse_saved_sftp(session_id, directory)
+            worker.list(directory).await
         });
         self._sftp_browse_task = Some(cx.spawn(async move |this, cx| {
             let result = work.await;
@@ -243,8 +261,9 @@ impl Workspace {
                         browser.entries = entries;
                     }
                     Err(error) => {
-                        browser.status = format!("SFTP error: {error}");
+                        browser.status = format!("SFTP error: {error}. Refresh to reconnect.");
                         browser.entries.clear();
+                        view.sftp_connection = None;
                     }
                 }
                 cx.notify();
