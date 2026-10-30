@@ -1425,13 +1425,17 @@ impl Workspace {
             }
             let submitted = tab.remote_commands.as_ref()
                 .is_some_and(|commands| {
-                    commands.try_send(SshTerminalCommand::Input(vec![0x03])).is_ok()
+                    let cancelled = commands.try_send(SshTerminalCommand::CancelZmodem).is_ok();
+                    let interrupted = commands.try_send(
+                        SshTerminalCommand::Input(vec![0x03])
+                    ).is_ok();
+                    cancelled && interrupted
                 });
             tab.dismiss_zmodem();
             tab.status = if submitted {
-                "Sent Ctrl+C to remote rz/sz; native ZMODEM transfer is not enabled".into()
+                "Requested ZMODEM cancellation and Ctrl+C on this SSH session".into()
             } else {
-                "Could not cancel remote rz/sz; try Ctrl+C in the SSH terminal".into()
+                "Could not send ZMODEM cancellation; try reconnecting this session".into()
             };
             cx.notify();
         }
