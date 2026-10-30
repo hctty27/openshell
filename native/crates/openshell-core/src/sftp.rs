@@ -129,7 +129,7 @@ impl NativeSftp {
         let destination = checked_remote_path(remote_path)?;
         let mut local = tokio::fs::File::open(local_path).await?;
         let mut remote = self.session.open_with_flags(
-            destination, OpenFlags::CREATE | OpenFlags::EXCL | OpenFlags::WRITE,
+            destination, OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE,
         ).await?;
         let copied = tokio::io::copy(&mut local, &mut remote).await?;
         remote.close().await?;
