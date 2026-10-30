@@ -144,20 +144,12 @@ impl EntityInputHandler for Workspace {
         cx.notify();
     }
 
-    fn unmark_text(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.ime.consume_stale_commit() {
-            cx.notify();
-            return;
-        }
-        // The platform can finalize a composition by unmarking it without
-        // a separate replace callback. Deliver it once, not per keystroke.
-        let text = self.ime.text.clone();
-        if !text.is_empty() {
-            self.replace_text_in_range(None, &text, window, cx);
-        } else {
-            self.ime.reset();
-            cx.notify();
-        }
+    fn unmark_text(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        // unmarkText ends the marked range, but is not a text-commit event.
+        // Only replace_text_in_range may deliver characters to the PTY.
+        // In particular, Escape must not execute unfinished Pinyin preedit.
+        self.ime.reset();
+        cx.notify();
     }
 
     fn bounds_for_range(
@@ -204,6 +196,15 @@ mod tests {
         assert_eq!(byte_offset_for_utf16(text, 2), None);
         assert_eq!(byte_offset_for_utf16(text, 3), Some(7));
         assert_eq!(byte_offset_for_utf16(text, 5), Some(text.len()));
+    }
+
+    #[test]
+    fn cancelled_preedit_disappears_without_becoming_committed_text() {
+        let mut ime = TerminalImeState::default();
+        ime.set_marked("rm -rf", None, 11, None);
+        ime.reset();
+        assert!(!ime.is_composing());
+        assert!(ime.text.is_empty());
     }
 
     #[test]
