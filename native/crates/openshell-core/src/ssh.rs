@@ -816,6 +816,38 @@ mod tests {
         assert_eq!(tokio::fs::read(&output).await.unwrap(), b"existing user data");
     }
 
+    #[tokio::test]
+    async fn receiver_removes_only_its_partial_file_on_abort() {
+        let temp = tempfile::tempdir().unwrap();
+        let existing = temp.path().join("existing.txt");
+        tokio::fs::write(&existing, b"important").await.unwrap();
+        let mut receiving = ZmodemDownload::open(temp.path().to_path_buf()).await.unwrap();
+        let (path, mut file) = create_received_target(temp.path(), "incomplete.bin")
+            .await.unwrap();
+        file.write_all(b"partial transfer").await.unwrap();
+        receiving.current = Some(ZmodemReceivedFile {
+            path: path.clone(), file, expected: Some(1000),
+            written: 16, name: "incomplete.bin".into(),
+        });
+        receiving.clean_partial().await;
+        assert!(!path.exists());
+        assert_eq!(tokio::fs::read(&existing).await.unwrap(), b"important");
+    }
+
+    #[tokio::test]
+    async fn mismatched_zmodem_size_discards_incomplete_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut receiving = ZmodemDownload::open(temp.path().to_path_buf()).await.unwrap();
+        let (path, file) = create_received_target(temp.path(), "truncated.bin")
+            .await.unwrap();
+        receiving.current = Some(ZmodemReceivedFile {
+            path: path.clone(), file, expected: Some(100),
+            written: 0, name: "truncated.bin".into(),
+        });
+        assert!(receiving.finish_file().await.is_err());
+        assert!(!path.exists());
+    }
+
     #[test]
     fn resize_commands_are_clamped_before_network_dispatch() {
         assert_eq!(
