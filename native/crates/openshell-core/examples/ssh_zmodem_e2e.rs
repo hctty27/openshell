@@ -65,6 +65,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut initial_output = Vec::new();
     let mut progress_events = 0_usize;
     let mut cancel_sent = false;
+    let mut post_cancel_bytes = 0_usize;
+    let mut post_cancel_tail: Vec<u8> = Vec::new();
 
     let test_result = timeout(Duration::from_secs(45), async {
         loop {
@@ -87,6 +89,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         };
                         commands.send(request).await?;
                         started = true;
+                    }
+                    if mode == "cancel-receive" && cancel_sent {
+                        post_cancel_bytes = post_cancel_bytes.saturating_add(bytes.len());
+                        post_cancel_tail.extend_from_slice(&bytes);
+                        if post_cancel_tail.len() > 256 {
+                            post_cancel_tail.drain(..post_cancel_tail.len() - 256);
+                        }
                     }
                     if completed {
                         recent_output.extend_from_slice(&bytes);
@@ -148,6 +157,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Always attempt to close the PTY on failure as well as success.
     if test_result.is_err() {
+        eprintln!("SSH cancellation diagnostics: post_cancel_bytes={post_cancel_bytes}, tail_hex={}",
+            post_cancel_tail.iter().map(|b| format!("{b:02x}")).collect::<String>());
         eprintln!(
             "SSH test timeout diagnostics: mode={mode}, detected={started},              completed={completed}, events={progress_events}, first_pty_bytes={}",
             initial_output.iter().map(|b| format!("{b:02x}")).collect::<String>()
