@@ -100,7 +100,8 @@ jobs:
           import os, pathlib, random
           p = pathlib.Path(os.environ["RUNNER_TEMP"]) / "openshell-ssh-e2e"
           rng = random.Random(20261030)
-          data = bytes(rng.randrange(256) for _ in range(64 * 1024 + 47))
+          # Verify multi-chunk SSH transport backpressure with a 1 MiB+ payload.
+          data = bytes(rng.randrange(256) for _ in range(1024 * 1024 + 47))
           (p / "from-rz.bin").write_bytes(data)
           (p / "from-sz.bin").write_bytes(data)
           PY
