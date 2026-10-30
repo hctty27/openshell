@@ -143,10 +143,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 ZmodemAction::Event(ZmodemEvent::SessionCompleted) => {
-                    eprintln!("PROTO SessionCompleted");
+                    eprintln!("PROTO SessionCompleted; flushing queued final wire frames");
                     if current.is_some() { return Err("incomplete file at session end".into()); }
                     completed = true;
-                    break;
+                    // Keep polling until Idle: zmodem2 can queue the final
+                    // ZFIN reply after emitting SessionCompleted.
                 }
                 ZmodemAction::Event(ZmodemEvent::Aborted) =>
                     return Err("peer aborted ZMODEM session".into()),
