@@ -380,9 +380,22 @@ The GPUI pane displays the detected operation and offers **Cancel remote
 rz/sz** (Ctrl+C on that exact SSH channel) and, for saved connections,
 **Cancel rz/sz + Open SFTP** as a supported file-transfer alternative.
 
-**This is detection and recovery, not rz/sz file transfer.** No automated
-ZMODEM sender, receiver, file picker or binary-stream ownership exists yet.
-Do not claim `rz` or `sz` uploads/downloads are supported until the
-protocol state machine has been integrated and tested with actual `lrzsz`.
-Protocol adoption will require exclusive binary stream dispatch, CRC/timeout
-handling, explicit local destination, progress, cancellation, and cleanup.
+### Experimental ZMODEM sender (remote rz)
+
+The core now uses `zmodem2 = 0.7.3` for a poll-driven ZMODEM sender/receiver
+adapter, with conservative filename validation (including Windows device names),
+manual receive-file acceptance, explicit cancel and timeout operations. When
+a remote `rz` ZRINIT is detected, the native UI can prompt for a **single**
+local file. OpenShell sends it through the **same SSH PTY** with temporary
+exclusive binary-stream ownership; during this upload, normal keyboard input
+is suppressed and binary frames are not rendered into the terminal. The
+transfer enforces a 256 KiB inbound buffer ceiling, 32-bit ZMODEM file-size
+limit, and up to five protocol-response retries.
+
+This implementation is **experimental and NOT yet verified against a real
+lrzsz server**. Its progress is not yet exposed as a proper embedded task
+panel; failure cleanup may require remote intervention. Remote `sz`
+download, multiple-file protocol sessions, full resume/CRC interoperability,
+and precise cancel/reconnect behavior remain **not implemented or unverified**.
+For production transfers, prefer the existing SFTP panel. Never treat
+successful Rust/Windows CI as an lrzsz interoperability test.
