@@ -232,6 +232,98 @@ mod tests {
     }
 
     #[test]
+    fn in_memory_zmodem_roundtrip_preserves_file_bytes() {
+        use std::collections::VecDeque;
+
+        let payload = b"OpenShell ZMODEM binary \x00\x01\x18\xff\n with padding".repeat(130);
+        let mut sender = ZmodemEngine::new(ZmodemRole::Send).unwrap();
+        let mut receiver = ZmodemEngine::new(ZmodemRole::Receive).unwrap();
+        let mut inbound_sender = VecDeque::<u8>::new();
+        let mut inbound_receiver = VecDeque::<u8>::new();
+        let mut received = Vec::new();
+        let mut offered = false;
+        let mut finish_pending = false;
+        let mut finished = false;
+        let mut file_seen = false;
+        let mut receiver_done = false;
+
+        for _ in 0..50_000 {
+            if !offered {
+                match sender.start_file("sample.bin", payload.len() as u64) {
+                    Ok(()) => offered = true,
+                    Err(ZmodemEngineError::Protocol(zmodem2::Error::Backpressure)) => {}
+                    Err(error) => panic!("cannot offer file: {error}"),
+                }
+            }
+            if finish_pending {
+                match sender.finish() {
+                    Ok(()) => finish_pending = false,
+                    Err(ZmodemEngineError::Protocol(zmodem2::Error::Backpressure)) => {}
+                    Err(error) => panic!("cannot finish session: {error}"),
+                }
+            }
+
+            if !inbound_sender.is_empty() {
+                let chunk: Vec<_> = inbound_sender.iter().take(512).copied().collect();
+                let used = sender.submit_wire(&chunk).unwrap();
+                for _ in 0..used { inbound_sender.pop_front(); }
+            }
+            if !inbound_receiver.is_empty() {
+                let chunk: Vec<_> = inbound_receiver.iter().take(512).copied().collect();
+                let used = receiver.submit_wire(&chunk).unwrap();
+                for _ in 0..used { inbound_receiver.pop_front(); }
+            }
+
+            match sender.next_action().unwrap() {
+                ZmodemAction::Wire(bytes) => {
+                    let count = bytes.len();
+                    inbound_receiver.extend(bytes);
+                    sender.wire_written(count);
+                }
+                ZmodemAction::ReadFile { offset, max_len } => {
+                    let start = offset as usize;
+                    assert!(start < payload.len(), "unexpected read beyond source");
+                    let end = (start + max_len).min(payload.len());
+                    sender.submit_file(&payload[start..end]).unwrap();
+                }
+                ZmodemAction::Event(ZmodemEvent::FileCompleted) => {
+                    finish_pending = true;
+                }
+                ZmodemAction::Event(ZmodemEvent::SessionCompleted) => finished = true,
+                ZmodemAction::Event(ZmodemEvent::Aborted) => panic!("sender aborted"),
+                ZmodemAction::WriteFile(_) => panic!("sender tried to write a file"),
+                _ => {}
+            }
+            match receiver.next_action().unwrap() {
+                ZmodemAction::Wire(bytes) => {
+                    let count = bytes.len();
+                    inbound_sender.extend(bytes);
+                    receiver.wire_written(count);
+                }
+                ZmodemAction::Event(ZmodemEvent::OfferedFile { name, size }) => {
+                    assert_eq!(name, "sample.bin");
+                    assert_eq!(size, Some(payload.len() as u32));
+                    receiver.accept_received_file().unwrap();
+                    file_seen = true;
+                }
+                ZmodemAction::WriteFile(bytes) => {
+                    received.extend_from_slice(&bytes);
+                    receiver.file_written(bytes.len()).unwrap();
+                }
+                ZmodemAction::Event(ZmodemEvent::SessionCompleted) => receiver_done = true,
+                ZmodemAction::Event(ZmodemEvent::Aborted) => panic!("receiver aborted"),
+                ZmodemAction::ReadFile { .. } => panic!("receiver tried to read a file"),
+                _ => {}
+            }
+            if finished && receiver_done { break; }
+        }
+        assert!(file_seen, "receiver did not acknowledge ZFILE");
+        assert!(finished, "sender did not complete protocol session");
+        assert!(receiver_done, "receiver did not complete protocol session");
+        assert_eq!(received, payload, "ZMODEM roundtrip changed file bytes");
+    }
+
+    #[test]
     fn sender_receiver_have_separate_roles_and_emit_handshake_bytes() {
         let mut sender = ZmodemEngine::new(ZmodemRole::Send).unwrap();
         let mut receiver = ZmodemEngine::new(ZmodemRole::Receive).unwrap();
