@@ -54,7 +54,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut offered = false;
     let mut should_finish = false;
     let mut completed = false;
-    let mut current: Option<(File, Option<u64>, u64)> = None;
+    let mut current: Option<(String, File, Option<u64>, u64)> = None;
     let mut pending = Vec::<u8>::new();
     let mut input = tokio::io::stdin();
     let mut output = tokio::io::stdout();
@@ -96,21 +96,29 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ZmodemAction::Event(ZmodemEvent::OfferedFile { name, size }) if !send => {
                     let basename = safe_filename(name.as_bytes())?;
-                    if current.is_some() { return Err("nested ZFILE event".into()); }
-                    match OpenOptions::new().write(true).create_new(true)
-                        .open(path.join(basename))
-                    {
-                        Ok(file) => {
-                            current = Some((file, size.map(u64::from), 0));
-                            protocol.accept_received_file()?;
+                    eprintln!("ZFILE offer: {basename} size {size:?}");
+                    if let Some((current_name, _, current_size, written)) = &current {
+                        if current_name != &basename || *current_size != size.map(u64::from) {
+                            return Err("different file header before previous ZEOF".into());
                         }
-                        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists =>
-                            protocol.skip_received_file()?,
-                        Err(err) => return Err(err.into()),
+                        eprintln!("Retry ZFILE for same file at offset {written}");
+                        protocol.accept_received_file_at(*written as u32)?;
+                    } else {
+                        match OpenOptions::new().write(true).create_new(true)
+                            .open(path.join(&basename))
+                        {
+                            Ok(file) => {
+                                current = Some((basename, file, size.map(u64::from), 0));
+                                protocol.accept_received_file()?;
+                            }
+                            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists =>
+                                protocol.skip_received_file()?,
+                            Err(err) => return Err(err.into()),
+                        }
                     }
                 }
                 ZmodemAction::WriteFile(bytes) if !send => {
-                    let Some((file, size, written)) = current.as_mut() else {
+                    let Some((_, file, size, written)) = current.as_mut() else {
                         return Err("received bytes without file offer".into());
                     };
                     let total = *written + bytes.len() as u64;
@@ -125,7 +133,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     should_finish = true;
                 }
                 ZmodemAction::Event(ZmodemEvent::FileCompleted) => {
-                    if let Some((file, expected, written)) = current.take() {
+                    if let Some((_, file, expected, written)) = current.take() {
                         if expected.is_some_and(|n| n != written) {
                             return Err("file shorter than declared ZFILE length".into());
                         }
