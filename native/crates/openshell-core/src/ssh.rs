@@ -492,7 +492,19 @@ impl SshTerminal {
                 }
             }
             if completed {
-                upload = None;
+                if let Some(mut active) = upload.take() {
+                    for _ in 0..32 {
+                        match active.protocol.next_action() {
+                            Ok(ZmodemAction::Wire(bytes)) => {
+                                let count = bytes.len();
+                                writer.data_bytes(bytes).await?;
+                                active.protocol.wire_written(count);
+                            }
+                            Ok(ZmodemAction::Idle) | Err(_) => break,
+                            Ok(_) => continue,
+                        }
+                    }
+                }
                 let _ = progress.try_send(ZmodemTransferStatus::Completed { files: 1 });
                 let _ = output.send(b"\r\n[OpenShell] ZMODEM upload complete\r\n".to_vec()).await;
             } else if let Some(error) = failed {
@@ -615,7 +627,20 @@ impl SshTerminal {
                 }
             }
             if receiver_completed {
-                if let Some(active) = download.take() {
+                if let Some(mut active) = download.take() {
+                    // SessionCompleted can precede a queued ZFIN response.
+                    // Flush it before returning the PTY to terminal mode.
+                    for _ in 0..32 {
+                        match active.protocol.next_action() {
+                            Ok(ZmodemAction::Wire(bytes)) => {
+                                let count = bytes.len();
+                                writer.data_bytes(bytes).await?;
+                                active.protocol.wire_written(count);
+                            }
+                            Ok(ZmodemAction::Idle) | Err(_) => break,
+                            Ok(_) => continue,
+                        }
+                    }
                     let _ = progress.try_send(ZmodemTransferStatus::Completed {
                         files: active.completed,
                     });
