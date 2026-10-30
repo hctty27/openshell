@@ -2,7 +2,7 @@ mod terminal_paint;
 mod clipboard_paste;
 mod session_editor;
 mod sftp_browser;
-use sftp_browser::SftpBrowser;
+use sftp_browser::{SftpBrowser, SftpTransferView, remote_destination};
 use session_editor::SessionDraft;
 use clipboard_paste::{encode_paste, needs_paste_confirmation, MAX_PASTE_BYTES};
 mod terminal_tab;
@@ -20,12 +20,12 @@ mod direct3d_diagnostics;
 use gpui::prelude::*;
 use gpui::{
     div, px, rgb, size, App, Application, Bounds, Context, FocusHandle, Focusable,
-    ClipboardItem, IntoElement, KeyDownEvent, Keystroke, MouseButton, Render, Task, Window, WindowBounds,
+    ClipboardItem, IntoElement, KeyDownEvent, Keystroke, MouseButton, PathPromptOptions, Render, Task, Window, WindowBounds,
     WindowOptions, Subscription, ScrollWheelEvent,
 };
 use openshell_core::{CredentialVault, HostIdentity, HostTrustStore, TrustDecision, LocalShell, LocalTerminal, Session, SessionStore, SessionKeyStore, SshTerminalCommand, TerminalEngine, TerminalSize};
 use openshell_core::native_paths::{native_database_path, ensure_native_data_directory};
-use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session, browse_saved_sftp};
+use ssh_preview::{PreviewStatus, SshPreview, start_from_environment, start_saved_session, browse_saved_sftp, start_saved_sftp_transfer, SftpTransferDirection, SftpTransferEvent};
 
 
 /// Pure tab navigation for Ctrl+Tab, including wrap-around.
@@ -55,6 +55,9 @@ struct Workspace {
     _session_catalog_task: Task<()>,
     sftp_browser: Option<SftpBrowser>,
     _sftp_browse_task: Option<Task<()>>,
+    _sftp_picker_task: Option<Task<()>>,
+    _sftp_transfer_task: Option<Task<()>>,
+    next_sftp_generation: u64,
 }
 
 fn terminal_key_bytes(key: &Keystroke) -> Option<Vec<u8>> {
@@ -151,6 +154,9 @@ impl Workspace {
             _session_catalog_task: catalog_task,
             sftp_browser: None,
             _sftp_browse_task: None,
+            _sftp_picker_task: None,
+            _sftp_transfer_task: None,
+            next_sftp_generation: 1,
         }
     }
 
@@ -193,12 +199,19 @@ impl Workspace {
     }
 
     fn open_sftp_browser(&mut self, session: Session, cx: &mut Context<Self>) {
-        self.sftp_browser = Some(SftpBrowser::new(session.id, session.name));
+        self._sftp_picker_task = None;
+        self._sftp_transfer_task = None;
+        self._sftp_browse_task = None;
+        let generation = self.next_sftp_generation;
+        self.next_sftp_generation = self.next_sftp_generation.wrapping_add(1);
+        self.sftp_browser = Some(SftpBrowser::new(session.id, session.name, generation));
         self.refresh_sftp_browser(cx);
     }
 
     fn close_sftp_browser(&mut self, cx: &mut Context<Self>) {
         self._sftp_browse_task = None;
+        self._sftp_picker_task = None;
+        self._sftp_transfer_task = None;
         self.sftp_browser = None;
         cx.notify();
     }
@@ -207,6 +220,7 @@ impl Workspace {
         let Some(browser) = &mut self.sftp_browser else { return };
         browser.revision = browser.revision.wrapping_add(1);
         let revision = browser.revision;
+        let generation = browser.generation;
         let session_id = browser.session_id.clone();
         let directory = browser.path.clone();
         browser.status = "Opening a separate SSH/SFTP channel...".into();
@@ -220,7 +234,7 @@ impl Workspace {
             let result = work.await;
             let _ = this.update(cx, |view, cx| {
                 let Some(browser) = &mut view.sftp_browser else { return };
-                if browser.revision != revision { return; }
+                if browser.revision != revision || browser.generation != generation { return; }
                 browser.loading = false;
                 match result {
                     Ok((path, entries)) => {
@@ -248,6 +262,146 @@ impl Workspace {
         let Some(browser) = &self.sftp_browser else { return };
         let parent = browser.parent();
         self.sftp_navigate(parent, cx);
+    }
+
+
+    fn choose_sftp_upload(&mut self, cx: &mut Context<Self>) {
+        let Some(browser) = &mut self.sftp_browser else { return; };
+        if browser.loading || browser.picker_open || browser.transfer_running() { return; }
+        browser.picker_open = true;
+        let generation = browser.generation;
+        let picker = cx.prompt_for_paths(PathPromptOptions {
+            files: true, directories: false, multiple: false,
+            prompt: Some("Select a file to upload".into()),
+        });
+        cx.notify();
+        self._sftp_picker_task = Some(cx.spawn(async move |this, cx| {
+            let selection = picker.await;
+            let _ = this.update(cx, |view, cx| {
+                let Some(browser) = &mut view.sftp_browser else { return; };
+                if browser.generation != generation { return; }
+                browser.picker_open = false;
+                match selection {
+                    Ok(Ok(Some(paths))) => {
+                        if let Some(local) = paths.into_iter().next() {
+                            let name = local.file_name().and_then(|name| name.to_str());
+                            let target = name.and_then(|name| remote_destination(&browser.path, name));
+                            match target {
+                                Some(remote) => view.start_sftp_transfer(
+                                    SftpTransferDirection::Upload, local, remote, None, cx,
+                                ),
+                                None => {
+                                    browser.status = "Cannot upload: unsupported filename".into();
+                                    cx.notify();
+                                }
+                            }
+                        }
+                    }
+                    Ok(Ok(None)) => cx.notify(),
+                    _ => {
+                        browser.status = "File chooser failed".into();
+                        cx.notify();
+                    }
+                }
+            });
+        }));
+    }
+
+    fn choose_sftp_download(
+        &mut self, remote: String, filename: String, size: u64, cx: &mut Context<Self>,
+    ) {
+        let Some(browser) = &mut self.sftp_browser else { return; };
+        if browser.loading || browser.picker_open || browser.transfer_running() { return; }
+        browser.picker_open = true;
+        let generation = browser.generation;
+        let destination_dir = std::env::var_os("USERPROFILE")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        let picker = cx.prompt_for_new_path(&destination_dir, Some(&filename));
+        cx.notify();
+        self._sftp_picker_task = Some(cx.spawn(async move |this, cx| {
+            let selection = picker.await;
+            let _ = this.update(cx, |view, cx| {
+                let Some(browser) = &mut view.sftp_browser else { return; };
+                if browser.generation != generation { return; }
+                browser.picker_open = false;
+                match selection {
+                    Ok(Ok(Some(local))) => {
+                        view.start_sftp_transfer(
+                            SftpTransferDirection::Download, local, remote, Some(size), cx,
+                        );
+                    }
+                    Ok(Ok(None)) => cx.notify(),
+                    _ => {
+                        browser.status = "Save-file chooser failed".into();
+                        cx.notify();
+                    }
+                }
+            });
+        }));
+    }
+
+    fn start_sftp_transfer(
+        &mut self, direction: SftpTransferDirection, local: std::path::PathBuf,
+        remote: String, total: Option<u64>, cx: &mut Context<Self>,
+    ) {
+        let Some(browser) = &mut self.sftp_browser else { return; };
+        if browser.transfer_running() { return; }
+        let generation = browser.generation;
+        let session_id = browser.session_id.clone();
+        let verb = match direction {
+            SftpTransferDirection::Upload => "Uploading",
+            SftpTransferDirection::Download => "Downloading",
+        };
+        let mut transfer = match start_saved_sftp_transfer(session_id, direction, local, remote) {
+            Ok(transfer) => transfer,
+            Err(error) => {
+                browser.status = format!("Unable to start SFTP transfer: {error}");
+                cx.notify();
+                return;
+            }
+        };
+        browser.transfer = Some(SftpTransferView {
+            cancel: transfer.cancel.clone(), status: verb.into(),
+            bytes: 0, total, running: true,
+        });
+        cx.notify();
+        self._sftp_transfer_task = Some(cx.spawn(async move |this, cx| {
+            while let Some(event) = transfer.events.recv().await {
+                let finished = matches!(&event, SftpTransferEvent::Completed(_));
+                let _ = this.update(cx, |view, cx| {
+                    let Some(browser) = &mut view.sftp_browser else { return; };
+                    if browser.generation != generation { return; }
+                    let Some(state) = browser.transfer.as_mut() else { return; };
+                    match event {
+                        SftpTransferEvent::Total(total) => state.total = Some(total),
+                        SftpTransferEvent::Progress(bytes) => state.bytes = bytes,
+                        SftpTransferEvent::Completed(result) => {
+                            state.running = false;
+                            match result {
+                                Ok(bytes) => {
+                                    state.bytes = bytes;
+                                    state.status = "Transfer completed".into();
+                                    view.refresh_sftp_browser(cx);
+                                }
+                                Err(error) => {
+                                    state.status = format!("Transfer failed: {error}");
+                                }
+                            }
+                        }
+                    }
+                    cx.notify();
+                });
+                if finished { break; }
+            }
+        }));
+    }
+
+    fn cancel_sftp_transfer(&mut self, cx: &mut Context<Self>) {
+        if let Some(browser) = &mut self.sftp_browser {
+            browser.cancel_transfer();
+            cx.notify();
+        }
     }
 
     fn new_session(&mut self, cx: &mut Context<Self>) {
@@ -1032,6 +1186,11 @@ impl Render for Workspace {
             let status = browser.status.clone();
             let entries = browser.entries.clone();
             let loading = browser.loading;
+            let picker_open = browser.picker_open;
+            let transfer_running = browser.transfer_running();
+            let transfer_label = browser.transfer.as_ref()
+                .map(SftpTransferView::progress_label)
+                .unwrap_or_else(|| "No active transfer".to_owned());
             div()
                 .id("native-sftp-browser")
                 .w(px(315.0))
@@ -1047,6 +1206,22 @@ impl Render for Workspace {
                         .on_click(cx.listener(|view, _, _, cx| view.close_sftp_browser(cx)))))
                 .child(format!("Remote: {path}"))
                 .child(status)
+                .child("Click a folder to open it, or a file to download it.")
+                .child(div().id("sftp-upload-file")
+                    .cursor_pointer().p_2().rounded_md()
+                    .bg(rgb(0x29435d))
+                    .child(if loading || picker_open || transfer_running {
+                        "Upload unavailable"
+                    } else {
+                        "Upload file..."
+                    })
+                    .on_click(cx.listener(|view, _, _, cx| view.choose_sftp_upload(cx))))
+                .child(transfer_label)
+                .child(div().id("sftp-cancel-transfer")
+                    .cursor_pointer().p_2()
+                    .bg(rgb(if transfer_running { 0x693c3c } else { 0x141f2c }))
+                    .child(if transfer_running { "Cancel transfer" } else { "" })
+                    .on_click(cx.listener(|view, _, _, cx| view.cancel_sftp_transfer(cx))))
                 .child(div().flex().gap_2()
                     .child(div().id("sftp-up").cursor_pointer()
                         .p_2().bg(rgb(0x29435d)).child("Up")
@@ -1065,6 +1240,8 @@ impl Render for Workspace {
                     .children(entries.into_iter().enumerate().map(|(index, entry)| {
                         let directory = entry.directory;
                         let next = entry.path;
+                        let filename = entry.name.clone();
+                        let size = entry.size;
                         div()
                             .id(("sftp-remote-entry", index))
                             .cursor_pointer()
@@ -1074,7 +1251,11 @@ impl Render for Workspace {
                                 entry.name, if directory { "".to_owned() }
                                 else { format!(" ({} bytes)", entry.size) }))
                             .on_click(cx.listener(move |view, _, _, cx| {
-                                if directory { view.sftp_navigate(next.clone(), cx); }
+                                if directory {
+                                    view.sftp_navigate(next.clone(), cx);
+                                } else {
+                                    view.choose_sftp_download(next.clone(), filename.clone(), size, cx);
+                                }
                             }))
                     })))
         } else {
