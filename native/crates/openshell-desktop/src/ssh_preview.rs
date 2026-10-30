@@ -11,6 +11,7 @@ use std::{env, thread, path::PathBuf, sync::{Arc, atomic::{AtomicBool, Ordering}
 use openshell_core::{
     CredentialVault, HostIdentity, HostTrustStore, Session, SessionStore, SessionKeyStore,
     SshConnection, SshTerminalCommand, TerminalSize, NativeSftp, SftpEntry,
+    ssh::ZmodemTransferStatus,
     native_paths::native_database_path,
 };
 use tokio::sync::{mpsc, oneshot, watch};
@@ -29,6 +30,7 @@ pub struct SshPreview {
     pub commands: mpsc::Sender<SshTerminalCommand>,
     pub output: mpsc::Receiver<Vec<u8>>,
     pub status: mpsc::Receiver<PreviewStatus>,
+    pub zmodem: mpsc::Receiver<ZmodemTransferStatus>,
     pub cancel: watch::Sender<bool>,
 }
 
@@ -162,6 +164,7 @@ fn start_source(source: PreviewSource, size: TerminalSize) -> Result<SshPreview,
     let (commands, command_rx) = mpsc::channel(MAX_PENDING_PACKETS);
     let (output_tx, output) = mpsc::channel(MAX_PENDING_PACKETS);
     let (status_tx, status) = mpsc::channel(8);
+    let (zmodem_tx, zmodem) = mpsc::channel(32);
     let (cancel, mut cancel_rx) = watch::channel(false);
 
     thread::Builder::new()
@@ -214,7 +217,7 @@ fn start_source(source: PreviewSource, size: TerminalSize) -> Result<SshPreview,
 
                 let _ = status_tx.send(PreviewStatus::Connected).await;
                 let outcome = terminal
-                    .run_controlled(output_tx, command_rx)
+                    .run_controlled(output_tx, command_rx, zmodem_tx)
                     .await
                     .map_err(|err| err.to_string());
 
@@ -237,7 +240,7 @@ fn start_source(source: PreviewSource, size: TerminalSize) -> Result<SshPreview,
         })
         .map_err(|err| format!("failed to start SSH worker: {err}"))?;
 
-    Ok(SshPreview { commands, output, status, cancel })
+    Ok(SshPreview { commands, output, status, zmodem, cancel })
 }
 
 #[cfg(test)]
