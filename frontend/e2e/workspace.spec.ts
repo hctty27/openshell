@@ -200,6 +200,17 @@ test.beforeEach(async ({ page }) => {
     };
   });
 });
+test.afterEach(async ({ page }, info) => {
+  if (info.status === info.expectedStatus || page.isClosed()) return;
+  const detail = await page.evaluate(() => ({
+    browserFixture: !!(window as any).go?.main?.App,
+    dialogs: [...document.querySelectorAll("dialog")].map(el => ({ open: el.open, text: el.textContent?.trim().slice(0, 500) })),
+    tabs: [...document.querySelectorAll(".terminal-tab")].map(el => el.textContent?.trim()),
+    alerts: [...document.querySelectorAll('[role="alert"]')].map(el => el.textContent?.trim()),
+    content: document.body.innerText.slice(0, 800),
+  })).catch(error => ({ error: String(error) }));
+  console.log("E2E_MIGRATION_DIAGNOSTICS", JSON.stringify(detail));
+});
 test("session, custom API, terminal and explicitly confirmed AI command", async ({
   page,
 }) => {
