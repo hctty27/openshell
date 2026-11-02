@@ -75,7 +75,7 @@ test("shows a focused SSH workspace without AI controls", async () => {
     render(<App />);
   });
   expect(screen.getAllByText("会话管理")[0]).toBeTruthy();
-  expect(screen.queryByText("SSH 终端")).toBeNull();
+  expect(document.querySelector(".workspace-header")).toBeNull();
   expect(screen.queryByText("AI 助手")).toBeNull();
 });
 test("session sidebar can auto-hide, hover open and pin without remounting the tree", async () => {
