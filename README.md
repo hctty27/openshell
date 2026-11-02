@@ -145,14 +145,14 @@ OpenShell connects to configured SSH/SFTP servers when requested. Legacy AI conf
 
 ## Development
 
-**Stack:** Go · Wails v3.0.0 · React · TypeScript · xterm.js · SQLite.
+**Stack:** Go · Wails v3.1.0 · React · TypeScript · xterm.js · SQLite.
 
 Use a Windows development environment with Go 1.26+, a current Node.js 22 release compatible with the locked Vite version, npm, and WebView2. Dependency versions are recorded in [go.mod](go.mod) and [frontend/package-lock.json](frontend/package-lock.json).
 
 ```sh
 git clone https://github.com/hctty27/openshell.git
 cd openshell
-go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 cd frontend
 npm ci
 cd ..

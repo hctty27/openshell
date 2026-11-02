@@ -145,14 +145,14 @@ OpenShell 仅按用户操作连接到配置的 SSH/SFTP 服务器。旧版 AI �
 
 ## 本地开发
 
-**技术栈：** Go · Wails v3.0.0 · React · TypeScript · xterm.js · SQLite。
+**技术栈：** Go · Wails v3.1.0 · React · TypeScript · xterm.js · SQLite。
 
 请使用 Windows 开发环境，并准备 Go 1.26+、满足锁定 Vite 版本要求的较新 Node.js 22、npm 和 WebView2。依赖版本见 [go.mod](go.mod) 与 [frontend/package-lock.json](frontend/package-lock.json)。
 
 ```sh
 git clone https://github.com/hctty27/openshell.git
 cd openshell
-go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 cd frontend
 npm ci
 cd ..

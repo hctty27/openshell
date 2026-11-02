@@ -1,12 +1,12 @@
 module github.com/hctty27/openshell
 
-go 1.26.0
+go 1.26.10
 
 require (
 	github.com/UserExistsError/conpty v0.1.4
 	github.com/pkg/sftp v1.13.10
 	github.com/trzsz/trzsz-go v1.2.1-0.20261010161529-351cf747d8f9
-	github.com/wailsapp/wails/v3 v3.0.0
+	github.com/wailsapp/wails/v3 v3.1.0
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.58.0
 	modernc.org/sqlite v1.60.1
