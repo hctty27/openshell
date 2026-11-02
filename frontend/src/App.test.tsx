@@ -168,7 +168,7 @@ test("moves Settings to the top toolbar and product info to About", async () => 
   fireEvent.click(settingsButton);
   fireEvent.click(screen.getByRole("button", { name: "关于" }));
   expect(screen.getByText("OpenShell")).toBeTruthy();
-  expect(screen.getByText(/版本 v\\d+\\.\\d+\\.\\d+/)).toBeTruthy();
+  expect(screen.getByText(/版本 v\d+\.\d+\.\d+/)).toBeTruthy();
 });
 
 test("terminal mouse settings are opt-in and saved independently", async () => {
