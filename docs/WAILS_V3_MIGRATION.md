@@ -35,12 +35,14 @@ wails3 dev
 ## Production build
 
 ```powershell
-wails3 build
+wails3 generate bindings -names -ts
+wails3 generate syso -manifest build/windows/wails.exe.manifest -icon build/windows/icon.ico -info build/windows/info.json -arch amd64 -out rsrc_windows_amd64.syso
+go build -tags production -trimpath -ldflags="-s -w" -o build/bin/OpenShell.exe .
 ```
 
 The executable is built at `build/bin/OpenShell.exe`; existing release packaging retains this path.
 
-## Verification before merge
+## Verification checklist
 
 1. Run `go test ./...`, `go vet ./...` and `npm test -- --run`.
 2. Build on Windows amd64, verify icons and no extra console windows.
@@ -50,5 +52,4 @@ The executable is built at `build/bin/OpenShell.exe`; existing release packaging
 6. Test native dialogs, SFTP upload from drag/drop, rz/sz/trz/tsz transfer progress.
 7. Test light/dark themes and Chinese/English strings.
 
-This branch is a migration candidate, not a published release. The experimental
-WebView2 composition-hosting caption-button mode is deliberately disabled.
+Automated CI, Windows smoke and packaging were green before PR #94 was merged. Native Windows acceptance is still important for window snapping and SSH/SFTP transfers. The experimental WebView2 composition-hosting caption-button mode is deliberately disabled.
