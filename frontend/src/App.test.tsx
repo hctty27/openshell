@@ -84,9 +84,12 @@ test("session sidebar can auto-hide, hover open and pin without remounting the t
   const dock = document.querySelector(".session-sidebar-dock") as HTMLElement;
   const panel = screen.getByRole("complementary");
   expect(dock.classList.contains("session-sidebar-dock--auto")).toBe(false);
+  expect(document.querySelector(".window-titlebar-sidebar")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "自动隐藏会话栏" }));
   expect(dock.classList.contains("session-sidebar-dock--auto")).toBe(true);
-  expect(screen.getByRole("button", { name: "展开会话栏" })).toBeTruthy();
+  const rail = screen.getByRole("button", { name: "展开会话栏" });
+  expect(rail).toBeTruthy();
+  expect(rail.children).toHaveLength(0);
   await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("sessionSidebarMode", "auto-hide"));
   fireEvent.mouseLeave(dock);
   await waitFor(() => expect(panel.getAttribute("aria-hidden")).toBe("true"), { timeout: 1200 });
