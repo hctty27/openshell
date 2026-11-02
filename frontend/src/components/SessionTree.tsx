@@ -17,6 +17,8 @@ import {
   Trash2,
   Plug,
   ChevronDown,
+  Pin,
+  PinOff,
   Settings,
   Network,
   FileInput,
@@ -40,6 +42,9 @@ interface Props {
   onRenameGroup(g: Group): void;
   onDeleteGroup(g: Group): void;
   onSettings(): void;
+  pinned?: boolean;
+  hidden?: boolean;
+  onTogglePin?(): void;
 }
 export default function SessionTree(p: Props) {
   useTranslation();
@@ -286,7 +291,7 @@ export default function SessionTree(p: Props) {
     window.addEventListener("pointercancel", stop);
   };
   return (
-    <aside className="session-sidebar">
+    <aside id="session-sidebar-panel" className="session-sidebar" aria-hidden={p.hidden || undefined} inert={p.hidden}>
       <div className="brand">
         <img className="brand-icon" src="/app-icon.svg" alt="OpenShell" />
         <strong>
@@ -297,6 +302,17 @@ export default function SessionTree(p: Props) {
       <div className="sidebar-heading">
         <span>{t("common:sessions")}</span>
         <div>
+          {p.onTogglePin && (
+            <button
+              type="button"
+              title={t(p.pinned ? "sessions:autoHideSidebar" : "sessions:pinSidebar")}
+              aria-label={t(p.pinned ? "sessions:autoHideSidebar" : "sessions:pinSidebar")}
+              aria-pressed={p.pinned === true}
+              onClick={p.onTogglePin}
+            >
+              {p.pinned ? <Pin size={15} /> : <PinOff size={15} />}
+            </button>
+          )}
           <button title={t("sessions:importXshellTitle")} onClick={() => p.onImport?.()}>
             <FileInput size={16} />
           </button>

@@ -1,3 +1,64 @@
+.session-sidebar-dock {
+  position: relative;
+  display: flex;
+  flex: 0 0 var(--session-width);
+  min-width: 0;
+  height: 100%;
+  z-index: 10;
+}
+.session-sidebar-dock .session-sidebar {
+  width: 100%;
+  min-width: 0;
+}
+.session-sidebar-dock--auto {
+  flex: 0 0 30px;
+  width: 30px;
+  z-index: 12;
+}
+.session-sidebar-dock--auto .session-sidebar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(var(--session-width), calc(100vw - 40px));
+  transform: translateX(calc(-100% - 2px));
+  visibility: hidden;
+  pointer-events: none;
+  box-shadow: 5px 0 18px #0003;
+  transition: transform 180ms ease, visibility 0s linear 180ms;
+}
+.session-sidebar-dock--auto.is-open .session-sidebar {
+  transform: translateX(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition: transform 180ms ease;
+}
+.session-sidebar-rail {
+  display: flex;
+  width: 30px;
+  height: 100%;
+  padding: 11px 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+}
+.session-sidebar-rail > span {
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
+  font-size: 11px;
+}
+.session-sidebar-rail:hover,
+.session-sidebar-rail:focus-visible {
+  color: var(--text);
+  background: var(--raised);
+}
+@media (prefers-reduced-motion: reduce) {
+  .session-sidebar-dock--auto .session-sidebar {
+    transition: none;
+  }
+}
 .session-sidebar {
   width: var(--session-width);
   flex-shrink: 0;
