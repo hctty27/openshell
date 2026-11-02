@@ -10,7 +10,6 @@ import {
   Plus,
   X,
   PanelRightOpen,
-  PanelLeftOpen,
   RefreshCw,
   Unplug,
   ArrowRight,
@@ -150,7 +149,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const { tabs, setTabs, tabsRef, activeID, setActiveID, activeIDRef, update } = useWorkspaceTabs();
   const { hasActiveTransfers } = useTransferActivity();
   const [state, setState] = useState(initialState),
-    [showSessions, setShowSessions] = useState(true),
     [sidebarMode, setSidebarMode] = useState<"pinned" | "auto-hide">(
       initialState.sessionSidebarMode === "auto-hide" ? "auto-hide" : "pinned",
     ),
@@ -851,14 +849,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
         } as React.CSSProperties
       }
     >
-      <WindowTitleBar tabs={tabs} showSessions={showSessions}
-        onToggleSessions={() => setShowSessions(current => !current)}
+      <WindowTitleBar tabs={tabs}
         onSettings={() => setDialog({ kind: "settings" })}
         onNotice={notify} />
       <div className="app-body">
-      {showSessions && (
-        <>
-          <div
+      <div
             ref={sidebarDockRef}
             className={`session-sidebar-dock ${sidebarMode === "auto-hide" ? "session-sidebar-dock--auto" : ""} ${autoSidebarOpen ? "is-open" : ""}`}
             onMouseEnter={() => {
@@ -902,6 +897,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 type="button"
                 className="session-sidebar-rail"
                 aria-label={tr("sessions:showAutoHiddenSidebar")}
+                title={tr("sessions:showAutoHiddenSidebar")}
                 aria-controls="session-sidebar-panel"
                 aria-expanded={autoSidebarOpen}
                 onClick={() => {
@@ -909,10 +905,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   clearSidebarTimer(sidebarCloseTimer);
                   setAutoSidebarOpen(true);
                 }}
-              >
-                <PanelLeftOpen size={15} aria-hidden="true" />
-                <span>{tr("common:sessions")}</span>
-              </button>
+              />
             )}
           <SessionTree
             pinned={sidebarMode === "pinned"}
@@ -938,8 +931,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
           {sidebarMode === "pinned" && (
             <div className="splitter" onPointerDown={drag} />
           )}
-        </>
-      )}
       <main className="workspace" onPointerDownCapture={() => {
         if (sidebarMode === "auto-hide" && autoSidebarOpen) {
           clearSidebarTimer(sidebarCloseTimer);
