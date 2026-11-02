@@ -145,27 +145,29 @@ OpenShell connects to configured SSH/SFTP servers when requested. Legacy AI conf
 
 ## Development
 
-**Stack:** Go · Wails v2 · React · TypeScript · xterm.js · SQLite.
+**Stack:** Go · Wails v3.0.0 · React · TypeScript · xterm.js · SQLite.
 
 Use a Windows development environment with Go 1.26+, a current Node.js 22 release compatible with the locked Vite version, npm, and WebView2. Dependency versions are recorded in [go.mod](go.mod) and [frontend/package-lock.json](frontend/package-lock.json).
 
 ```sh
 git clone https://github.com/hctty27/openshell.git
 cd openshell
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
 cd frontend
 npm ci
 cd ..
-wails dev
+wails3 dev
 ```
 
 Build the Windows x64 executable:
 
 ```sh
-wails build -platform windows/amd64 -clean
+wails3 generate bindings -names -ts
+wails3 generate syso -manifest build/windows/wails.exe.manifest -icon build/windows/icon.ico -info build/windows/info.json -arch amd64 -out rsrc_windows_amd64.syso
+go build -tags production -trimpath -ldflags="-s -w" -o build/bin/OpenShell.exe .
 ```
 
-Output: `build/bin/OpenShell.exe`. A plain Wails build does not package the ZMODEM helpers. For the bundled utilities, run [scripts/prepare_zmodem_windows.ps1](scripts/prepare_zmodem_windows.ps1) in PowerShell after building. The [Windows release workflow](.github/workflows/windows-release.yml) contains the full icon-generation, installer, and portable-package steps.
+Output: `build/bin/OpenShell.exe`. Ensure `build/windows/icon.ico` has been generated before building. This build does not package the ZMODEM helpers. For the bundled utilities, run [scripts/prepare_zmodem_windows.ps1](scripts/prepare_zmodem_windows.ps1) in PowerShell after building. The [Windows release workflow](.github/workflows/windows-release.yml) contains the full icon-generation, installer, and portable-package steps.
 
 <details>
 <summary>Validation and release workflow</summary>
@@ -188,7 +190,7 @@ Backend tests use controlled SSH servers and mock APIs. Browser tests use a mock
 - [Windows terminal smoke](.github/workflows/windows-terminal-smoke.yml) covers relevant terminal, SSH, SFTP, and ConPTY pull requests.
 - [Windows release](.github/workflows/windows-release.yml) publishes only after the release marker changes on `main` and CI passes. It retains three Releases, keeps older Git tags, and retains final build artifacts for seven days. Manual runs create artifacts without publishing a Release.
 
-For a release, update `.github/release-version.txt`, `frontend/package.json`, `frontend/package-lock.json`, the fallback version in `frontend/src/App.tsx`, `wails.json`, and `CHANGELOG.md` together. Push to `main`; the workflow creates the tag after successful validation and packaging.
+For a release, update `.github/release-version.txt`, `frontend/package.json`, `frontend/package-lock.json`, and `CHANGELOG.md` together. Push to `main`; the workflow creates the tag after successful validation and packaging.
 
 </details>
 
