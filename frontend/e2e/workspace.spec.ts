@@ -218,7 +218,7 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   await page.getByText("测试服务器", { exact: true }).dblclick();
   await expect(page.getByText("确认服务器指纹", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "信任并连接" }).click();
-  await expect(page.getByText("SSH 已连接", { exact: false })).toBeVisible();
+  await expect(page.locator(".terminal-tab.active .connection-state-connected")).toHaveAttribute("aria-label", "SSH 已连接");
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "AI 配置", exact: true }).click();
   await page.getByLabel("配置名称", { exact: true }).fill("测试 API");
@@ -589,7 +589,7 @@ test("terminal backdrop fills its pane across mixed application and terminal pal
     .toEqual(Array(4).fill("rgb(248, 250, 252)"));
 });
 
-test("compact sidebar removes detail actions and aligns single-row footer heights", async ({
+test("compact workspace removes redundant chrome while keeping quick commands", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1200, height: 700 });
@@ -650,47 +650,39 @@ test("compact sidebar removes detail actions and aligns single-row footer height
 
   await page.getByRole("button", { name: "选中会话 紧凑测试" }).dblclick();
   await page.getByRole("button", { name: "信任并连接" }).click();
-  await expect(page.getByText("SSH 已连接", { exact: false })).toBeVisible();
+  await expect(page.locator(".terminal-tab.active .connection-state-connected")).toHaveAttribute("aria-label", "SSH 已连接");
+
+  await expect(page.locator(".brand, .sidebar-footer, .workspace-status")).toHaveCount(0);
+  const settingsButton = page.getByTitle("设置", { exact: true });
+  await expect(settingsButton).toBeVisible();
+  await expect(settingsButton.locator("xpath=..")).toHaveClass(/header-right/);
 
   const geometry = await page.evaluate(() => {
-    const box = (selector: string) =>
-      document.querySelector(selector)!.getBoundingClientRect();
+    const height = (selector: string) =>
+      document.querySelector(selector)!.getBoundingClientRect().height;
     return {
-      header: box(".workspace-header").height,
-      tabs: box(".tab-strip").height,
-      server: box(".terminal-toolbar").height,
-      detailsHeading: box(".details-heading").height,
-      left: box(".sidebar-footer").height,
-      right: box(".workspace-status").height,
-      quick: box(".quick-command-bar").height,
-      quickButton: box(".quick-command-manage").height,
-      root: box(".tree-root").height,
-      group: box(".group-heading").height,
-      session: box(".session-row").height,
-      detail: box(".details-properties > div").height,
-      leftBottom: box(".sidebar-footer").bottom,
-      rightBottom: box(".workspace-status").bottom,
-      statusLeft: box(".workspace-version").x,
-      statusRight: box(".workspace-connection").x,
-      statusRightEdge: box(".workspace-connection").right,
-      footerRightEdge: box(".workspace-status").right,
+      header: height(".workspace-header"),
+      tabs: height(".tab-strip"),
+      server: height(".terminal-toolbar"),
+      detailsHeading: height(".details-heading"),
+      quick: height(".quick-command-bar"),
+      quickButton: height(".quick-command-manage"),
+      root: height(".tree-root"),
+      group: height(".group-heading"),
+      session: height(".session-row"),
+      detail: height(".details-properties > div"),
     };
   });
   expect(geometry.header).toBe(30);
   expect(geometry.tabs).toBe(30);
   expect(geometry.server).toBe(30);
   expect(geometry.detailsHeading).toBe(30);
-  expect(geometry.left).toBe(30);
-  expect(geometry.right).toBe(30);
   expect(geometry.quick).toBe(30);
   expect(geometry.quickButton).toBe(24);
   expect(geometry.root).toBe(26);
   expect(geometry.group).toBe(26);
   expect(geometry.session).toBe(26);
   expect(geometry.detail).toBe(21);
-  expect(Math.abs(geometry.leftBottom - geometry.rightBottom)).toBeLessThan(1);
-  expect(geometry.statusRight).toBeGreaterThan(geometry.statusLeft);
-  expect(geometry.footerRightEdge - geometry.statusRightEdge).toBeLessThan(20);
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "终端", exact: true }).click();
@@ -719,7 +711,7 @@ test("bilingual switching preserves SSH terminal and survives reload", async ({
   await page.getByRole("button", { name: "Save session", exact: true }).click();
   await page.getByText("My Server 原名", { exact: true }).first().dblclick();
   await page.getByRole("button", { name: "Trust and connect" }).click();
-  await expect(page.getByText("SSH connected", { exact: false })).toBeVisible();
+  await expect(page.locator(".terminal-tab.active .connection-state-connected")).toHaveAttribute("aria-label", "SSH connected");
   await expect(page.locator(".xterm")).toHaveCount(1);
   await page
     .locator(".xterm")

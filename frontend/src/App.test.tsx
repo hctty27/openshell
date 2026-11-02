@@ -125,7 +125,7 @@ test("theme previews immediately and is saved in general settings", async () => 
   fireEvent.click(screen.getByRole("button", { name: "深色" }));
   expect(document.documentElement.dataset.theme).toBe("dark");
 });
-test("settings navigation contains only general, terminal and connection options", async () => {
+test("settings navigation includes an About section", async () => {
   await act(async () => {
     render(<App />);
   });
@@ -133,6 +133,7 @@ test("settings navigation contains only general, terminal and connection options
   expect(screen.getByRole("navigation", { name: "设置分类" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "通用" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "终端" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "关于" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "AI 配置" })).toBeNull();
   expect(screen.queryByRole("button", { name: "自动执行" })).toBeNull();
   expect(screen.queryByText("OpenShell · 中文终端预览")).toBeNull();
@@ -155,27 +156,19 @@ test("opens session editor without connecting and rejects missing host", async (
   fireEvent.click(screen.getByRole("button", { name: "保存会话" }));
   expect(screen.getByText("请填写主机地址和用户名")).toBeTruthy();
 });
-test("shows the OpenShell product name", async () => {
+test("moves Settings to the top toolbar and product info to About", async () => {
   await act(async () => {
     render(<App />);
   });
-  expect(screen.getAllByText("OpenShell").length).toBeGreaterThan(0);
-  expect(screen.queryByText("轻量 SSH")).toBeNull();
-});
-
-test("renders application version on the left and SSH connection status on the right", async () => {
-  await act(async () => {
-    render(<App />);
-  });
-  const footer = document.querySelector(".workspace-status");
-  expect(
-    footer?.firstElementChild?.classList.contains("workspace-version"),
-  ).toBe(true);
-  expect(
-    footer?.lastElementChild?.classList.contains("workspace-connection"),
-  ).toBe(true);
-  expect(footer?.textContent).toMatch(/OpenShell\s+v\d+\.\d+\.\d+/);
-  expect(footer?.textContent).toContain("未连接");
+  expect(document.querySelector(".brand")).toBeNull();
+  expect(document.querySelector(".sidebar-footer")).toBeNull();
+  expect(document.querySelector(".workspace-status")).toBeNull();
+  const settingsButton = screen.getByRole("button", { name: "设置" });
+  expect(settingsButton.closest(".workspace-header")).toBeTruthy();
+  fireEvent.click(settingsButton);
+  fireEvent.click(screen.getByRole("button", { name: "关于" }));
+  expect(screen.getByText("OpenShell")).toBeTruthy();
+  expect(screen.getByText(/版本 v\d+\.\d+\.\d+/)).toBeTruthy();
 });
 
 test("terminal mouse settings are opt-in and saved independently", async () => {

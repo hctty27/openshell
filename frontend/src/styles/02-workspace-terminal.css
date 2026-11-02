@@ -37,10 +37,14 @@
   align-items: center;
   gap: 12px;
 }
-.local-badge {
-  font: 9px monospace;
+.workspace-settings-button {
+  width: 26px;
+  height: 26px;
+  padding: 4px;
   color: var(--text-muted);
-  letter-spacing: 1px;
+}
+.workspace-settings-button:hover {
+  color: var(--text-primary);
 }
 .tab-strip {
   height: var(--chrome-bar-height);
@@ -267,32 +271,6 @@
   bottom: 10px;
   color: var(--text-muted);
   font-size: 9px;
-}
-.workspace-status {
-  height: var(--chrome-bar-height);
-  border-top: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 13px;
-  font-size: 9px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-.workspace-status > span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  white-space: nowrap;
-}
-.workspace-status .workspace-connection {
-  margin-left: auto;
-}
-.status-sep {
-  height: 9px;
-  width: 1px;
-  background: var(--border);
-  margin: 0 3px;
 }
 .terminal-toolbar {
   height: var(--chrome-bar-height);

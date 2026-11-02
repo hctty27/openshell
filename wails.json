@@ -12,7 +12,7 @@
   "info": {
     "companyName": "Cheng",
     "productName": "OpenShell",
-    "productVersion": "0.1.72",
+    "productVersion": "0.1.73",
     "copyright": "Copyright 2026 Cheng",
     "comments": "OpenShell — lightweight Windows SSH/SFTP client"
   }

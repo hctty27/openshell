@@ -61,7 +61,6 @@ const renderTree = () => {
       onCreateInGroup={onCreateInGroup}
       onRenameGroup={onRenameGroup}
       onDeleteGroup={onDeleteGroup}
-      onSettings={vi.fn()}
     />
   );
   const { rerender } = render(tree(sessions));
@@ -84,6 +83,8 @@ afterEach(cleanup);
 test("shows a collapsible session tree with root and groups", () => {
   renderTree();
   expect(screen.getByRole("button", { name: "所有会话" })).toBeTruthy();
+  expect(document.querySelector(".brand")).toBeNull();
+  expect(document.querySelector(".sidebar-footer")).toBeNull();
   expect(
     screen.getByRole("button", { name: "选中分组 默认分组" }),
   ).toBeTruthy();
