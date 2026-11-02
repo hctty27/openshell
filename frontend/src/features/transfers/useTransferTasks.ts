@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { api, desktop, listen } from "../../bridge";
 import type { Ref, SFTPTask } from "../../types";
+import { mergeTransferHistory, sameTransferRef } from "./transferHistory";
 
 interface ZmodemStats { transferred: string; speed: string }
 
-const sameRef = (a: Ref | undefined, b: Ref | undefined) =>
-  Boolean(a && b && a.tabId === b.tabId && a.sessionId === b.sessionId && a.generation === b.generation);
+const sameRef = sameTransferRef;
 
 // Owns transfer event subscriptions, hydration and lifecycle state independently
 // of the sidebar's rendering and button interactions.
@@ -32,15 +32,13 @@ export function useTransferTasks(refID?: Ref) {
       void api.SFTPTransfers(refID).then(list => {
         if (disposed) return;
         setTasks(current => {
-          const byID = new Map((list ?? []).map(task => [task.id, task]));
-          for (const task of current) byID.set(task.id, task);
-          return [...byID.values()].sort((a, b) => a.created - b.created);
+          return mergeTransferHistory((list ?? []).filter(task => sameRef(task.ref, refID)), current);
         });
       }).catch(() => {});
     }
     const offTasks = listen("sftp:transfer", (task: SFTPTask) => {
       if (!sameRef(task.ref, refID)) return;
-      setTasks(old => [...old.filter(item => item.id !== task.id), task].sort((a, b) => a.created - b.created));
+      setTasks(old => mergeTransferHistory(old, [task]));
       if (task.status === "running" || task.status === "failed") setExpanded(true);
     });
     const offDetails = listen("ssh:transfer-details", (payload: { ref: Ref }) => {
