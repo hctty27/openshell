@@ -73,6 +73,8 @@ type AppState struct {
 	PreserveTerminalHistory bool `json:"preserveTerminalHistory"`
 	ConfirmActiveDisconnect bool              `json:"confirmActiveDisconnect"`
 	SplitRatio             int                 `json:"splitRatio"`
+	SessionSidebarMode     string              `json:"sessionSidebarMode"`
+	SessionSidebarWidth    int                 `json:"sessionSidebarWidth"`
 	FontSize              string              `json:"fontSize"`
 	Theme                 string              `json:"theme"`
 	TerminalTheme         string              `json:"terminalTheme"`
@@ -257,6 +259,13 @@ func (a *App) State() (AppState, error) {
 	if e != nil { return AppState{}, e }
 	confirmDisconnect, e := a.store.GetPreference(a.ctx, "confirmActiveDisconnect")
 	if e != nil { return AppState{}, e }
+	mode, e := a.store.GetPreference(a.ctx, "sessionSidebarMode")
+	if e != nil { return AppState{}, e }
+	if mode != "auto-hide" { mode = "pinned" }
+	widthRaw, e := a.store.GetPreference(a.ctx, "sessionSidebarWidth")
+	if e != nil { return AppState{}, e }
+	width, err := strconv.Atoi(widthRaw)
+	if err != nil || width < 190 || width > 360 { width = 235 }
 	return AppState{
 		KeepAliveSeconds: keepAliveSeconds,
 		AutoReconnect: autoReconnect != "false",
@@ -273,6 +282,7 @@ func (a *App) State() (AppState, error) {
 		AutoCopySelection: autoCopySelection == "true", RightClickPaste: rightClickPaste == "true",
 		ConfirmMultilinePaste: confirmMultilinePaste != "false",
 		LogHighlights: logHighlights == "true", SplitRatio: splitRatio,
+		SessionSidebarMode: mode, SessionSidebarWidth: width,
 		Version:               branding.Version,
 	}, nil
 }
@@ -434,6 +444,11 @@ func (a *App) SavePreference(key, value string) error {
 	case "splitRatio":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 20 || n > 80 { return apperror.New("unsupportedPreference", nil) }
+	case "sessionSidebarMode":
+		if value != "pinned" && value != "auto-hide" { return apperror.New("unsupportedPreference", nil) }
+	case "sessionSidebarWidth":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 190 || n > 360 { return apperror.New("unsupportedPreference", nil) }
 	case "quickCommands":
 		if err := validateQuickCommands(value); err != nil {
 			return err

@@ -48,6 +48,41 @@ func TestThemePreferencePersistsAcrossRestart(t *testing.T) {
 	}
 }
 
+
+func TestSessionSidebarPreferences(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	a, err := newApp(path, &vault{m: map[string]string{}}, nil)
+	if err != nil { t.Fatal(err) }
+	state, err := a.State()
+	if err != nil { t.Fatal(err) }
+	if state.SessionSidebarMode != "pinned" || state.SessionSidebarWidth != 235 {
+		t.Fatalf("unexpected defaults: %s / %d", state.SessionSidebarMode, state.SessionSidebarWidth)
+	}
+	for _, test := range []struct{ key, value string }{
+		{"sessionSidebarMode", "auto-hide"},
+		{"sessionSidebarWidth", "318"},
+	} {
+		if err := a.SavePreference(test.key, test.value); err != nil { t.Fatalf("%s: %v", test.key, err) }
+	}
+	for _, test := range []struct{ key, value string }{
+		{"sessionSidebarMode", "floating"},
+		{"sessionSidebarWidth", "189"},
+		{"sessionSidebarWidth", "361"},
+		{"sessionSidebarWidth", "nope"},
+	} {
+		if err := a.SavePreference(test.key, test.value); err == nil { t.Fatalf("accepted %s=%s", test.key, test.value) }
+	}
+	a.shutdown(context.Background())
+	b, err := newApp(path, &vault{m: map[string]string{}}, nil)
+	if err != nil { t.Fatal(err) }
+	defer b.shutdown(context.Background())
+	state, err = b.State()
+	if err != nil { t.Fatal(err) }
+	if state.SessionSidebarMode != "auto-hide" || state.SessionSidebarWidth != 318 {
+		t.Fatalf("preferences not restored: %s / %d", state.SessionSidebarMode, state.SessionSidebarWidth)
+	}
+}
+
 type vault struct {
 	m          map[string]string
 	failDelete bool

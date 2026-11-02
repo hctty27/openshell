@@ -47,5 +47,8 @@
   "sessionBackupDescription": "导出或恢复 SSH 连接配置及文件夹（不包含密码、私钥文件或 AI API 密钥）。",
   "exportSessionBackup": "导出备份",
   "restoreSessionBackup": "恢复备份",
-  "backupSaved": "OpenShell 会话备份已保存"
+  "backupSaved": "OpenShell 会话备份已保存",
+  "autoHideSidebar": "自动隐藏会话栏",
+  "pinSidebar": "固定会话栏",
+  "showAutoHiddenSidebar": "展开会话栏"
 }

@@ -47,5 +47,8 @@
   "sessionBackupDescription": "Export or restore SSH connection settings and folders (excluding passwords, private key files, and AI API keys).",
   "exportSessionBackup": "Export backup",
   "restoreSessionBackup": "Restore backup",
-  "backupSaved": "OpenShell session backup saved"
+  "backupSaved": "OpenShell session backup saved",
+  "autoHideSidebar": "Auto-hide session manager",
+  "pinSidebar": "Pin session manager",
+  "showAutoHiddenSidebar": "Show session manager"
 }

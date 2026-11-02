@@ -78,6 +78,39 @@ test("shows a focused SSH workspace without AI controls", async () => {
   expect(screen.getAllByText("SSH 终端")[0]).toBeTruthy();
   expect(screen.queryByText("AI 助手")).toBeNull();
 });
+test("session sidebar can auto-hide, hover open and pin without remounting the tree", async () => {
+  vi.mocked(api.SavePreference).mockClear();
+  await act(async () => { render(<App />); });
+  const dock = document.querySelector(".session-sidebar-dock") as HTMLElement;
+  const panel = screen.getByRole("complementary");
+  expect(dock.classList.contains("session-sidebar-dock--auto")).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "自动隐藏会话栏" }));
+  expect(dock.classList.contains("session-sidebar-dock--auto")).toBe(true);
+  expect(screen.getByRole("button", { name: "展开会话栏" })).toBeTruthy();
+  await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("sessionSidebarMode", "auto-hide"));
+  fireEvent.mouseLeave(dock);
+  await waitFor(() => expect(panel.getAttribute("aria-hidden")).toBe("true"), { timeout: 1200 });
+  fireEvent.mouseEnter(dock);
+  await waitFor(() => expect(panel.getAttribute("aria-hidden")).toBeNull(), { timeout: 1200 });
+  expect(document.getElementById("session-sidebar-panel")).toBe(panel);
+  fireEvent.click(screen.getByRole("button", { name: "固定会话栏" }));
+  expect(dock.classList.contains("session-sidebar-dock--auto")).toBe(false);
+  expect(document.getElementById("session-sidebar-panel")).toBe(panel);
+  await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("sessionSidebarMode", "pinned"));
+});
+
+test("restores the saved auto-hide sidebar mode and width", async () => {
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [], groups: [], fontSize: "14", version: "test",
+    language: "zh-CN", sessionSidebarMode: "auto-hide", sessionSidebarWidth: 314,
+  });
+  await act(async () => { render(<App />); });
+  const dock = document.querySelector(".session-sidebar-dock") as HTMLElement;
+  expect(dock.classList.contains("session-sidebar-dock--auto")).toBe(true);
+  expect((dock.closest(".app") as HTMLElement).style.getPropertyValue("--session-width")).toBe("314px");
+  expect(screen.getByRole("button", { name: "展开会话栏" }).getAttribute("aria-expanded")).toBe("false");
+});
+
 test("theme previews immediately and is saved in general settings", async () => {
   await act(async () => {
     render(<App />);

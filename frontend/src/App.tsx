@@ -155,6 +155,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const { hasActiveTransfers } = useTransferActivity();
   const [state, setState] = useState(initialState),
     [showSessions, setShowSessions] = useState(true),
+    [sidebarMode, setSidebarMode] = useState<"pinned" | "auto-hide">(
+      initialState.sessionSidebarMode === "auto-hide" ? "auto-hide" : "pinned",
+    ),
+    [autoSidebarOpen, setAutoSidebarOpen] = useState(false),
     [showSessionPicker, setShowSessionPicker] = useState(false),
     [xshellPreview, setXshellPreview] = useState<XshellImportPreview | null>(null),
     [fontSize, setFontSize] = useState(
@@ -189,7 +193,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
     } | null>(null),
     [toast, setToast] = useState<unknown>(""),
     [notice, setNotice] = useState<DisplayText>(""),
-    [sessionWidth, setSessionWidth] = useState(235),
+    [sessionWidth, setSessionWidth] = useState(
+      Math.max(190, Math.min(360, initialState.sessionSidebarWidth ?? 235)),
+    ),
     [challenge, setChallenge] = useState<{
       host: HostChallenge;
       tab: Tab;
@@ -197,6 +203,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
     } | null>(null),
     [login, setLogin] = useState<{ tab: Tab; secret: string } | null>(null);
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
+  const sidebarDockRef = useRef<HTMLDivElement>(null);
+  const sidebarHovered = useRef(false);
+  const sidebarOpenTimer = useRef<number | null>(null);
+  const sidebarCloseTimer = useRef<number | null>(null);
   const remoteUploadDirs = useRef<Record<string, string>>({});
   const disconnectInFlight = useRef(new Set<string>());
   const [disconnectingTabs, setDisconnectingTabs] = useState<string[]>([]);
@@ -773,19 +783,69 @@ function Workspace({ initialState }: { initialState: AppState }) {
       notify(e);
     }
   };
+  const clearSidebarTimer = (timer: React.MutableRefObject<number | null>) => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
+  };
+  const scheduleSidebarClose = () => {
+    clearSidebarTimer(sidebarOpenTimer);
+    clearSidebarTimer(sidebarCloseTimer);
+    if (sidebarMode !== "auto-hide") return;
+    sidebarCloseTimer.current = window.setTimeout(() => {
+      sidebarCloseTimer.current = null;
+      if (sidebarHovered.current) return;
+      const focused = document.activeElement;
+      const editing = focused instanceof HTMLElement &&
+        focused.matches("input, textarea, select") &&
+        sidebarDockRef.current?.contains(focused);
+      if (editing || document.querySelector(".session-context-menu") ||
+          document.querySelector('[role="dialog"]')) {
+        scheduleSidebarClose();
+        return;
+      }
+      setAutoSidebarOpen(false);
+    }, 300);
+  };
+  const toggleSidebarMode = () => {
+    const previous = sidebarMode;
+    const next = previous === "pinned" ? "auto-hide" : "pinned";
+    clearSidebarTimer(sidebarOpenTimer);
+    clearSidebarTimer(sidebarCloseTimer);
+    if (next === "auto-hide") setAutoSidebarOpen(true);
+    setSidebarMode(next);
+    void api.SavePreference("sessionSidebarMode", next).catch(error => {
+      setSidebarMode(current => current === next ? previous : current);
+      notify(error);
+    });
+  };
+  useEffect(() => {
+    if (sidebarMode === "pinned") setAutoSidebarOpen(false);
+  }, [sidebarMode]);
+  useEffect(() => () => {
+    if (sidebarOpenTimer.current !== null) window.clearTimeout(sidebarOpenTimer.current);
+    if (sidebarCloseTimer.current !== null) window.clearTimeout(sidebarCloseTimer.current);
+  }, []);
   const drag = (event: React.PointerEvent) => {
-    const start = event.clientX,
-      width = sessionWidth;
+    if (sidebarMode !== "pinned") return;
+    const start = event.clientX;
+    const width = sessionWidth;
+    let current = width;
     event.currentTarget.setPointerCapture(event.pointerId);
     const move = (e: PointerEvent) => {
-      setSessionWidth(Math.max(190, Math.min(360, width + e.clientX - start)));
+      current = Math.max(190, Math.min(360, width + e.clientX - start));
+      setSessionWidth(current);
     };
     const end = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      if (current !== width) {
+        void api.SavePreference("sessionSidebarWidth", String(current)).catch(notify);
+      }
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
   };
   return (
     <div
@@ -798,7 +858,66 @@ function Workspace({ initialState }: { initialState: AppState }) {
     >
       {showSessions && (
         <>
+          <div
+            ref={sidebarDockRef}
+            className={`session-sidebar-dock ${sidebarMode === "auto-hide" ? "session-sidebar-dock--auto" : ""} ${autoSidebarOpen ? "is-open" : ""}`}
+            onMouseEnter={() => {
+              sidebarHovered.current = true;
+              clearSidebarTimer(sidebarCloseTimer);
+              if (sidebarMode === "auto-hide") {
+                clearSidebarTimer(sidebarOpenTimer);
+                sidebarOpenTimer.current = window.setTimeout(() => {
+                  sidebarOpenTimer.current = null;
+                  setAutoSidebarOpen(true);
+                }, 150);
+              }
+            }}
+            onMouseLeave={() => {
+              sidebarHovered.current = false;
+              scheduleSidebarClose();
+            }}
+            onFocusCapture={() => {
+              if (sidebarMode === "auto-hide") {
+                clearSidebarTimer(sidebarOpenTimer);
+                clearSidebarTimer(sidebarCloseTimer);
+                setAutoSidebarOpen(true);
+              }
+            }}
+            onBlurCapture={event => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                scheduleSidebarClose();
+              }
+            }}
+            onKeyDown={event => {
+              if (event.key === "Escape" && sidebarMode === "auto-hide") {
+                clearSidebarTimer(sidebarOpenTimer);
+                clearSidebarTimer(sidebarCloseTimer);
+                setAutoSidebarOpen(false);
+                (document.activeElement as HTMLElement | null)?.blur();
+              }
+            }}
+          >
+            {sidebarMode === "auto-hide" && (
+              <button
+                type="button"
+                className="session-sidebar-rail"
+                aria-label={tr("sessions:showAutoHiddenSidebar")}
+                aria-controls="session-sidebar-panel"
+                aria-expanded={autoSidebarOpen}
+                onClick={() => {
+                  clearSidebarTimer(sidebarOpenTimer);
+                  clearSidebarTimer(sidebarCloseTimer);
+                  setAutoSidebarOpen(true);
+                }}
+              >
+                <PanelLeftOpen size={15} aria-hidden="true" />
+                <span>{tr("common:sessions")}</span>
+              </button>
+            )}
           <SessionTree
+            pinned={sidebarMode === "pinned"}
+            hidden={sidebarMode === "auto-hide" && !autoSidebarOpen}
+            onTogglePin={toggleSidebarMode}
             sessions={state.sessions}
             groups={state.groups}
             active={active?.session.id ?? ""}
@@ -816,13 +935,18 @@ function Workspace({ initialState }: { initialState: AppState }) {
             onDeleteGroup={deleteGroup}
             onSettings={() => setDialog({ kind: "settings" })}
           />
-          <div
-            className="splitter"
-            onPointerDown={drag}
-          />
+          </div>
+          {sidebarMode === "pinned" && (
+            <div className="splitter" onPointerDown={drag} />
+          )}
         </>
       )}
-      <main className="workspace">
+      <main className="workspace" onPointerDownCapture={() => {
+        if (sidebarMode === "auto-hide" && autoSidebarOpen) {
+          clearSidebarTimer(sidebarCloseTimer);
+          setAutoSidebarOpen(false);
+        }
+      }}>
         <header className="workspace-header">
           <button
             title={
