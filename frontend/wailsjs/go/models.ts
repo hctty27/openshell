@@ -110,6 +110,8 @@ export namespace main {
 
 	    quickCommands: QuickCommand[];
 	    quickCommandLayout: string;
+	    sessionSidebarMode: string;
+	    sessionSidebarWidth: number;
 	    autoCopySelection: boolean;
 	    rightClickPaste: boolean;
 	    confirmMultilinePaste: boolean;
@@ -131,6 +133,8 @@ export namespace main {
 
 	        this.quickCommands = this.convertValues(source["quickCommands"], QuickCommand);
 	        this.quickCommandLayout = source["quickCommandLayout"];
+	        this.sessionSidebarMode = source["sessionSidebarMode"];
+	        this.sessionSidebarWidth = source["sessionSidebarWidth"];
 	        this.autoCopySelection = source["autoCopySelection"];
 	        this.rightClickPaste = source["rightClickPaste"];
 	        this.confirmMultilinePaste = source["confirmMultilinePaste"];

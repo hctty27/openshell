@@ -79,6 +79,8 @@ export interface AppState {
   confirmMultilinePaste?: boolean;
   logHighlights?: boolean;
   splitRatio?: number;
+  sessionSidebarMode?: "pinned" | "auto-hide";
+  sessionSidebarWidth?: number;
   keepAliveSeconds?: number;
   autoReconnect?: boolean;
   maxReconnectAttempts?: number;
