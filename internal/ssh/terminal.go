@@ -168,7 +168,7 @@ type zmodemDirectionWriter struct {
 	dst         io.Writer
 	tail        []byte
 	onDirection func(string) bool
-	onTrzsz     func(string)
+	onTrzsz     func(string, bool) bool
 }
 
 var zmodemDirectionPattern = regexp.MustCompile(`\*\*\x18B0([01])[0-9a-f]{12}`)
@@ -179,10 +179,13 @@ func (w *zmodemDirectionWriter) Write(p []byte) (int, error) {
 	oldLen := len(w.tail)
 	data := append(append([]byte(nil), w.tail...), p...)
 	var directions []string
-	var trzszDirections []string
+	var trzszDirections []struct { direction string; directory bool }
 	for _, loc := range trzszDirectionPattern.FindAllSubmatchIndex(data, -1) {
 		if loc[1] <= oldLen { continue }
-		if data[loc[2]] == 'S' { trzszDirections = append(trzszDirections, "download") } else { trzszDirections = append(trzszDirections, "upload") }
+		mode := data[loc[2]]
+		direction := "upload"
+		if mode == 'S' { direction = "download" }
+		trzszDirections = append(trzszDirections, struct { direction string; directory bool }{direction, mode == 'D' || mode == 'F'})
 	}
 	for _, loc := range zmodemDirectionPattern.FindAllSubmatchIndex(data, -1) {
 		if loc[1] <= oldLen {
@@ -200,8 +203,10 @@ func (w *zmodemDirectionWriter) Write(p []byte) (int, error) {
 	w.tail = append(w.tail[:0], data...)
 	w.mu.Unlock()
 
-	for _, direction := range trzszDirections {
-		if w.onTrzsz != nil { w.onTrzsz(direction) }
+	for _, request := range trzszDirections {
+		if w.onTrzsz != nil && !w.onTrzsz(request.direction, request.directory) {
+			return len(p), nil
+		}
 	}
 	for _, direction := range directions {
 		if w.onDirection != nil {
@@ -268,11 +273,14 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	observedOutput := &zmodemDirectionWriter{
 		dst: remoteOutput,
 		onDirection: func(direction string) bool {
+            if !m.selectZmodemPaths(connection, direction, "zmodem", false, filter, remoteInput) { return false }
             m.emit("ssh:transfer-details", map[string]any{"ref": ref, "direction": direction, "protocol": "zmodem"})
-            return m.selectZmodemPaths(connection, direction, filter, remoteInput)
+            return true
         },
-		onTrzsz: func(direction string) {
+		onTrzsz: func(direction string, directory bool) bool {
+			if !m.selectZmodemPaths(connection, direction, "trzsz", directory, filter, remoteInput) { return false }
 			m.emit("ssh:transfer-details", map[string]any{"ref": ref, "direction": direction, "protocol": "trzsz"})
+			return true
 		},
 	}
 	session.Stdout, session.Stderr = observedOutput, observedOutput
