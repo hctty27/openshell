@@ -81,13 +81,17 @@ export default function TerminalPane(p: Props) {
     let lastAcknowledgedSequence = 0;
     let acknowledgementScheduled = false;
     const acknowledge = () => {
-      if (acknowledgementScheduled || local || !ref) return;
+      if (acknowledgementScheduled || (!local && !ref)) return;
       acknowledgementScheduled = true;
       queueMicrotask(() => {
         acknowledgementScheduled = false;
         if (lastProcessedSequence <= lastAcknowledgedSequence) return;
         lastAcknowledgedSequence = lastProcessedSequence;
-        void api.AcknowledgeTerminalOutput(ref, lastAcknowledgedSequence).catch(() => {});
+        if (local) {
+          void api.AcknowledgeLocalTerminalOutput(p.tab.id, localID, lastAcknowledgedSequence).catch(() => {});
+        } else if (ref) {
+          void api.AcknowledgeTerminalOutput(ref, lastAcknowledgedSequence).catch(() => {});
+        }
       });
     };
     const term = new Terminal({
@@ -148,7 +152,7 @@ export default function TerminalPane(p: Props) {
       if (disposed || terminalMode === "offline") return;
       if (local ? (payload.tabId !== p.tab.id || payload.terminalId !== localID) : !same(payload.ref)) return;
       const bytes = Uint8Array.from(atob(payload.data), (c) => c.charCodeAt(0));
-      const sequence = !local && typeof payload.sequence === "number" ? payload.sequence : 0;
+      const sequence = typeof payload.sequence === "number" ? payload.sequence : 0;
       lastReceivedSequence = Math.max(lastReceivedSequence, sequence);
       // Go pauses reading at the high watermark and resumes only when
       // xterm.js has actually parsed the acknowledged bytes.
