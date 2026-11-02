@@ -1,7 +1,6 @@
 package sftp
 
 import (
-    "context"
     "errors"
     "fmt"
     "os"
@@ -11,7 +10,6 @@ import (
     "strconv"
     "strings"
     "sync"
-    "time"
 
     "github.com/hctty27/openshell/internal/apperror"
     "github.com/hctty27/openshell/internal/domain"
