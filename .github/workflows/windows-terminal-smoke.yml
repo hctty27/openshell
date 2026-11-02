@@ -73,6 +73,8 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: Verify Go dependencies on Windows
+        run: go mod tidy
       - name: Test Go on Windows
         run: go test ./...
       - name: Stress SSH command execution on Windows
