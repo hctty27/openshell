@@ -81,7 +81,11 @@ export const desktop = nativeDesktop || Boolean(fixtureBackend);
 export const api = new Proxy({} as Backend, {
   get: (_, name) => (...args: unknown[]) => {
     if (fixtureBackend) {
-      return (fixtureBackend[name as keyof Backend] as (...values: unknown[]) => Promise<unknown>)(...args);
+      const method = fixtureBackend[name as keyof Backend];
+      if (typeof method !== "function") {
+        return Promise.reject(new Error(`Unavailable browser fixture method: ${String(name)}`));
+      }
+      return (method as (...values: unknown[]) => Promise<unknown>)(...args);
     }
     return nativeDesktop
       ? Call.ByName(`main.App.${String(name)}`, ...args) as Promise<unknown>
