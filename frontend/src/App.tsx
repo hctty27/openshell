@@ -24,6 +24,7 @@ import {
   Search,
   Columns2,
   Rows2,
+  Settings,
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
 import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime";
@@ -31,7 +32,6 @@ import { normalizeTerminalTheme, resolveTerminalTheme } from "./terminalThemes";
 import { reorderTabs } from "./features/sessions/tabOrder";
 import { hasInterruptibleWork, isActiveRemoteSession, sessionLabel } from "./features/sessions/closeProtection";
 import WorkspaceTabStrip from "./components/WorkspaceTabStrip";
-import ConnectionStatusIcon from "./components/ConnectionStatusIcon";
 import type {
   Session,
   Group,
@@ -933,7 +933,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
             onImport={openXshellImport}
             onRenameGroup={group}
             onDeleteGroup={deleteGroup}
-            onSettings={() => setDialog({ kind: "settings" })}
           />
           </div>
           {sidebarMode === "pinned" && (
@@ -968,7 +967,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
             {active?.session.name ?? tr("common:workspace")}
           </span>
           <div className="header-right">
-            <span className="local-badge">{tr("common:localLabel")}</span>
+            <button
+              type="button"
+              className="workspace-settings-button"
+              title={tr("common:settings")}
+              aria-label={tr("common:settings")}
+              onClick={() => setDialog({ kind: "settings" })}
+            >
+              <Settings size={17} aria-hidden="true" />
+            </button>
           </div>
         </header>
         <WorkspaceTabStrip tabs={tabs} activeID={activeID}
@@ -1210,34 +1217,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
             )}
           </>
         )}
-        <footer className="workspace-status">
-          <span className="workspace-version">
-            OpenShell <span className="status-sep" />v{APP_VERSION}
-          </span>
-          <span className="workspace-connection">
-            <ConnectionStatusIcon status={active?.status ?? "disconnected"}
-              localShell={!!active?.ref && !!active.everConnected &&
-                (state.disconnectBehavior ?? "local") === "local" &&
-                !active.localFallbackPending} />
-            {active?.status === "connected"
-              ? tr("common:sshConnected")
-              : active?.status === "connecting"
-                ? tr("common:connecting2")
-                : active?.status === "reconnecting"
-                  ? tr("common:reconnecting")
-                : active?.ref && active.everConnected && (state.disconnectBehavior ?? "local") === "local"
-                  ? tr("terminal:localShellStatus", { name: state.localShell === "pwsh" ? "PowerShell 7" : state.localShell === "cmd" ? "CMD" : state.localShell === "wsl" ? "WSL" : "PowerShell" })
-                  : tr("common:disconnected")}
-            {active?.status === "connected" && (
-              <>
-                <span className="status-sep" />
-                UTF-8
-                <span className="status-sep" />
-                xterm-256color
-              </>
-            )}
-          </span>
-        </footer>
       </main>
       {showSessionPicker && (
         <SessionPicker
