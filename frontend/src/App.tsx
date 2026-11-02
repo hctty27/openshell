@@ -51,8 +51,7 @@ import XshellImportDialog from "./components/XshellImportDialog";
 import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
 import SFTPView from "./components/SFTPView";
-import TransferDock from "./components/TransferDock";
-import ZmodemProgressDialog from "./components/ZmodemProgressDialog";
+import TransferCenter from "./components/TransferCenter";
 import ZmodemFilePicker from "./components/ZmodemFilePicker";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
 import { useAutoReconnect } from "./features/sessions/useAutoReconnect";
@@ -967,6 +966,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
             {active?.session.name ?? tr("common:workspace")}
           </span>
           <div className="header-right">
+            <TransferCenter tabs={tabs} onNotice={notify} />
             <button
               type="button"
               className="workspace-settings-button"
@@ -1201,7 +1201,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                         remoteUploadDirs.current[tab.id] = directory;
                       }} hideTaskQueue />
                   )}
-                  <TransferDock refID={tab.ref ?? undefined} onNotice={notify} alwaysVisible />
+
                 </aside>
               );
             })}
@@ -1405,7 +1405,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
         </ModalSurface>
       )}
       <ZmodemFilePicker activeRef={active?.ref ?? undefined} onNotice={notify} />
-       <ZmodemProgressDialog activeRef={active?.ref ?? undefined} onNotice={notify} />
+       
       {!!notice && !toast && (
         <div className="toast toast--success" role="status">
           <Check size={16} />
