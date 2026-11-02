@@ -66,13 +66,13 @@ jobs:
         shell: pwsh
         run: |
           $goPath = (go env GOPATH).Trim()
-          $wails = Join-Path $goPath "bin/wails.exe"
+          $wails = Join-Path $goPath "bin/wails3.exe"
           "binary=$wails" >> $env:GITHUB_OUTPUT
       - name: Restore cached Wails CLI
         uses: actions/cache@v6
         with:
           path: ${{ steps.wails-path.outputs.binary }}
-          key: windows-wails-cli-v2.17.0-go${{ steps.setup-go.outputs.go-version }}-${{ runner.arch }}
+          key: windows-wails-cli-v3.0.0-go${{ steps.setup-go.outputs.go-version }}-${{ runner.arch }}
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -88,9 +88,9 @@ jobs:
       - name: Ensure cached Wails CLI
         shell: pwsh
         run: |
-          $wails = Join-Path (go env GOPATH) "bin/wails.exe"
+          $wails = Join-Path (go env GOPATH) "bin/wails3.exe"
           if (!(Test-Path $wails)) {
-            go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
+            go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } else {
             Write-Host "Using cached Wails CLI: $wails"
@@ -124,7 +124,14 @@ jobs:
       - name: Build Windows executable
         shell: pwsh
         run: |
-          & "$(go env GOPATH)\bin\wails.exe" build -platform windows/amd64 -clean -s -webview2 embed -ldflags "-X github.com/hctty27/openshell/internal/branding.Version=$env:APP_VERSION"
+          go mod tidy
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$(go env GOPATH)\bin\wails3.exe" generate bindings -names -ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$(go env GOPATH)\bin\wails3.exe" generate syso -manifest build/windows/wails.exe.manifest -icon build/windows/icon.ico -info build/windows/info.json -arch amd64 -out rsrc_windows_amd64.syso
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force build/bin | Out-Null
+          go build -tags production -trimpath -ldflags "-s -w -X github.com/hctty27/openshell/internal/branding.Version=$env:APP_VERSION" -o build/bin/OpenShell.exe .
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path "build/bin/OpenShell.exe")) { throw "OpenShell.exe was not generated" }
 
