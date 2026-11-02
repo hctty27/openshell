@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Copy, Minus, PanelLeftClose, PanelLeftOpen, Settings, Square, SquareTerminal, X } from "lucide-react";
-import { Quit, WindowIsMaximised, WindowMinimise, WindowToggleMaximise } from "../../wailsjs/runtime/runtime";
+import { Window } from "@wailsio/runtime";
 import { desktop } from "../bridge";
 import { t } from "../i18n";
 import type { Tab } from "../types";
@@ -18,10 +18,10 @@ export default function WindowTitleBar({ tabs, showSessions, onToggleSessions, o
   const [maximised, setMaximised] = useState(false);
 
   useEffect(() => {
-    if (!desktop || !window.runtime) return;
+    if (!desktop) return;
     let active = true;
     const syncWindowState = () => {
-      void WindowIsMaximised().then(value => {
+      void Window.IsMaximised().then(value => {
         if (active) setMaximised(value);
       }).catch(() => {});
     };
@@ -34,7 +34,7 @@ export default function WindowTitleBar({ tabs, showSessions, onToggleSessions, o
   }, []);
 
   const toggleMaximise = () => {
-    if (desktop && window.runtime) WindowToggleMaximise();
+    if (desktop) void (maximised ? Window.Restore() : Window.Maximise()).catch(onNotice);
   };
 
   return (
@@ -63,7 +63,7 @@ export default function WindowTitleBar({ tabs, showSessions, onToggleSessions, o
         <div className="window-titlebar-controls">
           <button type="button" className="window-control"
             title={t("common:minimizeWindow")} aria-label={t("common:minimizeWindow")}
-            onClick={() => { if (window.runtime) WindowMinimise(); }}>
+            onClick={() => { if (desktop) void Window.Minimise().catch(onNotice); }}>
             <Minus size={15} aria-hidden="true" />
           </button>
           <button type="button" className="window-control"
@@ -74,7 +74,7 @@ export default function WindowTitleBar({ tabs, showSessions, onToggleSessions, o
           </button>
           <button type="button" className="window-control window-control-close"
             title={t("common:closeWindow")} aria-label={t("common:closeWindow")}
-            onClick={() => { if (window.runtime) Quit(); }}>
+            onClick={() => { if (desktop) void Window.Close().catch(onNotice); }}>
             <X size={16} aria-hidden="true" />
           </button>
         </div>
