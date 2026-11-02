@@ -36,7 +36,7 @@
 .session-sidebar-rail {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 18px;
+  width: 12px;
   height: 100%;
   padding: 0;
   background: transparent;
@@ -143,7 +143,7 @@
   background: var(--accent-soft);
 }
 .search {
-  margin: 0 13px 21px;
+  margin: 0 11px 9px;
   display: flex;
   align-items: center;
   gap: 7px;
