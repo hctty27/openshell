@@ -10,7 +10,6 @@ import (
 	sshclient "github.com/hctty27/openshell/internal/ssh"
 	"github.com/hctty27/openshell/internal/store"
 	files "github.com/hctty27/openshell/internal/sftp"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -30,6 +29,8 @@ type App struct {
 	sftp         *files.Manager
 	closing      map[string]domain.ConnectionRef
 	emit         sshclient.EmitFunc
+	quit         func()
+	pickDirectory func() (string, error)
 	pickKey      func() (string, error)
 	pickImport func() (string, error)
 	pickBackupRead func() (string, error)
@@ -687,7 +688,8 @@ func (a *App) SFTPCancel(taskID string) error {
 }
 
 func (a *App) SFTPChooseDirectory() (string, error) {
- return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{Title:a.dialogTitle("Select local folder", "选择本地文件夹")})
+ if a.pickDirectory == nil { return "", fmt.Errorf("directory picker unavailable") }
+ return a.pickDirectory()
 }
 
 func (a *App) SFTPReadRemoteText(ref domain.ConnectionRef, name string) (files.RemoteDocument,error) {
