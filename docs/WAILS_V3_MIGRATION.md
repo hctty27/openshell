@@ -2,7 +2,7 @@
 
 ## Scope
 
-The Windows shell has been ported from Wails v2 to **Wails v3.0.0**.
+The Windows shell has been ported from Wails v2 to **Wails v3.1.0**.
 SSH, SFTP, ZMODEM and data storage remain in their existing Go modules.
 
 - `main.go`: app/service lifecycle, native dialogs, file drops and shutdown guard.
@@ -14,10 +14,10 @@ SSH, SFTP, ZMODEM and data storage remain in their existing Go modules.
 
 ## Requirements
 
-- Go 1.26 or later
+- Go 1.26.10 or later (1.27.3+ also includes the October 2026 certificate-validation fix)
 - Node.js 22
-- Wails v3.0.0 CLI installed through
-  `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0`
+- Wails v3.1.0 CLI installed through
+  `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0`
 - Windows WebView2 runtime
 - Python with Pillow for existing icon-generation scripts, if needed
 
@@ -25,7 +25,7 @@ SSH, SFTP, ZMODEM and data storage remain in their existing Go modules.
 
 ```powershell
 go mod tidy
-go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
 cd frontend
 npm ci
 cd ..

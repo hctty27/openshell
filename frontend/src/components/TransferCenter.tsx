@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, desktop, errorText, listen } from "../bridge";
 import { t } from "../i18n";
 import type { Ref, SFTPTask, Tab } from "../types";
+import { mergeTransferHistory } from "../features/transfers/transferHistory";
 
 type Direction = "upload" | "download";
 type Protocol = "zmodem" | "trzsz";
@@ -111,7 +112,9 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     });
     const offSftp = listen("sftp:transfer", (task: SFTPTask) => {
       if (!task?.id || !task.ref) return;
-      setSftpJobs(previous => ({ ...previous, [task.id]: task }));
+      setSftpJobs(previous => Object.fromEntries(
+        mergeTransferHistory(Object.values(previous), [task]).map(item => [item.id, item]),
+      ));
     });
     const offDisconnect = listen("ssh:disconnected", (ref: Ref) => {
       if (!ref) return;
@@ -140,7 +143,9 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           for (const task of tasks ?? []) {
             if (!next[task.id]) next[task.id] = task;
           }
-          return next;
+          return Object.fromEntries(
+            mergeTransferHistory([], Object.values(next)).map(item => [item.id, item]),
+          );
         });
       }).catch(() => {});
     }

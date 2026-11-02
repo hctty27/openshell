@@ -8,12 +8,12 @@ publishing semantics just to reduce build time.
 
 | Key | Cached paths | Invalidation |
 | --- | --- | --- |
-| `windows-wails-cli-v2.17.0-go<version>-<arch>` | `$(go env GOPATH)/bin/wails.exe` | Wails CLI version, effective Go version, Windows architecture |
+| `windows-wails-cli-v3.1.0-go<version>-<arch>` | `$(go env GOPATH)/bin/wails3.exe` | Wails CLI version, effective Go version, Windows architecture |
 | `windows-app-icons-v1-<hash>` | Resized `build/appicon.png`, `build/windows/icon.ico`, `frontend/public/app-icon.png` | Source `build/appicon.png` or `scripts/generate_app_icons.py` |
 | `setup-go@v7` combined cache | `GOMODCACHE` + `GOCACHE` | Go version and `go.sum` |
 
 The Wails CLI cache is optional. If it is missing, the workflow executes the
-pinned `go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0` and checks
+pinned `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0` and checks
 that the binary exists. It is important that the key include the Go toolchain
 version; binaries should not be reused across unrelated Go toolchains.
 
@@ -24,6 +24,8 @@ Subsequent executable/NSIS icon checks *still compare the icon bytes actually
 embedded into the built Windows binaries*. To regenerate an updated icon
 locally, install Pillow and run that script; the cache will invalidate when
 either the source icon or the generation script changes.
+
+**Historical benchmark note:** The figures below were measured on earlier Wails v2 builds (around v0.1.49). They are preserved as historical evidence, not estimates of current Wails v3.1.0 performance.
 
 A separate [three-way Windows benchmark](https://github.com/hctty27/openshell/pull/52)
 compared the legacy module-only cache, setup-go's combined module/build cache,
@@ -65,8 +67,7 @@ Pillow + icons 27s, module cache restore 38s.
 PR #51 first (cold cache) Windows release dry run: 3m52s; Wails CLI install
 51s, icon generation 8s, module cache restore 39s. Cold results alone do not
 establish meaningful acceleration. Evaluate a second run after the Wails and
-icon caches have been populated. Ensure the resulting Release remains
-unchanged: `v0.1.49` until the user explicitly requests a new release.
+icon caches have been populated. The recorded release version at the time was `v0.1.49`; current releases are governed by `.github/release-version.txt`, and a dry run must never publish.
 
 ## Go cache A/B benchmark (PR #52)
 

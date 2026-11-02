@@ -56,6 +56,8 @@ jobs:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
+      - name: Check Wails Go module, CLI, and frontend lockstep versions
+        run: python3 scripts/verify_wails_stack_versions.py
       - name: Refresh module checksums for v3 migration
         run: go mod tidy
       - name: Run Go race tests

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Info, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, Save, ArrowLeftRight } from "lucide-react";
 import { api, listen, errorText } from "../bridge";
 import type { Ref, SFTPEntry, SFTPTask, SFTPDocument } from "../types";
+import { mergeTransferHistory, sameTransferRef } from "../features/transfers/transferHistory";
 import { useDialogs } from "./DialogProvider";
 import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMenu";
 import { i18n, t } from "../i18n";
@@ -115,6 +116,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
 
   useEffect(() => {
     let alive=true;
+    setTasks([]);
     api.SFTPHome(refID).then(async paths => {
       if (!alive) return;
       setLocalDir(paths.local);
@@ -132,7 +134,9 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
         if (alive) setRemoteDir(paths.remote);
       }
     }).catch(error => { if(alive) onNotice(error); });
-    api.SFTPTransfers(refID).then(list=>{if(alive)setTasks(list??[]);}).catch(()=>{});
+    api.SFTPTransfers(refID).then(list=>{
+      if(alive)setTasks(current => mergeTransferHistory(list??[],current.filter(task => sameTransferRef(task.ref, refID))));
+    }).catch(()=>{});
     return ()=>{alive=false;};
   },[refID.tabId,refID.sessionId,refID.generation]);
   useEffect(()=>{
@@ -142,7 +146,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
       .catch(error=>{if(alive){setLocalFiles([]);setLocalError(error);}})
       .finally(()=>{if(alive)setLocalBusy(false);});
     return ()=>{alive=false;};
-  },[refID.tabId,refID.generation,localDir,version]);
+  },[refID.tabId,refID.sessionId,refID.generation,localDir,version]);
   useEffect(()=>{
     if(!remoteDir)return;
     let alive=true;setRemoteBusy(true);setRemoteError("");
@@ -150,15 +154,15 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
       .catch(error=>{if(alive){setRemoteFiles([]);setRemoteError(error);}})
       .finally(()=>{if(alive)setRemoteBusy(false);});
     return ()=>{alive=false;};
-  },[refID.tabId,refID.generation,remoteDir,version]);
+  },[refID.tabId,refID.sessionId,refID.generation,remoteDir,version]);
   useEffect(()=>{
     const off=listen("sftp:transfer",(task:SFTPTask)=>{
-      if(task.ref.tabId!==refID.tabId||task.ref.generation!==refID.generation)return;
-      setTasks(old=>[...old.filter(t=>t.id!==task.id),task].sort((a,b)=>a.created-b.created));
+      if(!sameTransferRef(task?.ref, refID))return;
+      setTasks(old=>mergeTransferHistory(old,[task]));
       if(task.status==="completed")setVersion(v=>v+1);
     });
     return ()=>off();
-  },[refID.tabId,refID.generation]);
+  },[refID.tabId,refID.sessionId,refID.generation]);
 
   const transfer = async (side:Side, paths:string[], dstDir:string) => {
     if (!dstDir) return;

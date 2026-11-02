@@ -14,6 +14,7 @@ on:
       - "local_terminal.go"
       - "local_terminal_windows.go"
       - "local_terminal_test.go"
+      - "local_terminal_flow*.go"
       - "local_terminal_windows_test.go"
       - "frontend/src/App.tsx"
       - "frontend/src/terminalCwd.ts"
@@ -69,7 +70,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ steps.wails-path.outputs.binary }}
-          key: windows-wails-cli-v3.0.0-go${{ steps.setup-go.outputs.go-version }}-${{ runner.arch }}
+          key: windows-wails-cli-v3.1.0-go${{ steps.setup-go.outputs.go-version }}-${{ runner.arch }}
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -91,7 +92,7 @@ jobs:
         run: |
           $wails = Join-Path (go env GOPATH) "bin/wails3.exe"
           if (!(Test-Path $wails)) {
-            go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+            go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } else {
             Write-Host "Using cached Wails CLI: $wails"
