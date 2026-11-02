@@ -164,7 +164,7 @@ Build the Windows x64 executable:
 ```sh
 wails3 generate bindings -names -ts
 wails3 generate syso -manifest build/windows/wails.exe.manifest -icon build/windows/icon.ico -info build/windows/info.json -arch amd64 -out rsrc_windows_amd64.syso
-go build -tags production -trimpath -ldflags="-s -w" -o build/bin/OpenShell.exe .
+go build -tags production -trimpath -ldflags="-H windowsgui -s -w" -o build/bin/OpenShell.exe .
 ```
 
 Output: `build/bin/OpenShell.exe`. Ensure `build/windows/icon.ico` has been generated before building. This build does not package the ZMODEM helpers. For the bundled utilities, run [scripts/prepare_zmodem_windows.ps1](scripts/prepare_zmodem_windows.ps1) in PowerShell after building. The [Windows release workflow](.github/workflows/windows-release.yml) contains the full icon-generation, installer, and portable-package steps.
