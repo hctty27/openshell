@@ -1,5 +1,5 @@
 import { t } from "./i18n";
-import * as bindings from "../wailsjs/go/main/App";
+import { Call, Events } from "@wailsio/runtime";
 import type {
   AppState,
   SessionRequest,
@@ -64,35 +64,16 @@ type Backend = {
   Disconnect(ref: Ref): Promise<void>;
   CloseTab(id: string): Promise<void>;
 };
-declare global {
-  interface Window {
-    go?: { main?: { App: Backend } };
-    runtime?: {
-      EventsOn(name: string, callback: (payload: any) => void): () => void;
-    };
-  }
-}
-export const desktop = !!window.go?.main?.App;
+export const desktop = typeof window !== "undefined" &&
+  typeof (window as Window & { chrome?: { webview?: { postMessage?: unknown } } }).chrome?.webview?.postMessage === "function";
 export const api = new Proxy({} as Backend, {
-  get:
-    (_, name) =>
-    (...args: unknown[]) => {
-      const backend = window.go?.main?.App;
-      if (!backend)
-        return Promise.reject(
-          new Error(t("common:useThisFeatureInTheWindowsDesktopApp")),
-        );
-      return (
-        bindings[name as keyof typeof bindings] as (
-          ...args: unknown[]
-        ) => Promise<unknown>
-      )(...args);
-    },
+  get: (_, name) => (...args: unknown[]) =>
+    desktop
+      ? Call.ByName(`main.App.${String(name)}`, ...args) as Promise<unknown>
+      : Promise.reject(new Error(t("common:useThisFeatureInTheWindowsDesktopApp"))),
 });
-export function listen(
-  name: string,
-  callback: (payload: any) => void,
-): () => void {
-  return window.runtime?.EventsOn(name, callback) ?? (() => {});
+export function listen(name: string, callback: (payload: any) => void): () => void {
+  if (!desktop) return () => {};
+  return Events.On(name, event => callback(event.data));
 }
 export { errorText } from "./i18n/errors";
