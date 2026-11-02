@@ -25,7 +25,9 @@ embedded into the built Windows binaries*. To regenerate an updated icon
 locally, install Pillow and run that script; the cache will invalidate when
 either the source icon or the generation script changes.
 
-**Historical benchmark note:** The figures below were measured on earlier Wails v2 builds (around v0.1.49). They are preserved as historical evidence, not estimates of current Wails v3.1.0 performance.\n\nA separate [three-way Windows benchmark](https://github.com/hctty27/openshell/pull/52)
+**Historical benchmark note:** The figures below were measured on earlier Wails v2 builds (around v0.1.49). They are preserved as historical evidence, not estimates of current Wails v3.1.0 performance.
+
+A separate [three-way Windows benchmark](https://github.com/hctty27/openshell/pull/52)
 compared the legacy module-only cache, setup-go's combined module/build cache,
 and no cache. The legacy module-only archive was about 367 MB, restored in
 38 seconds and took 37 seconds to compile. A warm setup-go combined cache
