@@ -1,7 +1,7 @@
 <div align="center">
   <img src="build/openshell-icon.svg" alt="OpenShell" width="88" height="88" />
   <h1>OpenShell</h1>
-  <p><strong>AI-powered SSH workspace for Windows — terminals, SFTP, and controlled remote commands in one app.</strong></p>
+  <p><strong>Free and open-source SSH/SFTP client for Windows — terminal tabs, splits, file transfers and quick commands.</strong></p>
   <p>
     <a href="https://github.com/hctty27/openshell/releases/latest"><img src="https://img.shields.io/github/v/release/hctty27/openshell?label=release" alt="Latest release" /></a>
     <a href="https://github.com/hctty27/openshell/actions/workflows/ci.yml"><img src="https://github.com/hctty27/openshell/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
@@ -18,27 +18,21 @@
   </p>
 </div>
 
-OpenShell is a lightweight Windows SSH/SFTP client for developers and server administrators. Manage servers in a tabbed, split-terminal workspace, transfer files without leaving the app, and troubleshoot with an AI assistant powered by your own model and API. Review AI commands before execution or use a controlled automatic mode.
+OpenShell is a free, open-source Windows SSH/SFTP client for developers and server administrators. Manage servers with tabs and split terminals, transfer files with SFTP or rz/sz, import Xshell sessions, and run saved quick commands.
 
 **Status:** actively developed, pre-1.0 software. Windows x64 installers and portable packages are available. See the [release notes](https://github.com/hctty27/openshell/releases) for the changes and signing status of each build.
 
 ## Screenshots
 
-**Main workspace** — organize SSH sessions and keep an AI assistant alongside your terminals.
+**SSH terminal and SFTP file manager**
 
-![OpenShell main workspace, SSH session tree and AI assistant](docs/screenshots/01-main-workspace.webp)
-
-| SSH terminal + SFTP file manager | SSH terminal + SFTP + AI assistant |
-| :---: | :---: |
-| [![OpenShell SSH terminal with local and remote SFTP file manager](docs/screenshots/02-ssh-sftp.webp)](docs/screenshots/02-ssh-sftp.webp) | [![OpenShell SSH terminal, SFTP file manager and AI server analysis](docs/screenshots/03-ssh-sftp-ai.webp)](docs/screenshots/03-ssh-sftp-ai.webp) |
-
-_Click either preview to open the full-size screenshot._
+![OpenShell SSH terminal and SFTP file manager](docs/screenshots/02-ssh-sftp.webp)
 
 ## Why OpenShell
 
 - **Work like a terminal power user.** Organize SSH sessions, rearrange tabs, split terminals, and reconnect without rebuilding your workspace.
 - **Move files in the same window.** Use the integrated SFTP manager or familiar `rz` / `sz` commands with an in-app file picker and transfer progress.
-- **Bring your own AI.** Use OpenAI-compatible or native Anthropic Messages APIs for chat, reviewed commands, and controlled automatic operations. SSH and SFTP work without AI configuration.
+- **Focused by design.** Use SSH, SFTP and terminal tools without an external AI provider or API key.
 
 ## Highlights
 
@@ -49,7 +43,6 @@ _Click either preview to open the full-size screenshot._
 | Connection controls | Configure keepalive and reconnection, disconnect manually, return to a local Windows shell, and confirm before closing live connections. |
 | SFTP | Browse local and remote files, upload and download files or directories, resume transfers, edit remote text, preview one-way directory sync, and manage permissions. |
 | Terminal file transfers | Use `rz` / `sz` with bundled ZMODEM utilities, an embedded file picker, and a transfer-progress dialog—without opening Explorer or an extra CMD window. |
-| AI assistant | Stream from OpenAI-compatible or native Anthropic Messages APIs, review or automate remote commands, and share conversation history across tabs for the same server. |
 | Quick commands | Save reusable commands with categories, ordering, and global, folder, or session scope. Line breaks control when commands execute. |
 | Appearance and language | Switch between English and Simplified Chinese, light and dark application themes, and independent classic, dark, or light terminal palettes. |
 
@@ -72,9 +65,8 @@ The portable package skips installation; settings and credentials still use your
 2. **Verify the server.** Check the SSH host-key fingerprint before trusting the first connection. A changed trusted fingerprint blocks the connection.
 3. **Choose your workspace.** Use tabs and split panes for terminals, or open SFTP from the terminal toolbar to manage files.
 4. **Set your preferences.** In Settings, use **General** for language and application appearance, **Terminal** for terminal options, and **Connection** for keepalive, reconnection, and disconnect behavior.
-5. **Configure AI when needed.** Under **AI Settings**, add an API profile, test the connection, and save it. Select the profile and execution mode in the AI sidebar.
 
-The interface defaults to English; switch to Simplified Chinese in Settings → General. SSH and SFTP do not require an AI API key. You can edit a connected session: its name and folder update immediately, while host, port, user, and authentication changes apply on the next connection.
+The interface defaults to English; switch to Simplified Chinese in Settings → General. You can edit a connected session: its name and folder update immediately, while host, port, user, and authentication changes apply on the next connection.
 
 ### Terminal workflow
 
@@ -84,43 +76,6 @@ The interface defaults to English; switch to Simplified Chinese in Settings → 
 - Choose a global terminal palette or override it per session; changes apply without reconnecting. The quick-command bar supports a single scrolling row or multiple rows.
 - Configure disconnect behavior to return to a local shell, keep the disconnected tab, or close it. Local choices include Windows PowerShell, PowerShell 7, CMD, and WSL. Automatic reconnection applies to unexpected disconnects, not a manual disconnect. Closing an active SSH tab or exiting while connections are live requires confirmation.
 - Use **Manage** in the quick-command bar to add commands. Each line break sends Enter; without a final line break, the last line is inserted without executing. Run these only when the terminal is ready to receive shell input.
-
-## AI assistant
-
-### Connect your API
-
-| Setting | Value |
-| --- | --- |
-| API protocol | Choose **OpenAI-compatible API** (existing/default profiles) or **Anthropic Messages API**. |
-| Base URL | Use a Chat Completions base URL such as `https://api.example.com/v1`, or an Anthropic Messages base URL such as `https://api.anthropic.com/v1`. |
-| API key | Your provider's key; it may be empty for a local service that does not require authentication. |
-| Model name | The exact model ID accepted by your provider. |
-| Tool calls | Enable only when both the provider and model support tools. Required for AI command execution. |
-
-Remote endpoints require HTTPS. Local services can use HTTP on loopback addresses such as `127.0.0.1` or `::1`. Anthropic Messages uses native SSE and `x-api-key` authentication, while existing profiles retain OpenAI Chat Completions behavior. OpenAI Responses API is not yet supported directly. Native Anthropic integration is covered by simulated protocol tests; verify real API credentials and model tool-call behavior before relying on automatic execution.
-
-### Choose how commands run
-
-| Mode | Behavior |
-| --- | --- |
-| Chat | Discuss a problem without executing commands. |
-| Confirm | Review the target, working directory, and command before approving execution. You can edit or reject a proposal. |
-| Automatic | Let AI execute commands and inspect results. By default, only recognized inspection commands run automatically; modifying, unrecognized, or repeated commands require confirmation. |
-
-Automatic mode defaults to **10 commands per round**, configurable from 1–100. Continuing another round requires a click. Settings also let you allow modifying operations for new tasks. A task keeps its original server connection, API profile, and execution limits; disconnecting, reconnecting, or an unknown execution result stops the task.
-
-**AI commands use a separate SSH exec channel.** They do not inherit a terminal's `cd`, temporary environment variables, virtual environment, or sudo state. Check the absolute remote working directory before execution; it defaults to the remote HOME. Quick commands instead type into the current interactive terminal and use its shell state.
-
-Commands report stdout, stderr, exit code, and duration. The default timeout is 60 seconds, configurable from 1–600 seconds. Stop and timeout cancel waiting and further actions, but do not guarantee that a remote process has exited. A stalled channel setup may require disconnecting SSH. Use the interactive terminal for password prompts and other interactive commands. Markdown code blocks in chat are never executed automatically.
-
-### Conversation memory and context
-
-- Each saved server session owns multiple conversations. Tabs for that session share the list and can select different conversations; tabs viewing the same conversation see synchronized messages.
-- New conversations remain drafts until the first message. History and summaries persist locally by default and can be disabled in AI settings.
-- Only the tab that started a request controls its commands. Restoring history or reconnecting does not resume pending commands or automatic tasks. Clearing or deleting a conversation affects every tab viewing it.
-- Turning history saving off uses temporary conversations and keeps existing saved history. Turning it back on restores saved history without importing temporary messages. Stop active tasks before switching storage mode.
-- Long conversations use summaries plus recent turns within a **48 KiB request-data budget**, not an exact token limit. Summaries use your selected model and may incur provider charges; failed summarization falls back to bounded recent context.
-- Selected terminal text or recent output is attached only after preview and confirmation. AI-executed commands also return their output to the model. Review what you send; automatic masking cannot catch every secret.
 
 ## Files and transfers
 
@@ -170,7 +125,7 @@ OpenShell's embedded file picker handles local file and destination selection wi
 | Source | What is included | What to configure again |
 | --- | --- | --- |
 | Xshell `.xts` / `.xsh` | SSH connection settings and folder structure; UTF-16 and UTF-8 files are supported. Preview and select sessions, then skip or rename duplicate names. | Passwords and private-key authentication. Xshell-encrypted credentials, Telnet, proxy, and jump-host settings are not imported. |
-| OpenShell JSON backup | Saved SSH sessions and nested folders. Export and restore through Settings → General → Session backup. | Credentials and private-key files. AI profiles, API keys, appearance preferences, and conversation history are not included in session backups. |
+| OpenShell JSON backup | Saved SSH sessions and nested folders. Export and restore through Settings → General → Session backup. | Credentials and private-key files. Appearance preferences are not included in session backups. |
 
 To migrate from Xshell, export sessions, choose **Import Xshell** in OpenShell's session panel, review the import, and re-enter authentication details before connecting.
 
@@ -178,12 +133,11 @@ To migrate from Xshell, export sessions, choose **Import Xshell** in OpenShell's
 
 | Data | Storage |
 | --- | --- |
-| Sessions, folders, API profile settings, preferences, trusted host keys | `%APPDATA%\OpenShell\state.db` |
-| Saved AI conversations and summaries | The same local database; history saving is optional. |
-| Passwords, API keys, private-key passphrases | Windows Credential Manager, under OpenShell entries. |
+| Sessions, folders, preferences, trusted host keys | `%APPDATA%\OpenShell\state.db` |
+| Passwords and private-key passphrases | Windows Credential Manager, under OpenShell entries. |
 | Private keys | Your selected files; OpenShell stores their paths. |
 
-Connections to SSH/SFTP servers and AI providers use the endpoints you configure. Prompts, attached excerpts, and AI command results sent to an AI provider are subject to that provider's policies. This program will not transfer information to other networked systems unless requested by the user or the person installing or operating it.
+OpenShell connects to configured SSH/SFTP servers when requested. Legacy AI configurations and conversations from earlier versions may remain in the local database after upgrading; this release does not delete them automatically.
 
 ## Development
 
