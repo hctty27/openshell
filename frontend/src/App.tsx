@@ -195,7 +195,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       tab: Tab;
       secret: string;
     } | null>(null),
-    [login, setLogin] = useState<{ tab: Tab; secret: string } | null>(null),
+    [login, setLogin] = useState<{ tab: Tab; secret: string } | null>(null);
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
   const remoteUploadDirs = useRef<Record<string, string>>({});
   const disconnectInFlight = useRef(new Set<string>());
@@ -1001,9 +1001,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
                     }));
                     if (tab.ref) api.Disconnect(tab.ref).catch(() => {});
                     notify(text);
-                  }}
-                  onSelection={(text) => {
-                    selections.current[tab.id] = text;
                   }}
                 />
               ))}

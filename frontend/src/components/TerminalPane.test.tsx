@@ -139,10 +139,10 @@ const tab: Tab = {
   status: "connected",
   home: "/root",
   cwd: "/root",
-  messages: [],
-  proposal: null,
-  chatBusy: false,
-  executing: false,
+  
+  
+  
+  
   error: "",
 };
 const renderTerminal = (

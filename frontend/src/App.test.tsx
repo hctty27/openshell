@@ -58,8 +58,7 @@ vi.mock("./bridge", async () => ({
     State: vi.fn(async () => ({
       sessions: [],
       groups: [],
-      profiles: [],
-      fontSize: "14",
+            fontSize: "14",
       language: "zh-CN",
       activeProfile: "",
       version: "0.1.17",
@@ -197,8 +196,7 @@ test("the tab plus opens a session list and reuses an already opened SSH tab", a
       },
     ],
     groups: [],
-    profiles: [],
-    fontSize: "14",
+        fontSize: "14",
     language: "zh-CN",
     activeProfile: "",
     version: "0.1.14",
@@ -239,8 +237,7 @@ test("edits an active session without disconnecting and updates every open tab",
   const state = (sessions: Session[]) => ({
     sessions,
     groups: [],
-    profiles: [],
-    fontSize: "14",
+        fontSize: "14",
     language: "zh-CN" as const,
     activeProfile: "",
     version: "0.1.25",
@@ -307,8 +304,7 @@ test("double-clicking a terminal tab opens an independent SSH session beside it 
       },
     ],
     groups: [],
-    profiles: [],
-    fontSize: "14",
+        fontSize: "14",
     language: "zh-CN",
     activeProfile: "",
     version: "0.1.18",
@@ -372,7 +368,7 @@ test("two connected sessions can split, rotate, focus and close without extra SS
         username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved",
       },
     ],
-    groups: [], profiles: [], fontSize: "14", language: "zh-CN",
+    groups: [], fontSize: "14", language: "zh-CN",
     activeProfile: "", version: "0.1.33",
   });
   await act(async () => { render(<App />); });
@@ -407,7 +403,7 @@ test("split gutter accepts keyboard, drag, and reset with persistent bounds", as
       { id: "eu-id", groupId: "", name: "eu", host: "eu.example.com", port: 22,
         username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved" },
     ],
-    groups: [], profiles: [], fontSize: "14", language: "zh-CN",
+    groups: [], fontSize: "14", language: "zh-CN",
     activeProfile: "", splitRatio: 60, version: "0.1.34",
   });
   await act(async () => { render(<App />); });
@@ -450,7 +446,7 @@ test("SFTP opens beside the existing terminal and can close without reconnecting
       port: 22, username: "root", authType: "key",
       privateKeyPath: "", credentialRef: "saved",
     }],
-    groups: [], profiles: [], fontSize: "14", language: "zh-CN",
+    groups: [], fontSize: "14", language: "zh-CN",
     activeProfile: "", version: "0.1.39",
   });
   await act(async () => { render(<App />); });
@@ -497,7 +493,7 @@ test("closing a connected tab requires confirmation and cancelling preserves it"
   vi.mocked(api.State).mockResolvedValueOnce({
     sessions: [{id:"live-id",groupId:"",name:"Live Server",host:"example.test",port:22,
       username:"root",authType:"key",privateKeyPath:"",credentialRef:"saved"}],
-    groups: [], profiles: [], fontSize:"14", language:"zh-CN",
+    groups: [], fontSize:"14", language:"zh-CN",
     activeProfile:"", version:"0.1.58",
   });
   await act(async () => { render(<App />); });
@@ -525,7 +521,7 @@ test("closing an already disconnected tab needs no SSH confirmation", async () =
   vi.mocked(api.State).mockResolvedValueOnce({
     sessions: [{id:"offline-id",groupId:"",name:"Offline",host:"example.test",port:22,
       username:"root",authType:"key",privateKeyPath:"",credentialRef:"saved"}],
-    groups: [], profiles: [], fontSize:"14", language:"zh-CN",
+    groups: [], fontSize:"14", language:"zh-CN",
     activeProfile:"", autoReconnect:false, version:"0.1.58",
   });
   await act(async () => { render(<App />); });
@@ -548,7 +544,7 @@ test("native quit request asks once for live sessions, cancellation is safe", as
   vi.mocked(api.State).mockResolvedValueOnce({
     sessions: [{id:"quit-id",groupId:"",name:"Quit Server",host:"example.test",port:22,
       username:"root",authType:"key",privateKeyPath:"",credentialRef:"saved"}],
-    groups: [], profiles: [], fontSize:"14", language:"zh-CN",
+    groups: [], fontSize:"14", language:"zh-CN",
     activeProfile:"", version:"0.1.58",
   });
   await act(async () => { render(<App />); });
@@ -587,7 +583,7 @@ test("terminal toolbar has one context-aware disconnect/reconnect control", asyn
   vi.mocked(api.State).mockResolvedValueOnce({
     sessions: [{ id: "toggle-id", groupId: "", name: "Toggle", host: "example.test",
       port: 22, username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved" }],
-    groups: [], profiles: [], fontSize: "14", language: "zh-CN",
+    groups: [], fontSize: "14", language: "zh-CN",
     activeProfile: "", version: "0.1.64",
   });
   await act(async () => { render(<App />); });
