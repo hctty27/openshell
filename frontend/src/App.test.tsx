@@ -496,11 +496,14 @@ test("SFTP opens beside the existing terminal and can close without reconnecting
   const tabID = screen.getByTestId("terminal-pane-stub").getAttribute("data-tab-id");
   const ref = { tabId: tabID, sessionId: "us-id", generation: 1 };
   act(() => {
+    for (const listener of transferEvents.listeners.get("ssh:transfer-details") ?? []) {
+      listener({ ref, direction: "upload", protocol: "zmodem" });
+    }
     for (const listener of transferEvents.listeners.get("ssh:transfer-state") ?? []) {
       listener({ ref, active: true });
     }
   });
-  fireEvent.click(screen.getByTitle("打开 SFTP 文件管理"));
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
   expect(screen.getByText("ZMODEM")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
   await waitFor(() => expect(api.CancelZmodem).toHaveBeenCalledWith(ref));
