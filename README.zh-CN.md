@@ -145,27 +145,29 @@ OpenShell 仅按用户操作连接到配置的 SSH/SFTP 服务器。旧版 AI �
 
 ## 本地开发
 
-**技术栈：** Go · Wails v2 · React · TypeScript · xterm.js · SQLite。
+**技术栈：** Go · Wails v3.0.0 · React · TypeScript · xterm.js · SQLite。
 
 请使用 Windows 开发环境，并准备 Go 1.26+、满足锁定 Vite 版本要求的较新 Node.js 22、npm 和 WebView2。依赖版本见 [go.mod](go.mod) 与 [frontend/package-lock.json](frontend/package-lock.json)。
 
 ```sh
 git clone https://github.com/hctty27/openshell.git
 cd openshell
-go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
 cd frontend
 npm ci
 cd ..
-wails dev
+wails3 dev
 ```
 
 构建 Windows x64 可执行文件：
 
 ```sh
-wails build -platform windows/amd64 -clean
+wails3 generate bindings -names -ts
+wails3 generate syso -manifest build/windows/wails.exe.manifest -icon build/windows/icon.ico -info build/windows/info.json -arch amd64 -out rsrc_windows_amd64.syso
+go build -tags production -trimpath -ldflags="-s -w" -o build/bin/OpenShell.exe .
 ```
 
-产物为 `build/bin/OpenShell.exe`。单独执行 Wails 构建不会打包 ZMODEM 工具；需要时在构建后通过 PowerShell 运行 [scripts/prepare_zmodem_windows.ps1](scripts/prepare_zmodem_windows.ps1)。完整图标生成、安装版与便携版打包流程见 [Windows 发布工作流](.github/workflows/windows-release.yml)。
+产物为 `build/bin/OpenShell.exe`，构建前需要生成 `build/windows/icon.ico`。以上命令不打包 ZMODEM 工具；需要时在构建后通过 PowerShell 运行 [scripts/prepare_zmodem_windows.ps1](scripts/prepare_zmodem_windows.ps1)。完整图标生成、安装版与便携版打包流程见 [Windows 发布工作流](.github/workflows/windows-release.yml)。
 
 <details>
 <summary>验证与发布流程</summary>
@@ -188,7 +190,7 @@ npx playwright test
 - [Windows terminal smoke](.github/workflows/windows-terminal-smoke.yml)：对终端、SSH、SFTP、ConPTY 相关 PR 执行 Windows 冒烟验证。
 - [Windows release](.github/workflows/windows-release.yml)：只有 `main` 的版本标记变化且 CI 通过后才正式发布。保留最近 3 个 Release 和旧 Git Tag，最终构建产物保留 7 天。手动运行仅生成 Artifacts，不发布 Release。
 
-发布时同步更新 `.github/release-version.txt`、`frontend/package.json`、`frontend/package-lock.json`、`frontend/src/App.tsx` 的回退版本、`wails.json` 及 `CHANGELOG.md`。推送到 `main` 后，工作流在验证与打包通过后自动创建 Tag。
+发布时同步更新 `.github/release-version.txt`、`frontend/package.json`、`frontend/package-lock.json`、`CHANGELOG.md`。推送到 `main` 后，工作流在验证与打包通过后自动创建 Tag。
 
 </details>
 
