@@ -3,6 +3,7 @@ package sftp
 import (
     "context"
     "fmt"
+    "path/filepath"
     "testing"
     "time"
 
@@ -76,7 +77,7 @@ func TestShutdownWaitsForWorkersAndRejectsNewTransfers(t *testing.T) {
     }
 
     ref := domain.ConnectionRef{SessionID: "server"}
-    if _, err := m.Start(ref, "upload", "/source", "/destination", false); err == nil {
+    if _, err := m.Start(ref, "upload", filepath.Join(t.TempDir(), "source"), "/destination", false); err == nil {
         t.Fatal("closed manager accepted a new transfer")
     }
 }
