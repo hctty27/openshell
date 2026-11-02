@@ -52,7 +52,7 @@ export default function SessionTree(p: Props) {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [contextMenu, setContextMenu] = useState<{
-    kind: "root" | "group" | "session";
+    kind: "root" | "group" | "session" | "toolbar";
     id: string;
     anchor: HTMLElement;
     x: number;
@@ -135,13 +135,13 @@ export default function SessionTree(p: Props) {
       ];
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
   const showContextMenu = (
-    kind: "root" | "group" | "session",
+    kind: "root" | "group" | "session" | "toolbar",
     id: string,
     anchor: HTMLElement,
     x: number,
     y: number,
   ) => {
-    setSelected({ kind, id });
+    if (kind !== "toolbar") setSelected({ kind, id });
     setContextMenu({ kind, id, anchor, x, y });
   };
   const openWithMouse = (
@@ -180,7 +180,7 @@ export default function SessionTree(p: Props) {
     (session) => session.id === contextMenu?.id,
   );
   const menuItems: ContextMenuAction[] =
-    contextMenu?.kind === "root"
+    (contextMenu?.kind === "root" || contextMenu?.kind === "toolbar")
       ? [
           {
             label: t("common:newSshSession"),
@@ -304,7 +304,7 @@ export default function SessionTree(p: Props) {
               aria-haspopup="menu"
               onClick={event => {
                 const rect = event.currentTarget.getBoundingClientRect();
-                showContextMenu("root", "", event.currentTarget, rect.right - 160, rect.bottom);
+                showContextMenu("toolbar", "", event.currentTarget, rect.right - 160, rect.bottom);
               }}>
               <Ellipsis size={16} />
             </button>
