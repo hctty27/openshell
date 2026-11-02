@@ -14,6 +14,7 @@ on:
       - "local_terminal.go"
       - "local_terminal_windows.go"
       - "local_terminal_test.go"
+      - "local_terminal_flow*.go"
       - "local_terminal_windows_test.go"
       - "frontend/src/App.tsx"
       - "frontend/src/terminalCwd.ts"
