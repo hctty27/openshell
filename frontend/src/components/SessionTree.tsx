@@ -291,27 +291,30 @@ export default function SessionTree(p: Props) {
     <aside id="session-sidebar-panel" className="session-sidebar" aria-hidden={p.hidden || undefined} inert={p.hidden}>
       <div className="sidebar-heading">
         <span>{t("common:sessions")}</span>
-        <div>
+        <div className="sidebar-heading-actions">
+          <div className="sidebar-heading-tools">
+            <button title={t("sessions:importXshellTitle")} onClick={() => p.onImport?.()}>
+              <FileInput size={16} />
+            </button>
+            <button title={t("common:newFolder")} onClick={p.onGroup}>
+              <FolderPlus size={16} />
+            </button>
+            <button title={t("common:newSession")} onClick={() => p.onEdit()}>
+              <Plus size={18} />
+            </button>
+          </div>
           {p.onTogglePin && (
             <button
               type="button"
+              className={`sidebar-pin-toggle ${p.pinned ? "is-pinned" : ""}`}
               title={t(p.pinned ? "sessions:autoHideSidebar" : "sessions:pinSidebar")}
               aria-label={t(p.pinned ? "sessions:autoHideSidebar" : "sessions:pinSidebar")}
               aria-pressed={p.pinned === true}
               onClick={p.onTogglePin}
             >
-              {p.pinned ? <Pin size={15} /> : <PinOff size={15} />}
+              {p.pinned ? <Pin size={15} fill="currentColor" aria-hidden="true" /> : <PinOff size={15} aria-hidden="true" />}
             </button>
           )}
-          <button title={t("sessions:importXshellTitle")} onClick={() => p.onImport?.()}>
-            <FileInput size={16} />
-          </button>
-          <button title={t("common:newFolder")} onClick={p.onGroup}>
-            <FolderPlus size={16} />
-          </button>
-          <button title={t("common:newSession")} onClick={() => p.onEdit()}>
-            <Plus size={18} />
-          </button>
         </div>
       </div>
       <div className="search">
