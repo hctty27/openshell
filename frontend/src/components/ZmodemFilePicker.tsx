@@ -6,7 +6,7 @@ import { t } from "../i18n";
 import type { Ref, SFTPEntry } from "../types";
 
 type Direction = "upload" | "download";
-interface PickerRequest { ref: Ref; id: number; direction: Direction }
+interface PickerRequest { ref: Ref; id: number; direction: Direction; protocol?: "zmodem" | "trzsz"; allowDirectories?: boolean }
 interface Places { home: string; roots: string[] }
 interface Props { activeRef?: Ref; onNotice(error: unknown): void }
 
@@ -177,7 +177,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice }: Props) {
               className={`zmodem-picker-entry ${selected.includes(entry.path) ? "selected" : ""}`}
               disabled={busy || entry.isSymlink}
               onClick={() => {
-                if (entry.isDir || download) return;
+                if (download || (entry.isDir && !request.allowDirectories)) return;
                 setSelected(previous => previous.includes(entry.path)
                   ? previous.filter(file => file !== entry.path)
                   : [...previous, entry.path]);
@@ -189,7 +189,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice }: Props) {
               {entry.isDir ? <Folder size={16} /> : <File size={16} />}
               <span title={entry.path}>{entry.name}</span>
               <small>{entry.isDir ? t("sftp:zmodemPickFolder") : niceSize(entry.size)}</small>
-              {!download && !entry.isDir && <input type="checkbox" tabIndex={-1} readOnly
+              {!download && (!entry.isDir || request.allowDirectories) && <input type="checkbox" tabIndex={-1} readOnly
                 checked={selected.includes(entry.path)} aria-label={entry.name} />}
             </button>
           ))}

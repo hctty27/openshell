@@ -31,7 +31,7 @@ OpenShell is a free, open-source Windows SSH/SFTP client for developers and serv
 ## Why OpenShell
 
 - **Work like a terminal power user.** Organize SSH sessions, rearrange tabs, split terminals, and reconnect without rebuilding your workspace.
-- **Move files in the same window.** Use the integrated SFTP manager or familiar `rz` / `sz` commands with an in-app file picker and transfer progress.
+- **Move files in the same window.** Use SFTP, `rz` / `sz`, or `trz` / `tsz` with an embedded picker and a non-modal global transfer center.
 - **Focused by design.** Use SSH, SFTP and terminal tools without an external AI provider or API key.
 
 ## Highlights
@@ -42,7 +42,7 @@ OpenShell is a free, open-source Windows SSH/SFTP client for developers and serv
 | Session management | Organize connections in nested folders, search and edit sessions, authenticate with a password or local private key, import Xshell sessions, and export session backups. |
 | Connection controls | Configure keepalive and reconnection, disconnect manually, return to a local Windows shell, and confirm before closing live connections. |
 | SFTP | Browse local and remote files, upload and download files or directories, resume transfers, edit remote text, preview one-way directory sync, and manage permissions. |
-| Terminal file transfers | Use `rz` / `sz` with bundled ZMODEM utilities, an embedded file picker, and a transfer-progress dialog—without opening Explorer or an extra CMD window. |
+| Terminal file transfers | Use `rz` / `sz` or `trz` / `tsz` with an embedded file picker and a cross-session transfer center—without opening Explorer or an extra CMD window. |
 | Quick commands | Save reusable commands with categories, ordering, and global, folder, or session scope. Line breaks control when commands execute. |
 | Appearance and language | Switch between English and Simplified Chinese, light and dark application themes, and independent classic, dark, or light terminal palettes. |
 
@@ -118,7 +118,11 @@ Reconnect to apply the change. Each new prompt reports the current directory; op
 
 Run `rz` on the remote host to choose local files to upload, or `sz /path/to/file` to choose a local destination for downloads. The remote host must have `lrzsz` installed. Official Windows packages include headless `rz.exe` / `sz.exe` launchers, with unmodified lrzsz binaries and `msys-2.0.dll` in `zmodem/native/`, as well as the original source and license notices. No Windows PATH setup is needed; the bundled launchers avoid opening an extra console window.
 
-OpenShell's embedded file picker handles local file and destination selection without opening Windows Explorer. Transfer progress appears in an in-app dialog and closes when the operation finishes; cancel using the transfer controls or Ctrl+C. The bundled launcher avoids a separate CMD window. Downloads use the `rz -E` rename strategy for existing filenames. Protocol payloads are filtered before terminal history and AI context. ZMODEM can be unreliable inside tmux/screen; use SFTP for directories and resumable transfers.
+OpenShell's compact embedded picker handles local file and destination selection without opening Windows Explorer. Progress appears in a non-modal transfer center in the workspace header; switch tabs freely while transfers continue, or cancel through the transfer center or Ctrl+C. The bundled launcher avoids a separate CMD window. Downloads use the `rz -E` rename strategy for existing filenames. Protocol payloads are filtered before terminal history and AI context. ZMODEM can be unreliable inside tmux/screen; use SFTP for directories and resumable transfers.
+
+### Native trzsz: `trz` / `tsz`
+
+Install `trzsz` on the remote host, then use `trz` to upload and `tsz file` to download; `trz -d` supports selecting directories. Both protocols use OpenShell's embedded picker and global transfer center. Native trzsz displays per-file percentages, while traditional `rz` / `sz` use an indeterminate bar when a trustworthy total is unavailable. SSH tabs retain independent transfer state, so switching from A to B does not stop A's transfer.
 
 ## Import and backup
 

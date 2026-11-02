@@ -14,6 +14,7 @@ import (
 type zmodemSelection struct {
     id uint64
     direction string
+    allowDirectories bool
     response chan []string
 }
 
@@ -23,7 +24,7 @@ var zmodemCancelSequence = []byte("\x18\x18\x18\x18\x18\x18\x18\x18\x18\x18\x08\
 
 // selectZmodemPaths pauses the remote ZMODEM header until the in-app picker
 // supplies validated local paths. No native operating-system dialog is opened.
-func (m *Manager) selectZmodemPaths(c *connection, direction string, filter *trzsz.TrzszFilter, serverIn io.Writer) bool {
+func (m *Manager) selectZmodemPaths(c *connection, direction, protocol string, allowDirectories bool, filter *trzsz.TrzszFilter, serverIn io.Writer) bool {
     m.mu.Lock()
     if m.connections[c.ref.TabID] != c {
         m.mu.Unlock()
@@ -37,6 +38,7 @@ func (m *Manager) selectZmodemPaths(c *connection, direction string, filter *trz
     request := &zmodemSelection{
         id: m.nextZmodemSelectionID,
         direction: direction,
+        allowDirectories: allowDirectories,
         response: make(chan []string, 1),
     }
     c.zmodemSelection = request
@@ -45,6 +47,7 @@ func (m *Manager) selectZmodemPaths(c *connection, direction string, filter *trz
 
     m.emit("ssh:zmodem-pick", map[string]any{
         "ref": ref, "id": request.id, "direction": direction,
+        "protocol": protocol, "allowDirectories": allowDirectories,
     })
 
     var paths []string
@@ -65,7 +68,12 @@ func (m *Manager) selectZmodemPaths(c *connection, direction string, filter *trz
     m.emit("ssh:zmodem-pick-ended", map[string]any{"ref": ref, "id": request.id})
     if !live || len(paths) == 0 {
         if live {
-            _, _ = serverIn.Write(zmodemCancelSequence)
+            if protocol == "trzsz" {
+                _, _ = serverIn.Write([]byte{0x03})
+                m.emit("ssh:transfer-finished", map[string]any{"ref": ref})
+            } else {
+                _, _ = serverIn.Write(zmodemCancelSequence)
+            }
         }
         return false
     }
@@ -78,7 +86,11 @@ func (m *Manager) selectZmodemPaths(c *connection, direction string, filter *trz
     }
     if err != nil {
         m.emit("ssh:zmodem-pick-error", map[string]any{"ref": ref, "id": request.id, "error": err.Error()})
-        _, _ = serverIn.Write(zmodemCancelSequence)
+        if protocol == "trzsz" {
+            _, _ = serverIn.Write([]byte{0x03})
+        } else {
+            _, _ = serverIn.Write(zmodemCancelSequence)
+        }
         return false
     }
     return true
@@ -95,6 +107,7 @@ func (m *Manager) SubmitZmodemSelection(ref domain.ConnectionRef, id uint64, pat
     }
     request := c.zmodemSelection
     direction := request.direction
+    allowDirectories := request.allowDirectories
     m.mu.Unlock()
 
     if len(paths) > 0 {
@@ -115,8 +128,8 @@ func (m *Manager) SubmitZmodemSelection(ref domain.ConnectionRef, id uint64, pat
             if direction == "download" && !info.IsDir() {
                 return fmt.Errorf("ZMODEM download destination must be a directory")
             }
-            if direction == "upload" && !info.Mode().IsRegular() {
-                return fmt.Errorf("ZMODEM upload requires regular files")
+            if direction == "upload" && !info.Mode().IsRegular() && !(allowDirectories && info.IsDir()) {
+                return fmt.Errorf("upload requires regular files unless directory mode is enabled")
             }
         }
     }

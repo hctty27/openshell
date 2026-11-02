@@ -67,3 +67,15 @@ test("a picker for another SSH tab does not cover the active tab", () => {
   });
   expect(screen.queryByRole("dialog")).toBeNull();
 });
+
+test("trz -d selects a local directory using the embedded picker", async () => {
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:zmodem-pick", {
+    ref, id: 5, direction: "upload", protocol: "trzsz", allowDirectories: true,
+  });
+  expect(await screen.findByText("folder")).toBeTruthy();
+  fireEvent.click(screen.getByText("folder"));
+  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
+  await waitFor(() => expect(api.SubmitZmodemSelection)
+    .toHaveBeenCalledWith(ref, 5, ["/home/user/folder"]));
+});

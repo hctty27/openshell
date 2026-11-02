@@ -8,6 +8,7 @@ import (
 	"github.com/trzsz/trzsz-go/trzsz"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -167,15 +168,25 @@ type zmodemDirectionWriter struct {
 	dst         io.Writer
 	tail        []byte
 	onDirection func(string) bool
+	onTrzsz     func(string, bool) bool
 }
 
 var zmodemDirectionPattern = regexp.MustCompile(`\*\*\x18B0([01])[0-9a-f]{12}`)
+var trzszDirectionPattern = regexp.MustCompile(`::TRZSZ:TRANSFER:([SRDF]):[0-9]+\.[0-9]+\.[0-9]+(?::[0-9]+){0,2}`)
 
 func (w *zmodemDirectionWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	oldLen := len(w.tail)
 	data := append(append([]byte(nil), w.tail...), p...)
 	var directions []string
+	var trzszDirections []struct { direction string; directory bool }
+	for _, loc := range trzszDirectionPattern.FindAllSubmatchIndex(data, -1) {
+		if loc[1] <= oldLen { continue }
+		mode := data[loc[2]]
+		direction := "upload"
+		if mode == 'S' { direction = "download" }
+		trzszDirections = append(trzszDirections, struct { direction string; directory bool }{direction, mode == 'D' || mode == 'F'})
+	}
 	for _, loc := range zmodemDirectionPattern.FindAllSubmatchIndex(data, -1) {
 		if loc[1] <= oldLen {
 			continue
@@ -186,12 +197,17 @@ func (w *zmodemDirectionWriter) Write(p []byte) (int, error) {
 			directions = append(directions, "download")
 		}
 	}
-	if len(data) > 32 {
-		data = data[len(data)-32:]
+	if len(data) > 128 {
+		data = data[len(data)-128:]
 	}
 	w.tail = append(w.tail[:0], data...)
 	w.mu.Unlock()
 
+	for _, request := range trzszDirections {
+		if w.onTrzsz != nil && !w.onTrzsz(request.direction, request.directory) {
+			return len(p), nil
+		}
+	}
 	for _, direction := range directions {
 		if w.onDirection != nil {
 			if !w.onDirection(direction) {
@@ -257,9 +273,15 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	observedOutput := &zmodemDirectionWriter{
 		dst: remoteOutput,
 		onDirection: func(direction string) bool {
-            m.emit("ssh:transfer-details", map[string]any{"ref": ref, "direction": direction})
-            return m.selectZmodemPaths(connection, direction, filter, remoteInput)
+            if !m.selectZmodemPaths(connection, direction, "zmodem", false, filter, remoteInput) { return false }
+            m.emit("ssh:transfer-details", map[string]any{"ref": ref, "direction": direction, "protocol": "zmodem"})
+            return true
         },
+		onTrzsz: func(direction string, directory bool) bool {
+			if !m.selectZmodemPaths(connection, direction, "trzsz", directory, filter, remoteInput) { return false }
+			m.emit("ssh:transfer-details", map[string]any{"ref": ref, "direction": direction, "protocol": "trzsz"})
+			return true
+		},
 	}
 	session.Stdout, session.Stderr = observedOutput, observedOutput
 	if err = session.Shell(); err != nil {
@@ -310,6 +332,8 @@ type terminalOutputCloser struct {
     lastProgress time.Time
 }
 var zmodemProgressPattern = regexp.MustCompile(`Transferred ([0-9.]+[[:space:]]*[KMGTPE]?B), Speed ((?:[0-9.]+[[:space:]]*[KMGTPE]?B/s)|N/A)`)
+// Native trzsz emits per-file progress (not an aggregate for multi-file transfers).
+var trzszProgressPattern = regexp.MustCompile(`([0-9]{1,3})% \| ([0-9]+(?:\.[0-9]+)? [KMGT]?B)(?: \| ([0-9]+(?:\.[0-9]+)? [KMGT]?B/s))?`)
 
 // trzsz-go emits these messages immediately after the local rz/sz child exits.
 // Its transfer-state callback can be delayed until further remote SSH output.
@@ -320,6 +344,7 @@ func (o *terminalOutputCloser) Write(p []byte) (int, error) {
     oldTailSize := len(o.tail)
     data := append(append([]byte(nil), o.tail...), p...)
     matches := zmodemProgressPattern.FindAllSubmatch(data, -1)
+    nativeMatches := trzszProgressPattern.FindAllSubmatch(data, -1)
     locallyExited := false
     for _, loc := range zmodemLocalExitPattern.FindAllIndex(data, -1) {
         if loc[1] > oldTailSize {
@@ -329,7 +354,18 @@ func (o *terminalOutputCloser) Write(p []byte) (int, error) {
     }
     if len(data) > 256 { data = data[len(data)-256:] }
     o.tail = append(o.tail[:0], data...)
-    if len(matches) != 0 && time.Since(o.lastProgress) >= 180*time.Millisecond {
+    if len(nativeMatches) != 0 && time.Since(o.lastProgress) >= 180*time.Millisecond {
+        last := nativeMatches[len(nativeMatches)-1]
+        percentage := -1
+        if n, err := strconv.Atoi(string(last[1])); err == nil && n <= 100 { percentage = n }
+        if percentage >= 0 {
+            o.lastProgress = time.Now()
+            o.writer.m.emit("ssh:transfer-progress", map[string]any{
+                "ref": o.writer.c.ref, "protocol": "trzsz", "percent": percentage,
+                "transferred": string(last[2]), "speed": string(last[3]),
+            })
+        }
+    } else if len(matches) != 0 && time.Since(o.lastProgress) >= 180*time.Millisecond {
         last := matches[len(matches)-1]
         o.lastProgress = time.Now()
         o.writer.m.emit("ssh:transfer-progress", map[string]any{
