@@ -19,7 +19,6 @@ import {
   ChevronDown,
   Pin,
   PinOff,
-  Settings,
   Network,
   FileInput,
 } from "lucide-react";
@@ -41,14 +40,12 @@ interface Props {
   onImport?(): void;
   onRenameGroup(g: Group): void;
   onDeleteGroup(g: Group): void;
-  onSettings(): void;
   pinned?: boolean;
   hidden?: boolean;
   onTogglePin?(): void;
 }
 export default function SessionTree(p: Props) {
   useTranslation();
-  const settingsTitle = t("common:settings");
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [contextMenu, setContextMenu] = useState<{
@@ -292,13 +289,6 @@ export default function SessionTree(p: Props) {
   };
   return (
     <aside id="session-sidebar-panel" className="session-sidebar" aria-hidden={p.hidden || undefined} inert={p.hidden}>
-      <div className="brand">
-        <img className="brand-icon" src="/app-icon.svg" alt="OpenShell" />
-        <strong>
-          OpenShell<span>{t("common:workspaceLabel")}</span>
-        </strong>
-        <span className="version">0.1</span>
-      </div>
       <div className="sidebar-heading">
         <span>{t("common:sessions")}</span>
         <div>
@@ -515,15 +505,6 @@ export default function SessionTree(p: Props) {
           </dl>
         </div>
       </section>
-      <div className="sidebar-footer">
-        <span>
-          <i className="status-dot" />
-          {t("sessions:localWorkspace")}
-        </span>
-        <button title={settingsTitle} onClick={p.onSettings}>
-          <Settings size={17} />
-        </button>
-      </div>
       {contextMenu && menuItems.length > 0 && (
         <FloatingContextMenu
           x={contextMenu.x}
