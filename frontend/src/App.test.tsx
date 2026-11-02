@@ -75,7 +75,7 @@ test("shows a focused SSH workspace without AI controls", async () => {
     render(<App />);
   });
   expect(screen.getAllByText("会话管理")[0]).toBeTruthy();
-  expect(screen.getAllByText("SSH 终端")[0]).toBeTruthy();
+  expect(document.querySelector(".workspace-header")).toBeNull();
   expect(screen.queryByText("AI 助手")).toBeNull();
 });
 test("session sidebar can auto-hide, hover open and pin without remounting the tree", async () => {
@@ -164,10 +164,10 @@ test("moves Settings to the top toolbar and product info to About", async () => 
   expect(document.querySelector(".sidebar-footer")).toBeNull();
   expect(document.querySelector(".workspace-status")).toBeNull();
   const settingsButton = screen.getByRole("button", { name: "设置" });
-  expect(settingsButton.closest(".workspace-header")).toBeTruthy();
+  expect(settingsButton.closest(".window-titlebar")).toBeTruthy();
   fireEvent.click(settingsButton);
   fireEvent.click(screen.getByRole("button", { name: "关于" }));
-  expect(screen.getByText("OpenShell")).toBeTruthy();
+  expect(screen.getAllByText("OpenShell").length).toBeGreaterThan(0);
   expect(screen.getByText(/版本 v\d+\.\d+\.\d+/)).toBeTruthy();
 });
 
@@ -479,7 +479,7 @@ test("SFTP opens beside the existing terminal and can close without reconnecting
   expect(screen.getByTestId("sftp-panel-stub").getAttribute("data-initial-directory")).toBe("/root");
   expect(document.querySelector(".workspace-file-panel .transfer-dock")).toBeNull();
   expect(document.querySelector(".workspace-workarea > .transfer-dock")).toBeNull();
-  expect(document.querySelector(".workspace-header .transfer-center")).toBeTruthy();
+  expect(document.querySelector(".window-titlebar .transfer-center")).toBeTruthy();
   expect(screen.getByTestId("sftp-panel-stub").getAttribute("data-cwd-reported")).toBe("false");
   const terminal = document.querySelector(".terminal-container") as HTMLElement;
   expect(terminal.style.display).not.toBe("none");

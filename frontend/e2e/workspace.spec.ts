@@ -200,6 +200,17 @@ test.beforeEach(async ({ page }) => {
     };
   });
 });
+test.afterEach(async ({ page }, info) => {
+  if (info.status === info.expectedStatus || page.isClosed()) return;
+  const detail = await page.evaluate(() => ({
+    browserFixture: !!(window as any).go?.main?.App,
+    dialogs: [...document.querySelectorAll("dialog")].map(el => ({ open: el.open, text: el.textContent?.trim().slice(0, 500) })),
+    tabs: [...document.querySelectorAll(".terminal-tab")].map(el => el.textContent?.trim()),
+    alerts: [...document.querySelectorAll('[role="alert"]')].map(el => el.textContent?.trim()),
+    content: document.body.innerText.slice(0, 800),
+  })).catch(error => ({ error: String(error) }));
+  console.log("E2E_MIGRATION_DIAGNOSTICS", JSON.stringify(detail));
+});
 test("session, custom API, terminal and explicitly confirmed AI command", async ({
   page,
 }) => {
@@ -655,13 +666,13 @@ test("compact workspace removes redundant chrome while keeping quick commands", 
   await expect(page.locator(".brand, .sidebar-footer, .workspace-status")).toHaveCount(0);
   const settingsButton = page.getByTitle("设置", { exact: true });
   await expect(settingsButton).toBeVisible();
-  await expect(settingsButton.locator("xpath=..")).toHaveClass(/header-right/);
+  await expect(settingsButton.locator("xpath=../..")).toHaveClass(/window-titlebar/);
 
   const geometry = await page.evaluate(() => {
     const height = (selector: string) =>
       document.querySelector(selector)!.getBoundingClientRect().height;
     return {
-      header: height(".workspace-header"),
+      header: height(".window-titlebar"),
       tabs: height(".tab-strip"),
       server: height(".terminal-toolbar"),
       detailsHeading: height(".details-heading"),
@@ -673,7 +684,7 @@ test("compact workspace removes redundant chrome while keeping quick commands", 
       detail: height(".details-properties > div"),
     };
   });
-  expect(geometry.header).toBe(30);
+  expect(geometry.header).toBe(32);
   expect(geometry.tabs).toBe(30);
   expect(geometry.server).toBe(30);
   expect(geometry.detailsHeading).toBe(30);

@@ -7,6 +7,7 @@ import TransferCenter from "./TransferCenter";
 
 const events = vi.hoisted(() => ({ callbacks: new Map<string, (value: any) => void>() }));
 vi.mock("../bridge", () => ({
+  desktop: true,
   api: {
     SFTPTransfers: vi.fn(async () => []),
     SFTPCancel: vi.fn(async () => {}),

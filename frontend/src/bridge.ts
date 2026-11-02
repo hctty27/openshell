@@ -1,5 +1,5 @@
 import { t } from "./i18n";
-import * as bindings from "../wailsjs/go/main/App";
+import { Call, Events } from "@wailsio/runtime";
 import type {
   AppState,
   SessionRequest,
@@ -66,33 +66,36 @@ type Backend = {
 };
 declare global {
   interface Window {
-    go?: { main?: { App: Backend } };
-    runtime?: {
-      EventsOn(name: string, callback: (payload: any) => void): () => void;
-    };
+    go?: { main?: { App?: Backend } };
+    runtime?: { EventsOn?: (name: string, callback: (payload: any) => void) => () => void };
   }
 }
-export const desktop = !!window.go?.main?.App;
+
+export const nativeDesktop = typeof window !== "undefined" &&
+  typeof (window as Window & { chrome?: { webview?: { postMessage?: unknown } } })
+    .chrome?.webview?.postMessage === "function";
+
+const fixtureBackend = import.meta.env.DEV ? window.go?.main?.App : undefined;
+export const desktop = nativeDesktop || Boolean(fixtureBackend);
+
 export const api = new Proxy({} as Backend, {
-  get:
-    (_, name) =>
-    (...args: unknown[]) => {
-      const backend = window.go?.main?.App;
-      if (!backend)
-        return Promise.reject(
-          new Error(t("common:useThisFeatureInTheWindowsDesktopApp")),
-        );
-      return (
-        bindings[name as keyof typeof bindings] as (
-          ...args: unknown[]
-        ) => Promise<unknown>
-      )(...args);
-    },
+  get: (_, name) => (...args: unknown[]) => {
+    if (fixtureBackend) {
+      const method = fixtureBackend[name as keyof Backend];
+      if (typeof method !== "function") {
+        return Promise.reject(new Error(`Unavailable browser fixture method: ${String(name)}`));
+      }
+      return (method as (...values: unknown[]) => Promise<unknown>)(...args);
+    }
+    return nativeDesktop
+      ? Call.ByName(`main.App.${String(name)}`, ...args) as Promise<unknown>
+      : Promise.reject(new Error(t("common:useThisFeatureInTheWindowsDesktopApp")));
+  },
 });
-export function listen(
-  name: string,
-  callback: (payload: any) => void,
-): () => void {
-  return window.runtime?.EventsOn(name, callback) ?? (() => {});
+
+export function listen(name: string, callback: (payload: any) => void): () => void {
+  if (fixtureBackend && window.runtime?.EventsOn) return window.runtime.EventsOn(name, callback);
+  if (!nativeDesktop) return () => {};
+  return Events.On(name, event => callback(event.data));
 }
 export { errorText } from "./i18n/errors";

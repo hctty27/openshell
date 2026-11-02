@@ -1,15 +1,15 @@
 {
-	"fixed": {
-		"file_version": "{{.Info.ProductVersion}}"
-	},
-	"info": {
-		"0000": {
-			"ProductVersion": "{{.Info.ProductVersion}}",
-			"CompanyName": "{{.Info.CompanyName}}",
-			"FileDescription": "{{.Info.ProductName}}",
-			"LegalCopyright": "{{.Info.Copyright}}",
-			"ProductName": "{{.Info.ProductName}}",
-			"Comments": "{{.Info.Comments}}"
-		}
-	}
+  "fixed": {
+    "file_version": "0.1.74"
+  },
+  "info": {
+    "0000": {
+      "ProductVersion": "0.1.74",
+      "CompanyName": "Cheng",
+      "FileDescription": "OpenShell SSH/SFTP client",
+      "LegalCopyright": "Copyright 2026 Cheng",
+      "ProductName": "OpenShell",
+      "Comments": "OpenShell — lightweight Windows SSH/SFTP client"
+    }
+  }
 }

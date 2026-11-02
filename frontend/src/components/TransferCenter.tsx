@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpDown, ArrowUpFromLine, Check, RotateCcw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, errorText, listen } from "../bridge";
+import { api, desktop, errorText, listen } from "../bridge";
 import { t } from "../i18n";
 import type { Ref, SFTPTask, Tab } from "../types";
 
@@ -130,7 +130,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
   }, []);
 
   useEffect(() => {
-    if (typeof window.go?.main?.App?.SFTPTransfers !== "function") return;
+    if (!desktop) return;
     let cancelled = false;
     for (const ref of liveRefs) {
       void api.SFTPTransfers(ref).then(tasks => {

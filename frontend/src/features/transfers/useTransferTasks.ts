@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, listen } from "../../bridge";
+import { api, desktop, listen } from "../../bridge";
 import type { Ref, SFTPTask } from "../../types";
 
 interface ZmodemStats { transferred: string; speed: string }
@@ -28,7 +28,7 @@ export function useTransferTasks(refID?: Ref) {
     if (!refID) return;
     // Browser fixtures can emulate SSH without exposing the SFTP backend.
     // Check the actual Wails binding before calling through the API proxy.
-    if (typeof window.go?.main?.App?.SFTPTransfers === "function") {
+    if (desktop) {
       void api.SFTPTransfers(refID).then(list => {
         if (disposed) return;
         setTasks(current => {

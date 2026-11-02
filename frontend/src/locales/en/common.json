@@ -160,5 +160,9 @@
   "quitActiveSessionsDescription": "{{count}} SSH connection(s) will be disconnected when OpenShell exits.",
   "quitActiveSessionsBusyDescription": "{{count}} SSH connection(s) will be disconnected, and running AI tasks or file transfers may be interrupted. Remote processes may continue running.",
   "quitAndDisconnect": "Disconnect all and exit",
-  "retryConnection": "Retry connection"
+  "retryConnection": "Retry connection",
+  "minimizeWindow": "Minimize",
+  "maximizeWindow": "Maximize",
+  "restoreWindow": "Restore",
+  "closeWindow": "Close window"
 }

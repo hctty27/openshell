@@ -7,10 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"github.com/hctty27/openshell/internal/branding"
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
+  "github.com/wailsapp/wails/v3/pkg/events"
+  "context"
 	"log"
 )
 
@@ -31,37 +30,50 @@ func main() {
             _ = os.Setenv("PATH", helperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
         }
     }
-    app, e := NewApp()
-	if e != nil {
-		log.Fatal("无法初始化应用：", e)
-	}
-	app.emit = func(name string, payload any) { runtime.EventsEmit(app.ctx, name, payload) }
-	app.pickBackupRead = func() (string, error) {
-		return runtime.OpenFileDialog(app.ctx, runtime.OpenDialogOptions{
-			Title: app.dialogTitle("Import OpenShell session backup", "导入 OpenShell 会话备份"),
-			Filters: []runtime.FileFilter{{DisplayName: app.dialogTitle("OpenShell backup (*.json)", "OpenShell 备份文件 (*.json)"), Pattern: "*.json"}},
-		})
-	}
-	app.pickBackupWrite = func() (string, error) {
-		return runtime.SaveFileDialog(app.ctx, runtime.SaveDialogOptions{
-			Title: app.dialogTitle("Back up OpenShell sessions", "备份 OpenShell 会话"),
-			DefaultFilename: "openshell-sessions.json",
-			Filters: []runtime.FileFilter{{DisplayName: "OpenShell session backup (*.json)", Pattern: "*.json"}},
-		})
-	}
-	app.pickImport = func() (string, error) {
-		title := app.dialogTitle("Import Xshell sessions", "导入 Xshell 会话")
-		return runtime.OpenFileDialog(app.ctx, runtime.OpenDialogOptions{
-			Title: title,
-			Filters: []runtime.FileFilter{{DisplayName: app.dialogTitle("Xshell sessions (*.xts;*.xsh)", "Xshell 会话文件 (*.xts;*.xsh)"), Pattern: "*.xts;*.xsh"}},
-		})
-	}
-	app.pickKey = func() (string, error) {
-		title := app.dialogTitle("Choose SSH private key", "选择 SSH 私钥")
-		return runtime.OpenFileDialog(app.ctx, runtime.OpenDialogOptions{Title: title})
-	}
-	e = wails.Run(&options.App{Title: branding.Name, Width: 1440, Height: 900, MinWidth: 1000, MinHeight: 640, AssetServer: &assetserver.Options{Assets: assets}, BackgroundColour: &options.RGBA{R: 11, G: 16, B: 23, A: 255}, DragAndDrop: &options.DragAndDrop{EnableFileDrop: true, DisableWebViewDrop: true}, OnStartup: app.startup, OnBeforeClose: app.beforeClose, OnShutdown: app.shutdown, Bind: []interface{}{app}})
-	if e != nil {
-		log.Fatal(e)
-	}
+    service, err := NewApp()
+    if err != nil { log.Fatal("无法初始化应用：", err) }
+    ctx, cancel := context.WithCancel(context.Background())
+    service.startup(ctx)
+    desktop := application.New(application.Options{
+      Name: branding.Name,
+      Services: []application.Service{application.NewService(service)},
+      Assets: application.AssetOptions{Handler: application.BundledAssetFileServer(assets)},
+      ShouldQuit: func() bool { return !service.beforeClose(ctx) },
+      OnShutdown: func() { cancel(); service.shutdown(ctx) },
+    })
+    service.emit = func(name string, payload any) { desktop.Event.Emit(name, payload) }
+    service.quit = desktop.Quit
+    service.pickBackupRead = func() (string, error) {
+      return desktop.Dialog.OpenFile().SetTitle(service.dialogTitle("Import OpenShell session backup", "导入 OpenShell 会话备份")).
+        AddFilter("OpenShell backup (*.json)", "*.json").PromptForSingleSelection()
+    }
+    service.pickBackupWrite = func() (string, error) {
+      return desktop.Dialog.SaveFile().
+        SetFilename("openshell-sessions.json").AddFilter("OpenShell backup (*.json)", "*.json").PromptForSingleSelection()
+    }
+    service.pickImport = func() (string, error) {
+      return desktop.Dialog.OpenFile().SetTitle(service.dialogTitle("Import Xshell sessions", "导入 Xshell 会话")).
+        AddFilter("Xshell sessions (*.xts;*.xsh)", "*.xts;*.xsh").PromptForSingleSelection()
+    }
+    service.pickKey = func() (string, error) {
+      return desktop.Dialog.OpenFile().SetTitle(service.dialogTitle("Choose SSH private key", "选择 SSH 私钥")).PromptForSingleSelection()
+    }
+    service.pickDirectory = func() (string, error) {
+      return desktop.Dialog.OpenFile().SetTitle(service.dialogTitle("Select local folder", "选择本地文件夹")).
+        CanChooseDirectories(true).CanChooseFiles(false).PromptForSingleSelection()
+    }
+    window := desktop.Window.NewWithOptions(application.WebviewWindowOptions{
+      Name: "main", Title: branding.Name, Width: 1440, Height: 900,
+      MinWidth: 1000, MinHeight: 640, Frameless: true, EnableFileDrop: true,
+      BackgroundColour: application.NewRGB(11,16,23),
+      Windows: application.WindowsWindow{NonClientRegionSupport: true},
+    })
+    window.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+      details := event.Context().DropTargetDetails()
+      if details == nil { return }
+      desktop.Event.Emit("app:files-dropped", map[string]any{
+        "x": details.X, "y": details.Y, "paths": event.Context().DroppedFiles(),
+      })
+    })
+    if err := desktop.Run(); err != nil { log.Fatal(err) }
 }
