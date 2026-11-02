@@ -164,7 +164,7 @@ wails3 dev
 ```sh
 wails3 generate bindings -names -ts
 wails3 generate syso -manifest build/windows/wails.exe.manifest -icon build/windows/icon.ico -info build/windows/info.json -arch amd64 -out rsrc_windows_amd64.syso
-go build -tags production -trimpath -ldflags="-s -w" -o build/bin/OpenShell.exe .
+go build -tags production -trimpath -ldflags="-H windowsgui -s -w" -o build/bin/OpenShell.exe .
 ```
 
 产物为 `build/bin/OpenShell.exe`，构建前需要生成 `build/windows/icon.ico`。以上命令不打包 ZMODEM 工具；需要时在构建后通过 PowerShell 运行 [scripts/prepare_zmodem_windows.ps1](scripts/prepare_zmodem_windows.ps1)。完整图标生成、安装版与便携版打包流程见 [Windows 发布工作流](.github/workflows/windows-release.yml)。

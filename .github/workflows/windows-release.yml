@@ -13,6 +13,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "scripts/verify_windows_gui_subsystem.py"
       - ".github/workflows/windows-release.yml"
 
 permissions:
@@ -132,9 +133,11 @@ jobs:
           & "$(go env GOPATH)\bin\wails3.exe" generate syso -manifest build/windows/wails.exe.manifest -icon build/windows/icon.ico -info build/windows/info.json -arch amd64 -out rsrc_windows_amd64.syso
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory -Force build/bin | Out-Null
-          go build -tags production -trimpath -ldflags "-s -w -X github.com/hctty27/openshell/internal/branding.Version=$env:APP_VERSION" -o build/bin/OpenShell.exe .
+          go build -tags production -trimpath -ldflags "-H windowsgui -s -w -X github.com/hctty27/openshell/internal/branding.Version=$env:APP_VERSION" -o build/bin/OpenShell.exe .
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path "build/bin/OpenShell.exe")) { throw "OpenShell.exe was not generated" }
+          python scripts/verify_windows_gui_subsystem.py build/bin/OpenShell.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Prepare bundled ZMODEM utilities
         shell: pwsh
@@ -190,6 +193,8 @@ jobs:
           New-Item -ItemType Directory -Force dist | Out-Null
           $portable = "dist/OpenShell-v$env:APP_VERSION.exe"
           Copy-Item "build/bin/OpenShell.exe" $portable -Force
+          python scripts/verify_windows_gui_subsystem.py $portable
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/verify_windows_icons.py --icon build/windows/icon.ico --exe $portable
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $staging = Join-Path (Resolve-Path "dist").Path "portable-staging"
