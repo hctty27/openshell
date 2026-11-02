@@ -2,6 +2,13 @@
 
 ## 未发布
 
+## 0.1.76 — 2026-11-02
+
+- 修复 Wails v3 迁移后 Windows 便携版启动 OpenShell 时额外弹出 CMD 控制台窗口的问题。
+- Windows 正式版、终端冒烟测试及本地构建统一使用 Go 链接参数 `-H windowsgui`，确保桌面应用使用 Windows GUI 子系统。
+- 新增 PE 可执行文件子系统校验，Windows 构建和便携版打包时检查 `Subsystem=2`，防止再次误发控制台程序。
+- 保留 SSH/SFTP、本地 ConPTY 终端以及 rz/sz/trz/tsz 文件传输能力；通过 PR CI、Windows Smoke 与发布打包检查。
+
 ## 0.1.75 — 2026-11-02
 
 - Windows 桌面框架由 Wails v2 升级为 Wails v3.0.0，保留现有 Go SSH/SFTP、终端、会话管理与文件传输能力。
