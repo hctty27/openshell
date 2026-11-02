@@ -1,12 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { t } from "../i18n";
-import { Settings2 } from "lucide-react";
-import type { QuickCommand, QuickCommandLayout, Tab } from "../types";
+import { Plus, Settings2 } from "lucide-react";
+import type { QuickCommand, Tab } from "../types";
 
 interface Props {
   tab?: Tab;
   commands: QuickCommand[];
-  layout: QuickCommandLayout;
   onManage(): void;
   onRun(command: QuickCommand): void;
 }
@@ -25,7 +24,6 @@ export function visibleQuickCommands(commands: QuickCommand[], tab?: Tab) {
 export default function QuickCommandBar({
   tab,
   commands,
-  layout,
   onManage,
   onRun,
 }: Props) {
@@ -33,23 +31,13 @@ export default function QuickCommandBar({
   const visible = visibleQuickCommands(commands, tab);
   return (
     <div
-      className={`quick-command-bar ${layout}`}
+      className="quick-command-bar"
       aria-label={t("terminal:quickCommands")}
     >
-      <button
-        type="button"
-        className="quick-command-manage"
-        onClick={onManage}
-        title={t("terminal:manageQuickCommands")}
-      >
-        <Settings2 size={14} />
-        <span>{t("common:manage")}</span>
-      </button>
       <div
-        className={`quick-command-list ${layout}`}
+        className="quick-command-list"
         aria-label={t("terminal:commandButtons")}
         onWheel={(event) => {
-          if (layout !== "single") return;
           const el = event.currentTarget;
           if (
             el.scrollWidth > el.clientWidth &&
@@ -59,11 +47,6 @@ export default function QuickCommandBar({
           }
         }}
       >
-        {visible.length === 0 && (
-          <span className="quick-command-empty">
-            {t("terminal:noQuickCommandsClickManageToAddOne")}
-          </span>
-        )}
         {visible.map((command) => (
           <button
             key={command.id}
@@ -80,6 +63,17 @@ export default function QuickCommandBar({
           </button>
         ))}
       </div>
+      <button
+        type="button"
+        className="quick-command-manage"
+        onClick={onManage}
+        title={t("terminal:manageQuickCommands")}
+        aria-label={t("terminal:manageQuickCommands")}
+      >
+        {visible.length === 0
+          ? <Plus size={15} aria-hidden="true" />
+          : <Settings2 size={14} aria-hidden="true" />}
+      </button>
     </div>
   );
 }

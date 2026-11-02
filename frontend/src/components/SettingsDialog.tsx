@@ -30,7 +30,6 @@ import type {
   SessionRequest,
   Theme,
   TerminalTheme,
-  QuickCommandLayout,
 } from "../types";
 interface Props {
   language?: Language;
@@ -46,8 +45,6 @@ interface Props {
   onTheme(theme: Theme): void;
   terminalTheme: TerminalTheme;
   onTerminalTheme(theme: TerminalTheme): void;
-  quickCommandLayout: QuickCommandLayout;
-  onQuickCommandLayout(layout: QuickCommandLayout): void;
   autoCopySelection: boolean;
   onAutoCopySelection(enabled: boolean): void;
   rightClickPaste: boolean;
@@ -459,8 +456,6 @@ export default function SettingsDialog(p: Props) {
               onTerminalTheme={p.onTerminalTheme}
               fontSize={p.fontSize}
               onFont={p.onFont}
-              quickCommandLayout={p.quickCommandLayout}
-              onQuickCommandLayout={p.onQuickCommandLayout}
               logHighlights={p.logHighlights}
               onLogHighlights={p.onLogHighlights}
               autoCopySelection={p.autoCopySelection}
@@ -540,10 +535,6 @@ export default function SettingsDialog(p: Props) {
                     await api.SavePreference("fontSize", String(p.fontSize));
                     await api.SavePreference("theme", p.theme);
                     await api.SavePreference("terminalTheme", p.terminalTheme);
-                    await api.SavePreference(
-                      "quickCommandLayout",
-                      p.quickCommandLayout,
-                    );
                     await api.SavePreference(
                       "autoCopySelection",
                       String(p.autoCopySelection),
