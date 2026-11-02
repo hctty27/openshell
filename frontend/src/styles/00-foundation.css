@@ -159,6 +159,15 @@ kbd {
 .app {
   height: 100vh;
   display: flex;
+  flex-direction: column;
   min-width: 900px;
+  overflow: hidden;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
