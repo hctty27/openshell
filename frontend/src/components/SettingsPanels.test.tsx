@@ -77,8 +77,6 @@ test("terminal settings display multiline paste confirmation only when right-cli
     onTerminalTheme: vi.fn(),
     fontSize: 14,
     onFont: vi.fn(),
-    quickCommandLayout: "single" as const,
-    onQuickCommandLayout: vi.fn(),
     logHighlights: false,
     onLogHighlights: vi.fn(),
     autoCopySelection: true,
@@ -90,6 +88,7 @@ test("terminal settings display multiline paste confirmation only when right-cli
   };
   const { rerender } = render(<TerminalSettingsPanel {...props} />);
   expect(screen.queryByLabelText("多行粘贴前确认")).toBeNull();
+  expect(screen.queryByLabelText("快速命令栏布局")).toBeNull();
   fireEvent.click(screen.getByLabelText("鼠标右键粘贴"));
   expect(props.onRightClickPaste).toHaveBeenCalledWith(true);
   rerender(<TerminalSettingsPanel {...props} rightClickPaste />);
