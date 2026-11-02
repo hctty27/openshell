@@ -72,14 +72,12 @@ vi.mock("./bridge", async () => ({
   },
 }));
 afterEach(cleanup);
-test("shows workspace and collapsible AI sidebar", async () => {
+test("shows a focused SSH workspace without AI controls", async () => {
   await act(async () => {
     render(<App />);
   });
   expect(screen.getAllByText("会话管理")[0]).toBeTruthy();
   expect(screen.getAllByText("SSH 终端")[0]).toBeTruthy();
-  expect(screen.getByText("AI 助手")).toBeTruthy();
-  fireEvent.click(screen.getByTitle("收起 AI"));
   expect(screen.queryByText("AI 助手")).toBeNull();
 });
 test("theme previews immediately and is saved in general settings", async () => {
@@ -96,7 +94,7 @@ test("theme previews immediately and is saved in general settings", async () => 
   fireEvent.click(screen.getByRole("button", { name: "深色" }));
   expect(document.documentElement.dataset.theme).toBe("dark");
 });
-test("settings navigation separates general, terminal, AI and automatic options", async () => {
+test("settings navigation contains only general, terminal and connection options", async () => {
   await act(async () => {
     render(<App />);
   });
@@ -104,8 +102,8 @@ test("settings navigation separates general, terminal, AI and automatic options"
   expect(screen.getByRole("navigation", { name: "设置分类" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "通用" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "终端" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "AI 配置" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "自动执行" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "AI 配置" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "自动执行" })).toBeNull();
   expect(screen.queryByText("OpenShell · 中文终端预览")).toBeNull();
   expect(screen.queryByText(/systemctl status redis/)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "终端" }));
@@ -126,35 +124,6 @@ test("opens session editor without connecting and rejects missing host", async (
   fireEvent.click(screen.getByRole("button", { name: "保存会话" }));
   expect(screen.getByText("请填写主机地址和用户名")).toBeTruthy();
 });
-test("API settings expose custom endpoint key and model fields", async () => {
-  await act(async () => {
-    render(<App />);
-  });
-  fireEvent.click(screen.getByTitle("设置"));
-  fireEvent.click(screen.getByRole("button", { name: "AI 配置" }));
-  const name = screen.getByLabelText("配置名称") as HTMLInputElement;
-  const baseUrl = screen.getByLabelText("Base URL") as HTMLInputElement;
-  expect(name.value).toBe("");
-  expect(name.placeholder).toBe("自定义 API");
-  expect(baseUrl.value).toBe("");
-  expect(baseUrl.placeholder).toBe("https://api.example.com/v1");
-  fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
-  expect(screen.getByRole("alert").textContent).toBe("请输入配置名称");
-  fireEvent.change(name, { target: { value: "示例 API" } });
-  fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
-  expect(screen.getByRole("alert").textContent).toBe("请输入 API 地址");
-  expect(screen.getByLabelText("API Key")).toBeTruthy();
-  expect(screen.getByLabelText("模型名称")).toBeTruthy();
-  const provider = screen.getByRole("combobox", { name: "API 协议" }) as HTMLSelectElement;
-  expect(provider.value).toBe("openai");
-  await waitFor(() => expect(screen.getAllByText("OpenAI 兼容接口").length).toBeGreaterThan(0));
-  fireEvent.change(provider, { target: { value: "anthropic" } });
-  expect(provider.value).toBe("anthropic");
-  expect(baseUrl.placeholder).toBe("https://api.anthropic.com/v1");
-  fireEvent.change(provider, { target: { value: "openai" } });
-  expect(baseUrl.placeholder).toBe("https://api.example.com/v1");
-});
-
 test("shows the OpenShell product name", async () => {
   await act(async () => {
     render(<App />);
@@ -209,29 +178,6 @@ test("terminal mouse settings are opt-in and saved independently", async () => {
       "confirmMultilinePaste",
       "false",
     );
-  });
-});
-
-test("automatic execution settings save bounded limit and scope", async () => {
-  await act(async () => {
-    render(<App />);
-  });
-  fireEvent.click(screen.getByTitle("设置"));
-  fireEvent.click(screen.getByRole("button", { name: "自动执行" }));
-  expect(
-    (screen.getByLabelText("每轮命令上限") as HTMLInputElement).value,
-  ).toBe("50");
-  fireEvent.change(screen.getByLabelText("每轮命令上限"), {
-    target: { value: "3" },
-  });
-  fireEvent.change(screen.getByLabelText("自动执行范围"), {
-    target: { value: "all" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "保存自动执行设置" }));
-  await waitFor(() => {
-    expect(api.SavePreference).toHaveBeenCalledWith("autoCommandLimit", "3");
-    expect(api.SavePreference).toHaveBeenCalledWith("autoAllowChanges", "true");
-    expect(api.SavePreference).toHaveBeenCalledWith("autoContinueRounds", "true");
   });
 });
 

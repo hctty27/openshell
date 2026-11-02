@@ -6,9 +6,7 @@ export function isActiveRemoteSession(tab: Tab): boolean {
 }
 
 export function hasInterruptibleWork(tab: Tab, hasTransfers: (ref: Tab["ref"]) => boolean): boolean {
-  return tab.chatBusy || tab.executing || !!tab.proposal ||
-    !!(tab.autoRun && ["ready", "running", "awaiting_confirmation", "limit"].includes(tab.autoRun.status)) ||
-    hasTransfers(tab.ref);
+  return hasTransfers(tab.ref);
 }
 
 export function sessionLabel(tab: Tab): string {

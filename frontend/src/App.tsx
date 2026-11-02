@@ -14,7 +14,6 @@ import {
   PanelLeftOpen,
   RefreshCw,
   Unplug,
-  Sparkles,
   ArrowRight,
   Server,
   ShieldCheck,
@@ -41,13 +40,10 @@ import type {
   Ref,
   HostChallenge,
   SessionRequest,
-  ChatRequest,
-  ChatMode,
   Theme,
   QuickCommand,
   QuickCommandLayout,
   XshellImportPreview,
-  OperationStep,
 } from "./types";
 import SessionTree from "./components/SessionTree";
 import SessionPicker from "./components/SessionPicker";
@@ -58,15 +54,11 @@ import SFTPView from "./components/SFTPView";
 import TransferDock from "./components/TransferDock";
 import ZmodemProgressDialog from "./components/ZmodemProgressDialog";
 import ZmodemFilePicker from "./components/ZmodemFilePicker";
-import AISidebar from "./components/AISidebar";
-import { useConversations } from "./useConversations";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
 import { useAutoReconnect } from "./features/sessions/useAutoReconnect";
-import { useAutomaticEventHandlers } from "./features/ai/useAutomaticEventHandlers";
 import { useSplitWorkspace } from "./features/terminal/useSplitWorkspace";
 import { useTabSplitDrop } from "./features/terminal/useTabSplitDrop";
 import { useTransferActivity } from "./features/transfers/useTransferActivity";
-import { toChatMessages } from "./conversations";
 import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
 import { quickCommandTerminalInput } from "./quickCommands";
@@ -76,9 +68,7 @@ const APP_VERSION = import.meta.env.VITE_APP_VERSION || packageManifest.version;
 const initial: AppState = {
   sessions: [],
   groups: [],
-  profiles: [],
   fontSize: "14",
-  activeProfile: "",
   version: APP_VERSION,
 };
 const id = () => crypto.randomUUID();
@@ -164,7 +154,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const { tabs, setTabs, tabsRef, activeID, setActiveID, activeIDRef, update } = useWorkspaceTabs();
   const { hasActiveTransfers } = useTransferActivity();
   const [state, setState] = useState(initialState),
-    [showAI, setShowAI] = useState(true),
     [showSessions, setShowSessions] = useState(true),
     [showSessionPicker, setShowSessionPicker] = useState(false),
     [xshellPreview, setXshellPreview] = useState<XshellImportPreview | null>(null),
@@ -193,12 +182,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     [quickCommandFocus, setQuickCommandFocus] = useState(0),
     [terminalSearchFocus, setTerminalSearchFocus] = useState(0),
     [logHighlights, setLogHighlights] = useState(initialState.logHighlights === true),
-    [profileID, setProfileID] = useState(
-      initialState.profiles.find((p) => p.id === initialState.activeProfile)
-        ?.id ??
-        initialState.profiles[0]?.id ??
-        "",
-    ),
     [dialog, setDialog] = useState<{
       kind: "session" | "settings";
       session?: Session;
@@ -206,7 +189,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     } | null>(null),
     [toast, setToast] = useState<unknown>(""),
     [notice, setNotice] = useState<DisplayText>(""),
-    [aiWidth, setAIWidth] = useState(370),
     [sessionWidth, setSessionWidth] = useState(235),
     [challenge, setChallenge] = useState<{
       host: HostChallenge;
@@ -214,17 +196,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
       secret: string;
     } | null>(null),
     [login, setLogin] = useState<{ tab: Tab; secret: string } | null>(null),
-    [preview, setPreview] = useState<{
-      tabID: string;
-      text: string;
-      truncated: boolean;
-    } | null>(null),
-    [attachments, setAttachments] = useState<Record<string, string>>({});
-  const [aiTargetIDs, setAiTargetIDs] = useState<Record<string, string[]>>({});
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
   const remoteUploadDirs = useRef<Record<string, string>>({});
-  const streamIDs = useRef<Record<string, string>>({});
-  const selections = useRef<Record<string, string>>({});
   const disconnectInFlight = useRef(new Set<string>());
   const [disconnectingTabs, setDisconnectingTabs] = useState<string[]>([]);
   const autoReconnectRef = useRef(state.autoReconnect !== false);
@@ -236,57 +209,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     const timer = window.setTimeout(() => setNotice(""), 5000);
     return () => window.clearTimeout(timer);
   }, [notice]);
-  const memory = useConversations();
-  const rawActive = tabs.find((t) => t.id === activeID);
-  const activeConversationID = rawActive
-    ? (memory.selectedByTab[rawActive.id] ?? rawActive.conversationID)
-    : undefined;
-  const activeCache = activeConversationID
-    ? memory.cache[activeConversationID]
-    : undefined;
-  const active: Tab | undefined = rawActive
-    ? {
-        ...rawActive,
-        conversationID: activeConversationID,
-        messages: activeConversationID === ""
-          ? []
-          : activeCache
-            ? toChatMessages(activeCache)
-            : rawActive.messages,
-        memoryRun: activeCache?.run,
-        memoryLoading:
-          memory.loadingByTab[rawActive.id] ||
-          !!(activeConversationID && !activeCache?.loaded),
-        memoryError: memory.errors[rawActive.id],
-        memoryStatus: activeCache?.status,
-        hasEarlier: activeCache?.hasMore,
-      }
-    : undefined;
-  const [operationSteps, setOperationSteps] = useState<OperationStep[]>([]);
-  useEffect(() => {
-    const ref = rawActive?.ref;
-    const conversationID = activeConversationID;
-    if (!showAI || !ref || !conversationID) {
-      setOperationSteps([]);
-      return;
-    }
-    let cancelled = false;
-    const refresh = () => {
-      api.ListOperationSteps(ref, conversationID).then(steps => {
-        if (!cancelled) setOperationSteps(steps);
-      }).catch(() => {
-        if (!cancelled) setOperationSteps([]);
-      });
-    };
-    refresh();
-    const stopOperations = listen("ops:changed", (evt: { conversationId?: string }) => {
-      if (evt.conversationId === conversationID) refresh();
-    });
-    const stopConversations = listen("conversation:event", (evt: { conversationId?: string; kind?: string }) => {
-      if (evt.conversationId === conversationID && ["cleared", "deleted"].includes(evt.kind ?? "")) refresh();
-    });
-    return () => { cancelled = true; stopOperations(); stopConversations(); };
-  }, [showAI, rawActive?.ref?.tabId, rawActive?.ref?.generation, activeConversationID]);
+  const active = tabs.find((t) => t.id === activeID);
   const activeTerminalBackground = resolveTerminalTheme(theme, terminalTheme, active?.session.terminalTheme).background;
   const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
   const notify = (error: unknown) => setToast(error);
@@ -411,13 +334,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
       setSplitRatio(Math.min(80, Math.max(20, data.splitRatio ?? 50)));
       if (data.fontSize)
         setFontSize(Math.max(11, Math.min(24, Number(data.fontSize) || 14)));
-      setProfileID((old) =>
-        data.profiles.some((p) => p.id === old)
-          ? old
-          : data.profiles.some((p) => p.id === data.activeProfile)
-            ? data.activeProfile
-            : (data.profiles[0]?.id ?? ""),
-      );
     } catch (e) {
       if (desktop) notify(e);
     }
@@ -426,10 +342,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
   useEffect(() => {
-    const memoryFailure = listen(
-      "conversation:error",
-      (event: { error: unknown }) => notify(event.error),
-    );
     const lost = listen("ssh:connection-lost", (payload: { ref: Ref; reason: string }) => {
       if (!showDisconnectReasonRef.current) return;
       const reasons: Record<string, string> = {
@@ -447,7 +359,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
         if (t.ref?.generation !== ref.generation || t.manualDisconnected) return t;
         return {
           ...t, status: autoReconnectRef.current ? "reconnecting" : "disconnected",
-          retryCount: 0, chatBusy: false, executing: false, proposal: null,
+          retryCount: 0,
           error: t.error || message("common:connectionInterrupted"),
         };
       }),
@@ -469,11 +381,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
     return () => {
       off();
       lost();
-      memoryFailure();
       end();
     };
   }, []);
-  useAutomaticEventHandlers({ streamIDs, update });
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 7000);
@@ -543,9 +453,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
       localFallbackPending: false,
       retryCount: 0,
       error: "",
-      proposal: null,
-      messages: [],
-      chatBusy: false,
     }));
     try {
       const result = await api.Connect(tab.id, tab.session.id, secret);
@@ -565,15 +472,12 @@ function Workspace({ initialState }: { initialState: AppState }) {
       update(tab.id, (t) => ({
         ...t,
         ref: result.ref,
-        conversationID: result.conversationId,
         status: "connected", everConnected: true,
         home: result.home,
         cwd: result.home,
         cwdReported: false,
         error: "",
       }));
-      if (result.conversationId)
-        await memory.restore(result.ref, result.conversationId);
     } catch (e) {
       update(tab.id, (t) => t.manualDisconnected ? t : ({ ...t, status: "error", error: e }));
       if (!tabsRef.current.find(t => t.id === tab.id)?.manualDisconnected) notify(e);
@@ -588,10 +492,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
       home: "",
       cwd: "",
       cwdReported: false,
-      messages: [],
-      proposal: null,
-      chatBusy: false,
-      executing: false,
       error: "",
     };
     setTabs((old) => {
@@ -613,7 +513,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     enabled: state.autoReconnect !== false,
     maxReconnectAttempts: state.maxReconnectAttempts ?? 10,
     onChallenge: (host, tab) => setChallenge({ host, tab, secret: "" }),
-    restoreConversation: memory.restore,
   });
   const autoClosingTabs = useRef(new Set<string>());
   useEffect(() => {
@@ -657,7 +556,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     if (disconnectInFlight.current.has(tab.id)) return;
     if (!tab.ref && tab.status !== "connecting" && tab.status !== "reconnecting") return;
     const hasTransfers = hasActiveTransfers(tab.ref);
-    if (state.confirmActiveDisconnect !== false && (tab.chatBusy || tab.executing || hasTransfers)) {
+    if (state.confirmActiveDisconnect !== false && hasTransfers) {
       if (!(await dialogs.confirm({
         title: message("common:disconnectRunningTitle"),
         description: message("common:disconnectRunningDescription"),
@@ -672,7 +571,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       update(tab.id, t => ({
         ...t, status: "disconnected", manualDisconnected: true,
         localFallbackPending: true,
-        retryCount: 0, chatBusy: false, executing: false, proposal: null,
+        retryCount: 0,
         error: "",
       }));
       try {
@@ -706,7 +605,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           title: message(active ? "common:closeActiveSessionTitle" : "common:closeRunningTask"),
           description: message(active
             ? busy ? "common:closeActiveSessionBusyDescription" : "common:closeActiveSessionDescription"
-            : "common:thisTabHasAnAiTaskOrPending", { name: initial.session.name }),
+            : "common:closeActiveSessionDescription", { name: initial.session.name }),
           preview: sessionLabel(initial),
           tone: "warning",
           confirmLabel: message(active ? "common:closeSessionAndDisconnect" : "common:closeAnyway"),
@@ -720,19 +619,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
         (!active && isActiveRemoteSession(current))) return;
       stopRetryTimer(tab.id);
       await api.CloseTab(tab.id);
-      memory.forget(tab.id);
       setTabs((old) => old.filter((t) => t.id !== tab.id));
       if (activeIDRef.current === tab.id) {
         const rest = tabsRef.current.filter((t) => t.id !== tab.id);
         setActiveID(rest.at(-1)?.id ?? "");
       }
-      delete streamIDs.current[tab.id];
-      delete selections.current[tab.id];
-      setAttachments((old) => {
-        const next = { ...old };
-        delete next[tab.id];
-        return next;
-      });
     } catch (e) {
       notify(e);
     } finally {
@@ -882,275 +773,12 @@ function Workspace({ initialState }: { initialState: AppState }) {
       notify(e);
     }
   };
-  const requestFor = (
-    tab: Tab,
-    text: string,
-    operate: boolean,
-    context = "",
-  ): ChatRequest => ({
-    requestId: id(),
-    ref: tab.ref!,
-    targets: (() => {
-      const refs = (aiTargetIDs[tab.id] ?? [tab.id]).map(targetID =>
-        tabsRef.current.find(t => t.id === targetID && t.status === "connected")?.ref
-      ).filter((ref): ref is NonNullable<Tab["ref"]> => Boolean(ref));
-      if (refs.length !== (aiTargetIDs[tab.id] ?? [tab.id]).length) throw new Error("A selected SSH connection was disconnected. Please update the target list.");
-      return refs;
-    })(),
-    profileId: profileID,
-    text: tab.cwd && (aiTargetIDs[tab.id] ?? [tab.id]).length === 1 && (aiTargetIDs[tab.id] ?? [tab.id])[0] === tab.id
-      ? tr("common:currentAiWorkingDirectory", { text, cwd: tab.cwd })
-      : text,
-    context,
-    operate,
-  });
-  const chat = async (
-    tab: Tab,
-    text: string,
-    operate: boolean,
-    context = "",
-    continuation = false,
-  ) => {
-    if (!tab.ref) return;
-    const messageID = id();
-    streamIDs.current[tab.id] = messageID;
-    update(tab.id, (t) => ({
-      ...t,
-      chatBusy: true,
-      autoRun: continuation ? t.autoRun : undefined,
-      messages: t.conversationID
-        ? t.messages
-        : [
-            ...t.messages,
-            ...(continuation
-              ? []
-              : [{ id: id(), role: "user" as const, text }]),
-            { id: messageID, role: "assistant", text: "" },
-          ],
-      error: "",
-    }));
-    setAttachments((old) => ({ ...old, [tab.id]: "" }));
-    try {
-      const response = await (continuation ? api.Continue : api.Chat)(
-        requestFor(tab, text, operate, context),
-      );
-      update(tab.id, (t) =>
-        t.ref?.generation === tab.ref?.generation
-          ? {
-              ...t,
-              chatBusy: false,
-              messages: t.messages.map((m) =>
-                m.id === messageID
-                  ? {
-                      ...m,
-                      text:
-                        response.text ||
-                        (response.proposal
-                          ? tr("common:commandProposalReady")
-                          : tr("common:noTextReturned")),
-                    }
-                  : m,
-              ),
-              proposal: response.proposal ?? null,
-            }
-          : t,
-      );
-    } catch (e) {
-      update(tab.id, (t) => ({
-        ...t,
-        chatBusy: false,
-        messages: t.messages.map((m) =>
-          m.id === messageID
-            ? { ...m, incomplete: true, text: m.text || errorText(e) }
-            : m,
-        ),
-      }));
-      notify(e);
-    } finally {
-      delete streamIDs.current[tab.id];
-    }
-  };
-  const startAutomatic = async (tab: Tab, text: string, context: string) => {
-    if (!tab.ref) return;
-    const taskID = id();
-    update(tab.id, (t) => ({
-      ...t,
-      proposal: null,
-      autoRun: {
-        id: taskID,
-        ref: tab.ref!,
-        status: "ready",
-        steps: 0,
-        roundSteps: 0,
-        limit: state.autoCommandLimit ?? 50,
-        allowChanges: state.autoAllowChanges ?? false,
-        reason: "",
-        reasonCode: "taskStarting",
-      },
-      messages: t.conversationID
-        ? t.messages
-        : [...t.messages, { id: id(), role: "user", text }],
-    }));
-    setAttachments((old) => ({ ...old, [tab.id]: "" }));
-    try {
-      await api.StartAutomatic(requestFor(tab, text, true, context), taskID);
-    } catch (e) {
-      await api.StopAutomatic(tab.ref!, taskID).catch(notify);
-      update(tab.id, (t) =>
-        t.autoRun?.id === taskID
-          ? {
-              ...t,
-              chatBusy: false,
-              executing: false,
-              proposal: null,
-              autoRun: {
-                ...t.autoRun,
-                status: "error",
-                reason: e instanceof Error ? e.message : String(e),
-                reasonCode: undefined,
-              },
-            }
-          : t,
-      );
-      notify(e);
-    }
-  };
-  const resumeAutomatic = async (extend: boolean) => {
-    if (!active?.autoRun) return;
-    try {
-      await api.ResumeAutomatic(
-        active.ref!,
-        active.autoRun.id,
-        extend ? "" : (active.proposal?.id ?? ""),
-        extend,
-      );
-    } catch (e) {
-      notify(e);
-    }
-  };
-  const sendChat = (text: string, mode: ChatMode, context: string) => {
-    if (!active) return;
-    if (mode === "auto") return startAutomatic(active, text, context);
-    return chat(active, text, mode !== "chat", context);
-  };
-  const inspectPreflight = async () => {
-    if (!active?.ref || !active.proposal) throw new Error("No pending command");
-    return api.InspectProposalPreflight(active.ref, active.proposal.id);
-  };
-  const confirmCommand = async () => {
-    if (active?.autoRun?.status === "awaiting_confirmation")
-      return resumeAutomatic(false);
-    if (!active?.proposal) return;
-    const tab = active,
-      p = active.proposal;
-    update(tab.id, (t) => ({ ...t, executing: true }));
-    try {
-      const result = await api.ConfirmCommand(tab.ref!, p.id);
-      update(tab.id, (t) => ({
-        ...t,
-        executing: false,
-        proposal: null,
-        messages: t.conversationID
-          ? t.messages
-          : [...t.messages, { id: id(), role: "result", text: "", result }],
-      }));
-      if (
-        result.status !== "unknown" &&
-        tabsRef.current.some((t) => t.id === tab.id) &&
-        tab.ref
-      )
-        await chat(tab, "", true, "", true);
-    } catch (e) {
-      update(tab.id, (t) => ({ ...t, executing: false, proposal: null }));
-      notify(e);
-    }
-  };
-  const cancelCommand = async () => {
-    if (
-      active?.autoRun &&
-      ["ready", "running", "awaiting_confirmation", "limit"].includes(
-        active.autoRun.status,
-      )
-    ) {
-      await api.StopAutomatic(active.ref!, active.autoRun.id).catch(notify);
-      return;
-    }
-    if (!active?.proposal) return;
-    try {
-      await api.CancelCommand(active.ref!, active.proposal.id);
-      if (!active.executing)
-        update(active.id, (t) => ({
-          ...t,
-          proposal: null,
-          messages: t.conversationID
-            ? t.messages
-            : [
-                ...t.messages,
-                {
-                  id: id(),
-                  role: "result",
-                  text: tr("common:commandRejectedNothingWasRun"),
-                },
-              ],
-        }));
-    } catch (e) {
-      notify(e);
-    }
-  };
-  const stop = () => {
-    if (!active) return;
-    if (
-      active.autoRun &&
-      ["ready", "running", "awaiting_confirmation", "limit"].includes(
-        active.autoRun.status,
-      )
-    )
-      api.StopAutomatic(active.ref!, active.autoRun.id).catch(notify);
-    else if (active.executing) cancelCommand();
-    else api.CancelChat(active.ref!).catch(notify);
-  };
-  const clear = async () => {
-    if (!active) return;
-    if (
-      active.conversationID &&
-      !(await dialogs.confirm({
-        title: message("ai:clearChat"),
-        description: message("ai:sharedClearDescription"),
-        tone: "danger",
-        confirmLabel: message("ai:clearChat"),
-      }))
-    )
-      return;
-    try {
-      await api.ClearChat(active.id);
-      update(active.id, (t) => ({ ...t, messages: [], proposal: null }));
-    } catch (e) {
-      notify(e);
-    }
-  };
-  const previewContext = async () => {
-    if (!active?.ref) return;
-    try {
-      const value = await api.PreviewContext(
-        active.ref,
-        selections.current[active.id] ?? "",
-      );
-      setPreview({ tabID: active.id, ...value });
-    } catch (e) {
-      notify(e);
-    }
-  };
-  const drag = (kind: "ai" | "sessions", event: React.PointerEvent) => {
+  const drag = (event: React.PointerEvent) => {
     const start = event.clientX,
-      width = kind === "ai" ? aiWidth : sessionWidth;
+      width = sessionWidth;
     event.currentTarget.setPointerCapture(event.pointerId);
     const move = (e: PointerEvent) => {
-      if (kind === "ai")
-        setAIWidth(Math.max(310, Math.min(620, width + start - e.clientX)));
-      else
-        setSessionWidth(
-          Math.max(190, Math.min(360, width + e.clientX - start)),
-        );
+      setSessionWidth(Math.max(190, Math.min(360, width + e.clientX - start)));
     };
     const end = () => {
       window.removeEventListener("pointermove", move);
@@ -1165,7 +793,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
       style={
         {
           "--session-width": `${sessionWidth}px`,
-          "--ai-width": `${aiWidth}px`,
         } as React.CSSProperties
       }
     >
@@ -1191,7 +818,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           />
           <div
             className="splitter"
-            onPointerDown={(e) => drag("sessions", e)}
+            onPointerDown={drag}
           />
         </>
       )}
@@ -1218,14 +845,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
           </span>
           <div className="header-right">
             <span className="local-badge">{tr("common:localLabel")}</span>
-            {!showAI && (
-              <button
-                title={tr("common:expandAi")}
-                onClick={() => setShowAI(true)}
-              >
-                <PanelRightOpen size={18} />
-              </button>
-            )}
           </div>
         </header>
         <WorkspaceTabStrip tabs={tabs} activeID={activeID}
@@ -1249,9 +868,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
             <span className="eyebrow">{tr("common:lighterConnection")}</span>
             <h1>{tr("common:connectYourServerGetToWork")}</h1>
             <p>
-              {tr("common:aFocusedTerminalAiAtYourSide")}
-              <br />
-              {tr("common:yourSessionsModelsAndActionsUnderYourControl")}
+              {tr("common:doubleClickASessionOnTheLeftTo")}
             </p>
             <button
               className="primary"
@@ -1271,8 +888,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 {tr("common:sshTerminal")}
               </span>
               <span>
-                <Sparkles size={15} />
-                {tr("common:customAi")}
+                <FolderOpen size={15} />
+                {tr("sftp:fileManager")}
               </span>
             </div>
             <div className="empty-shortcut">
@@ -1333,16 +950,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   {active?.status === "connected" ? <Unplug size={14} /> :
                     active?.status === "connecting" || active?.status === "reconnecting"
                       ? <X size={14} /> : <RefreshCw size={14} />}
-                </button>
-                <button
-                  title={tr("common:sendSelectedTextOrRecentOutputToAi")}
-                  disabled={active?.status !== "connected"}
-                  onClick={() => {
-                    setShowAI(true);
-                    previewContext();
-                  }}
-                >
-                  <Sparkles size={14} />
                 </button>
               </div>
             </div>
@@ -1511,148 +1118,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
           </span>
         </footer>
       </main>
-      {showAI && (
-        <>
-          <div className="splitter" onPointerDown={(e) => drag("ai", e)} />
-          <AISidebar
-            tab={active}
-            operationSteps={operationSteps}
-            availableTabs={tabs.filter(t => t.ref && t.status === "connected")}
-            targetTabIDs={active ? (aiTargetIDs[active.id] ?? [active.id]) : []}
-            onToggleTarget={(targetID) => {
-              if (!active) return;
-              setAiTargetIDs(old => {
-                const selected = old[active.id] ?? [active.id];
-                if (selected.includes(targetID) && selected.length === 1) return old;
-                const next = selected.includes(targetID)
-                  ? selected.filter(id => id !== targetID)
-                  : selected.length < 8 ? [...selected, targetID] : selected;
-                return { ...old, [active.id]: next };
-              });
-            }}
-            profiles={state.profiles}
-            conversationItems={
-              memory.lists[
-                activeCache?.conversation?.serverKey ??
-                  (active ? memory.serverKeysByTab[active.id] : "")
-              ]?.items ?? []
-            }
-            conversationHasMore={
-              !!memory.lists[
-                activeCache?.conversation?.serverKey ??
-                  (active ? memory.serverKeysByTab[active.id] : "")
-              ]?.nextCursor
-            }
-            onConversationSelect={(id) =>
-              active?.ref && memory.select(active.ref, id).catch(notify)
-            }
-            onConversationCreate={async () => {
-              if (!active?.ref || !active.conversationID) return;
-              const ref = active.ref;
-              try {
-                await memory.draft(ref);
-                update(active.id, (t) =>
-                  t.ref?.generation === ref.generation
-                    ? { ...t, conversationID: "", messages: [], proposal: null }
-                    : t,
-                );
-              } catch (e) {
-                notify(e);
-              }
-            }}
-            onConversationRename={async (id) => {
-              if (!active?.ref) return;
-              const ref = active.ref;
-              const title = await dialogs.input({
-                title: message("ai:renameConversation"),
-                description: message("ai:renameConversationDescription"),
-                label: message("ai:conversationTitle"),
-                defaultValue:
-                  memory.lists[
-                    activeCache?.conversation?.serverKey ??
-                      (active ? memory.serverKeysByTab[active.id] : "")
-                  ]?.items.find((item) => item.id === id)?.title ?? "",
-                confirmLabel: message("common:saveChanges"),
-              });
-              if (title !== null)
-                await memory.rename(ref, id, title).catch(notify);
-            }}
-            onConversationDelete={async (id) => {
-              if (!active?.ref) return;
-              const ref = active.ref;
-              if (
-                await dialogs.confirm({
-                  title: message("ai:deleteConversation"),
-                  description: message("ai:deleteConversationDescription"),
-                  tone: "danger",
-                  confirmLabel: message("ai:deleteConversation"),
-                })
-              )
-                await memory.remove(ref, id).catch(notify);
-            }}
-            onConversationMore={() =>
-              active?.ref &&
-              (activeCache?.conversation?.serverKey ||
-                memory.serverKeysByTab[active.id]) &&
-              memory
-                .list(
-                  active.ref,
-                  activeCache?.conversation?.serverKey ??
-                    memory.serverKeysByTab[active.id],
-                  true,
-                )
-                .catch(notify)
-            }
-            onLoadEarlier={() =>
-              active?.ref &&
-              active.conversationID &&
-              memory
-                .loadEarlier(active.ref, active.conversationID)
-                .catch(notify)
-            }
-            onRetryHistory={() =>
-              active?.ref &&
-              active.conversationID &&
-              memory.restore(active.ref, active.conversationID).catch(notify)
-            }
-            onFocusOwner={setActiveID}
-            profileID={profileID}
-            onProfile={(value) => {
-              setProfileID(value);
-              api.SavePreference("activeProfile", value).catch(notify);
-            }}
-            onHide={() => setShowAI(false)}
-            onSettings={() => setDialog({ kind: "settings" })}
-            onSend={sendChat}
-            onAutoContinue={() => resumeAutomatic(true)}
-            onStop={stop}
-            onClear={clear}
-            onPreview={previewContext}
-            context={active ? (attachments[active.id] ?? "") : ""}
-            onClearContext={() =>
-              active && setAttachments({ ...attachments, [active.id]: "" })
-            }
-            onPreflight={inspectPreflight}
-            onConfirm={confirmCommand}
-            onCancel={cancelCommand}
-            onRevise={async (command, cwd, seconds) => {
-              if (!active?.proposal) return;
-              try {
-                const p = await api.ReviseProposal(
-                  active.ref!,
-                  active.proposal.id,
-                  command,
-                  cwd,
-                  seconds,
-                );
-                update(active.id, (t) => ({ ...t, proposal: p }));
-              } catch (e) {
-                notify(e);
-              }
-            }}
-          />
-        </>
-      )}
       {showSessionPicker && (
         <SessionPicker
           sessions={state.sessions}
@@ -1696,12 +1161,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
             )
           }
           groups={state.groups}
-          profiles={state.profiles}
-          autoCommandLimit={state.autoCommandLimit}
-          saveChatHistory={state.saveChatHistory}
-          autoSummarize={state.autoSummarize}
-          autoAllowChanges={state.autoAllowChanges}
-           autoContinueRounds={state.autoContinueRounds}
           language={language}
           languageSaving={languageSaving}
           onLanguage={changeLanguage}
@@ -1842,53 +1301,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   {tr("common:trustAndConnect")}
                 </button>
               )}
-            </footer>
-        </ModalSurface>
-      )}
-      {preview && (
-        <ModalSurface
-          className="context-dialog"
-          aria-label={tr("common:sendTerminalTextToAi")}
-          onDismiss={() => setPreview(null)}
-        >
-            <header>
-              <div>
-                <span className="eyebrow">{tr("common:contextPreview")}</span>
-                <h2>{tr("common:sendTerminalTextToAi")}</h2>
-              </div>
-              <button
-                title={tr("common:closePreview")}
-                onClick={() => setPreview(null)}
-              >
-                <X size={18} />
-              </button>
-            </header>
-            <p className="muted small">
-              {tr("common:onlyTheTextBelowWillBeSentCommon")}
-              {preview.truncated ? tr("common:contentTruncated") : ""}
-            </p>
-            <textarea
-              aria-label={tr("common:terminalTextPreview")}
-              value={preview.text}
-              onChange={(e) => setPreview({ ...preview, text: e.target.value })}
-            />
-            <footer>
-              <button className="secondary" onClick={() => setPreview(null)}>
-                {tr("common:cancel")}
-              </button>
-              <button
-                className="primary"
-                onClick={() => {
-                  setAttachments((old) => ({
-                    ...old,
-                    [preview.tabID]: preview.text,
-                  }));
-                  setShowAI(true);
-                  setPreview(null);
-                }}
-              >
-                {tr("common:attachToChat")}
-              </button>
             </footer>
         </ModalSurface>
       )}

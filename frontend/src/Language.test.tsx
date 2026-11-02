@@ -23,7 +23,6 @@ vi.mock("./bridge", () => ({
 const state = {
   sessions: [],
   groups: [],
-  profiles: [],
   fontSize: "14",
   activeProfile: "",
   version: "test",

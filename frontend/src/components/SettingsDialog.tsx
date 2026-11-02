@@ -8,11 +8,8 @@ import {
   X,
   Server,
   Network,
-  KeyRound,
   Settings2,
   Terminal,
-  Bot,
-  ShieldCheck,
   FolderOpen,
   Plus,
   Trash2,
@@ -20,7 +17,6 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import { api, errorText } from "../bridge";
-import { useDialogs } from "./DialogProvider";
 import ModalSurface from "./ModalSurface";
 import GeneralSettingsPanel from "./GeneralSettingsPanel";
 import ConnectionSettingsPanel from "./ConnectionSettingsPanel";
@@ -29,9 +25,7 @@ import type {
   Session,
   LocalForward,
   Group,
-  APIProfile,
   SessionRequest,
-  APIRequest,
   Theme,
   TerminalTheme,
   QuickCommandLayout,
@@ -45,13 +39,7 @@ interface Props {
   sessionConnected?: boolean;
   groupID?: string;
   groups: Group[];
-  profiles: APIProfile[];
   fontSize: number;
-  autoCommandLimit?: number;
-  autoAllowChanges?: boolean;
-  autoContinueRounds?: boolean;
-  saveChatHistory?: boolean;
-  autoSummarize?: boolean;
   theme: Theme;
   onTheme(theme: Theme): void;
   terminalTheme: TerminalTheme;
@@ -92,18 +80,8 @@ const emptySession: Session = {
   privateKeyPath: "",
   credentialRef: "",
 };
-const emptyProfile: APIProfile = {
-  id: "",
-  name: "",
-  baseUrl: "",
-  model: "",
-  provider: "openai",
-  secretRef: "",
-  toolsEnabled: true,
-};
 export default function SettingsDialog(p: Props) {
   useTranslation();
-  const dialogs = useDialogs();
   const [tab, setTab] = useState(
     p.kind === "session" ? "session" : "general",
   );
@@ -112,9 +90,6 @@ export default function SettingsDialog(p: Props) {
     groupId: p.groupID ?? "",
     ...p.session,
   });
-  const [autoLimit, setAutoLimit] = useState(p.autoCommandLimit ?? 50);
-  const [autoContinueRounds, setAutoContinueRounds] = useState(p.autoContinueRounds !== false);
-  const [allowChanges, setAllowChanges] = useState(p.autoAllowChanges ?? false);
   const [keepAliveSeconds, setKeepAliveSeconds] = useState(p.keepAliveSeconds ?? 30);
   const [autoReconnect, setAutoReconnect] = useState(p.autoReconnect !== false);
   const [maxReconnectAttempts, setMaxReconnectAttempts] = useState(p.maxReconnectAttempts ?? 10);
@@ -125,13 +100,6 @@ export default function SettingsDialog(p: Props) {
   const [preserveTerminalHistory, setPreserveTerminalHistory] = useState(p.preserveTerminalHistory !== false);
   const [secret, setSecret] = useState("");
   const [saveSecret, setSaveSecret] = useState(!!p.session?.credentialRef);
-  const [profile, setProfile] = useState<APIProfile>(
-    p.profiles[0]
-      ? { ...p.profiles[0] }
-      : { ...emptyProfile },
-  );
-  const [key, setKey] = useState("");
-  const [memoryOnly, setMemoryOnly] = useState(false);
   const [error, setError] = useState<unknown>("");
   const [success, setSuccess] = useState<DisplayText>("");
   const [busy, setBusy] = useState(false);
@@ -171,7 +139,6 @@ export default function SettingsDialog(p: Props) {
       setBusy(false);
     }
   };
-  const apiRequest = (): APIRequest => ({ profile, key, memoryOnly });
   return (
     <ModalSurface
       className={`settings-dialog settings-dialog--${p.kind}`}
@@ -200,8 +167,6 @@ export default function SettingsDialog(p: Props) {
                 { id: "general", label: t("settings:general"), icon: Settings2 },
                 { id: "terminal", label: t("settings:terminal"), icon: Terminal },
                 { id: "connection", label: t("settings:connection"), icon: Network },
-                { id: "api", label: t("settings:aiSettings"), icon: Bot },
-                { id: "automatic", label: t("ai:automatic"), icon: ShieldCheck },
               ].map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
@@ -437,252 +402,6 @@ export default function SettingsDialog(p: Props) {
               </p>
             </>
           )}
-          {tab === "api" && (
-            <section className="settings-panel" aria-labelledby="settings-api-title">
-              <div className="settings-panel-heading">
-                <h3 id="settings-api-title">{t("settings:aiSettings")}</h3>
-                <p>{t("settings:aiDescription")}</p>
-              </div>
-              <div className="settings-memory">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={p.saveChatHistory !== false}
-                      disabled={busy}
-                      onChange={(e) =>
-                        void run(async () => {
-                          await api.SavePreference(
-                            "saveChatHistory",
-                            String(e.target.checked),
-                          );
-                          await p.onRefresh();
-                        })
-                      }
-                    />
-                    {t("settings:saveChatHistory")}
-                  </label>
-                  <p className="muted small">
-                    {t("settings:memoryDescription")}
-                  </p>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={p.autoSummarize !== false}
-                      disabled={busy}
-                      onChange={(e) =>
-                        void run(async () => {
-                          await api.SavePreference(
-                            "autoSummarize",
-                            String(e.target.checked),
-                          );
-                          await p.onRefresh();
-                        })
-                      }
-                    />
-                    {t("settings:autoSummarize")}
-                  </label>
-                  <p className="muted small">
-                    {t("settings:summaryDescription")}
-                  </p>
-                </div>
-                <div className="api-presets">
-                <select
-                  aria-label={t("settings:apiProfile")}
-                  value={profile.id}
-                  onChange={(e) => {
-                    setProfile({
-                      ...p.profiles.find((v) => v.id === e.target.value)!,
-                    });
-                    setKey("");
-                    setError("");
-                    setSuccess("");
-                  }}
-                >
-                  {!profile.id && (
-                    <option value="">{t("settings:newProfile")}</option>
-                  )}
-                  {p.profiles.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  title={t("settings:newApiProfile")}
-                  onClick={() => {
-                    setProfile({ ...emptyProfile });
-                    setKey("");
-                    setError("");
-                    setSuccess("");
-                  }}
-                >
-                  <Plus size={17} />
-                </button>
-                {profile.id && (
-                  <button
-                    title={t("settings:deleteApiProfile")}
-                    onClick={async () => {
-                      if (
-                        !(await dialogs.confirm({
-                          title: message("settings:deleteAiApiProfile"),
-                          description: message(
-                            "settings:deleteThisApiProfileAndItsSavedKey",
-                          ),
-                          tone: "danger",
-                          confirmLabel: message("settings:deleteProfile"),
-                        }))
-                      )
-                        return;
-                      await run(async () => {
-                        await api.DeleteAPI(profile.id);
-                        await p.onRefresh();
-                        setProfile({ ...emptyProfile });
-                        setKey("");
-                      });
-                    }}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
-              </div>
-              <div className="form-note">
-                <KeyRound size={17} />
-                <span>{t(profile.provider === "anthropic" ? "settings:anthropicNativeApi" : "settings:openaiCompatibleApi")}</span>
-              </div>
-              <label>
-                {t("settings:apiProtocol")}
-                <select
-                  aria-label={t("settings:apiProtocol")}
-                  value={profile.provider || "openai"}
-                  onChange={(e) => setProfile({ ...profile, provider: e.target.value as "openai" | "anthropic" })}
-                >
-                  <option value="openai">{t("settings:openaiCompatibleApi")}</option>
-                  <option value="anthropic">{t("settings:anthropicNativeApi")}</option>
-                </select>
-              </label>
-              <label>
-                {t("settings:profileName")}
-                <input
-                  value={profile.name}
-                  placeholder={t("settings:customApi")}
-                  onChange={(e) =>
-                    setProfile({ ...profile, name: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                Base URL
-                <input
-                  value={profile.baseUrl}
-                  onChange={(e) =>
-                    setProfile({ ...profile, baseUrl: e.target.value })
-                  }
-                  placeholder={profile.provider === "anthropic" ? "https://api.anthropic.com/v1" : "https://api.example.com/v1"}
-                />
-              </label>
-              <label>
-                API Key
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={key}
-                  onChange={(e) => setKey(e.target.value)}
-                  placeholder={
-                    profile.secretRef
-                      ? t("settings:keySavedLeaveEmptyToKeepIt")
-                      : t(
-                          "settings:skOptionalForLocalServicesWithoutAuthentication",
-                        )
-                  }
-                />
-              </label>
-              <label>
-                {t("settings:modelName")}
-                <input
-                  value={profile.model}
-                  onChange={(e) =>
-                    setProfile({ ...profile, model: e.target.value })
-                  }
-                  placeholder={t("settings:modelIdFromYourApiProvider")}
-                />
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={profile.toolsEnabled}
-                  onChange={(e) =>
-                    setProfile({ ...profile, toolsEnabled: e.target.checked })
-                  }
-                />
-                {t("settings:enableToolCallsAiServerOperations")}
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={memoryOnly}
-                  onChange={(e) => setMemoryOnly(e.target.checked)}
-                />
-                {t("settings:useKeyForThisSessionOnly")}
-              </label>
-              <p className="muted small">
-                {t("settings:disableToolCallsForApisThatOnlySupport")}
-              </p>
-            </section>
-          )}
-          {tab === "automatic" && (
-            <section className="settings-panel" aria-labelledby="settings-automatic-title">
-              <div className="settings-panel-heading">
-                <h3 id="settings-automatic-title">{t("ai:automatic")}</h3>
-                <p>{t("settings:automaticDescription")}</p>
-              </div>
-              <div className="settings-inline-note">
-                {t(
-                  "settings:automaticModeProcessesTasksUsingCommandResultsEach",
-                )}
-              </div>
-              <label>
-                {t("settings:commandsPerRound")}
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={autoLimit}
-                  onChange={(e) => setAutoLimit(Number(e.target.value))}
-                />
-              </label>
-              <label className="inline-field">
-                <input
-                  type="checkbox"
-                  checked={autoContinueRounds}
-                  onChange={(e) => setAutoContinueRounds(e.target.checked)}
-                />
-                {t("settings:autoContinueRounds")}
-              </label>
-              <label>
-                {t("settings:automaticExecutionScope")}
-                <select
-                  aria-label={t("settings:automaticExecutionScope")}
-                  value={allowChanges ? "all" : "inspection"}
-                  onChange={(e) => setAllowChanges(e.target.value === "all")}
-                >
-                  <option value="inspection">
-                    {t("settings:inspectOnlyConfirmChanges")}
-                  </option>
-                  <option value="all">{t("ai:changesAllowed")}</option>
-                </select>
-              </label>
-              <p className="muted small">
-                {t("settings:default10CommandsPerRoundContinueAfterReaching")}
-              </p>
-              {allowChanges && (
-                <p className="small danger-text">
-                  {t(
-                    "settings:allowsAutomaticConfigurationChangesInstallsDeletionsAndRestarts",
-                  )}
-                </p>
-              )}
-            </section>
-          )}
           {tab === "general" && (
             <GeneralSettingsPanel
               language={p.language}
@@ -752,20 +471,6 @@ export default function SettingsDialog(p: Props) {
             {t("common:close")}
           </button>
           <div>
-            {tab === "api" && (
-              <button
-                className="secondary"
-                disabled={busy}
-                onClick={() =>
-                  run(
-                    () => api.TestAPI(apiRequest()),
-                    message("settings:connectedModelRespondedSuccessfully"),
-                  )
-                }
-              >
-                {t("settings:testConnection")}
-              </button>
-            )}
             {tab === "session" && (
               <button
                 className="primary"
@@ -791,66 +496,6 @@ export default function SettingsDialog(p: Props) {
               >
                 {busy ? <LoaderCircle size={15} className="spin" /> : null}
                 {t("settings:saveSession")}
-              </button>
-            )}
-            {tab === "api" && (
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={() => {
-                  if (!profile.name.trim()) {
-                    setError(message("settings:enterApiProfileName"));
-                    setSuccess("");
-                    return;
-                  }
-                  if (!profile.baseUrl.trim()) {
-                    setError(message("settings:enterApiBaseUrl"));
-                    setSuccess("");
-                    return;
-                  }
-                  void run(async () => {
-                    const saved = await api.SaveAPI(apiRequest());
-                    setProfile(saved);
-                    setKey("");
-                    await p.onRefresh();
-                  }, message("settings:profileSaved"));
-                }}
-              >
-                {busy ? <LoaderCircle size={15} className="spin" /> : null}
-                {t("settings:saveProfile")}
-              </button>
-            )}
-            {tab === "automatic" && (
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={() =>
-                  run(async () => {
-                    if (
-                      !Number.isInteger(autoLimit) ||
-                      autoLimit < 1 ||
-                      autoLimit > 100
-                    )
-                      throw new Error(
-                        t("settings:commandLimitMustBeBetween1And100"),
-                      );
-                    await api.SavePreference(
-                      "autoCommandLimit",
-                      String(autoLimit),
-                    );
-                    await api.SavePreference(
-                      "autoAllowChanges",
-                      String(allowChanges),
-                    );
-                    await api.SavePreference(
-                      "autoContinueRounds",
-                      String(autoContinueRounds),
-                    );
-                    await p.onRefresh();
-                  }, message("settings:automaticSettingsSaved"))
-                }
-              >
-                {t("settings:saveAutomaticSettings")}
               </button>
             )}
             {tab === "connection" && (

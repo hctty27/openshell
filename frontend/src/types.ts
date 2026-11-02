@@ -36,43 +36,6 @@ export interface XshellImportResult {
   imported: number;
   skipped: number;
 }
-export interface APIProfile {
-  id: string;
-  name: string;
-  baseUrl: string;
-  model: string;
-  provider?: "openai" | "anthropic";
-  secretRef: string;
-  toolsEnabled: boolean;
-}
-interface PreflightCheck {
-  ref: Ref;
-  key: "connection" | "identity" | "capacity";
-  status: "passed" | "failed" | "warning";
-}
-export interface PreflightReport {
-  proposalId: string;
-  checkedAt: string;
-  ready: boolean;
-  checks: PreflightCheck[];
-}
-export interface OperationStep {
-  id: string;
-  conversationId: string;
-  runId: string;
-  sequence: number;
-  command: string;
-  purpose?: string;
-  targets: Ref[];
-  risk: "read" | "low" | "high";
-  preflight?: string[];
-  status: "awaiting_confirmation" | "running" | "completed" | "failed" | "unknown" | "cancelled" | "superseded" | "expired";
-  verificationStatus?: string;
-  exitCode?: number | null;
-  reason?: string;
-  createdAt: string;
-  updatedAt: string;
-}
 export interface Ref {
   tabId: string;
   sessionId: string;
@@ -84,46 +47,7 @@ interface OperationPlan {
   preflight: string[];
   verificationRequired: boolean;
 }
-export interface Proposal {
-  plan?: OperationPlan;
-  id: string;
-  ref: Ref;
-  command: string;
-  purpose: string;
-  cwd: string;
-  timeoutSeconds: number;
-  status: string;
-  targets?: Ref[];
-}
-export interface CommandResult { 
-  targetResults?: { ref: Ref; result: CommandResult }[];
-  status: string;
-  stdout: string;
-  stderr: string;
-  exitCode: number | null;
-  durationMillis: number;
-  truncated: boolean;
-  reason: string;
-  reasonCode?: string;
-  verificationStatus?: "pending" | "not_required";
-  reasonParams?: Record<string, string | number>;
-}
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant" | "result";
-  text: string;
-  incomplete?: boolean;
-  result?: CommandResult;
-  command?: string;
-}
 export interface Tab {
-  conversationID?: string;
-  memoryRun?: ConversationRun | null;
-  memoryLoading?: boolean;
-  memoryError?: unknown;
-  memoryStatus?: string;
-  hasEarlier?: boolean;
-
   id: string;
   session: Session;
   ref: Ref | null;
@@ -135,11 +59,6 @@ export interface Tab {
   home: string;
   cwd: string;
   cwdReported?: boolean;
-  messages: ChatMessage[];
-  proposal: Proposal | null;
-  autoRun?: AutoSnapshot;
-  chatBusy: boolean;
-  executing: boolean;
   error: unknown;
 }
 export type Theme = "dark" | "light";
@@ -157,44 +76,8 @@ export interface QuickCommand {
   mode?: "run" | "insert"; // Legacy persisted action.
   confirm: boolean;
 }
-export type ChatMode = "chat" | "confirm" | "auto";
-export interface AutoSnapshot {
-  id: string;
-  ref: Ref;
-  status:
-    | "ready"
-    | "running"
-    | "awaiting_confirmation"
-    | "limit"
-    | "completed"
-    | "stopped"
-    | "error";
-  steps: number;
-  roundSteps: number;
-  limit: number;
-  allowChanges: boolean;
-  verificationPending?: boolean;
-  verificationChecks?: number;
-  recoveryFailures?: number;
-  reason: string;
-  reasonCode?: string;
-  reasonParams?: Record<string, string | number>;
-  proposal?: Proposal;
-}
-export interface AutoEvent {
-  kind: string;
-  state: AutoSnapshot;
-  messageId?: string;
-  text?: string;
-  result?: CommandResult;
-}
 export interface AppState {
-  saveChatHistory?: boolean;
-  autoSummarize?: boolean;
   language?: import("./i18n/languages").Language;
-  autoCommandLimit?: number;
-  autoAllowChanges?: boolean;
-  autoContinueRounds?: boolean;
   quickCommands?: QuickCommand[];
   quickCommandLayout?: QuickCommandLayout;
   autoCopySelection?: boolean;
@@ -212,11 +95,9 @@ export interface AppState {
   confirmActiveDisconnect?: boolean;
   sessions: Session[];
   groups: Group[];
-  profiles: APIProfile[];
   fontSize: string;
   theme?: Theme;
   terminalTheme?: TerminalTheme;
-  activeProfile: string;
   version: string;
 }
 export interface HostChallenge {
@@ -226,98 +107,15 @@ export interface HostChallenge {
   changed: boolean;
 }
 export interface ConnectResult {
-  conversationId?: string;
   ref: Ref;
   home: string;
   challenge?: HostChallenge;
-}
-export interface ChatRequest {
-  requestId?: string;
-  ref: Ref;
-  targets?: Ref[];
-  profileId: string;
-  text: string;
-  context: string;
-  operate: boolean;
-}
-export interface ChatResponse {
-  text: string;
-  proposal?: Proposal;
 }
 export interface SessionRequest {
   session: Session;
   secret: string;
   saveSecret: boolean;
 }
-export interface APIRequest {
-  profile: APIProfile;
-  key: string;
-  memoryOnly: boolean;
-}
-
-export interface Conversation {
-  id: string;
-  serverKey: string;
-  sessionId: string;
-  title: string;
-  titleManual: boolean;
-  summary: string;
-  summaryThroughSeq: number;
-  revision: number;
-  createdAt: string;
-  updatedAt: string;
-}
-export interface ConversationMessage {
-  id: string;
-  conversationId: string;
-  seq: number;
-  role: "user" | "assistant" | "tool";
-  content: string;
-  toolCalls?: unknown[];
-  toolCallId?: string;
-  display?: { command?: string; result?: CommandResult };
-  status: string;
-  createdAt: string;
-}
-export interface ConversationCursor {
-  updatedAt: string;
-  id: string;
-}
-export interface ConversationList {
-  items: Conversation[];
-  nextCursor: ConversationCursor | null;
-}
-export interface ConversationRun {
-  id: string;
-  conversationId: string;
-  kind: string;
-  status: string;
-  ownerRef: Ref;
-}
-export interface ConversationPage {
-  conversation: Conversation;
-  messages: ConversationMessage[];
-  beforeSeq: number;
-  hasMore: boolean;
-  run: ConversationRun | null;
-  eventSeq: number;
-}
-export interface ConversationEvent {
-  selectionRevision?: number;
-  selectedRefs?: Record<string, Ref>;
-  eventId: string;
-  eventSeq: number;
-  serverKey: string;
-  conversationId: string;
-  kind: string;
-  revision: number;
-  run: ConversationRun | null;
-  message?: ConversationMessage;
-  conversation?: Conversation;
-  selectedByTab?: Record<string, string>;
-  status?: string;
-}
-
 export interface SFTPEntry {
   name: string;
   path: string;
