@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Copy, Minus, PanelLeftClose, PanelLeftOpen, Settings, Square, SquareTerminal, X } from "lucide-react";
+import { Copy, Minus, Settings, Square, SquareTerminal, X } from "lucide-react";
 import { Window } from "@wailsio/runtime";
 import { nativeDesktop } from "../bridge";
 import { t } from "../i18n";
@@ -8,13 +8,11 @@ import TransferCenter from "./TransferCenter";
 
 interface Props {
   tabs: Tab[];
-  showSessions: boolean;
-  onToggleSessions(): void;
   onSettings(): void;
   onNotice(error: unknown): void;
 }
 
-export default function WindowTitleBar({ tabs, showSessions, onToggleSessions, onSettings, onNotice }: Props) {
+export default function WindowTitleBar({ tabs, onSettings, onNotice }: Props) {
   const [maximised, setMaximised] = useState(false);
 
   useEffect(() => {
@@ -43,13 +41,6 @@ export default function WindowTitleBar({ tabs, showSessions, onToggleSessions, o
         <SquareTerminal size={15} aria-hidden="true" />
         <span>OpenShell</span>
       </div>
-      <button type="button" className="window-titlebar-sidebar"
-        title={t(showSessions ? "common:collapseSessions" : "common:expandSessions")}
-        aria-label={t(showSessions ? "common:collapseSessions" : "common:expandSessions")}
-        onClick={onToggleSessions}>
-        {showSessions ? <PanelLeftClose size={16} aria-hidden="true" /> :
-          <PanelLeftOpen size={16} aria-hidden="true" />}
-      </button>
       <div className="window-titlebar-drag-area" onDoubleClick={toggleMaximise} aria-hidden="true" />
       <div className="window-titlebar-actions">
         <TransferCenter tabs={tabs} onNotice={onNotice} />
