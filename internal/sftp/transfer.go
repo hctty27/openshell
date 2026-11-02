@@ -66,6 +66,8 @@ func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination
         return Task{}, apperror.New("sftpTransferAnotherTransferAlreadyTargetsThisPath",nil)
     }
     m.reserved[reservation] = struct{}{}
+    m.workers.Add(1)
+    m.slotUsers[ref.SessionID]++
     slot := m.slots[ref.SessionID]
     if slot == nil { slot = make(chan struct{},2); m.slots[ref.SessionID] = slot }
     j := &job{task:task,ctx:ctx,cancel:cancel,slot:slot,reservation:reservation}
@@ -87,6 +89,29 @@ func (m *Manager) Transfers(ref domain.ConnectionRef) []Task {
     sort.Slice(out,func(i,j int) bool { return out[i].Created < out[j].Created })
     return out
 }
+const maxFinishedTransferHistory = 200
+
+// Caller must hold m.mu. Only terminal tasks are eligible for eviction.
+func (m *Manager) pruneHistoryLocked() {
+    var finished []*job
+    for _, j := range m.tasks {
+        switch j.task.Status {
+        case "completed", "cancelled", "failed":
+            finished = append(finished, j)
+        }
+    }
+    if len(finished) <= maxFinishedTransferHistory { return }
+    sort.Slice(finished, func(i, j int) bool {
+        if finished[i].task.Created != finished[j].task.Created {
+            return finished[i].task.Created < finished[j].task.Created
+        }
+        return finished[i].task.ID < finished[j].task.ID
+    })
+    for _, j := range finished[:len(finished)-maxFinishedTransferHistory] {
+        delete(m.tasks, j.task.ID)
+    }
+}
+
 func (m *Manager) Cancel(id string) error {
     m.mu.Lock()
     j := m.tasks[id]
@@ -106,13 +131,34 @@ func (m *Manager) CancelConnection(ref domain.ConnectionRef) {
     m.mu.Unlock()
     for _,cancel := range cancels { cancel() }
 }
+// Close cancels outstanding transfers and allows a bounded grace period to exit.
 func (m *Manager) Close() {
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    _ = m.Shutdown(ctx)
+}
+
+// Shutdown prevents new transfers, cancels existing jobs and waits for their cleanup.
+func (m *Manager) Shutdown(ctx context.Context) error {
     m.mu.Lock()
     m.closed = true
     var cancels []context.CancelFunc
-    for _,j := range m.tasks { cancels=append(cancels,j.cancel) }
+    for _, j := range m.tasks {
+        if j.task.Status == "queued" || j.task.Status == "running" {
+            cancels = append(cancels, j.cancel)
+        }
+    }
     m.mu.Unlock()
-    for _,cancel:=range cancels { cancel() }
+    for _, cancel := range cancels { cancel() }
+
+    done := make(chan struct{})
+    go func() { m.workers.Wait(); close(done) }()
+    select {
+    case <-done:
+        return nil
+    case <-ctx.Done():
+        return ctx.Err()
+    }
 }
 func (m *Manager) update(j *job, fn func(*Task)) {
     m.mu.Lock()
@@ -132,14 +178,24 @@ func (m *Manager) progress(j *job,n int64) {
     if send { m.emit("sftp:transfer",snap) }
 }
 func (m *Manager) run(j *job) {
+    acquired := false
     defer func() {
+        if acquired { <-j.slot }
         m.mu.Lock()
         delete(m.reserved, j.reservation)
+        sessionID := j.task.Ref.SessionID
+        m.slotUsers[sessionID]--
+        if m.slotUsers[sessionID] == 0 {
+            delete(m.slotUsers, sessionID)
+            delete(m.slots, sessionID)
+        }
+        m.pruneHistoryLocked()
         m.mu.Unlock()
+        m.workers.Done()
     }()
     select {
     case j.slot<-struct{}{}:
-        defer func(){ <-j.slot }()
+        acquired = true
     case <-j.ctx.Done():
         m.update(j,func(t *Task){t.Status="cancelled"})
         return

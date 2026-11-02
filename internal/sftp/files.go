@@ -1,6 +1,7 @@
 package sftp
 
 import (
+    "context"
     "errors"
     "fmt"
     "os"
@@ -10,6 +11,7 @@ import (
     "strconv"
     "strings"
     "sync"
+    "time"
 
     "github.com/hctty27/openshell/internal/apperror"
     "github.com/hctty27/openshell/internal/domain"
@@ -38,12 +40,14 @@ type Manager struct {
     mu sync.Mutex
     tasks map[string]*job
     slots map[string]chan struct{}
+    slotUsers map[string]int
+    workers sync.WaitGroup
     reserved map[string]struct{}
     closed bool
 }
 
 func NewManager(lookup Lookup, emit func(string, any)) *Manager {
-    return &Manager{lookup: lookup, emit: emit, tasks: make(map[string]*job), slots: make(map[string]chan struct{}), reserved: make(map[string]struct{})}
+    return &Manager{lookup: lookup, emit: emit, tasks: make(map[string]*job), slots: make(map[string]chan struct{}), slotUsers: make(map[string]int), reserved: make(map[string]struct{})}
 }
 
 func (m *Manager) remote(ref domain.ConnectionRef) (*pkg.Client, error) {
