@@ -26,102 +26,10 @@
 
 
 
-/* In-workspace ZMODEM progress dialog. Opens only after transfer data starts. */
-.zmodem-progress-dialog {
-  width: min(460px, calc(100vw - 32px));
-  max-height: min(90vh, 620px);
-  overflow-y: auto;
-  margin: auto;
-  padding: 0;
-  background: var(--raised);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 25px 70px #0006;
-  color: var(--text-primary);
-}
-.zmodem-progress-dialog::backdrop {
-  background: var(--overlay);
-  backdrop-filter: blur(2px);
-}
-.zmodem-progress-dialog > header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--border);
-  padding: 15px 19px;
-}
-.zmodem-progress-dialog h2 {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0;
-  flex: 1;
-}
-.zmodem-progress-dialog > header button { padding: 5px; color: var(--text-muted); }
-.zmodem-progress-body { padding: 20px; display: flex; flex-direction: column; gap: 17px; }
-.zmodem-progress-description { display: flex; align-items: center; gap: 12px; color: var(--text-secondary); }
-.zmodem-progress-description svg { color: var(--accent); flex-shrink: 0; }
-.zmodem-progress-description strong { font-size: 13px; display: block; color: var(--text-primary); }
-.zmodem-progress-description span { display: block; font-size: 12px; margin-top: 3px; }
-.zmodem-progress-track {
-  height: 9px;
-  background: var(--field-bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-  position: relative;
-}
-.zmodem-progress-track > div {
-  width: 35%;
-  height: 100%;
-  background: var(--accent-fill);
-  border-radius: 5px;
-  animation: zmodem-working 1.7s ease-in-out infinite alternate;
-}
-.zmodem-progress-track--ended > div { animation: none; opacity: .5; }
-@keyframes zmodem-working {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(285%); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .zmodem-progress-track > div { animation: none; width: 100%; opacity: .55; }
-}
-.zmodem-progress-fields {
-  display: grid;
-  grid-template-columns: minmax(90px, 105px) minmax(0, 1fr);
-  gap: 10px 14px;
-  margin: 0;
-  font-size: 12px;
-}
-.zmodem-progress-fields dt { color: var(--text-secondary); }
-.zmodem-progress-fields dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.zmodem-progress-dialog > footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px 19px;
-}
-.zmodem-progress-dialog > footer label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-.zmodem-progress-dialog > footer button {
-  border: 1px solid var(--border);
-  background: var(--panel);
-  border-radius: 6px;
-  padding: 8px 13px;
-  min-height: 32px;
-}
-.zmodem-progress-dialog > footer button:hover { background: var(--hover); }
-
 /* ZMODEM file browsing stays inside the Wails window, not a native picker. */
 .zmodem-picker-dialog {
-  width: min(720px, calc(100vw - 32px));
-  height: min(660px, calc(100vh - 48px));
+  width: min(620px, calc(100vw - 32px));
+  height: min(440px, calc(100vh - 48px));
   max-height: calc(100vh - 48px);
   margin: auto;
   padding: 0;
@@ -186,3 +94,32 @@
 }
 
 
+
+/* Unified transfer center is attached to the workspace header, not the terminal pane. */
+.transfer-center { position: relative; display: flex; align-items: center; }
+.transfer-center-toggle { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 30px; min-height: 28px; border-radius: 6px; color: var(--text-secondary); }
+.transfer-center-toggle:hover, .transfer-center-toggle[aria-expanded="true"] { color: var(--text-primary); background: var(--hover); }
+.transfer-center-count { position: absolute; right: -4px; top: -5px; min-width: 15px; height: 15px; border-radius: 8px; padding: 0 3px; background: var(--accent-fill); color: var(--on-accent); font-size: 10px; line-height: 15px; text-align: center; }
+.transfer-center-popover { position: absolute; top: calc(100% + 10px); right: 0; z-index: 125; display: flex; flex-direction: column; width: min(370px, calc(100vw - 28px)); max-height: min(520px, 78vh); border: 1px solid var(--border); border-radius: 10px; background: var(--raised); box-shadow: 0 18px 55px #0006; color: var(--text-primary); overflow: hidden; }
+.transfer-center-popover header { display: flex; align-items: center; flex-shrink: 0; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.transfer-center-popover header strong { font-size: 13px; }
+.transfer-center-popover header span { color: var(--text-secondary); font-size: 11px; margin-left: auto; }
+.transfer-center-popover header button { display: inline-flex; align-items: center; color: var(--text-muted); }
+.transfer-center-list { padding: 5px 0; overflow-y: auto; }
+.transfer-center-job { display: flex; flex-direction: column; gap: 9px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.transfer-center-job:last-child { border-bottom: 0; }
+.transfer-center-line { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.transfer-center-line > svg:first-child { flex-shrink: 0; color: var(--accent); }
+.transfer-center-line strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.transfer-center-line button { display: inline-flex; margin-left: 2px; flex-shrink: 0; padding: 3px; color: var(--text-muted); }
+.transfer-center-line button:hover { color: var(--text-primary); }
+.transfer-center-line button:disabled { opacity: .45; cursor: default; }
+.transfer-center-session { min-width: 0; flex: 1; margin-left: auto; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-size: 11px; }
+.transfer-center-bar { position: relative; height: 6px; overflow: hidden; border-radius: 5px; background: var(--field-bg); }
+.transfer-center-bar > div { height: 100%; border-radius: inherit; background: var(--accent-fill); }
+.transfer-center-bar.indeterminate > div { width: 34%; animation: transfer-center-progress 1.6s ease-in-out infinite alternate; }
+.transfer-center-metrics { display: flex; justify-content: space-between; gap: 10px; color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.transfer-center-metrics span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-center-empty { padding: 26px 14px; text-align: center; font-size: 12px; color: var(--text-muted); }
+@keyframes transfer-center-progress { from { transform: translateX(-100%); } to { transform: translateX(295%); } }
+@media (prefers-reduced-motion: reduce) { .transfer-center-bar.indeterminate > div { animation: none; width: 100%; opacity: .5; } }
