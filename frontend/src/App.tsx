@@ -10,8 +10,6 @@ import {
   Plus,
   X,
   PanelRightOpen,
-  PanelLeftClose,
-  PanelLeftOpen,
   RefreshCw,
   Unplug,
   ArrowRight,
@@ -24,10 +22,8 @@ import {
   Search,
   Columns2,
   Rows2,
-  Settings,
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
-import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime";
 import { normalizeTerminalTheme, resolveTerminalTheme } from "./terminalThemes";
 import { reorderTabs } from "./features/sessions/tabOrder";
 import { hasInterruptibleWork, isActiveRemoteSession, sessionLabel } from "./features/sessions/closeProtection";
@@ -51,7 +47,7 @@ import XshellImportDialog from "./components/XshellImportDialog";
 import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
 import SFTPView from "./components/SFTPView";
-import TransferCenter from "./components/TransferCenter";
+import WindowTitleBar from "./components/WindowTitleBar";
 import ZmodemFilePicker from "./components/ZmodemFilePicker";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
 import { useAutoReconnect } from "./features/sessions/useAutoReconnect";
@@ -276,9 +272,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const dropDialogs = useRef(dialogs);
   dropDialogs.current = dialogs;
   useEffect(() => {
-    const fileRuntime = window.runtime as (typeof window.runtime & { OnFileDrop?: unknown }) | undefined;
-    if (!desktop || typeof fileRuntime?.OnFileDrop !== "function") return;
-    OnFileDrop((x, y, paths) => {
+    if (!desktop) return;
+    return listen("app:files-dropped", ({ x, y, paths }: { x: number; y: number; paths: string[] }) => {
       const target = document.elementFromPoint(x, y);
       if (!target || paths.length === 0) return;
       const pane = target.closest<HTMLElement>(".terminal-pane[data-tab-id]");
@@ -323,8 +318,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           existing.add(name);
         }
       })().catch(setToast);
-    }, true);
-    return () => OnFileDropOff();
+    });
   }, []);
 
   const refresh = async () => {
@@ -849,12 +843,18 @@ function Workspace({ initialState }: { initialState: AppState }) {
   return (
     <div
       className="app"
+      data-file-drop-target
       style={
         {
           "--session-width": `${sessionWidth}px`,
         } as React.CSSProperties
       }
     >
+      <WindowTitleBar tabs={tabs} showSessions={showSessions}
+        onToggleSessions={() => setShowSessions(current => !current)}
+        onSettings={() => setDialog({ kind: "settings" })}
+        onNotice={notify} />
+      <div className="app-body">
       {showSessions && (
         <>
           <div
@@ -945,39 +945,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
           setAutoSidebarOpen(false);
         }
       }}>
-        <header className="workspace-header">
-          <button
-            title={
-              showSessions
-                ? tr("common:collapseSessions")
-                : tr("common:expandSessions")
-            }
-            onClick={() => setShowSessions(!showSessions)}
-          >
-            {showSessions ? (
-              <PanelLeftClose size={17} />
-            ) : (
-              <PanelLeftOpen size={17} />
-            )}
-          </button>
-          <span className="workspace-label">{tr("common:sshTerminal")}</span>
-          <span className="header-divider" />
-          <span className="muted">
-            {active?.session.name ?? tr("common:workspace")}
-          </span>
-          <div className="header-right">
-            <TransferCenter tabs={tabs} onNotice={notify} />
-            <button
-              type="button"
-              className="workspace-settings-button"
-              title={tr("common:settings")}
-              aria-label={tr("common:settings")}
-              onClick={() => setDialog({ kind: "settings" })}
-            >
-              <Settings size={17} aria-hidden="true" />
-            </button>
-          </div>
-        </header>
         <WorkspaceTabStrip tabs={tabs} activeID={activeID}
           disconnectBehavior={state.disconnectBehavior ?? "local"}
           onActivate={setActiveID}
@@ -1218,6 +1185,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           </>
         )}
       </main>
+      </div>
       {showSessionPicker && (
         <SessionPicker
           sessions={state.sessions}
