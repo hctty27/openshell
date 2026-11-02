@@ -70,6 +70,7 @@ func main() {
     })
     window.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
       details := event.Context().DropTargetDetails()
+      if details == nil { return }
       desktop.Event.Emit("app:files-dropped", map[string]any{
         "x": details.X, "y": details.Y, "paths": event.Context().DroppedFiles(),
       })
