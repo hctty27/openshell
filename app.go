@@ -151,7 +151,6 @@ func (a *App) QuitConfirmed() {
  runtime.Quit(a.ctx)
 }
 func (a *App) shutdown(context.Context) {
-	a.mu.Lock()
 	a.closeAllLocalTerminals()
 	a.ssh.Close()
 	a.store.Close()
