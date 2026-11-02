@@ -7,6 +7,7 @@ import QuickCommandBar, { visibleQuickCommands } from "./QuickCommandBar";
 import type { QuickCommand, Tab } from "../types";
 
 afterEach(cleanup);
+
 const tab: Tab = {
   id: "tab-1",
   session: {
@@ -24,12 +25,9 @@ const tab: Tab = {
   status: "connected",
   home: "/root",
   cwd: "/root",
-  
-  
-  
-  
   error: "",
 };
+
 const command = (
   id: string,
   scope: QuickCommand["scope"],
@@ -41,7 +39,6 @@ const command = (
   category: "常用",
   scope,
   scopeId,
-  mode: "run",
   confirm: false,
 });
 
@@ -61,45 +58,62 @@ test("scopes commands to current session in saved order", () => {
   expect(visibleQuickCommands(commands, undefined)).toEqual([]);
 });
 
-test("management is the first button; command buttons send selected command", () => {
-  const manage = vi.fn(),
-    run = vi.fn();
+test("management is the final button in the flat single-row toolbar", () => {
+  const manage = vi.fn();
+  const run = vi.fn();
   const commands = [command("A", "global"), command("B", "global")];
   const { container } = render(
-    <QuickCommandBar
-      tab={tab}
-      commands={commands}
-      layout="single"
-      onManage={manage}
-      onRun={run}
-    />,
+    <QuickCommandBar tab={tab} commands={commands} onManage={manage} onRun={run} />,
   );
-  expect(container.querySelector(".quick-command-list.single")).toBeTruthy();
-  const buttons = container.querySelectorAll("button");
-  expect(buttons[0].textContent).toBe("管理");
-  expect(buttons[1].textContent).toBe("A");
-  expect(buttons[2].textContent).toBe("B");
-  fireEvent.click(buttons[0]);
-  expect(manage).toHaveBeenCalledTimes(1);
+  expect(container.querySelector(".quick-command-list")).toBeTruthy();
+  expect(container.querySelector(".quick-command-list.single, .quick-command-list.multi")).toBeNull();
+  const buttons = container.querySelectorAll(".quick-command-bar button");
+  expect(buttons).toHaveLength(3);
+  expect(buttons[0].textContent).toBe("A");
+  expect(buttons[1].textContent).toBe("B");
+  expect(buttons[2].classList.contains("quick-command-manage")).toBe(true);
+  expect(buttons[2].getAttribute("aria-label")).toBe("管理快速命令");
   fireEvent.click(buttons[2]);
+  expect(manage).toHaveBeenCalledTimes(1);
+  fireEvent.click(buttons[1]);
   expect(run).toHaveBeenCalledWith(commands[1]);
 });
 
-test("multi-line setting changes layout and disconnected commands cannot run", () => {
-  const run = vi.fn();
+test("empty toolbar shows only the add/manage icon", () => {
+  const manage = vi.fn();
   const { container } = render(
+    <QuickCommandBar tab={tab} commands={[]} onManage={manage} onRun={vi.fn()} />,
+  );
+  expect(container.querySelector(".quick-command-empty")).toBeNull();
+  expect(container.querySelectorAll(".quick-command-bar button")).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "管理快速命令" }));
+  expect(manage).toHaveBeenCalledTimes(1);
+});
+
+test("disconnected commands remain disabled", () => {
+  const run = vi.fn();
+  render(
     <QuickCommandBar
-      tab={{ ...tab, status: "disconnected" }}
+      tab={{ ...tab, ref: null, status: "disconnected" }}
       commands={[command("A", "global")]}
-      layout="multi"
       onManage={vi.fn()}
       onRun={run}
     />,
   );
-  expect(container.querySelector(".quick-command-list.multi")).toBeTruthy();
-  expect(
-    screen.getByRole("button", { name: "A" }).hasAttribute("disabled"),
-  ).toBe(true);
-  fireEvent.click(screen.getByRole("button", { name: "A" }));
+  const button = screen.getByRole("button", { name: "A" }) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  fireEvent.click(button);
   expect(run).not.toHaveBeenCalled();
+});
+
+test("overflowing commands scroll horizontally with the mouse wheel", () => {
+  const { container } = render(
+    <QuickCommandBar tab={tab} commands={[command("A", "global")]}
+      onManage={vi.fn()} onRun={vi.fn()} />,
+  );
+  const list = container.querySelector(".quick-command-list") as HTMLDivElement;
+  Object.defineProperty(list, "scrollWidth", { configurable: true, value: 500 });
+  Object.defineProperty(list, "clientWidth", { configurable: true, value: 100 });
+  fireEvent.wheel(list, { deltaY: 48, deltaX: 0 });
+  expect(list.scrollLeft).toBe(48);
 });
