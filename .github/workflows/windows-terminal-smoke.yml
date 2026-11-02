@@ -5,6 +5,11 @@ on:
     branches: [main]
     paths:
       - "app.go"
+      - "main.go"
+      - "frontend/src/components/WindowTitleBar.tsx"
+      - "frontend/src/bridge.ts"
+      - "frontend/src/features/sessions/**"
+      - "frontend/src/features/transfers/**"
       - "app_integration_test.go"
       - "local_terminal.go"
       - "local_terminal_windows.go"

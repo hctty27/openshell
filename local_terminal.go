@@ -17,10 +17,12 @@ type localTerminalSession struct {
     pty localPTY
     closeOnce sync.Once
     closeErr error
+    output *localOutputFlow
 }
 
 func (s *localTerminalSession) close() error {
     s.closeOnce.Do(func() {
+        if s.output != nil { s.output.stop() }
         s.closeErr = s.pty.Close()
     })
     return s.closeErr
@@ -29,6 +31,7 @@ type localOutputEvent struct {
     TabID string `json:"tabId"`
     TerminalID string `json:"terminalId"`
     Data string `json:"data"`
+    Sequence uint64 `json:"sequence"`
 }
 type localEndEvent struct {
     TabID string `json:"tabId"`
@@ -65,7 +68,7 @@ func (a *App) StartLocalTerminal(tabID, terminalID, shell string, cols, rows int
         a.stopPendingLocalTerminal(tabID, terminalID)
         return fmt.Errorf("start local shell: %w", err)
     }
-    current := &localTerminalSession{id: terminalID, pty: pty}
+    current := &localTerminalSession{id: terminalID, pty: pty, output: newLocalOutputFlow()}
     a.mu.Lock()
     latestRef, valid := a.tabRefs[tabID]
     if !valid || latestRef != ref || a.localTerminalPending[tabID] != terminalID {
@@ -90,9 +93,12 @@ func (a *App) StartLocalTerminal(tabID, terminalID, shell string, cols, rows int
         for {
             n, readErr := pty.Read(buf)
             if n > 0 {
+                sequence, ok := current.output.reserve(n)
+                if !ok { return }
                 a.emit("local:output", localOutputEvent{
                     TabID:tabID, TerminalID:terminalID,
                     Data:base64.StdEncoding.EncodeToString(buf[:n]),
+                    Sequence:sequence,
                 })
             }
             if readErr != nil { return }
@@ -100,6 +106,15 @@ func (a *App) StartLocalTerminal(tabID, terminalID, shell string, cols, rows int
     }()
     return nil
 }
+// AcknowledgeLocalTerminalOutput returns credits only to the exact active PTY.
+func (a *App) AcknowledgeLocalTerminalOutput(tabID, terminalID string, sequence uint64) {
+    a.mu.Lock()
+    session := a.localTerminals[tabID]
+    a.mu.Unlock()
+    if session == nil || session.id != terminalID || session.output == nil { return }
+    session.output.acknowledge(sequence)
+}
+
 func (a *App) WriteLocalTerminal(tabID, terminalID, data string) error {
     if len(data) > 1024*1024 { return errors.New("local terminal input too large") }
     decoded, err := base64.StdEncoding.DecodeString(data)

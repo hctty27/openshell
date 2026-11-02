@@ -155,6 +155,7 @@ func (a *App) QuitConfirmed() {
  if a.quit != nil { a.quit() }
 }
 func (a *App) shutdown(context.Context) {
+	a.sftp.Close()
 	a.closeAllLocalTerminals()
 	a.ssh.Close()
 	a.store.Close()
