@@ -33,7 +33,6 @@
   --wails-draggable: drag;
 }
 .window-titlebar-brand svg { color: var(--accent-fill); }
-.window-titlebar-sidebar,
 .window-titlebar-settings {
   flex: 0 0 30px;
   height: 28px;
