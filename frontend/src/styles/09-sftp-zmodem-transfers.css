@@ -96,6 +96,7 @@
 
 
 /* Unified transfer center is attached to the workspace header, not the terminal pane. */
+.workspace-header { position: relative; z-index: 70; }
 .transfer-center { position: relative; display: flex; align-items: center; }
 .transfer-center-toggle { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 30px; min-height: 28px; border-radius: 6px; color: var(--text-secondary); }
 .transfer-center-toggle:hover, .transfer-center-toggle[aria-expanded="true"] { color: var(--text-primary); background: var(--hover); }
