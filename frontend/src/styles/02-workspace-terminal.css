@@ -5,46 +5,75 @@
   flex-direction: column;
   background: var(--surface);
 }
-.workspace-header {
-  height: var(--chrome-bar-height);
+/* 自定义窗口标题栏：拖动区域与可交互按钮严格分开。 */
+.window-titlebar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 14px;
+  flex: 0 0 32px;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  background: var(--panel);
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  position: relative;
+  z-index: 30;
+  user-select: none;
+}
+.window-titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  height: 100%;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  app-region: drag;
+  --wails-draggable: drag;
+}
+.window-titlebar-brand svg { color: var(--accent-fill); }
+.window-titlebar-sidebar,
+.window-titlebar-settings {
+  flex: 0 0 30px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-muted);
+}
+.window-titlebar-drag-area {
+  flex: 1;
+  height: 100%;
+  min-width: 25px;
+  app-region: drag;
+  --wails-draggable: drag;
+}
+.window-titlebar-actions,
+.window-titlebar-controls {
+  height: 100%;
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
 }
-.workspace-header > button {
-  width: 24px;
-  height: 24px;
-  padding: 3px;
-  color: var(--text-muted);
+.window-titlebar-actions { gap: 5px; padding: 0 9px; }
+.window-titlebar button,
+.window-titlebar .transfer-center,
+.window-titlebar .transfer-center-popover {
+  app-region: no-drag;
+  --wails-draggable: no-drag;
 }
-.workspace-label {
-  color: var(--info);
-  font-weight: 500;
-  white-space: nowrap;
+.window-titlebar-controls .window-control {
+  width: 46px;
+  height: 100%;
+  border-radius: 0;
+  color: var(--text-secondary);
 }
-.header-divider {
-  width: 1px;
-  height: 13px;
-  background: var(--border);
-}
-.header-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.workspace-settings-button {
-  width: 26px;
-  height: 26px;
-  padding: 4px;
-  color: var(--text-muted);
-}
-.workspace-settings-button:hover {
+.window-titlebar-controls .window-control:hover {
+  background: var(--hover);
   color: var(--text-primary);
+}
+.window-titlebar-controls .window-control-close:hover {
+  background: #c42b37;
+  color: white;
 }
 .tab-strip {
   height: var(--chrome-bar-height);
