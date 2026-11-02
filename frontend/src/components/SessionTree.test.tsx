@@ -61,6 +61,7 @@ const renderTree = () => {
       onCreateInGroup={onCreateInGroup}
       onRenameGroup={onRenameGroup}
       onDeleteGroup={onDeleteGroup}
+      detailsExpanded
     />
   );
   const { rerender } = render(tree(sessions));
