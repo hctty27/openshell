@@ -9,19 +9,18 @@ The entrypoint imports these files in original source order:
 | `00-foundation.css` | Theme tokens, application defaults, native form controls |
 | `01-sessions.css` | Left session sidebar, session rows and connection indicators |
 | `02-workspace-terminal.css` | Workspace chrome, tabs, split panes, terminal and transfer dock |
-| `03-ai-sidebar.css` | AI sidebar, chat messages, composer and proposals |
 | `04-dialog-foundations.css` | Legacy dialog primitives, notifications and responsive foundations |
 | `05-session-tree-commands.css` | Tree layout, session properties and quick-command surfaces |
 | `06-dialogs-pickers.css` | Shared dialogs, session picker, floating menus and session editor |
 | `07-settings.css` | Workspace settings navigation and controls |
 | `08-sftp-browser.css` | SFTP browser and Xshell import |
-| `09-conversation-transfers.css` | AI conversation switcher, SFTP editor and ZMODEM interfaces |
-| `10-overlays-ai-ops.css` | Modal surfaces, AI target scope and operation status |
+| `09-sftp-zmodem-transfers.css` | SFTP editor and embedded ZMODEM transfer dialogs |
+| `10-dialog-overlays.css` | Shared modal surfaces and responsive dialogs |
 
 ## Rules for future changes
 
 - Maintain import order in `src/styles.css`. The ordering preserves intentional overrides and media rules from the previous single-file stylesheet.
-- The initial extraction was verified by concatenating all 11 files and comparing the result byte-for-byte with the original 90,397-character stylesheet.
+- The initial extraction was verified by concatenating all 10 files and comparing the result byte-for-byte with the original original stylesheet.
 - Add related selectors to the matching file; consider the existing cascade when modifying rules and do not create arbitrary `@layer` declarations.
 - Keep Wails and xterm runtime class selectors even when static code search cannot find an explicit JSX reference.
 - The CI-enforced `npm run audit:styles` script checks that the module manifest stays in its reviewed order and no module is missing or empty.

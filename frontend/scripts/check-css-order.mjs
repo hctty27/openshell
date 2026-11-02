@@ -4,14 +4,13 @@ const orderedModules = [
   "00-foundation",
   "01-sessions",
   "02-workspace-terminal",
-  "03-ai-sidebar",
   "04-dialog-foundations",
   "05-session-tree-commands",
   "06-dialogs-pickers",
   "07-settings",
   "08-sftp-browser",
-  "09-conversation-transfers",
-  "10-overlays-ai-ops",
+  "09-sftp-zmodem-transfers",
+  "10-dialog-overlays",
 ];
 
 const entry = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");

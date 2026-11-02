@@ -6,5 +6,5 @@
 @import "./styles/06-dialogs-pickers.css";
 @import "./styles/07-settings.css";
 @import "./styles/08-sftp-browser.css";
-@import "./styles/09-conversation-transfers.css";
-@import "./styles/10-overlays-ai-ops.css";
+@import "./styles/09-sftp-zmodem-transfers.css";
+@import "./styles/10-dialog-overlays.css";
