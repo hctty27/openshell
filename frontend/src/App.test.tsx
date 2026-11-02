@@ -75,7 +75,7 @@ test("shows a focused SSH workspace without AI controls", async () => {
     render(<App />);
   });
   expect(screen.getAllByText("会话管理")[0]).toBeTruthy();
-  expect(screen.getAllByText("SSH 终端")[0]).toBeTruthy();
+  expect(screen.queryByText("SSH 终端")).toBeNull();
   expect(screen.queryByText("AI 助手")).toBeNull();
 });
 test("session sidebar can auto-hide, hover open and pin without remounting the tree", async () => {
@@ -164,7 +164,7 @@ test("moves Settings to the top toolbar and product info to About", async () => 
   expect(document.querySelector(".sidebar-footer")).toBeNull();
   expect(document.querySelector(".workspace-status")).toBeNull();
   const settingsButton = screen.getByRole("button", { name: "设置" });
-  expect(settingsButton.closest(".workspace-header")).toBeTruthy();
+  expect(settingsButton.closest(".window-titlebar")).toBeTruthy();
   fireEvent.click(settingsButton);
   fireEvent.click(screen.getByRole("button", { name: "关于" }));
   expect(screen.getByText("OpenShell")).toBeTruthy();
