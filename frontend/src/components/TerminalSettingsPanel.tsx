@@ -1,6 +1,6 @@
 import { t } from "../i18n";
 import { resolveTerminalTheme } from "../terminalThemes";
-import type { Theme, TerminalTheme, QuickCommandLayout } from "../types";
+import type { Theme, TerminalTheme } from "../types";
 
 interface Props {
   theme: Theme;
@@ -8,8 +8,6 @@ interface Props {
   onTerminalTheme(theme: TerminalTheme): void;
   fontSize: number;
   onFont(value: number): void;
-  quickCommandLayout: QuickCommandLayout;
-  onQuickCommandLayout(layout: QuickCommandLayout): void;
   logHighlights: boolean;
   onLogHighlights(enabled: boolean): void;
   autoCopySelection: boolean;
@@ -61,19 +59,6 @@ export default function TerminalSettingsPanel(p: Props) {
                   value={p.fontSize}
                   onChange={(e) => p.onFont(Number(e.target.value))}
                 />
-              </div>
-              <div className="settings-terminal-group">
-                <label htmlFor="settings-quick-commands">{t("settings:quickCommandLayout")}</label>
-                <select
-                  id="settings-quick-commands"
-                  value={p.quickCommandLayout}
-                  onChange={(e) =>
-                    p.onQuickCommandLayout(e.target.value as QuickCommandLayout)
-                  }
-                >
-                  <option value="single">{t("settings:singleRowWithHorizontalScrollingDefault")}</option>
-                  <option value="multi">{t("settings:multipleRowsWithWrapping")}</option>
-                </select>
               </div>
               <div className="settings-terminal-group">
                 <label className="settings-toggle-row">
