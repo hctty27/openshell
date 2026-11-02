@@ -82,42 +82,6 @@
 .splitter:hover {
   background: var(--accent-fill);
 }
-.brand {
-  height: 76px;
-  padding: 0 19px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.brand-icon {
-  width: 32px;
-  height: 32px;
-  display: block;
-  object-fit: contain;
-  border-radius: 8px;
-}
-.brand strong {
-  font-size: 16px;
-  letter-spacing: 0.5px;
-  color: var(--info);
-  font-weight: 600;
-}
-.brand strong > span {
-  display: block;
-  font-size: 8px;
-  color: var(--text-muted);
-  letter-spacing: 2px;
-  margin-top: 4px;
-  font-weight: 500;
-}
-.version {
-  font: 10px monospace;
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 2px 4px;
-  margin-left: auto;
-}
 .sidebar-heading {
   display: flex;
   align-items: center;
@@ -251,27 +215,6 @@
   color: var(--accent);
   font-size: 11px;
   padding: 6px;
-}
-.sidebar-footer {
-  height: var(--chrome-bar-height);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-top: 1px solid var(--border);
-  padding: 0 14px;
-  color: var(--text-muted);
-  font-size: 10px;
-}
-.sidebar-footer > span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.sidebar-footer button {
-  width: 23px;
-  height: 23px;
-  padding: 3px;
 }
 .status-dot {
   display: inline-block;
