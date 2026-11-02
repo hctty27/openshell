@@ -63,6 +63,9 @@ jobs:
           echo "BEGIN_WAILS_V3_GO_SUM"
           cat go.sum
           echo "END_WAILS_V3_GO_SUM"
+          echo "BEGIN_WAILS_V3_GO_MOD"
+          cat go.mod
+          echo "END_WAILS_V3_GO_MOD"
       - name: Run Go race tests
         run: go test -race ./...
       - name: Check Go source
