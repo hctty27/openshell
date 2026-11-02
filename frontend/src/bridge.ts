@@ -64,16 +64,34 @@ type Backend = {
   Disconnect(ref: Ref): Promise<void>;
   CloseTab(id: string): Promise<void>;
 };
-export const desktop = typeof window !== "undefined" &&
-  typeof (window as Window & { chrome?: { webview?: { postMessage?: unknown } } }).chrome?.webview?.postMessage === "function";
+declare global {
+  interface Window {
+    go?: { main?: { App?: Backend } };
+    runtime?: { EventsOn?: (name: string, callback: (payload: any) => void) => () => void };
+  }
+}
+
+export const nativeDesktop = typeof window !== "undefined" &&
+  typeof (window as Window & { chrome?: { webview?: { postMessage?: unknown } } })
+    .chrome?.webview?.postMessage === "function";
+
+const fixtureBackend = import.meta.env.DEV ? window.go?.main?.App : undefined;
+export const desktop = nativeDesktop || Boolean(fixtureBackend);
+
 export const api = new Proxy({} as Backend, {
-  get: (_, name) => (...args: unknown[]) =>
-    desktop
+  get: (_, name) => (...args: unknown[]) => {
+    if (fixtureBackend) {
+      return (fixtureBackend[name as keyof Backend] as (...values: unknown[]) => Promise<unknown>)(...args);
+    }
+    return nativeDesktop
       ? Call.ByName(`main.App.${String(name)}`, ...args) as Promise<unknown>
-      : Promise.reject(new Error(t("common:useThisFeatureInTheWindowsDesktopApp"))),
+      : Promise.reject(new Error(t("common:useThisFeatureInTheWindowsDesktopApp")));
+  },
 });
+
 export function listen(name: string, callback: (payload: any) => void): () => void {
-  if (!desktop) return () => {};
+  if (fixtureBackend && window.runtime?.EventsOn) return window.runtime.EventsOn(name, callback);
+  if (!nativeDesktop) return () => {};
   return Events.On(name, event => callback(event.data));
 }
 export { errorText } from "./i18n/errors";
