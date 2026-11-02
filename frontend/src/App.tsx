@@ -10,6 +10,7 @@ import {
   Plus,
   X,
   PanelRightOpen,
+  PanelLeftOpen,
   RefreshCw,
   Unplug,
   ArrowRight,
