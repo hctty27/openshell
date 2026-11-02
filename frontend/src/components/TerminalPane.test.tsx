@@ -101,6 +101,7 @@ vi.mock("../bridge", () => ({
   api: {
     WriteTerminal: vi.fn(async () => {}),
     AcknowledgeTerminalOutput: vi.fn(async () => {}),
+    AcknowledgeLocalTerminalOutput: vi.fn(async () => {}),
     ResizeTerminal: vi.fn(async () => {}),
     OpenTerminal: vi.fn(async () => {}),
     StartLocalTerminal: vi.fn(async () => {}),
@@ -752,4 +753,33 @@ test("late SSH open failure from a disposed pane does not break a new connection
     await Promise.resolve();
   });
   expect(onError).not.toHaveBeenCalled();
+});
+
+test("local terminal returns output credits after xterm parses and ignores stale PTYs", async () => {
+  renderTerminal({
+    tab: { ...tab, status: "disconnected", everConnected: true },
+    disconnectBehavior: "local",
+    showDisconnectReason: false,
+  });
+  await waitFor(() => expect(api.StartLocalTerminal).toHaveBeenCalled());
+  const localID = vi.mocked(api.StartLocalTerminal).mock.calls[0][1];
+  const receive = events.listeners.get("local:output");
+  expect(receive).toBeDefined();
+  const term = refs.terms[0];
+
+  act(() => {
+    receive!({ tabId: tab.id, terminalId: "expired", sequence: 1, data: btoa("stale") });
+    receive!({ tabId: tab.id, terminalId: localID, sequence: 1, data: btoa("first") });
+    receive!({ tabId: tab.id, terminalId: localID, sequence: 2, data: btoa("second") });
+  });
+  expect(term.write).toHaveBeenCalledTimes(2);
+  expect(api.AcknowledgeLocalTerminalOutput).not.toHaveBeenCalled();
+  await act(async () => {
+    for (const [, parsed] of term.write.mock.calls) parsed?.();
+    await Promise.resolve();
+  });
+  await waitFor(() =>
+    expect(api.AcknowledgeLocalTerminalOutput).toHaveBeenCalledWith(tab.id, localID, 2),
+  );
+  expect(api.AcknowledgeTerminalOutput).not.toHaveBeenCalled();
 });

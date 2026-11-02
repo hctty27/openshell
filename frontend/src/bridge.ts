@@ -51,6 +51,7 @@ type Backend = {
   OpenTerminal(ref: Ref, cols: number, rows: number): Promise<void>;
   StartLocalTerminal(tabID: string, terminalID: string, shell: string, cols: number, rows: number): Promise<void>;
   WriteLocalTerminal(tabID: string, terminalID: string, data: string): Promise<void>;
+  AcknowledgeLocalTerminalOutput(tabID: string, terminalID: string, sequence: number): Promise<void>;
   ResizeLocalTerminal(tabID: string, terminalID: string, cols: number, rows: number): Promise<void>;
   CloseLocalTerminal(tabID: string, terminalID: string): Promise<void>;
   WriteTerminal(ref: Ref, data: string): Promise<void>;
