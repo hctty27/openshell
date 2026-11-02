@@ -650,7 +650,7 @@ test("compact workspace removes redundant chrome while keeping quick commands", 
 
   await page.getByRole("button", { name: "选中会话 紧凑测试" }).dblclick();
   await page.getByRole("button", { name: "信任并连接" }).click();
-  await expect(page.getByText("SSH 已连接", { exact: false })).toBeVisible();
+  await expect(page.locator(".terminal-tab.active .connection-state-connected")).toHaveAttribute("aria-label", "SSH 已连接");
 
   await expect(page.locator(".brand, .sidebar-footer, .workspace-status")).toHaveCount(0);
   const settingsButton = page.getByTitle("设置", { exact: true });
