@@ -41,12 +41,6 @@ export interface Ref {
   sessionId: string;
   generation: number;
 }
-interface OperationPlan {
-  risk: "read" | "low" | "high";
-  requiresConfirmation: boolean;
-  preflight: string[];
-  verificationRequired: boolean;
-}
 export interface Tab {
   id: string;
   session: Session;

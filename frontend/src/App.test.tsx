@@ -487,7 +487,7 @@ test("closing a connected tab requires confirmation and cancelling preserves it"
     sessions: [{id:"live-id",groupId:"",name:"Live Server",host:"example.test",port:22,
       username:"root",authType:"key",privateKeyPath:"",credentialRef:"saved"}],
     groups: [], fontSize:"14", language:"zh-CN",
-    activeProfile:"", version:"0.1.58",
+ version:"0.1.58",
   });
   await act(async () => { render(<App />); });
   fireEvent.doubleClick(screen.getByRole("button", {name:"选中会话 Live Server"}));
@@ -515,7 +515,7 @@ test("closing an already disconnected tab needs no SSH confirmation", async () =
     sessions: [{id:"offline-id",groupId:"",name:"Offline",host:"example.test",port:22,
       username:"root",authType:"key",privateKeyPath:"",credentialRef:"saved"}],
     groups: [], fontSize:"14", language:"zh-CN",
-    activeProfile:"", autoReconnect:false, version:"0.1.58",
+ autoReconnect:false, version:"0.1.58",
   });
   await act(async () => { render(<App />); });
   fireEvent.doubleClick(screen.getByRole("button", {name:"选中会话 Offline"}));
@@ -538,7 +538,7 @@ test("native quit request asks once for live sessions, cancellation is safe", as
     sessions: [{id:"quit-id",groupId:"",name:"Quit Server",host:"example.test",port:22,
       username:"root",authType:"key",privateKeyPath:"",credentialRef:"saved"}],
     groups: [], fontSize:"14", language:"zh-CN",
-    activeProfile:"", version:"0.1.58",
+ version:"0.1.58",
   });
   await act(async () => { render(<App />); });
   await waitFor(() => expect(api.SetCloseGuardReady).toHaveBeenCalledWith(true));
