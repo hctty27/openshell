@@ -160,5 +160,9 @@
   "quitActiveSessionsDescription": "仍有 {{count}} 个活动 SSH 会话。退出时将断开这些连接。",
   "quitActiveSessionsBusyDescription": "仍有 {{count}} 个活动 SSH 会话。退出将断开连接，并可能中断 AI 任务或文件传输；远程进程可能继续运行。",
   "quitAndDisconnect": "断开所有连接并退出",
-  "retryConnection": "重试连接"
+  "retryConnection": "重试连接",
+  "minimizeWindow": "最小化",
+  "maximizeWindow": "最大化",
+  "restoreWindow": "还原窗口",
+  "closeWindow": "关闭窗口"
 }
