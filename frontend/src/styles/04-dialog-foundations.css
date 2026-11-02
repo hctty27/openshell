@@ -270,20 +270,11 @@
   background: transparent;
 }
 @media (max-height: 750px) {
-  .ai-welcome {
-    padding-top: 45px;
-  }
   .workspace-empty {
     padding-bottom: 40px;
   }
   .brand {
     height: 65px;
-  }
-  .ai-welcome-icon {
-    margin-bottom: 15px;
-  }
-  .suggestions {
-    margin-top: 20px;
   }
 }
 @media (max-width: 1150px) {
@@ -302,10 +293,6 @@
   }
   .brand {
     padding: 0 14px;
-  }
-  .ai-conversation {
-    padding-left: 13px;
-    padding-right: 13px;
   }
 }
 
