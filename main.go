@@ -48,7 +48,7 @@ func main() {
         AddFilter("OpenShell backup (*.json)", "*.json").PromptForSingleSelection()
     }
     service.pickBackupWrite = func() (string, error) {
-      return desktop.Dialog.SaveFile().SetTitle(service.dialogTitle("Back up OpenShell sessions", "备份 OpenShell 会话")).
+      return desktop.Dialog.SaveFile().
         SetFilename("openshell-sessions.json").AddFilter("OpenShell backup (*.json)", "*.json").PromptForSingleSelection()
     }
     service.pickImport = func() (string, error) {
