@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/branding"
 	"github.com/hctty27/openshell/internal/domain"
@@ -151,7 +152,7 @@ func (a *App) QuitConfirmed() {
  a.mu.Lock()
  a.quitApproved = true
  a.mu.Unlock()
- runtime.Quit(a.ctx)
+ if a.quit != nil { a.quit() }
 }
 func (a *App) shutdown(context.Context) {
 	a.closeAllLocalTerminals()
