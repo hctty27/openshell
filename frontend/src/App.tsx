@@ -10,7 +10,6 @@ import {
   Plus,
   X,
   PanelRightOpen,
-  PanelLeftOpen,
   RefreshCw,
   Unplug,
   ArrowRight,
@@ -150,11 +149,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const { tabs, setTabs, tabsRef, activeID, setActiveID, activeIDRef, update } = useWorkspaceTabs();
   const { hasActiveTransfers } = useTransferActivity();
   const [state, setState] = useState(initialState),
-    [showSessions, setShowSessions] = useState(true),
     [sidebarMode, setSidebarMode] = useState<"pinned" | "auto-hide">(
       initialState.sessionSidebarMode === "auto-hide" ? "auto-hide" : "pinned",
     ),
     [autoSidebarOpen, setAutoSidebarOpen] = useState(false),
+    [detailsExpanded, setDetailsExpanded] = useState(initialState.sessionDetailsExpanded === true),
     [showSessionPicker, setShowSessionPicker] = useState(false),
     [xshellPreview, setXshellPreview] = useState<XshellImportPreview | null>(null),
     [fontSize, setFontSize] = useState(
@@ -201,6 +200,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
   const sidebarDockRef = useRef<HTMLDivElement>(null);
   const sidebarHovered = useRef(false);
+  const sidebarKeyboardFocused = useRef(false);
+  const sidebarPointerFocused = useRef(false);
   const sidebarOpenTimer = useRef<number | null>(null);
   const sidebarCloseTimer = useRef<number | null>(null);
   const remoteUploadDirs = useRef<Record<string, string>>({});
@@ -788,14 +789,16 @@ function Workspace({ initialState }: { initialState: AppState }) {
     sidebarCloseTimer.current = window.setTimeout(() => {
       sidebarCloseTimer.current = null;
       if (sidebarHovered.current) return;
-      const focused = document.activeElement;
-      const editing = focused instanceof HTMLElement &&
-        focused.matches("input, textarea, select") &&
-        sidebarDockRef.current?.contains(focused);
-      if (editing || document.querySelector(".session-context-menu") ||
-          document.querySelector('[role="dialog"]')) {
+      if (sidebarKeyboardFocused.current &&
+          sidebarDockRef.current?.contains(document.activeElement)) return;
+      if (document.querySelector(".session-context-menu")) {
         scheduleSidebarClose();
         return;
+      }
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && sidebarDockRef.current?.contains(focused) &&
+          !focused.classList.contains("session-sidebar-rail")) {
+        focused.blur();
       }
       setAutoSidebarOpen(false);
     }, 300);
@@ -851,16 +854,17 @@ function Workspace({ initialState }: { initialState: AppState }) {
         } as React.CSSProperties
       }
     >
-      <WindowTitleBar tabs={tabs} showSessions={showSessions}
-        onToggleSessions={() => setShowSessions(current => !current)}
+      <WindowTitleBar tabs={tabs}
         onSettings={() => setDialog({ kind: "settings" })}
         onNotice={notify} />
       <div className="app-body">
-      {showSessions && (
-        <>
-          <div
+      <div
             ref={sidebarDockRef}
             className={`session-sidebar-dock ${sidebarMode === "auto-hide" ? "session-sidebar-dock--auto" : ""} ${autoSidebarOpen ? "is-open" : ""}`}
+            onPointerDownCapture={() => {
+              sidebarPointerFocused.current = true;
+              sidebarKeyboardFocused.current = false;
+            }}
             onMouseEnter={() => {
               sidebarHovered.current = true;
               clearSidebarTimer(sidebarCloseTimer);
@@ -876,8 +880,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
               sidebarHovered.current = false;
               scheduleSidebarClose();
             }}
-            onFocusCapture={() => {
-              if (sidebarMode === "auto-hide") {
+            onFocusCapture={event => {
+              if (!sidebarPointerFocused.current) sidebarKeyboardFocused.current = true;
+              if (sidebarMode === "auto-hide" &&
+                  !(event.target as HTMLElement).classList.contains("session-sidebar-rail")) {
                 clearSidebarTimer(sidebarOpenTimer);
                 clearSidebarTimer(sidebarCloseTimer);
                 setAutoSidebarOpen(true);
@@ -885,15 +891,27 @@ function Workspace({ initialState }: { initialState: AppState }) {
             }}
             onBlurCapture={event => {
               if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                sidebarKeyboardFocused.current = false;
+                sidebarPointerFocused.current = false;
                 scheduleSidebarClose();
+              }
+            }}
+            onKeyDownCapture={event => {
+              if (event.key === "Tab" || event.key.startsWith("Arrow")) {
+                sidebarPointerFocused.current = false;
+                sidebarKeyboardFocused.current = true;
               }
             }}
             onKeyDown={event => {
               if (event.key === "Escape" && sidebarMode === "auto-hide") {
+                event.preventDefault();
+                event.stopPropagation();
                 clearSidebarTimer(sidebarOpenTimer);
                 clearSidebarTimer(sidebarCloseTimer);
+                sidebarKeyboardFocused.current = false;
+                sidebarPointerFocused.current = false;
                 setAutoSidebarOpen(false);
-                (document.activeElement as HTMLElement | null)?.blur();
+                sidebarDockRef.current?.querySelector<HTMLButtonElement>(".session-sidebar-rail")?.focus();
               }
             }}
           >
@@ -902,6 +920,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 type="button"
                 className="session-sidebar-rail"
                 aria-label={tr("sessions:showAutoHiddenSidebar")}
+                title={tr("sessions:showAutoHiddenSidebar")}
                 aria-controls="session-sidebar-panel"
                 aria-expanded={autoSidebarOpen}
                 onClick={() => {
@@ -909,13 +928,19 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   clearSidebarTimer(sidebarCloseTimer);
                   setAutoSidebarOpen(true);
                 }}
-              >
-                <PanelLeftOpen size={15} aria-hidden="true" />
-                <span>{tr("common:sessions")}</span>
-              </button>
+              />
             )}
           <SessionTree
             pinned={sidebarMode === "pinned"}
+            detailsExpanded={detailsExpanded}
+            onToggleDetails={() => {
+              const next = !detailsExpanded;
+              setDetailsExpanded(next);
+              void api.SavePreference("sessionDetailsExpanded", String(next)).catch(error => {
+                setDetailsExpanded(current => current === next ? !next : current);
+                notify(error);
+              });
+            }}
             hidden={sidebarMode === "auto-hide" && !autoSidebarOpen}
             onTogglePin={toggleSidebarMode}
             sessions={state.sessions}
@@ -938,8 +963,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
           {sidebarMode === "pinned" && (
             <div className="splitter" onPointerDown={drag} />
           )}
-        </>
-      )}
       <main className="workspace" onPointerDownCapture={() => {
         if (sidebarMode === "auto-hide" && autoSidebarOpen) {
           clearSidebarTimer(sidebarCloseTimer);

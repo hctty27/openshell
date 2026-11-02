@@ -81,6 +81,7 @@ export interface AppState {
   splitRatio?: number;
   sessionSidebarMode?: "pinned" | "auto-hide";
   sessionSidebarWidth?: number;
+  sessionDetailsExpanded?: boolean;
   keepAliveSeconds?: number;
   autoReconnect?: boolean;
   maxReconnectAttempts?: number;

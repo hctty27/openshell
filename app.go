@@ -77,6 +77,7 @@ type AppState struct {
 	SplitRatio             int                 `json:"splitRatio"`
 	SessionSidebarMode     string              `json:"sessionSidebarMode"`
 	SessionSidebarWidth    int                 `json:"sessionSidebarWidth"`
+	SessionDetailsExpanded bool               `json:"sessionDetailsExpanded"`
 	FontSize              string              `json:"fontSize"`
 	Theme                 string              `json:"theme"`
 	TerminalTheme         string              `json:"terminalTheme"`
@@ -269,6 +270,8 @@ func (a *App) State() (AppState, error) {
 	if e != nil { return AppState{}, e }
 	width, err := strconv.Atoi(widthRaw)
 	if err != nil || width < 190 || width > 360 { width = 235 }
+	detailsExpanded, e := a.store.GetPreference(a.ctx, "sessionDetailsExpanded")
+	if e != nil { return AppState{}, e }
 	return AppState{
 		KeepAliveSeconds: keepAliveSeconds,
 		AutoReconnect: autoReconnect != "false",
@@ -286,6 +289,7 @@ func (a *App) State() (AppState, error) {
 		ConfirmMultilinePaste: confirmMultilinePaste != "false",
 		LogHighlights: logHighlights == "true", SplitRatio: splitRatio,
 		SessionSidebarMode: mode, SessionSidebarWidth: width,
+		SessionDetailsExpanded: detailsExpanded == "true",
 		Version:               branding.Version,
 	}, nil
 }
@@ -447,6 +451,8 @@ func (a *App) SavePreference(key, value string) error {
 	case "splitRatio":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 20 || n > 80 { return apperror.New("unsupportedPreference", nil) }
+	case "sessionDetailsExpanded":
+		if value != "true" && value != "false" { return apperror.New("booleanSettingsMustBeTrueOrFalse", nil) }
 	case "sessionSidebarMode":
 		if value != "pinned" && value != "auto-hide" { return apperror.New("unsupportedPreference", nil) }
 	case "sessionSidebarWidth":

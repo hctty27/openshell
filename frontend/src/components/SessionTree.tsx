@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Pin,
   PinOff,
+  Ellipsis,
   Network,
   FileInput,
 } from "lucide-react";
@@ -43,13 +44,15 @@ interface Props {
   pinned?: boolean;
   hidden?: boolean;
   onTogglePin?(): void;
+  detailsExpanded?: boolean;
+  onToggleDetails?(): void;
 }
 export default function SessionTree(p: Props) {
   useTranslation();
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [contextMenu, setContextMenu] = useState<{
-    kind: "root" | "group" | "session";
+    kind: "root" | "group" | "session" | "toolbar";
     id: string;
     anchor: HTMLElement;
     x: number;
@@ -132,13 +135,13 @@ export default function SessionTree(p: Props) {
       ];
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
   const showContextMenu = (
-    kind: "root" | "group" | "session",
+    kind: "root" | "group" | "session" | "toolbar",
     id: string,
     anchor: HTMLElement,
     x: number,
     y: number,
   ) => {
-    setSelected({ kind, id });
+    if (kind !== "toolbar") setSelected({ kind, id });
     setContextMenu({ kind, id, anchor, x, y });
   };
   const openWithMouse = (
@@ -177,7 +180,7 @@ export default function SessionTree(p: Props) {
     (session) => session.id === contextMenu?.id,
   );
   const menuItems: ContextMenuAction[] =
-    contextMenu?.kind === "root"
+    (contextMenu?.kind === "root" || contextMenu?.kind === "toolbar")
       ? [
           {
             label: t("common:newSshSession"),
@@ -291,27 +294,33 @@ export default function SessionTree(p: Props) {
     <aside id="session-sidebar-panel" className="session-sidebar" aria-hidden={p.hidden || undefined} inert={p.hidden}>
       <div className="sidebar-heading">
         <span>{t("common:sessions")}</span>
-        <div>
+        <div className="sidebar-heading-actions">
+          <div className="sidebar-heading-tools">
+            <button type="button" title={t("common:newSession")} aria-label={t("common:newSession")}
+              onClick={() => p.onEdit()}>
+              <Plus size={18} />
+            </button>
+            <button type="button" title={t("common:moreActions")} aria-label={t("common:moreActions")}
+              aria-haspopup="menu"
+              onClick={event => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                showContextMenu("toolbar", "", event.currentTarget, rect.right - 160, rect.bottom);
+              }}>
+              <Ellipsis size={16} />
+            </button>
+          </div>
           {p.onTogglePin && (
             <button
               type="button"
+              className={`sidebar-pin-toggle ${p.pinned ? "is-pinned" : ""}`}
               title={t(p.pinned ? "sessions:autoHideSidebar" : "sessions:pinSidebar")}
               aria-label={t(p.pinned ? "sessions:autoHideSidebar" : "sessions:pinSidebar")}
               aria-pressed={p.pinned === true}
               onClick={p.onTogglePin}
             >
-              {p.pinned ? <Pin size={15} /> : <PinOff size={15} />}
+              {p.pinned ? <Pin size={15} fill="currentColor" aria-hidden="true" /> : <PinOff size={15} aria-hidden="true" />}
             </button>
           )}
-          <button title={t("sessions:importXshellTitle")} onClick={() => p.onImport?.()}>
-            <FileInput size={16} />
-          </button>
-          <button title={t("common:newFolder")} onClick={p.onGroup}>
-            <FolderPlus size={16} />
-          </button>
-          <button title={t("common:newSession")} onClick={() => p.onEdit()}>
-            <Plus size={18} />
-          </button>
         </div>
       </div>
       <div className="search">
@@ -468,20 +477,28 @@ export default function SessionTree(p: Props) {
           </div>
         )}
       </div>
-      <div
-        className="details-resizer"
-        role="separator"
-        aria-label={t("sessions:resizeSessionDetails")}
-        aria-orientation="horizontal"
-        onPointerDown={resizeDetails}
-      />
+      {p.detailsExpanded && (
+        <div
+          className="details-resizer"
+          role="separator"
+          aria-label={t("sessions:resizeSessionDetails")}
+          aria-orientation="horizontal"
+          onPointerDown={resizeDetails}
+        />
+      )}
       <section
-        className="session-details"
-        style={{ height: detailsHeight }}
+        className={`session-details ${p.detailsExpanded ? "" : "is-collapsed"}`}
+        style={{ height: p.detailsExpanded ? detailsHeight : undefined }}
         data-testid="session-details"
       >
         <div className="details-heading">
-          <span>{t("common:details")}</span>
+          <button type="button" className="details-toggle"
+            aria-expanded={p.detailsExpanded === true}
+            aria-controls="session-details-content"
+            onClick={p.onToggleDetails}>
+            <ChevronDown size={14} className={p.detailsExpanded ? "" : "rotated"} aria-hidden="true" />
+            <span>{t("common:details")}</span>
+          </button>
           <small>
             {selectedSession
               ? "SSH"
@@ -490,7 +507,7 @@ export default function SessionTree(p: Props) {
                 : t("common:directory")}
           </small>
         </div>
-        <div className="details-body">
+        <div className="details-body" id="session-details-content" hidden={!p.detailsExpanded}>
           <div className="details-identity">
             {selectedSession ? <Server size={17} /> : <Folder size={17} />}
             <strong title={detailsName}>{detailsName}</strong>
