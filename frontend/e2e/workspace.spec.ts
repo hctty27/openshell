@@ -655,13 +655,13 @@ test("compact workspace removes redundant chrome while keeping quick commands", 
   await expect(page.locator(".brand, .sidebar-footer, .workspace-status")).toHaveCount(0);
   const settingsButton = page.getByTitle("设置", { exact: true });
   await expect(settingsButton).toBeVisible();
-  await expect(settingsButton.locator("xpath=..")).toHaveClass(/header-right/);
+  await expect(settingsButton.locator("xpath=../..")).toHaveClass(/window-titlebar/);
 
   const geometry = await page.evaluate(() => {
     const height = (selector: string) =>
       document.querySelector(selector)!.getBoundingClientRect().height;
     return {
-      header: height(".workspace-header"),
+      header: height(".window-titlebar"),
       tabs: height(".tab-strip"),
       server: height(".terminal-toolbar"),
       detailsHeading: height(".details-heading"),
@@ -673,7 +673,7 @@ test("compact workspace removes redundant chrome while keeping quick commands", 
       detail: height(".details-properties > div"),
     };
   });
-  expect(geometry.header).toBe(30);
+  expect(geometry.header).toBe(32);
   expect(geometry.tabs).toBe(30);
   expect(geometry.server).toBe(30);
   expect(geometry.detailsHeading).toBe(30);
