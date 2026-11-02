@@ -703,47 +703,7 @@ test("compact sidebar removes detail actions and aligns single-row footer height
   await expect(page.locator(".quick-command-bar.multi")).toBeVisible();
 });
 
-test("bilingual API placeholders translate without overwriting saved values", async ({ page }) => {
-  await page.goto("/?language=en");
-  await page.getByTitle("Settings", { exact: true }).click();
-  await page.getByRole("button", { name: "AI Settings", exact: true }).click();
-  const name = page.getByLabel("Profile name", { exact: true });
-  const url = page.getByLabel("Base URL", { exact: true });
-  await expect(name).toHaveValue("");
-  await expect(name).toHaveAttribute("placeholder", "Custom API");
-  await expect(url).toHaveValue("");
-  await expect(url).toHaveAttribute("placeholder", "https://api.example.com/v1");
-
-  await page.getByRole("button", { name: "Save profile" }).click();
-  await expect(page.getByRole("alert")).toContainText("Enter a profile name");
-  await name.fill("My saved API");
-  await page.getByRole("button", { name: "Save profile" }).click();
-  await expect(page.getByRole("alert")).toContainText("Enter an API base URL");
-  await url.fill("https://api.example.com/v1");
-  await page.getByLabel("Model name", { exact: true }).fill("my-model");
-  await page.getByRole("button", { name: "Save profile" }).click();
-  await expect(page.getByText("Profile saved")).toBeVisible();
-
-  await page.getByRole("button", { name: "General", exact: true }).click();
-  await page.locator("#settings-language").selectOption("zh-CN");
-  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-  await page.getByRole("button", { name: "AI 配置", exact: true }).click();
-  await expect(page.getByLabel("配置名称", { exact: true })).toHaveValue("My saved API");
-  await expect(page.getByLabel("Base URL", { exact: true })).toHaveValue("https://api.example.com/v1");
-
-  await page.getByTitle("新建 API 配置").click();
-  await expect(page.getByLabel("配置名称", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("配置名称", { exact: true })).toHaveAttribute("placeholder", "自定义 API");
-  await expect(page.getByLabel("Base URL", { exact: true })).toHaveValue("");
-  await page.getByRole("button", { name: "通用", exact: true }).click();
-  await page.locator("#settings-language").selectOption("en");
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await page.getByRole("button", { name: "AI Settings", exact: true }).click();
-  await expect(page.getByLabel("Profile name", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("Profile name", { exact: true })).toHaveAttribute("placeholder", "Custom API");
-});
-
-test("bilingual switching preserves terminal and draft and survives reload", async ({
+test("bilingual switching preserves SSH terminal and survives reload", async ({
   page,
 }) => {
   await page.goto("/?language=en");
@@ -764,9 +724,6 @@ test("bilingual switching preserves terminal and draft and survives reload", asy
   await page
     .locator(".xterm")
     .evaluate((el) => ((window as any).__originalTerminal = el));
-  await page
-    .getByLabel("Send to AI", { exact: true })
-    .fill("Keep my draft 原文");
   await page.getByTitle("Settings", { exact: true }).click();
   await expect(page.locator("#settings-language")).toHaveValue("en");
   await page.evaluate(() => document.fonts.ready);
@@ -785,9 +742,6 @@ test("bilingual switching preserves terminal and draft and survives reload", asy
     animations: "disabled",
   });
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
-  await expect(page.getByLabel("发送给 AI", { exact: true })).toHaveValue(
-    "Keep my draft 原文",
-  );
   expect(
     await page
       .locator(".xterm")
@@ -822,8 +776,8 @@ test("bilingual settings and session picker fit a compact window", async ({
   for (const language of ["en", "zh-CN"]) {
     await page.locator("#settings-language").selectOption(language);
     for (const name of language === "en"
-      ? ["General", "Terminal", "AI Settings", "Automatic"]
-      : ["通用", "终端", "AI 配置", "自动执行"]) {
+      ? ["General", "Terminal", "Connection"]
+      : ["通用", "终端", "连接"]) {
       await page.getByRole("button", { name, exact: true }).click();
       const dialog = page.locator(".settings-dialog");
       expect(
@@ -841,7 +795,7 @@ test("bilingual settings and session picker fit a compact window", async ({
         }),
       ).toBe(true);
       await page.screenshot({
-        path: `../tmp/i18n-${language}-${name === "AI Settings" || name === "AI 配置" ? "api" : name === "Automatic" || name === "自动执行" ? "auto" : name === "Terminal" || name === "终端" ? "terminal" : "general"}-compact.png`,
+        path: `../tmp/i18n-${language}-${name === "Connection" || name === "连接" ? "connection" : name === "Terminal" || name === "终端" ? "terminal" : "general"}-compact.png`,
       });
     }
     await page
@@ -857,73 +811,3 @@ test("bilingual settings and session picker fit a compact window", async ({
   await page.screenshot({ path: "../tmp/i18n-zh-picker-compact.png" });
 });
 
-test("AI header aligns with SSH title bar and compact model leaves space for Send", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1200, height: 800 });
-  await page.goto("/");
-
-  await page.getByTitle("设置", { exact: true }).click();
-  await page.getByRole("button", { name: "AI 配置", exact: true }).click();
-  await page.getByLabel("配置名称", { exact: true }).fill("测试 API");
-  await page
-    .getByLabel("Base URL", { exact: true })
-    .fill("https://api.example.com/v1");
-  await page
-    .getByLabel("模型名称", { exact: true })
-    .fill("grok-4.7(xhigh)-very-long-model-name");
-  await page.getByRole("button", { name: "保存配置", exact: true }).click();
-  await expect(page.getByText("配置已保存",{exact:true})).toBeVisible();
-  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
-  await expect(page.getByLabel("当前模型")).toBeVisible();
-
-  for (const width of [310, 370, 500]) {
-    await page.locator(".app").evaluate((element, value) => {
-      (element as HTMLElement).style.setProperty("--ai-width", `${value}px`);
-    }, width);
-
-    const positions = await page.evaluate(() => {
-      const rect = (selector: string) =>
-        document.querySelector(selector)!.getBoundingClientRect();
-      const header = rect(".ai-header");
-      const workspaceHeader = rect(".workspace-header");
-
-      const mode = rect(".mode-select");
-      const model = rect(".composer-model");
-      const send = rect(".send-button");
-      const tools = rect(".composer-tools");
-      return {
-        headerHeight: header.height,
-        headerTop: header.top,
-        mainTop: workspaceHeader.top,
-        headerBottom: header.bottom,
-        titleBottom: workspaceHeader.bottom,
-        modelWidth: model.width,
-        modeRight: mode.right,
-        modelLeft: model.left,
-        modelRight: model.right,
-        sendLeft: send.left,
-        sendRight: send.right,
-        toolsRight: tools.right,
-      };
-    });
-
-    expect(positions.headerHeight).toBe(30);
-    expect(
-      Math.abs(positions.headerTop - positions.mainTop),
-    ).toBeLessThanOrEqual(1);
-    expect(
-      Math.abs(positions.headerBottom - positions.titleBottom),
-    ).toBeLessThanOrEqual(1);
-    expect(positions.modelWidth).toBeLessThanOrEqual(116);
-    expect(positions.modelWidth).toBeGreaterThan(50);
-    expect(positions.modelLeft).toBeGreaterThan(positions.modeRight);
-    expect(positions.sendLeft - positions.modelRight).toBeGreaterThanOrEqual(4);
-    expect(positions.sendRight).toBeLessThanOrEqual(positions.toolsRight);
-  }
-
-  await expect(page.getByLabel("当前模型")).toHaveAttribute(
-    "title",
-    /grok-4\.7\(xhigh\)-very-long-model-name/,
-  );
-});
