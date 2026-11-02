@@ -37,7 +37,7 @@ wails3 dev
 ```powershell
 wails3 generate bindings -names -ts
 wails3 generate syso -manifest build/windows/wails.exe.manifest -icon build/windows/icon.ico -info build/windows/info.json -arch amd64 -out rsrc_windows_amd64.syso
-go build -tags production -trimpath -ldflags="-s -w" -o build/bin/OpenShell.exe .
+go build -tags production -trimpath -ldflags="-H windowsgui -s -w" -o build/bin/OpenShell.exe .
 ```
 
 The executable is built at `build/bin/OpenShell.exe`; existing release packaging retains this path.
