@@ -80,7 +80,7 @@ func (m *Manager) Transfers(ref domain.ConnectionRef) []Task {
     defer m.mu.Unlock()
     out := make([]Task,0)
     for _, j := range m.tasks {
-        if j.task.Ref.TabID == ref.TabID && j.task.Ref.SessionID == ref.SessionID {
+        if j.task.Ref == ref {
             out = append(out,j.task)
         }
     }
