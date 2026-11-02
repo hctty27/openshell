@@ -19,7 +19,7 @@ function reconnectingTab(overrides: Partial<Tab> = {}): Tab {
       credentialRef: "",
     },
     ref, status: "reconnecting", home: "/root", cwd: "/root",
-    messages: [], proposal: null, chatBusy: false, executing: false, error: "",
+        error: "",
     ...overrides,
   };
 }
@@ -31,14 +31,13 @@ function setup(tab = reconnectingTab(), options: { enabled?: boolean; maxRetries
     tabsRef.current = tabsRef.current.map(item => item.id === id ? change(item) : item);
   });
   const onChallenge = vi.fn();
-  const restoreConversation = vi.fn(async () => {});
   const props = {
     tabs, tabsRef, update, enabled: options.enabled ?? true,
     maxReconnectAttempts: options.maxRetries ?? 10,
-    onChallenge, restoreConversation,
+    onChallenge,
   };
   const hook = renderHook(() => useAutoReconnect(props));
-  return { ...hook, tabsRef, update, onChallenge, restoreConversation };
+  return { ...hook, tabsRef, update, onChallenge };
 }
 
 beforeEach(() => {
@@ -52,20 +51,17 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test("reconnect restores the latest session and conversation", async () => {
+test("reconnect restores the latest SSH session", async () => {
   vi.mocked(api.Reconnect).mockResolvedValue({
-    ref: { ...ref, generation: 2 }, home: "/home/root", conversationId: "chat-1",
+    ref: { ...ref, generation: 2 }, home: "/home/root",
   });
-  const { tabsRef, restoreConversation } = setup();
+  const { tabsRef } = setup();
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(api.Reconnect).toHaveBeenCalledWith(ref.tabId, ref.sessionId);
   expect(tabsRef.current[0]).toMatchObject({
     status: "connected", retryCount: 0, cwd: "/home/root",
     ref: { generation: 2 },
   });
-  expect(restoreConversation).toHaveBeenCalledWith(
-    { ...ref, generation: 2 }, "chat-1",
-  );
 });
 
 test("manual stop cancels pending reconnect timer", async () => {

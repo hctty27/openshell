@@ -4,29 +4,16 @@ import type {
   AppState,
   SessionRequest,
   Session,
-  APIRequest,
-  APIProfile,
   Group,
   XshellImportPreview,
   XshellImportResult,
   Ref,
   ConnectResult,
-  ChatRequest,
-  ChatResponse,
-  Proposal,
-  CommandResult,
-  AutoSnapshot,
   SFTPEntry,
   SFTPPaths,
   SFTPTask,
   SFTPDocument,
   SFTPSyncPreview,
-  ConversationCursor,
-  ConversationList,
-  ConversationPage,
-  Conversation,
-  OperationStep,
-  PreflightReport,
 } from "./types";
 type Backend = {
   SFTPHome(ref: Ref): Promise<SFTPPaths>;
@@ -41,23 +28,6 @@ type Backend = {
   SFTPPreviewSync(ref: Ref, direction: string, localDir: string, remoteDir: string): Promise<SFTPSyncPreview>;
   SFTPBatchChmod(ref: Ref, side: string, paths: string[], mode: string): Promise<number>;
   SFTPEnsureDirectory(ref: Ref, side: string, directory: string): Promise<void>;
-  StartAutomatic(req: ChatRequest, taskID: string): Promise<AutoSnapshot>;
-  InspectProposalPreflight(ref: Ref, proposalID: string): Promise<PreflightReport>;
-  ListOperationSteps(ref: Ref, conversationID: string): Promise<OperationStep[]>;
-  ListConversations(ref: Ref, cursor: ConversationCursor | null, limit: number): Promise<ConversationList>;
-  ReadConversation(ref: Ref, id: string, before: number, limit: number): Promise<ConversationPage>;
-  SelectConversation(ref: Ref, id: string): Promise<ConversationPage>;
-  CreateConversation(ref: Ref): Promise<Conversation>;
-  StartConversationDraft(ref: Ref): Promise<void>;
-  RenameConversation(ref: Ref, id: string, title: string): Promise<Conversation>;
-  DeleteConversation(ref: Ref, id: string): Promise<void>;
-  ResumeAutomatic(
-    ref: Ref,
-    taskID: string,
-    approvedProposalID: string,
-    extend: boolean,
-  ): Promise<AutoSnapshot>;
-  StopAutomatic(ref: Ref, taskID: string): Promise<void>;
   State(): Promise<AppState>;
   SetCloseGuardReady(ready: boolean): Promise<void>;
   QuitConfirmed(): Promise<void>;
@@ -71,9 +41,6 @@ type Backend = {
   SaveGroup(group: Group): Promise<Group>;
   DeleteGroup(id: string): Promise<void>;
   SavePreference(key: string, value: string): Promise<void>;
-  SaveAPI(req: APIRequest): Promise<APIProfile>;
-  DeleteAPI(id: string): Promise<void>;
-  TestAPI(req: APIRequest): Promise<void>;
   ChoosePrivateKey(): Promise<string>;
   Connect(
     tabID: string,
@@ -96,23 +63,6 @@ type Backend = {
   Reconnect(tabID: string, sessionID: string): Promise<ConnectResult>;
   Disconnect(ref: Ref): Promise<void>;
   CloseTab(id: string): Promise<void>;
-  PreviewContext(
-    ref: Ref,
-    text: string,
-  ): Promise<{ text: string; truncated: boolean }>;
-  ClearChat(id: string): Promise<void>;
-  CancelChat(ref: Ref): Promise<void>;
-  Chat(req: ChatRequest): Promise<ChatResponse>;
-  Continue(req: ChatRequest): Promise<ChatResponse>;
-  ReviseProposal(
-    ref: Ref,
-    id: string,
-    command: string,
-    cwd: string,
-    seconds: number,
-  ): Promise<Proposal>;
-  ConfirmCommand(ref: Ref, id: string): Promise<CommandResult>;
-  CancelCommand(ref: Ref, id: string): Promise<void>;
 };
 declare global {
   interface Window {

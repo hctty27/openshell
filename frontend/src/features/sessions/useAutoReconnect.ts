@@ -2,7 +2,7 @@ import { useEffect, useRef, type RefObject } from "react";
 import { api } from "../../bridge";
 import { decodeAppError } from "../../i18n/errors";
 import { message } from "../../i18n/message";
-import type { HostChallenge, Ref, Tab } from "../../types";
+import type { HostChallenge, Tab } from "../../types";
 
 interface Options {
   tabs: Tab[];
@@ -11,11 +11,10 @@ interface Options {
   enabled: boolean;
   maxReconnectAttempts: number;
   onChallenge(host: HostChallenge, tab: Tab): void;
-  restoreConversation(ref: Ref, conversationID: string): Promise<void>;
 }
 
 export function useAutoReconnect({
-  tabs, tabsRef, update, enabled, maxReconnectAttempts, onChallenge, restoreConversation,
+  tabs, tabsRef, update, enabled, maxReconnectAttempts, onChallenge,
 }: Options) {
   const reconnectTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const reconnectInFlight = useRef(new Set<string>());
@@ -67,11 +66,10 @@ export function useAutoReconnect({
             return;
           }
           update(tab.id, t => ({
-            ...t, ref: result.ref, conversationID: result.conversationId,
+            ...t, ref: result.ref,
             status: "connected", everConnected: true, home: result.home, cwd: result.home,
             retryCount: 0, error: "", manualDisconnected: false,
           }));
-          if (result.conversationId) await restoreConversation(result.ref, result.conversationId);
         } catch (error) {
           const code = decodeAppError(error)?.code;
           const authenticationErrors = new Set([

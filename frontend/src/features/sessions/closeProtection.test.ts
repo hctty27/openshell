@@ -3,8 +3,8 @@ import type { Tab } from "../../types";
 import { hasInterruptibleWork, isActiveRemoteSession, sessionLabel } from "./closeProtection";
 
 const sample = (status: Tab["status"]): Tab => ({
-  id:"t", status, ref:null, chatBusy:false, executing:false, proposal:null, error:null,
-  home:"", cwd:"", messages:[],
+  id:"t", status, ref:null,  error:null,
+  home:"", cwd:"",
   session:{id:"s",name:"US",host:"example.test",port:22,username:"root",
     groupId:"",authType:"key",privateKeyPath:"",credentialRef:""},
 });
@@ -16,12 +16,9 @@ describe("closeProtection", () => {
     expect(isActiveRemoteSession(sample("disconnected"))).toBe(false);
     expect(isActiveRemoteSession(sample("error"))).toBe(false);
   });
-  it("counts running tasks, pending proposals, and active transfers", () => {
+  it("counts active file transfers without AI task state", () => {
     const tab = sample("disconnected");
     expect(hasInterruptibleWork(tab, () => false)).toBe(false);
-    expect(hasInterruptibleWork({...tab, chatBusy:true}, () => false)).toBe(true);
-    expect(hasInterruptibleWork({...tab, executing:true}, () => false)).toBe(true);
-    expect(hasInterruptibleWork({...tab, proposal: {id:"p"} as Tab["proposal"]}, () => false)).toBe(true);
     expect(hasInterruptibleWork(tab, () => true)).toBe(true);
   });
   it("renders distinguishable session labels", () => {

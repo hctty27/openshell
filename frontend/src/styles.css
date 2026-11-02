@@ -1,11 +1,10 @@
 @import "./styles/00-foundation.css";
 @import "./styles/01-sessions.css";
 @import "./styles/02-workspace-terminal.css";
-@import "./styles/03-ai-sidebar.css";
 @import "./styles/04-dialog-foundations.css";
 @import "./styles/05-session-tree-commands.css";
 @import "./styles/06-dialogs-pickers.css";
 @import "./styles/07-settings.css";
 @import "./styles/08-sftp-browser.css";
-@import "./styles/09-conversation-transfers.css";
-@import "./styles/10-overlays-ai-ops.css";
+@import "./styles/09-sftp-zmodem-transfers.css";
+@import "./styles/10-dialog-overlays.css";

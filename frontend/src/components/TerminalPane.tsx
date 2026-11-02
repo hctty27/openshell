@@ -41,7 +41,7 @@ interface Props {
   commandFocusVersion?: number;
   searchFocusVersion?: number;
   onError(text: unknown): void;
-  onSelection(text: string): void;
+  onSelection?(text: string): void;
   onDirectoryChange?(ref: Ref, directory: string): void;
 }
 export default function TerminalPane(p: Props) {
@@ -208,7 +208,7 @@ export default function TerminalPane(p: Props) {
     };
     const resizeSubscription = term.onResize(sendResize);
     const selection = term.onSelectionChange(() =>
-      callbacks.current.onSelection(term.getSelection()),
+      callbacks.current.onSelection?.(term.getSelection()),
     );
     let selectingWithMouse = false;
     const paneElement = container.current.parentElement ?? container.current;

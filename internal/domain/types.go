@@ -38,56 +38,10 @@ type Group struct {
 	Name     string `json:"name"`
 	ParentID string `json:"parentId,omitempty"`
 }
-type APIProfile struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	BaseURL      string `json:"baseUrl"`
-	Model        string `json:"model"`
-	Provider     string `json:"provider,omitempty"`
-	SecretRef    string `json:"secretRef"`
-	ToolsEnabled bool   `json:"toolsEnabled"`
-}
 type ConnectionRef struct {
 	TabID      string `json:"tabId"`
 	SessionID  string `json:"sessionId"`
 	Generation uint64 `json:"generation"`
-}
-// OperationPlan describes checks a human must verify before execution.
-// It is metadata, not proof the checks have passed.
-type OperationPlan struct {
-    Risk string `json:"risk"`
-    RequiresConfirmation bool `json:"requiresConfirmation"`
-    Preflight []string `json:"preflight"`
-    VerificationRequired bool `json:"verificationRequired"`
-}
-type Proposal struct {
-	ID             string        `json:"id"`
-	Ref            ConnectionRef `json:"ref"`
-	Command        string        `json:"command"`
-	Purpose        string        `json:"purpose"`
-	Cwd            string        `json:"cwd"`
-	TimeoutSeconds int           `json:"timeoutSeconds"`
-	Status         string        `json:"status"`
-	ToolCallID     string        `json:"toolCallId"`
-	Plan           *OperationPlan `json:"plan,omitempty"`
-	Targets        []ConnectionRef `json:"targets,omitempty"`
-}
-type TargetCommandResult struct {
-	Ref ConnectionRef `json:"ref"`
-	Result CommandResult `json:"result"`
-}
-type CommandResult struct {
-	TargetResults []TargetCommandResult `json:"targetResults,omitempty"`
-	VerificationStatus string `json:"verificationStatus,omitempty"`
-	ReasonCode     string         `json:"reasonCode,omitempty"`
-	ReasonParams   map[string]any `json:"reasonParams,omitempty"`
-	Status         string         `json:"status"`
-	Stdout         string         `json:"stdout"`
-	Stderr         string         `json:"stderr"`
-	ExitCode       *int           `json:"exitCode"`
-	DurationMillis int64          `json:"durationMillis"`
-	Truncated      bool           `json:"truncated"`
-	Reason         string         `json:"reason"`
 }
 type AppError struct {
 	Code    string `json:"code"`
