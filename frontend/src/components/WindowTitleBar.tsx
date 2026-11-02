@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Copy, Minus, PanelLeftClose, PanelLeftOpen, Settings, Square, SquareTerminal, X } from "lucide-react";
 import { Window } from "@wailsio/runtime";
-import { desktop } from "../bridge";
+import { nativeDesktop } from "../bridge";
 import { t } from "../i18n";
 import type { Tab } from "../types";
 import TransferCenter from "./TransferCenter";
@@ -18,7 +18,7 @@ export default function WindowTitleBar({ tabs, showSessions, onToggleSessions, o
   const [maximised, setMaximised] = useState(false);
 
   useEffect(() => {
-    if (!desktop) return;
+    if (!nativeDesktop) return;
     let active = true;
     const syncWindowState = () => {
       void Window.IsMaximised().then(value => {
@@ -34,7 +34,7 @@ export default function WindowTitleBar({ tabs, showSessions, onToggleSessions, o
   }, []);
 
   const toggleMaximise = () => {
-    if (desktop) void (maximised ? Window.Restore() : Window.Maximise()).catch(onNotice);
+    if (nativeDesktop) void (maximised ? Window.Restore() : Window.Maximise()).catch(onNotice);
   };
 
   return (
@@ -59,11 +59,11 @@ export default function WindowTitleBar({ tabs, showSessions, onToggleSessions, o
           <Settings size={16} aria-hidden="true" />
         </button>
       </div>
-      {desktop && (
+      {nativeDesktop && (
         <div className="window-titlebar-controls">
           <button type="button" className="window-control"
             title={t("common:minimizeWindow")} aria-label={t("common:minimizeWindow")}
-            onClick={() => { if (desktop) void Window.Minimise().catch(onNotice); }}>
+            onClick={() => { if (nativeDesktop) void Window.Minimise().catch(onNotice); }}>
             <Minus size={15} aria-hidden="true" />
           </button>
           <button type="button" className="window-control"
@@ -74,7 +74,7 @@ export default function WindowTitleBar({ tabs, showSessions, onToggleSessions, o
           </button>
           <button type="button" className="window-control window-control-close"
             title={t("common:closeWindow")} aria-label={t("common:closeWindow")}
-            onClick={() => { if (desktop) void Window.Close().catch(onNotice); }}>
+            onClick={() => { if (nativeDesktop) void Window.Close().catch(onNotice); }}>
             <X size={16} aria-hidden="true" />
           </button>
         </div>
