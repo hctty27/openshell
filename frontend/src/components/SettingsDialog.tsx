@@ -1,3 +1,4 @@
+import packageManifest from "../../package.json";
 import { renderMessage, type DisplayText } from "../i18n/message";
 import { useTranslation } from "react-i18next";
 import { message } from "../i18n/message";
@@ -9,6 +10,7 @@ import {
   Server,
   Network,
   Settings2,
+  Info,
   Terminal,
   FolderOpen,
   Plus,
@@ -69,6 +71,7 @@ interface Props {
   onRefresh(): Promise<void>;
   onFont(n: number): void;
 }
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || packageManifest.version;
 const emptySession: Session = {
   id: "",
   groupId: "",
@@ -167,6 +170,7 @@ export default function SettingsDialog(p: Props) {
                 { id: "general", label: t("settings:general"), icon: Settings2 },
                 { id: "terminal", label: t("settings:terminal"), icon: Terminal },
                 { id: "connection", label: t("settings:connection"), icon: Network },
+                { id: "about", label: t("settings:about"), icon: Info },
               ].map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
@@ -413,6 +417,20 @@ export default function SettingsDialog(p: Props) {
               theme={p.theme}
               onTheme={p.onTheme}
             />
+          )}
+          {tab === "about" && (
+            <section className="settings-panel" aria-labelledby="settings-about-title">
+              <div className="settings-panel-heading">
+                <h3 id="settings-about-title">{t("settings:about")}</h3>
+              </div>
+              <div className="settings-about-product">
+                <img src="/app-icon.svg" alt="" aria-hidden="true" />
+                <div>
+                  <strong>OpenShell</strong>
+                  <p>{t("settings:version")} v{APP_VERSION}</p>
+                </div>
+              </div>
+            </section>
           )}
           {tab === "connection" && (
             <ConnectionSettingsPanel
