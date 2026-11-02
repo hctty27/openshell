@@ -94,3 +94,31 @@ func TestShutdownRespectsDeadline(t *testing.T) {
     }
     m.workers.Done()
 }
+
+func TestShutdownCancelsQueuedTransferAndReclaimsSessionSlot(t *testing.T) {
+    m := testManager()
+    ref := domain.ConnectionRef{TabID: "tab", SessionID: "queued-server", Generation: 1}
+    blocked := make(chan struct{}, 2)
+    blocked <- struct{}{}
+    blocked <- struct{}{}
+    m.mu.Lock()
+    m.slots[ref.SessionID] = blocked
+    m.mu.Unlock()
+
+    task, err := m.Start(ref, "upload", filepath.Join(t.TempDir(), "source"), "/destination", false)
+    if err != nil { t.Fatal(err) }
+    ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+    defer cancel()
+    if err := m.Shutdown(ctx); err != nil { t.Fatal(err) }
+
+    transfers := m.Transfers(ref)
+    if len(transfers) != 1 || transfers[0].ID != task.ID || transfers[0].Status != "cancelled" {
+        t.Fatalf("queued task not cancelled: %+v", transfers)
+    }
+    m.mu.Lock()
+    slots, users, reserved := len(m.slots), len(m.slotUsers), len(m.reserved)
+    m.mu.Unlock()
+    if slots != 0 || users != 0 || reserved != 0 {
+        t.Fatalf("transfer state not released: slots=%d users=%d reserved=%d", slots, users, reserved)
+    }
+}
