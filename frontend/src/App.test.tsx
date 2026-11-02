@@ -85,7 +85,12 @@ test("session sidebar can auto-hide, hover open and pin without remounting the t
   const panel = screen.getByRole("complementary");
   expect(dock.classList.contains("session-sidebar-dock--auto")).toBe(false);
   expect(document.querySelector(".window-titlebar-sidebar")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "自动隐藏会话栏" }));
+  const autoHideButton = screen.getByRole("button", { name: "自动隐藏会话栏" });
+  const headingButtons = Array.from(document.querySelectorAll(".sidebar-heading button"));
+  expect(headingButtons.at(-1)).toBe(autoHideButton);
+  expect(autoHideButton.classList.contains("sidebar-pin-toggle")).toBe(true);
+  expect(autoHideButton.getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(autoHideButton);
   expect(dock.classList.contains("session-sidebar-dock--auto")).toBe(true);
   const rail = screen.getByRole("button", { name: "展开会话栏" });
   expect(rail).toBeTruthy();
@@ -96,8 +101,12 @@ test("session sidebar can auto-hide, hover open and pin without remounting the t
   fireEvent.mouseEnter(dock);
   await waitFor(() => expect(panel.getAttribute("aria-hidden")).toBeNull(), { timeout: 1200 });
   expect(document.getElementById("session-sidebar-panel")).toBe(panel);
-  fireEvent.click(screen.getByRole("button", { name: "固定会话栏" }));
+  const pinButton = screen.getByRole("button", { name: "固定会话栏" });
+  expect(pinButton.getAttribute("aria-pressed")).toBe("false");
+  expect(pinButton.classList.contains("is-pinned")).toBe(false);
+  fireEvent.click(pinButton);
   expect(dock.classList.contains("session-sidebar-dock--auto")).toBe(false);
+  expect(screen.getByRole("button", { name: "自动隐藏会话栏" }).classList.contains("is-pinned")).toBe(true);
   expect(document.getElementById("session-sidebar-panel")).toBe(panel);
   await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("sessionSidebarMode", "pinned"));
 });
