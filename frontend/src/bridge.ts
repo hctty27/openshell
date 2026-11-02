@@ -64,7 +64,6 @@ type Backend = {
   Disconnect(ref: Ref): Promise<void>;
   CloseTab(id: string): Promise<void>;
 };
-};
 declare global {
   interface Window {
     go?: { main?: { App: Backend } };
