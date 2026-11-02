@@ -39,7 +39,6 @@ import type {
   SessionRequest,
   Theme,
   QuickCommand,
-  QuickCommandLayout,
   XshellImportPreview,
 } from "./types";
 import SessionTree from "./components/SessionTree";
@@ -165,9 +164,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     ),
     [terminalTheme, setTerminalTheme] = useState(
       normalizeTerminalTheme(initialState.terminalTheme),
-    ),
-    [quickCommandLayout, setQuickCommandLayout] = useState<QuickCommandLayout>(
-      initialState.quickCommandLayout === "multi" ? "multi" : "single",
     ),
     [autoCopySelection, setAutoCopySelection] = useState(
       initialState.autoCopySelection === true,
@@ -328,9 +324,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
       setState(data);
       setTheme(data.theme === "light" ? "light" : "dark");
       setTerminalTheme(normalizeTerminalTheme(data.terminalTheme));
-      setQuickCommandLayout(
-        data.quickCommandLayout === "multi" ? "multi" : "single",
-      );
       setAutoCopySelection(data.autoCopySelection === true);
       setRightClickPaste(data.rightClickPaste === true);
       setConfirmMultilinePaste(data.confirmMultilinePaste !== false);
@@ -1178,7 +1171,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
               <QuickCommandBar
                 tab={active}
                 commands={state.quickCommands ?? []}
-                layout={quickCommandLayout}
                 onManage={() => setShowQuickCommandManager(true)}
                 onRun={runQuickCommand}
               />
@@ -1238,8 +1230,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onTheme={setTheme}
           terminalTheme={terminalTheme}
           onTerminalTheme={setTerminalTheme}
-          quickCommandLayout={quickCommandLayout}
-          onQuickCommandLayout={setQuickCommandLayout}
           autoCopySelection={autoCopySelection}
           onAutoCopySelection={setAutoCopySelection}
           rightClickPaste={rightClickPaste}
