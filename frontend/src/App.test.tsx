@@ -477,9 +477,9 @@ test("SFTP opens beside the existing terminal and can close without reconnecting
   expect(document.querySelector(".workspace-workarea")?.classList.contains("with-sftp")).toBe(true);
   expect(screen.getByTestId("sftp-panel-stub")).toBeTruthy();
   expect(screen.getByTestId("sftp-panel-stub").getAttribute("data-initial-directory")).toBe("/root");
-  expect(document.querySelector(".workspace-file-panel .transfer-dock")).toBeTruthy();
+  expect(document.querySelector(".workspace-file-panel .transfer-dock")).toBeNull();
   expect(document.querySelector(".workspace-workarea > .transfer-dock")).toBeNull();
-  expect(document.querySelector(".workspace-file-panel .transfer-dock-heading")).toBeTruthy();
+  expect(document.querySelector(".workspace-header .transfer-center")).toBeTruthy();
   expect(screen.getByTestId("sftp-panel-stub").getAttribute("data-cwd-reported")).toBe("false");
   const terminal = document.querySelector(".terminal-container") as HTMLElement;
   expect(terminal.style.display).not.toBe("none");
