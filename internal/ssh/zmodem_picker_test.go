@@ -76,3 +76,15 @@ func TestZmodemCancelAndDisconnectReleaseSelection(t *testing.T) {
         t.Fatalf("disconnect should cancel the picker: %v", paths)
     }
 }
+
+func TestTrzszDirectoryModeAcceptsDirectorySelection(t *testing.T) {
+    manager, ref, request := newPickerManager("upload")
+    request.allowDirectories = true
+    dir := t.TempDir()
+    if err := manager.SubmitZmodemSelection(ref, request.id, []string{dir}); err != nil {
+        t.Fatal(err)
+    }
+    if got := <-request.response; len(got) != 1 || got[0] != dir {
+        t.Fatalf("unexpected directory selection: %v", got)
+    }
+}
