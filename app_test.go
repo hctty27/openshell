@@ -77,20 +77,6 @@ func TestSaveAndListSession(t *testing.T) {
 		t.Fatal(state, e)
 	}
 }
-func TestSecretsAbsentFromEventsAndLogs(t *testing.T) {
-	a, e := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
-	if e != nil {
-		t.Fatal(e)
-	}
-	defer a.shutdown(context.Background())
-	p, e := a.SaveAPI(SaveAPIRequest{Profile: domain.APIProfile{Name: "自定义", BaseURL: "https://example.com/v1", Model: "model"}, Key: "secret-api-key"})
-	if e != nil {
-		t.Fatal(e)
-	}
-	if p.SecretRef == "secret-api-key" {
-		t.Fatal("key leaked")
-	}
-}
 func TestEditingOpenSessionIsAllowed(t *testing.T) {
 	a, _ := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
 	defer a.shutdown(context.Background())

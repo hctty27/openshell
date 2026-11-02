@@ -47,9 +47,12 @@ func TestEditingConnectedSessionKeepsLiveSshTarget(t *testing.T) {
 	if !a.ssh.Valid(connected.Ref) {
 		t.Fatal("saving disconnected the live SSH connection")
 	}
-	result, err := a.ssh.Run(context.Background(), connected.Ref, "printf CONNECTED", "/tmp", 5*time.Second)
-	if err != nil || result.Stdout != "CONNECTED" {
-		t.Fatal("existing SSH connection cannot execute commands after save", result, err)
+	session, err := a.ssh.OpenSession(connected.Ref)
+	if err != nil { t.Fatal(err) }
+	defer session.Close()
+	result, err := session.Output("printf CONNECTED")
+	if err != nil || string(result) != "CONNECTED" {
+		t.Fatal("existing SSH connection cannot execute commands after save", string(result), err)
 	}
 	stored, err := a.store.GetSession(context.Background(), row.ID)
 	if err != nil || stored.Name != "Updated" || stored.Host != "new.example" || stored.Port != 2222 || stored.Username != "deploy" {

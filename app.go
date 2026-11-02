@@ -502,7 +502,6 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 		a.mu.Unlock()
 		return ConnectResult{}, e
 	}
-	old, exists := a.tabRefs[tabID]
 	a.connectEpoch[tabID]++
 	epoch := a.connectEpoch[tabID]
 	a.tabRefs[tabID] = domain.ConnectionRef{TabID: tabID, SessionID: sessionID}
@@ -512,9 +511,6 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 	}
 	a.mu.Unlock()
 	a.stopLocalTerminal(tabID, "")
-	if exists {
-		a.cancelExecution(old, true)
-	}
 	if secret == "" && s.CredentialRef != "" {
 		secret, e = a.secrets.Get(a.ctx, s.CredentialRef)
 		if e != nil {
