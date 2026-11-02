@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Pin,
   PinOff,
+  Ellipsis,
   Network,
   FileInput,
 } from "lucide-react";
@@ -43,6 +44,8 @@ interface Props {
   pinned?: boolean;
   hidden?: boolean;
   onTogglePin?(): void;
+  detailsExpanded?: boolean;
+  onToggleDetails?(): void;
 }
 export default function SessionTree(p: Props) {
   useTranslation();
@@ -293,14 +296,17 @@ export default function SessionTree(p: Props) {
         <span>{t("common:sessions")}</span>
         <div className="sidebar-heading-actions">
           <div className="sidebar-heading-tools">
-            <button title={t("sessions:importXshellTitle")} onClick={() => p.onImport?.()}>
-              <FileInput size={16} />
-            </button>
-            <button title={t("common:newFolder")} onClick={p.onGroup}>
-              <FolderPlus size={16} />
-            </button>
-            <button title={t("common:newSession")} onClick={() => p.onEdit()}>
+            <button type="button" title={t("common:newSession")} aria-label={t("common:newSession")}
+              onClick={() => p.onEdit()}>
               <Plus size={18} />
+            </button>
+            <button type="button" title={t("common:moreActions")} aria-label={t("common:moreActions")}
+              aria-haspopup="menu"
+              onClick={event => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                showContextMenu("root", "", event.currentTarget, rect.right - 160, rect.bottom);
+              }}>
+              <Ellipsis size={16} />
             </button>
           </div>
           {p.onTogglePin && (
@@ -471,20 +477,28 @@ export default function SessionTree(p: Props) {
           </div>
         )}
       </div>
-      <div
-        className="details-resizer"
-        role="separator"
-        aria-label={t("sessions:resizeSessionDetails")}
-        aria-orientation="horizontal"
-        onPointerDown={resizeDetails}
-      />
+      {p.detailsExpanded && (
+        <div
+          className="details-resizer"
+          role="separator"
+          aria-label={t("sessions:resizeSessionDetails")}
+          aria-orientation="horizontal"
+          onPointerDown={resizeDetails}
+        />
+      )}
       <section
-        className="session-details"
-        style={{ height: detailsHeight }}
+        className={`session-details ${p.detailsExpanded ? "" : "is-collapsed"}`}
+        style={{ height: p.detailsExpanded ? detailsHeight : undefined }}
         data-testid="session-details"
       >
         <div className="details-heading">
-          <span>{t("common:details")}</span>
+          <button type="button" className="details-toggle"
+            aria-expanded={p.detailsExpanded === true}
+            aria-controls="session-details-content"
+            onClick={p.onToggleDetails}>
+            <ChevronDown size={14} className={p.detailsExpanded ? "" : "rotated"} aria-hidden="true" />
+            <span>{t("common:details")}</span>
+          </button>
           <small>
             {selectedSession
               ? "SSH"
@@ -493,7 +507,7 @@ export default function SessionTree(p: Props) {
                 : t("common:directory")}
           </small>
         </div>
-        <div className="details-body">
+        <div className="details-body" id="session-details-content" hidden={!p.detailsExpanded}>
           <div className="details-identity">
             {selectedSession ? <Server size={17} /> : <Folder size={17} />}
             <strong title={detailsName}>{detailsName}</strong>
