@@ -137,7 +137,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         setSftpJobs(previous => {
           const next = { ...previous };
           for (const task of tasks ?? []) {
-            if (!next[task.id] || next[task.id].created <= task.created) next[task.id] = task;
+            if (!next[task.id]) next[task.id] = task;
           }
           return next;
         });
