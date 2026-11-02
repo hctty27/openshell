@@ -150,7 +150,7 @@ test("restores expanded session details and exposes infrequent actions via menu"
   expect(document.querySelector(".sidebar-heading-tools")?.querySelectorAll("button")).toHaveLength(2);
   fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
   expect(screen.getByRole("menuitem", { name: "导入 Xshell 会话" })).toBeTruthy();
-  expect(screen.getByRole("menuitem", { name: "新建文件夹" })).toBeTruthy();
+  expect(screen.getByRole("menuitem", { name: "新建分组" })).toBeTruthy();
 });
 
 test("mouse-focused session search does not keep auto-hidden sidebar open forever", async () => {
@@ -173,14 +173,15 @@ test("Escape closes auto-hidden sidebar and focuses the edge trigger", async () 
   await act(async () => { render(<App />); });
   fireEvent.click(screen.getByRole("button", { name: "自动隐藏会话栏" }));
   const dock = document.querySelector(".session-sidebar-dock") as HTMLElement;
+  const panel = document.getElementById("session-sidebar-panel") as HTMLElement;
   fireEvent.mouseLeave(dock);
-  await waitFor(() => expect(screen.getByRole("complementary").getAttribute("aria-hidden")).toBe("true"), { timeout: 1200 });
+  await waitFor(() => expect(panel.getAttribute("aria-hidden")).toBe("true"), { timeout: 1200 });
   const rail = screen.getByRole("button", { name: "展开会话栏" });
   fireEvent.click(rail);
   const search = screen.getByPlaceholderText("搜索会话…");
   fireEvent.focus(search);
   fireEvent.keyDown(search, { key: "Escape" });
-  expect(screen.getByRole("complementary").getAttribute("aria-hidden")).toBe("true");
+  expect(panel.getAttribute("aria-hidden")).toBe("true");
   expect(document.activeElement).toBe(rail);
 });
 test("theme previews immediately and is saved in general settings", async () => {
