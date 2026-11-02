@@ -27,7 +27,8 @@ interface Props {
 const refKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generation}`;
 const activeSftp = (task: SFTPTask) => task.status === "queued" || task.status === "running";
 const formatSize = (bytes: number) =>
-  bytes < 1024 ? `${bytes} B` : `${(bytes / 1048576).toFixed(1)} MB`;
+  bytes < 1024 ? `${bytes} B` : bytes < 1048576 ?
+    `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
 
 export default function TransferCenter({ tabs, onNotice }: Props) {
   useTranslation();
@@ -162,6 +163,13 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         if (!ended.length) return previous;
         const next = { ...previous };
         for (const [key] of ended) delete next[key];
+        return next;
+      });
+      setSftpJobs(previous => {
+        const completed = Object.values(previous).filter(task => task.status === "completed");
+        if (!completed.length) return previous;
+        const next = { ...previous };
+        for (const task of completed) delete next[task.id];
         return next;
       });
     }, 3500);
