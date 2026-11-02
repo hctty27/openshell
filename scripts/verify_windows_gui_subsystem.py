@@ -18,7 +18,7 @@ def read_subsystem(path: Path) -> int:
             raise ValueError("truncated DOS header")
         pe_offset = struct.unpack("<I", pe_offset_bytes)[0]
         binary.seek(pe_offset)
-        if binary.read(4) != b"PE\\x00\\x00":
+        if binary.read(4) != b"PE" + bytes((0, 0)):
             raise ValueError("missing PE signature")
         coff_header = binary.read(20)
         if len(coff_header) != 20:
