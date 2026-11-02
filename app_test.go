@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/hctty27/openshell/internal/domain"
-	"github.com/hctty27/openshell/internal/tasks"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestThemePreferencePersistsAcrossRestart(t *testing.T) {
@@ -109,21 +107,6 @@ func TestEditingOpenSessionIsAllowed(t *testing.T) {
 	}
 	if a.tabRefs["tab"] != ref {
 		t.Fatal("saving session configuration changed active tab reference")
-	}
-}
-func TestExecFailureStillCompletesToolHistory(t *testing.T) {
-	a, _, connected, _, profile, _ := memoryFixture(t, true)
-	a.coordinator = tasks.NewCoordinator(func(context.Context, domain.ConnectionRef, string, string, time.Duration) (domain.CommandResult, error) {
-		return domain.CommandResult{Status: "unknown", Reason: "start_failed"}, errors.New("channel rejected")
-	}, func(domain.ConnectionRef) bool { return true })
-	reply, err := a.Chat(ChatRequest{Ref: connected.Ref, ProfileID: profile.ID, Text: "check", Operate: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.ConfirmCommand(connected.Ref, reply.Proposal.ID)
-	page, err := a.ReadConversation(connected.Ref, connected.ConversationID, 0, 100)
-	if err != nil || len(page.Messages) != 3 || page.Messages[2].Role != "tool" || page.Messages[2].ToolCallID != "tool-1" {
-		t.Fatal("unmatched tool call after exec failure", page, err)
 	}
 }
 func TestDuplicateSessionCreatesIndependentCredentialsAndNames(t *testing.T) {
@@ -298,31 +281,3 @@ func TestTerminalClipboardPreferencesPersistAcrossRestart(t *testing.T) {
     }
 }
 
-func TestAutomaticSettingsValidationAndRestore(t *testing.T) {
-	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer a.shutdown(context.Background())
-	for _, v := range []string{"0", "101", "bad"} {
-		if err = a.SavePreference("autoCommandLimit", v); err == nil {
-			t.Fatal("invalid limit accepted", v)
-		}
-	}
-	if err = a.SavePreference("autoCommandLimit", "3"); err != nil {
-		t.Fatal(err)
-	}
-	if err = a.SavePreference("autoAllowChanges", "true"); err != nil {
-		t.Fatal(err)
-	}
-	state, err := a.State()
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, _ := json.Marshal(state)
-	var fields map[string]any
-	json.Unmarshal(data, &fields)
-	if fields["autoCommandLimit"] != float64(3) || fields["autoAllowChanges"] != true {
-		t.Fatal(fields)
-	}
-}

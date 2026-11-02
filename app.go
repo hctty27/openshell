@@ -4,16 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/hctty27/openshell/internal/ai"
 	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/branding"
-	"github.com/hctty27/openshell/internal/conversation"
 	"github.com/hctty27/openshell/internal/domain"
 	sshclient "github.com/hctty27/openshell/internal/ssh"
 	"github.com/hctty27/openshell/internal/store"
 	files "github.com/hctty27/openshell/internal/sftp"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
-	"github.com/hctty27/openshell/internal/tasks"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -31,14 +28,7 @@ type App struct {
 	secrets      domain.SecretStore
 	ssh          *sshclient.Manager
 	sftp         *files.Manager
-	coordinator  *tasks.Coordinator
-	automatic    *tasks.AutomaticRunner
-	provider     *ai.Provider
-	memory       *conversation.Service
-	executionMu  sync.Mutex
 	closing      map[string]domain.ConnectionRef
-	proposalRuns map[string]string
-	executions   map[string]*conversationExecution
 	emit         sshclient.EmitFunc
 	pickKey      func() (string, error)
 	pickImport func() (string, error)
@@ -48,8 +38,6 @@ type App struct {
 	mu           sync.Mutex
 	transient    map[string]string
 	challenges   map[string]*sshclient.HostKeyError
-	chatCancels  map[string]context.CancelFunc
-	pending      map[string]string
 	tabRefs      map[string]domain.ConnectionRef
 	localTerminals map[string]*localTerminalSession
 	localTerminalPending map[string]string
@@ -67,12 +55,9 @@ type QuickCommand struct {
 }
 
 type AppState struct {
-	SaveChatHistory       bool                `json:"saveChatHistory"`
-	AutoSummarize         bool                `json:"autoSummarize"`
 	Language              string              `json:"language"`
 	Sessions              []domain.Session    `json:"sessions"`
 	Groups                []domain.Group      `json:"groups"`
-	Profiles              []domain.APIProfile `json:"profiles"`
 	QuickCommands         []QuickCommand      `json:"quickCommands"`
 	QuickCommandLayout    string              `json:"quickCommandLayout"`
 	AutoCopySelection     bool                `json:"autoCopySelection"`
@@ -91,10 +76,6 @@ type AppState struct {
 	FontSize              string              `json:"fontSize"`
 	Theme                 string              `json:"theme"`
 	TerminalTheme         string              `json:"terminalTheme"`
-	ActiveProfile         string              `json:"activeProfile"`
-	AutoCommandLimit      int                 `json:"autoCommandLimit"`
-	AutoAllowChanges      bool                `json:"autoAllowChanges"`
-	AutoContinueRounds     bool                `json:"autoContinueRounds"`
 	Version               string              `json:"version"`
 }
 
@@ -103,11 +84,6 @@ type SaveSessionRequest struct {
 	Secret     string         `json:"secret"`
 	SaveSecret bool           `json:"saveSecret"`
 }
-type SaveAPIRequest struct {
-	Profile    domain.APIProfile `json:"profile"`
-	Key        string            `json:"key"`
-	MemoryOnly bool              `json:"memoryOnly"`
-}
 type HostChallenge struct {
 	ID          string `json:"id"`
 	Address     string `json:"address"`
@@ -115,25 +91,10 @@ type HostChallenge struct {
 	Changed     bool   `json:"changed"`
 }
 type ConnectResult struct {
-	ConversationID string               `json:"conversationId"`
 	Ref            domain.ConnectionRef `json:"ref"`
 	Challenge      *HostChallenge       `json:"challenge,omitempty"`
 	Home           string               `json:"home"`
 }
-type ChatRequest struct {
-	RequestID string               `json:"requestId"`
-	Ref       domain.ConnectionRef `json:"ref"`
-	Targets   []domain.ConnectionRef `json:"targets,omitempty"`
-	ProfileID string               `json:"profileId"`
-	Text      string               `json:"text"`
-	Context   string               `json:"context"`
-	Operate   bool                 `json:"operate"`
-}
-type ChatResponse struct {
-	Text     string           `json:"text"`
-	Proposal *domain.Proposal `json:"proposal,omitempty"`
-}
-
 func NewApp() (*App, error) {
 	dir, e := os.UserConfigDir()
 	if e != nil {
@@ -149,25 +110,11 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 	if emit == nil {
 		emit = func(string, any) {}
 	}
-	a := &App{ctx: context.Background(), store: db, secrets: secrets, provider: ai.NewProvider(), executions: map[string]*conversationExecution{}, closing: map[string]domain.ConnectionRef{}, proposalRuns: map[string]string{}, emit: emit, transient: map[string]string{}, challenges: map[string]*sshclient.HostKeyError{}, chatCancels: map[string]context.CancelFunc{}, pending: map[string]string{}, tabRefs: map[string]domain.ConnectionRef{}, localTerminals: map[string]*localTerminalSession{}, localTerminalPending: map[string]string{}}
-	a.memory = conversation.NewService(db, func(event domain.ConversationEvent) { a.emit("conversation:event", event) })
-	saved, e := db.GetPreference(a.ctx, "saveChatHistory")
-	if e != nil {
-		db.Close()
-		return nil, e
-	}
-	if saved == "false" {
-		if e = a.memory.Configure(a.ctx, false); e != nil {
-			db.Close()
-			return nil, e
-		}
-	}
+	a := &App{ctx: context.Background(), store: db, secrets: secrets, closing: map[string]domain.ConnectionRef{}, emit: emit, transient: map[string]string{}, challenges: map[string]*sshclient.HostKeyError{}, tabRefs: map[string]domain.ConnectionRef{}, localTerminals: map[string]*localTerminalSession{}, localTerminalPending: map[string]string{}}
 	a.connectEpoch = map[string]uint64{}
-	a.automatic = tasks.NewAutomaticRunner()
 	a.ssh = sshclient.NewManager(db, func(name string, payload any) {
 		if name == "ssh:disconnected" {
 			if ref, ok := payload.(domain.ConnectionRef); ok {
-				a.cancelExecution(ref, false)
 				if a.sftp != nil { a.sftp.CancelConnection(ref) }
 			}
 		}
@@ -178,7 +125,6 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 	if err != nil || keepAliveSeconds < 0 || keepAliveSeconds > 300 { keepAliveSeconds = 30 }
 	a.ssh.SetKeepAliveInterval(time.Duration(keepAliveSeconds) * time.Second)
 	a.sftp = files.NewManager(a.ssh.Client, func(name string, payload any) { a.emit(name, payload) })
-	a.coordinator = tasks.NewCoordinator(a.ssh.Run, a.ssh.Valid)
 	return a, nil
 }
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
@@ -206,20 +152,8 @@ func (a *App) QuitConfirmed() {
 }
 func (a *App) shutdown(context.Context) {
 	a.mu.Lock()
-	for _, cancel := range a.chatCancels {
-		cancel()
-	}
-	refs := make([]domain.ConnectionRef, 0, len(a.tabRefs))
-	for _, r := range a.tabRefs {
-		refs = append(refs, r)
-	}
-	a.mu.Unlock()
-	for _, ref := range refs {
-		a.cancelExecution(ref, true)
-	}
 	a.closeAllLocalTerminals()
 	a.ssh.Close()
-	a.memory.Close()
 	a.store.Close()
 }
 func (a *App) State() (AppState, error) {
@@ -235,15 +169,7 @@ func (a *App) State() (AppState, error) {
 	if e != nil {
 		return AppState{}, e
 	}
-	profiles, e := a.store.ListAPIProfiles(a.ctx)
-	if e != nil {
-		return AppState{}, e
-	}
 	font, e := a.store.GetPreference(a.ctx, "fontSize")
-	if e != nil {
-		return AppState{}, e
-	}
-	active, e := a.store.GetPreference(a.ctx, "activeProfile")
 	if e != nil {
 		return AppState{}, e
 	}
@@ -310,19 +236,7 @@ func (a *App) State() (AppState, error) {
 			commands[i].Mode = ""
 		}
 	}
-	limit, allow, autoContinue, e := a.automaticSettings()
-	if e != nil {
-		return AppState{}, e
-	}
-	saveChat, e := a.store.GetPreference(a.ctx, "saveChatHistory")
-	if e != nil {
-		return AppState{}, e
-	}
-	autoSummary, e := a.store.GetPreference(a.ctx, "autoSummarize")
-	if e != nil {
-		return AppState{}, e
-	}
- 	keepAliveRaw, e := a.store.GetPreference(a.ctx, "keepAliveSeconds")
+	keepAliveRaw, e := a.store.GetPreference(a.ctx, "keepAliveSeconds")
 	if e != nil { return AppState{}, e }
 	keepAliveSeconds, e := strconv.Atoi(keepAliveRaw)
 	if e != nil || keepAliveSeconds < 0 || keepAliveSeconds > 300 { keepAliveSeconds = 30 }
@@ -353,10 +267,9 @@ func (a *App) State() (AppState, error) {
 		LocalShell: localShell,
 		PreserveTerminalHistory: preserveHistory != "false",
 		ConfirmActiveDisconnect: confirmDisconnect != "false",
-		SaveChatHistory: saveChat != "false", AutoSummarize: autoSummary != "false",
-		Language: language, AutoCommandLimit: limit, AutoAllowChanges: allow, AutoContinueRounds: autoContinue,
-		Sessions: sessions, Groups: groups, Profiles: profiles,
-		FontSize: font, Theme: theme, TerminalTheme: terminalTheme, ActiveProfile: active,
+		Language: language,
+		Sessions: sessions, Groups: groups,
+		FontSize: font, Theme: theme, TerminalTheme: terminalTheme,
 		QuickCommands: commands, QuickCommandLayout: layout,
 		AutoCopySelection: autoCopySelection == "true", RightClickPaste: rightClickPaste == "true",
 		ConfirmMultilinePaste: confirmMultilinePaste != "false",
@@ -488,7 +401,7 @@ func (a *App) SaveGroup(g domain.Group) (domain.Group, error) {
 func (a *App) DeleteGroup(id string) error { return a.store.DeleteGroup(a.ctx, id) }
 func (a *App) SavePreference(key, value string) error {
 	switch key {
-	case "fontSize", "activeProfile":
+	case "fontSize":
 	case "language":
 		if value != "en" && value != "zh-CN" {
 			return apperror.New("unsupportedLanguage", nil)
@@ -509,12 +422,7 @@ func (a *App) SavePreference(key, value string) error {
 		if value != "single" && value != "multi" {
 			return apperror.New("unsupportedCommandBarLayout", nil)
 		}
-	case "autoCommandLimit":
-		n, e := strconv.Atoi(value)
-		if e != nil || n < 1 || n > 100 {
-			return apperror.New("commandLimitMustBeBetween1And100", nil)
-		}
-	case "autoCopySelection", "rightClickPaste", "logHighlights", "confirmMultilinePaste", "autoAllowChanges", "autoContinueRounds", "saveChatHistory", "autoSummarize", "autoReconnect", "showDisconnectReason", "confirmActiveDisconnect", "preserveTerminalHistory":
+	case "autoCopySelection", "rightClickPaste", "logHighlights", "confirmMultilinePaste", "autoReconnect", "showDisconnectReason", "confirmActiveDisconnect", "preserveTerminalHistory":
 		if value != "true" && value != "false" {
 			return apperror.New("booleanSettingsMustBeTrueOrFalse", nil)
 		}
@@ -533,25 +441,6 @@ func (a *App) SavePreference(key, value string) error {
 		}
 	default:
 		return apperror.New("unsupportedPreference", nil)
-	}
-	if key == "saveChatHistory" {
-		a.executionMu.Lock()
-		defer a.executionMu.Unlock()
-		old, e := a.store.GetPreference(a.ctx, key)
-		if e != nil {
-			return e
-		}
-		if (old != "false") == (value == "true") {
-			return a.store.SetPreference(a.ctx, key, value)
-		}
-		if e = a.store.SetPreference(a.ctx, key, value); e != nil {
-			return e
-		}
-		if e = a.memory.Configure(a.ctx, value == "true"); e != nil {
-			a.store.SetPreference(a.ctx, key, old)
-			return e
-		}
-		return nil
 	}
 	if err := a.store.SetPreference(a.ctx, key, value); err != nil { return err }
 	if key == "keepAliveSeconds" {
@@ -603,101 +492,6 @@ func validateQuickCommands(raw string) error {
 	return nil
 }
 
-func (a *App) SaveAPI(req SaveAPIRequest) (domain.APIProfile, error) {
-	p := req.Profile
-	var endpointErr error
-	switch p.Provider {
-	case "", "openai":
-		_, endpointErr = ai.NormalizeEndpoint(p.BaseURL)
-	case "anthropic":
-		_, endpointErr = ai.NormalizeAnthropicEndpoint(p.BaseURL)
-	default:
-		return p, apperror.New("unsupportedPreference", nil)
-	}
-	if endpointErr != nil { return p, endpointErr }
-	if strings.TrimSpace(p.Model) == "" {
-		return p, apperror.New("enterAModelName", nil)
-	}
-	if p.ID == "" {
-		p.ID = domain.NewID()
-	}
-	old, _ := a.store.GetAPIProfile(a.ctx, p.ID)
-	p.SecretRef = old.SecretRef
-	if req.Key != "" && !req.MemoryOnly {
-		p.SecretRef = "api-" + domain.NewID()
-		if e := a.secrets.Put(a.ctx, p.SecretRef, req.Key); e != nil {
-			return p, apperror.New("couldNotSaveSystemCredentialsUseTheKey", nil)
-		}
-	} else if req.MemoryOnly {
-		p.SecretRef = ""
-	}
-	if e := a.store.SaveAPIProfile(a.ctx, p); e != nil {
-		if p.SecretRef != "" && p.SecretRef != old.SecretRef {
-			a.secrets.Delete(a.ctx, p.SecretRef)
-		}
-		return p, e
-	}
-	if req.Key != "" {
-		a.mu.Lock()
-		a.transient["api:"+p.ID] = req.Key
-		a.mu.Unlock()
-	}
-	if old.SecretRef != "" && old.SecretRef != p.SecretRef {
-		if e := a.secrets.Delete(a.ctx, old.SecretRef); e != nil {
-			return p, apperror.New("profileSavedButOldCredentialCleanupFailed", nil)
-		}
-	}
-	return p, nil
-}
-func (a *App) DeleteAPI(id string) error {
-	p, e := a.store.GetAPIProfile(a.ctx, id)
-	if e != nil {
-		return e
-	}
-	if e = a.store.DeleteAPIProfile(a.ctx, id); e != nil {
-		return e
-	}
-	a.mu.Lock()
-	delete(a.transient, "api:"+id)
-	a.mu.Unlock()
-	if p.SecretRef != "" {
-		if e = a.secrets.Delete(a.ctx, p.SecretRef); e != nil {
-			return apperror.New("profileDeletedButCredentialCleanupFailed", nil)
-		}
-	}
-	return nil
-}
-func (a *App) profile(id string) (domain.APIProfile, string, error) {
-	p, e := a.store.GetAPIProfile(a.ctx, id)
-	if e != nil {
-		return p, "", apperror.New("selectAnAiApiProfileFirst", nil)
-	}
-	a.mu.Lock()
-	key, ok := a.transient["api:"+id]
-	a.mu.Unlock()
-	if !ok && p.SecretRef != "" {
-		key, e = a.secrets.Get(a.ctx, p.SecretRef)
-		if e != nil {
-			return p, "", apperror.New("couldNotReadApiKeyEnterItAgain", nil)
-		}
-	}
-	return p, key, nil
-}
-func (a *App) TestAPI(req SaveAPIRequest) error {
-	p := req.Profile
-	key := req.Key
-	if key == "" && p.ID != "" {
-		_, saved, e := a.profile(p.ID)
-		if e == nil {
-			key = saved
-		}
-	}
-	p.ToolsEnabled = false
-	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
-	defer cancel()
-	_, e := a.provider.Stream(ctx, p, key, []ai.Message{{Role: "user", Content: "Reply OK."}}, nil)
-	return e
-}
 func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 	if len(tabID) < 1 || len(tabID) > 128 {
 		return ConnectResult{}, apperror.New("invalidTerminalTab", nil)
@@ -765,21 +559,13 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 		a.ssh.Disconnect(ref)
 		return ConnectResult{}, apperror.New("connectionCancelled", nil)
 	}
-	live, e := a.ssh.ConnectedSession(ref)
-	var c domain.Conversation
-	if e == nil {
-		c, e = a.memory.Bind(a.ctx, ref, live)
-	}
 	a.mu.Unlock()
-	if e != nil {
-		return ConnectResult{Ref: ref, Home: home}, e
-	}
 	if secret != "" {
 		a.mu.Lock()
 		a.transient["connection:"+tabID+":"+sessionID] = secret
 		a.mu.Unlock()
 	}
-	return ConnectResult{Ref: ref, Home: home, ConversationID: c.ID}, nil
+	return ConnectResult{Ref: ref, Home: home}, nil
 }
 func (a *App) TrustHost(challengeID string) error {
 	a.mu.Lock()
@@ -831,7 +617,6 @@ func (a *App) CancelConnecting(tabID string) {
 	delete(a.transient, "connection:"+tabID+":"+ref.SessionID)
 	a.mu.Unlock()
 	a.sftp.CancelTab(tabID)
-	a.cancelExecution(ref, true)
 	a.ssh.CancelTab(tabID)
 }
 
@@ -845,7 +630,6 @@ func (a *App) Disconnect(ref domain.ConnectionRef) error {
 	delete(a.transient, "connection:"+ref.TabID+":"+ref.SessionID)
 	a.mu.Unlock()
 	a.sftp.CancelTab(ref.TabID)
-	a.cancelExecution(ref, true)
 	a.ssh.CancelTab(ref.TabID)
 	a.emit("ssh:disconnected", ref)
 	return nil
@@ -855,49 +639,16 @@ func (a *App) CloseTab(tabID string) error {
 	a.mu.Lock()
 	ref := a.tabRefs[tabID]
 	a.mu.Unlock()
-	a.cancelExecution(ref, true)
 	a.mu.Lock()
 	delete(a.transient, "connection:"+tabID+":"+ref.SessionID)
 	a.mu.Unlock()
-	a.automatic.Forget(tabID)
-	a.coordinator.Forget(tabID)
-	a.memory.Unbind(ref)
 	a.mu.Lock()
 	delete(a.tabRefs, tabID)
 	a.connectEpoch[tabID]++
-	for id := range a.pending {
-		p, e := a.coordinator.Get(id)
-		if e != nil || p.Ref.TabID == tabID {
-			delete(a.pending, id)
-		}
-	}
 	a.mu.Unlock()
 	a.sftp.CancelTab(tabID)
 	a.ssh.CancelTab(tabID)
 	return nil
-}
-func (a *App) PreviewContext(ref domain.ConnectionRef, text string) (ai.Preview, error) {
-	if !a.ssh.Valid(ref) {
-		return ai.Preview{}, apperror.New("sessionDisconnected", nil)
-	}
-	if text == "" {
-		text = a.ssh.History(ref)
-	}
-	p := ai.BuildPreview(text, 200, 32768)
-	p.Text = ai.Redact(p.Text)
-	return p, nil
-}
-func (a *App) Chat(req ChatRequest) (ChatResponse, error) { return a.chat(req, false) }
-func (a *App) Continue(req ChatRequest) (ChatResponse, error) {
-	req.Text = ""
-	req.Context = ""
-	return a.chat(req, true)
-}
-func (a *App) chat(req ChatRequest, continuation bool) (ChatResponse, error) {
-	if a.automatic.Active(req.Ref.TabID) {
-		return ChatResponse{}, apperror.New("stopTheAutomaticTaskFirst", nil)
-	}
-	return a.chatContext(a.ctx, req, continuation, false, nil)
 }
 func (a *App) ChoosePrivateKey() (string, error) {
 	if a.pickKey == nil {
