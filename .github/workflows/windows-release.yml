@@ -50,9 +50,10 @@ jobs:
           if ($packageVersion -ne $version) { throw "Version mismatch: $packageVersion vs $version" }
           "APP_VERSION=$version" >> $env:GITHUB_ENV
           "VITE_APP_VERSION=$version" >> $env:GITHUB_ENV
-          $config = Get-Content wails.json -Raw | ConvertFrom-Json
-          $config.info.productVersion = $version
-          $config | ConvertTo-Json -Depth 20 | Set-Content wails.json -Encoding utf8
+          $info = Get-Content "build/windows/info.json" -Raw | ConvertFrom-Json
+          $info.fixed.file_version = $version
+          $info.info.'0000'.ProductVersion = $version
+          $info | ConvertTo-Json -Depth 20 | Set-Content "build/windows/info.json" -Encoding utf8
       # Combined module + compiler cache was faster than module-only in
       # Windows Wails A/B tests. The cache is keyed by go.sum and Go version.
       - uses: actions/setup-go@v7
