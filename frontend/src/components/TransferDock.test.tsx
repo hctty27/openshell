@@ -7,6 +7,7 @@ import type { Ref, SFTPTask } from "../types";
 
 const events = vi.hoisted(() => ({ callbacks: new Map<string, (data: any) => void>() }));
 vi.mock("../bridge", () => ({
+  desktop: true,
   api: {
     SFTPTransfers: vi.fn(async () => []),
     SFTPCancel: vi.fn(async () => {}),
