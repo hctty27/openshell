@@ -63,23 +63,27 @@ func (r *terminalShellReadiness) observe(p []byte) {
 	// For plain shells without integration, infer readiness only from a
 	// recognizable full prompt at the end of the current output.
 	if strings.Contains(strings.ToLower(string(combined)), "jumpserver") { r.jumpServer = true }
-	if !r.integration {
-		stripped := terminalOSCPattern.ReplaceAll(combined, nil)
-		stripped = terminalCSIPattern.ReplaceAll(stripped, nil)
-		visible := strings.TrimRight(string(stripped), "\x00")
-		if index := strings.LastIndexAny(visible, "\r\n"); index >= 0 {
-			visible = visible[index+1:]
-		}
+	stripped := terminalOSCPattern.ReplaceAll(combined, nil)
+	stripped = terminalCSIPattern.ReplaceAll(stripped, nil)
+	visible := strings.TrimRight(string(stripped), "\x00")
+	if index := strings.LastIndexAny(visible, "\r\n"); index >= 0 {
+		visible = visible[index+1:]
+	}
+	// Returning to KoKo invalidates shell integration markers from the
+	// previously selected asset; the next asset may use a different shell.
+	if strings.TrimSpace(visible) == "Opt>" {
+		r.jumpServer = true
+		r.assetMenu = true
+		r.integration = false
+		r.prompt = false
+	}
+	if !r.integration && !r.assetMenu {
 		r.prompt = shellPromptPattern.MatchString(visible)
-		if strings.TrimSpace(visible) == "Opt>" {
-			r.jumpServer = true
-			r.assetMenu = true
-			r.prompt = false
-		}
-		if r.prompt {
-			r.assetMenu = false
-			r.manualInput = false
-		}
+		if r.prompt { r.manualInput = false }
+	} else if r.assetMenu && shellPromptPattern.MatchString(visible) {
+		r.prompt = true
+		r.assetMenu = false
+		r.manualInput = false
 	}
 
 	r.lastOutput = time.Now()
