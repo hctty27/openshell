@@ -126,6 +126,7 @@ func (w *terminalWriter) Write(p []byte) (int, error) {
 		return 0, io.ErrClosedPipe
 	}
 	w.c.history.Write(p)
+	w.c.readiness.observe(p)
 	w.m.mu.Lock()
 	controller := w.c.aiController
 	w.m.mu.Unlock()
