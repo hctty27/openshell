@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { initializeI18n } from "../i18n";
 import AIModelPicker from "./AIModelPicker";
 import type { AIProvider } from "../types";
 
@@ -14,6 +15,7 @@ const providers: AIProvider[] = [
   },
 ];
 
+beforeEach(async () => { await initializeI18n("zh-CN"); });
 afterEach(cleanup);
 
 test("combines provider and model in a single searchable picker", () => {
