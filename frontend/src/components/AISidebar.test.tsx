@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { initializeI18n } from "../i18n";
 import AISidebar from "./AISidebar";
 import { api } from "../bridge";
 import type { AIConversation, Tab } from "../types";
@@ -19,6 +20,7 @@ vi.mock("../bridge", () => ({
   },
 }));
 
+beforeEach(async () => { await initializeI18n("zh-CN"); });
 afterEach(() => {
   cleanup();
   events.clear();
