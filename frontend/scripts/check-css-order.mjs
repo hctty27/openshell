@@ -11,6 +11,7 @@ const orderedModules = [
   "08-sftp-browser",
   "09-sftp-zmodem-transfers",
   "10-dialog-overlays",
+  "11-ai",
 ];
 
 const entry = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
