@@ -317,7 +317,7 @@ func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToo
 		case <-ctx.Done(): return "任务已取消"
 		}
 	}
-	a.emit("ai:tool",map[string]any{"taskId":taskID,"tabId":args.TabID,"command":summary})
+	a.emit("ai:tool",map[string]any{"taskId":taskID,"tabId":ref.TabID,"command":summary})
 	execCtx,cancel:=context.WithTimeout(ctx,45*time.Second)
 	defer cancel()
 	switch call.Function.Name {
