@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Check, ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Send, Settings2, Sparkles, Square, Trash2, X } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, Tab } from "../types";
@@ -7,6 +7,7 @@ interface Props {
   tabs: Tab[];
   active?: Tab;
   pinned: boolean;
+  isOpen: boolean;
   onTogglePin(): void;
   onClose(): void;
 }
@@ -21,7 +22,7 @@ interface Approval {
 
 const emptyProvider = (): AIProvider => ({ id: "", name: "", baseUrl: "", hasKey: false, models: [] });
 
-export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }: Props) {
+export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, onClose }: Props) {
   const [providers, setProviders] = useState<AIProvider[]>([]);
   const [conversations, setConversations] = useState<AIConversation[]>([]);
   const [conversationID, setConversationID] = useState("");
@@ -44,6 +45,15 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const finishedTasks = useRef(new Set<string>());
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const followOutputRef = useRef(true);
+  const onMessagesScroll = () => {
+    const node = messagesRef.current;
+    if (!node) return;
+    // 用户向上查看旧消息时停止跟随；回到底部时自动恢复。
+    followOutputRef.current =
+      node.scrollHeight - node.scrollTop - node.clientHeight <= 72;
+  };
 
   useEffect(() => {
     // Older test fixtures may not expose the optional AI service methods.
@@ -88,6 +98,11 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
   const provider = providers.find(item => item.id === providerID) ?? providers[0];
   const model = provider?.models.find(item => item.id === modelID) ?? provider?.models[0];
   const current = conversations.find(item => item.id === conversationID);
+  useLayoutEffect(() => {
+    const node = messagesRef.current;
+    if (!isOpen || !node || !followOutputRef.current) return;
+    node.scrollTop = node.scrollHeight;
+  }, [isOpen, conversationID, current?.messages, stream, status, error, approval]);
   const filteredHistory = conversations.filter(item =>
     [item.title, ...item.targetNames, ...item.messages.map(m => m.content)].join(" ").toLowerCase().includes(search.toLowerCase())
   );
@@ -96,6 +111,7 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
     setTargetIDs(old => old.includes(id) ? old.filter(x => x !== id) : [...old, id]);
   };
   const selectConversation = (item: AIConversation) => {
+    followOutputRef.current = true;
     setConversationID(item.id);
     setProviderID(item.providerId);
     setModelID(item.modelId);
@@ -107,6 +123,7 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
   };
   const newConversation = () => {
     if (running) return;
+    followOutputRef.current = true;
     setConversationID("");
     setMessage("");
     setStream("");
@@ -155,6 +172,7 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
     event.preventDefault();
     const text = message.trim();
     if (!text || !provider || !model || !targets.length || submitting || running) return;
+    followOutputRef.current = true;
     setError("");
     setStatus("正在执行");
     setStream("");
@@ -172,7 +190,7 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
   };
 
   return (
-    <aside className="ai-panel" aria-label="AI 助手">
+    <aside className="ai-panel" aria-label="AI 助手" aria-hidden={!isOpen}>
       <header className="ai-header">
         <strong><Sparkles size={15} /> AI 助手</strong>
         <div className="ai-header-actions">
@@ -246,7 +264,7 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
               <option value="auto">完全自动</option>
             </select>
           </div>
-          <div className="ai-messages">
+          <div className="ai-messages" ref={messagesRef} onScroll={onMessagesScroll}>
             {!current?.messages.length && <div className="ai-welcome"><Sparkles size={26}/><h3>让 AI 帮你操作服务器</h3><p>选择会话和模型，描述需要完成的任务。</p></div>}
             {current?.messages.filter(m => m.role !== "system").map((m, i) => (
               <div key={i} className={`ai-message ai-message--${m.role}`}>
