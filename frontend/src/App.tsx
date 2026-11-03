@@ -147,6 +147,16 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const dialogs = useDialogs();
   const { tabs, setTabs, tabsRef, activeID, setActiveID, activeIDRef, update } = useWorkspaceTabs();
   const { hasActiveTransfers } = useTransferActivity();
+  const [transferFocusRequest, setTransferFocusRequest] = useState<{ ref: Ref } | null>(null);
+  useEffect(() => {
+    const offFinished = listen("ssh:transfer-finished", (event: { ref: Ref }) => {
+      if (event?.ref) setTransferFocusRequest({ ref: event.ref });
+    });
+    const offState = listen("ssh:transfer-state", (event: { ref: Ref; active: boolean }) => {
+      if (event?.ref && event.active === false) setTransferFocusRequest({ ref: event.ref });
+    });
+    return () => { offFinished(); offState(); };
+  }, []);
   const [state, setState] = useState(initialState),
     [sidebarMode, setSidebarMode] = useState<"pinned" | "auto-hide">(
       initialState.sessionSidebarMode === "auto-hide" ? "auto-hide" : "pinned",
@@ -1108,6 +1118,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   onNotice={notify}
                   commandFocusVersion={quickCommandFocus}
                   searchFocusVersion={terminalSearchFocus}
+                  transferFocusRequest={transferFocusRequest ?? undefined}
                   onError={(text) => {
                     update(tab.id, (t) => ({
                       ...t,
@@ -1386,7 +1397,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
             </footer>
         </ModalSurface>
       )}
-      <ZmodemFilePicker activeRef={active?.ref ?? undefined} onNotice={notify} />
+      <ZmodemFilePicker activeRef={active?.ref ?? undefined} onNotice={notify}
+        onClosed={ref => setTransferFocusRequest({ ref })} />
        
       {!!notice && !toast && (
         <div className="toast toast--success" role="status">
