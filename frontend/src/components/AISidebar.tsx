@@ -269,7 +269,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
           <button title={t("ai:allConversations")} aria-label={t("ai:allConversations")} onClick={() => setShowHistory(!showHistory)}><History size={15} /></button>
           <button type="button" title={t("ai:newConversation")} aria-label={t("ai:newConversation")} onClick={newConversation} disabled={!!running}><Plus size={15} /></button>
           <div className="ai-header-options" ref={optionsRef}>
-            <button type="button" title={t("ai:executionStrategy")} aria-label={t("ai:executionStrategy")}
+            <button type="button" title={t("ai:moreOptions")} aria-label={t("ai:executionStrategy")}
               aria-expanded={showOptions} aria-controls="ai-execution-options"
               onClick={() => { setShowOptions(value => !value); setShowHistory(false); }}>
               <MoreHorizontal size={16} />
