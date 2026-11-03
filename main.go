@@ -68,6 +68,13 @@ func main() {
       BackgroundColour: application.NewRGB(11,16,23),
       Windows: application.WindowsWindow{NonClientRegionSupport: true},
     })
+    // A WindowClosing hook must cancel the native close before WebView2 is destroyed.
+    // ShouldQuit alone runs too late for the frontend to display its confirmation.
+    window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+      if service.beforeClose(ctx) {
+        event.Cancel()
+      }
+    })
     window.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
       details := event.Context().DropTargetDetails()
       if details == nil { return }
