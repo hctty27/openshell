@@ -52,7 +52,8 @@ test("SFTP context menu copies a file path with Wails v3 clipboard", async () =>
     : []);
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
 
-  const row = await screen.findByRole("listitem", { name: /test\.txt/ });
+  const row = (await screen.findByText("test.txt")).closest('[role="listitem"]');
+  expect(row).not.toBeNull();
   fireEvent.contextMenu(row);
   fireEvent.click(await screen.findByRole("menuitem", { name: "复制路径" }));
   await waitFor(() => expect(Clipboard.SetText).toHaveBeenCalledWith("/root/test.txt"));
