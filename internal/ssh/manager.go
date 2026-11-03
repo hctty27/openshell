@@ -44,6 +44,7 @@ type connection struct {
 	forwards []*localForward
 	terminal *ssh.Session
 	stdin    interface{ Write([]byte) (int, error) }
+	stdinMu sync.Mutex
 	filter   interface { Close(); SetTerminalColumns(int32); IsTransferringFiles() bool; StopTransferringFiles(bool) }
 	writer   *terminalWriter
 	aiController *AITerminalLease
