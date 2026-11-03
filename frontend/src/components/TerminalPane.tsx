@@ -15,6 +15,7 @@ import type { Tab, Ref, Theme, TerminalTheme, DisconnectBehavior, LocalShell } f
 import { resolveTerminalTheme } from "../terminalThemes";
 import { parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
 import { useDialogs } from "./DialogProvider";
+import { attachImeFocusRecovery } from "../features/terminal/imeFocusRecovery";
 interface Props {
   tab: Tab;
   disconnectBehavior?: DisconnectBehavior;
@@ -50,6 +51,7 @@ export default function TerminalPane(p: Props) {
   const container = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const fit = useRef<FitAddon | null>(null);
+  const imePositionRecovery = useRef<ReturnType<typeof attachImeFocusRecovery> | null>(null);
   const searchAddon = useRef<SearchAddon | null>(null);
   const logAddons = useRef<SearchAddon[]>([]);
   const webglAddon = useRef<WebglAddon | null>(null);
@@ -121,6 +123,12 @@ export default function TerminalPane(p: Props) {
     terminal.current = term;
     fit.current = addon;
     term.open(container.current);
+    const imeRecovery = attachImeFocusRecovery(
+      navigator.userAgent.includes("Windows") ? term.textarea : undefined,
+      () => callbacks.current.active,
+      () => { if (!disposed) term.focus(); },
+    );
+    imePositionRecovery.current = imeRecovery;
     if (scrollbackSnapshot.current && p.preserveHistory !== false) {
       term.write(scrollbackSnapshot.current + "\r\n");
     }
@@ -355,10 +363,15 @@ export default function TerminalPane(p: Props) {
         measuredWidth = clientWidth;
         measuredHeight = clientHeight;
         addon.fit();
+        if (callbacks.current.active) imeRecovery.schedule();
       });
     };
     const observer = new ResizeObserver(resize);
     observer.observe(container.current);
+    const onWindowResize = () => {
+      if (callbacks.current.active) imeRecovery.schedule();
+    };
+    window.addEventListener("resize", onWindowResize);
     requestAnimationFrame(() => {
       if (disposed) return;
       addon.fit();
@@ -400,6 +413,9 @@ export default function TerminalPane(p: Props) {
       acknowledge();
       inputQueue.length = 0;
       observer.disconnect();
+      window.removeEventListener("resize", onWindowResize);
+      imeRecovery.dispose();
+      if (imePositionRecovery.current === imeRecovery) imePositionRecovery.current = null;
       off();
       if (local) void api.CloseLocalTerminal(p.tab.id, localID).catch(() => {});
       paneElement.removeEventListener("mousedown", onMouseDown, true);
@@ -503,6 +519,7 @@ export default function TerminalPane(p: Props) {
     if (terminal.current) {
       terminal.current.options.fontSize = p.fontSize;
       fit.current?.fit();
+      if (p.active) imePositionRecovery.current?.schedule();
     }
   }, [p.fontSize]);
   useEffect(() => {
@@ -515,6 +532,9 @@ export default function TerminalPane(p: Props) {
       });
     }
   }, [p.visible ?? p.active]);
+  useEffect(() => {
+    if (p.active && p.paneBounds) imePositionRecovery.current?.schedule();
+  }, [p.active, p.paneBounds?.left, p.paneBounds?.top, p.paneBounds?.width, p.paneBounds?.height]);
   useEffect(() => {
     if (p.active) {
       requestAnimationFrame(() => {
