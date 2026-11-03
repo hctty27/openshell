@@ -74,8 +74,12 @@ type ToolState = "running" | "success" | "failed" | "unknown";
 function toolState(call: AIToolCall, result?: AIMessage): ToolState {
   if (!result) return "running";
   const output = result.content.trim();
-  const status = output.match(/退出状态:\s*(?:exit status\s*)?(-?\d+)\b/i);
-  if (status) return Number(status[1]) === 0 ? "success" : "failed";
+  if (call.function.name === "ssh_exec") {
+    // Use only the final exit-status line appended by the executor, not
+    // a similarly worded string printed by the command itself.
+    const status = output.match(/(?:^|\n)退出状态:\s*(?:exit status\s*)?(-?\d+)\s*$/i);
+    if (status) return Number(status[1]) === 0 ? "success" : "failed";
+  }
 
   if (/^(未授权|会话目标已过期|执行失败|终端执行失败|终端命令|命令长度无效|缺少文件修订号|AI 写入内容超过|文件超过|任务已取消|未知工具|invalid|error:)/i.test(output)) {
     return "failed";
