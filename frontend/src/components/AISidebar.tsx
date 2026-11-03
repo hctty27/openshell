@@ -11,6 +11,7 @@ interface Props {
   active?: Tab;
   pinned: boolean;
   isOpen: boolean;
+  terminalAlternate?: boolean;
   onTogglePin(): void;
   onClose(): void;
 }
@@ -23,7 +24,7 @@ interface Approval {
   tabId: string;
 }
 
-export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, onClose }: Props) {
+export default function AISidebar({ tabs, active, pinned, isOpen, terminalAlternate = false, onTogglePin, onClose }: Props) {
   const lastModelRef = useRef(readLastModel());
   const [providers, setProviders] = useState<AIProvider[]>([]);
   const [conversations, setConversations] = useState<AIConversation[]>([]);
@@ -31,6 +32,9 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   const [providerID, setProviderID] = useState(lastModelRef.current.providerId);
   const [modelID, setModelID] = useState(lastModelRef.current.modelId);
   const [mode, setMode] = useState<"review" | "auto">("review");
+  const [execution, setExecution] = useState<"independent" | "terminal">("independent");
+  const [terminalReady, setTerminalReady] = useState(false);
+  useEffect(() => { setTerminalReady(false); }, [active?.ref?.tabId, active?.ref?.generation]);
   const [targetIDs, setTargetIDs] = useState<string[]>([]);
   const [historySessionIDs, setHistorySessionIDs] = useState<string[]>([]);
   const [historyBindings, setHistoryBindings] = useState<AITargetBinding[]>([]);
@@ -95,6 +99,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
         setRunning(old => old?.taskId === event.taskId ? null : old);
         setStream("");
         setApproval(null);
+        setTerminalReady(false);
       }
     });
     const offApproval = listen("ai:approval", (event: Approval) => setApproval(event));
@@ -123,6 +128,12 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   );
   const targetSet = new Set([...targetIDs, ...restoredTabIDs, ...(requiredID ? [requiredID] : [])]);
   const targets = connected.filter(tab => targetSet.has(tab.id));
+  const terminalSingleTarget = Boolean(
+    active?.ref && targets.length === 1 &&
+    targets[0]?.ref?.tabId === active.ref.tabId &&
+    targets[0]?.ref?.generation === active.ref.generation,
+  );
+  const terminalAvailable = terminalSingleTarget && !terminalAlternate;
   const provider = providerID ? providers.find(item => item.id === providerID) : providers[0];
   const model = modelID ? provider?.models.find(item => item.id === modelID) : provider?.models[0];
   const current = conversations.find(item => item.id === conversationID);
@@ -136,6 +147,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   );
   const toggleTarget = (id: string) => {
     if (id === requiredID) return;
+    setTerminalReady(false);
     const sessionID = connected.find(tab => tab.id === id)?.session.id;
     if (targetSet.has(id)) {
       setTargetIDs(old => old.filter(selected => selected !== id));
@@ -158,6 +170,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
     setProviderID(item.providerId);
     setModelID(item.modelId);
     setMode(item.mode);
+    setExecution(item.execution === "terminal" ? "terminal" : "independent");
+    setTerminalReady(false);
     setShowHistory(false);
     setStream("");
     setStatus("");
@@ -171,6 +185,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
     setHistoryBindings([]);
     setLegacyHistoryNeedsRebind(false);
     setConversationID("");
+    setExecution("independent");
+    setTerminalReady(false);
     setProviderID(lastModelRef.current.providerId);
     setModelID(lastModelRef.current.modelId);
     setMessage("");
@@ -196,7 +212,9 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const text = message.trim();
-    if (!text || !provider || !model || !targets.length || unavailableSessionIDs.length || legacyHistoryNeedsRebind || submitting || running) return;
+    if (!text || !provider || !model || !targets.length || unavailableSessionIDs.length ||
+      legacyHistoryNeedsRebind || submitting || running ||
+      (execution === "terminal" && (!terminalAvailable || !terminalReady))) return;
     followOutputRef.current = true;
     setError("");
     setStatus("正在执行");
@@ -205,7 +223,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
     try {
       const started = await api.AIStart({
         conversationId: conversationID, providerId: provider.id, modelId: model.id,
-        mode, text, targets: targets.map(tab => tab.ref!),
+        mode, execution, terminalReady: execution === "terminal" && terminalReady,
+        text, targets: targets.map(tab => tab.ref!),
       });
       if (!finishedTasks.current.has(started.taskId)) setRunning(started);
       setConversationID(started.conversationId);
@@ -262,11 +281,36 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
                 </div>
               )}
             </div>
-            <select value={mode} onChange={e => setMode(e.target.value as "review" | "auto")} title="执行模式">
+            <select value={mode} disabled={submitting || !!running}
+              onChange={e => setMode(e.target.value as "review" | "auto")} title="执行模式">
               <option value="review">自动审查</option>
               <option value="auto">完全自动</option>
             </select>
           </div>
+          <div className="ai-execution-row">
+            <label htmlFor="ai-execution-choice">操作方式</label>
+            <select id="ai-execution-choice" title="AI 操作方式"
+              value={execution} disabled={submitting || !!running}
+              onChange={e => { setExecution(e.target.value as "independent" | "terminal"); setTerminalReady(false); }}>
+              <option value="independent">独立执行</option>
+              <option value="terminal">当前终端</option>
+            </select>
+          </div>
+          {execution === "terminal" && (
+            <div className="ai-terminal-ready">
+              {terminalAlternate ? (
+                <p>当前终端正在运行全屏交互程序，请先退出后再使用 AI 接管。</p>
+              ) : !terminalSingleTarget ? (
+                <p>当前终端模式只能选择当前激活的一个 SSH 会话；多会话任务请使用独立执行。</p>
+              ) : (
+                <label>
+                  <input type="checkbox" checked={terminalReady} disabled={submitting || !!running}
+                    onChange={e => setTerminalReady(e.target.checked)} />
+                  <span>终端已停留在空白 Shell 提示符，允许 AI 临时独占输入。可随时点击“接管终端”停止。</span>
+                </label>
+              )}
+            </div>
+          )}
           {legacyHistoryNeedsRebind && (
             <div className="ai-session-warning" role="status">
               此历史对话没有可验证的目标服务器信息。请检查上方选择的会话，
@@ -322,7 +366,9 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
                 {running ? <button type="button" title="停止任务" aria-label="停止任务"
                     onClick={() => void api.AIStop(running.taskId)}><Square size={15} /></button> :
                   <button type="submit" title="发送" aria-label="发送" className="ai-primary"
-                    disabled={submitting || !provider || !model || !targets.length || legacyHistoryNeedsRebind || unavailableSessionIDs.length > 0 || !message.trim()}>
+                    disabled={submitting || !provider || !model || !targets.length || legacyHistoryNeedsRebind ||
+                      unavailableSessionIDs.length > 0 || !message.trim() ||
+                      (execution === "terminal" && (!terminalAvailable || !terminalReady))}>
                     <Send size={15} />
                   </button>}
               </div>
