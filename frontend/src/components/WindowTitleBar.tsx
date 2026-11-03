@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Copy, Minus, Settings, Square, SquareTerminal, X } from "lucide-react";
+import { Copy, Minus, Settings, Square, SquareTerminal, Sparkles, X } from "lucide-react";
 import { Window } from "@wailsio/runtime";
 import { nativeDesktop } from "../bridge";
 import { t } from "../i18n";
@@ -9,10 +9,12 @@ import TransferCenter from "./TransferCenter";
 interface Props {
   tabs: Tab[];
   onSettings(): void;
+  onAI(): void;
+  aiActive: boolean;
   onNotice(error: unknown): void;
 }
 
-export default function WindowTitleBar({ tabs, onSettings, onNotice }: Props) {
+export default function WindowTitleBar({ tabs, onSettings, onAI, aiActive, onNotice }: Props) {
   const [maximised, setMaximised] = useState(false);
 
   useEffect(() => {
@@ -44,6 +46,12 @@ export default function WindowTitleBar({ tabs, onSettings, onNotice }: Props) {
       <div className="window-titlebar-drag-area" onDoubleClick={toggleMaximise} aria-hidden="true" />
       <div className="window-titlebar-actions">
         <TransferCenter tabs={tabs} onNotice={onNotice} />
+        <button type="button" className="window-titlebar-settings"
+          title={aiActive ? "关闭 AI 助手" : "打开 AI 助手"}
+          aria-label={aiActive ? "关闭 AI 助手" : "打开 AI 助手"}
+          aria-pressed={aiActive} onClick={onAI}>
+          <Sparkles size={16} aria-hidden="true" />
+        </button>
         <button type="button" className="window-titlebar-settings"
           title={t("common:settings")} aria-label={t("common:settings")}
           onClick={onSettings}>
