@@ -1,5 +1,8 @@
 import { expect, test } from "vitest";
-import { readFileSync } from "node:fs";
+import sidebarSource from "../components/AISidebar.tsx?raw";
+import modelPickerSource from "../components/AIModelPicker.tsx?raw";
+import terminalPaneSource from "../components/TerminalPane.tsx?raw";
+import appSource from "../App.tsx?raw";
 import { i18n, initializeI18n, resources } from ".";
 import { normalizeLanguage } from "./languages";
 test("defaults to English and uses bundled Chinese resources", async () => {
@@ -43,9 +46,12 @@ test("missing Chinese translation falls back to English", async () => {
 
 
 test("AI interface components do not reintroduce hard-coded Chinese UI strings", () => {
-  for (const file of ["../components/AISidebar.tsx", "../components/AIModelPicker.tsx",
-    "../components/TerminalPane.tsx", "../App.tsx"]) {
-    const source = readFileSync(new URL(file, import.meta.url), "utf8");
+  for (const [file, source] of [
+    ["AISidebar.tsx", sidebarSource],
+    ["AIModelPicker.tsx", modelPickerSource],
+    ["TerminalPane.tsx", terminalPaneSource],
+    ["App.tsx", appSource],
+  ]) {
     const implementation = source.split("\n").filter(line => !line.trim().startsWith("//")).join("\n");
     expect(implementation, file).not.toMatch(/[\u3400-\u9fff]/);
   }
