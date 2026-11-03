@@ -207,7 +207,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     } | null>(null),
     [login, setLogin] = useState<{ tab: Tab; secret: string } | null>(null);
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
-  const [aiVisible, setAIVisible] = useState(initialState.aiVisible === true);
   const [aiSidebarMode, setAISidebarMode] = useState<"pinned" | "auto-hide">(
     initialState.aiSidebarMode === "pinned" ? "pinned" : "auto-hide",
   );
@@ -218,16 +217,21 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const [aiFocusOpen, setAIFocusOpen] = useState(false);
   const aiHoverTimer = useRef<number | null>(null);
   const aiCloseTimer = useRef<number | null>(null);
-  const toggleAIVisible = () => {
-    const next = !aiVisible;
-    setAIVisible(next);
-    if (next && activeID) setFileViews(old => ({ ...old, [activeID]: false }));
-    void api.SavePreference("aiVisible", String(next)).catch(notify);
-  };
   const toggleAIPin = () => {
     const next = aiSidebarMode === "pinned" ? "auto-hide" : "pinned";
     setAISidebarMode(next);
     void api.SavePreference("aiSidebarMode", next).catch(notify);
+  };
+  const closeAI = () => {
+    if (aiSidebarMode === "pinned") {
+      setAISidebarMode("auto-hide");
+      void api.SavePreference("aiSidebarMode", "auto-hide").catch(notify);
+    }
+    if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
+    if (aiCloseTimer.current !== null) window.clearTimeout(aiCloseTimer.current);
+    setAIHoverOpen(false);
+    setAIFocusOpen(false);
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   };
   useEffect(() => () => {
     if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
@@ -273,6 +277,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const active = tabs.find((t) => t.id === activeID);
   const activeTerminalBackground = resolveTerminalTheme(theme, terminalTheme, active?.session.terminalTheme).background;
   const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
+  const aiPinned = aiSidebarMode === "pinned" && !showSFTP;
+  const aiOpen = aiPinned || aiHoverOpen || aiFocusOpen;
   const notify = (error: unknown) => setToast(error);
   const quitPromptInProgress = useRef(false);
   const onQuitRequested = useRef<() => void>(() => {});
@@ -910,8 +916,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
       }
     >
       <WindowTitleBar tabs={tabs}
-        onAI={toggleAIVisible}
-        aiActive={aiVisible}
         onSettings={() => setDialog({ kind: "settings" })}
         onNotice={notify} />
       <div className="app-body">
@@ -1113,10 +1117,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   disabled={active?.status !== "connected"}
                   onClick={() => {
                     if (!active) return;
-                    if (!showSFTP && aiVisible) {
-                      setAIVisible(false);
-                      void api.SavePreference("aiVisible", "false").catch(notify);
-                    }
                     setFileViews(old => ({ ...old, [active.id]: !old[active.id] }));
                   }}
                 >
@@ -1276,8 +1276,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           </>
         )}
       </main>
-      {
-        <div style={!aiVisible ? { display: "none" } : undefined} className={`ai-dock ${aiSidebarMode === "auto-hide" ? "ai-dock--auto" : ""} ${aiHoverOpen || aiFocusOpen ? "is-open" : ""}`}
+      <div className={`ai-dock ${!aiPinned ? "ai-dock--auto" : ""} ${aiOpen ? "is-open" : ""}`}
           onMouseEnter={() => {
             if (aiCloseTimer.current !== null) window.clearTimeout(aiCloseTimer.current);
             if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
@@ -1292,22 +1291,21 @@ function Workspace({ initialState }: { initialState: AppState }) {
             if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setAIFocusOpen(false);
           }}
           onKeyDown={event => {
-            if (event.key === "Escape" && aiSidebarMode === "auto-hide") {
+            if (event.key === "Escape" && !aiPinned) {
               setAIHoverOpen(false);
               setAIFocusOpen(false);
               (event.currentTarget.querySelector(".ai-rail") as HTMLButtonElement | null)?.focus();
             }
           }}
         >
-          {aiSidebarMode === "auto-hide" && (
+          {!aiPinned && (
             <button className="ai-rail" title="展开 AI 助手" aria-label="展开 AI 助手"
-              aria-expanded={aiHoverOpen || aiFocusOpen} onClick={() => setAIHoverOpen(true)} />
+              aria-expanded={aiOpen} onClick={() => setAIHoverOpen(true)} />
           )}
-          {aiSidebarMode === "pinned" && <div className="ai-dock-splitter" onPointerDown={startAIResize} role="separator" aria-label="调整 AI 侧栏宽度" />}
-          <AISidebar tabs={tabs} active={active} pinned={aiSidebarMode === "pinned"}
-            onTogglePin={toggleAIPin} onClose={toggleAIVisible} />
+          {aiPinned && <div className="ai-dock-splitter" onPointerDown={startAIResize} role="separator" aria-label="调整 AI 侧栏宽度" />}
+          <AISidebar tabs={tabs} active={active} pinned={aiSidebarMode === "pinned"} isOpen={aiOpen}
+            onTogglePin={toggleAIPin} onClose={closeAI} />
         </div>
-      }
       </div>
       {showSessionPicker && (
         <SessionPicker
