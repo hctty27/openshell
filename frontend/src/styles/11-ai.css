@@ -59,6 +59,7 @@
   z-index: 15;
 }
 .ai-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -191,8 +192,16 @@
 .ai-primary:hover { color: var(--on-accent); filter: brightness(1.07); }
 .ai-danger { color: var(--danger); }
 .ai-history {
+  position: absolute;
+  z-index: 26;
+  top: 46px;
+  left: 8px;
+  right: 8px;
   padding: 9px 10px;
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--raised);
+  box-shadow: 0 12px 26px #0005;
 }
 .ai-search { display: flex; align-items: center; gap: 5px; background: var(--field-bg); border-radius: 6px; padding-left: 7px; }
 .ai-search input { width: 100%; padding: 7px; border: 0; box-shadow: none; font-size: 11px; }
