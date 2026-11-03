@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Send, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ChevronDown, History, LoaderCircle, MoreHorizontal, Pin, PinOff, Plus, Search, Send, Sparkles, Square, Trash2, X } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, AITargetBinding, Tab } from "../types";
 import AIModelPicker from "./AIModelPicker";
@@ -46,6 +46,9 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [search, setSearch] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [showTargets, setShowTargets] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
+  const optionsRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [running, setRunning] = useState<AIStartResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [stream, setStream] = useState("");
@@ -62,6 +65,29 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     followOutputRef.current =
       node.scrollHeight - node.scrollTop - node.clientHeight <= 72;
   };
+
+  useEffect(() => {
+    if (!showOptions) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!optionsRef.current?.contains(event.target as Node)) setShowOptions(false);
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowOptions(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [showOptions]);
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(148, Math.max(44, textarea.scrollHeight))}px`;
+  }, [message]);
 
   useEffect(() => {
     // Older test fixtures may not expose the optional AI service methods.
@@ -175,6 +201,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setMode(item.mode);
     setExecution("auto");
     setShowHistory(false);
+    setShowOptions(false);
     setStream("");
     setStatus("");
     setError("");
@@ -195,6 +222,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setStatus("");
     setError("");
     setShowHistory(false);
+    setShowOptions(false);
   };
   const chooseModel = (nextProviderID: string, nextModelID: string) => {
     setProviderID(nextProviderID);
@@ -239,7 +267,32 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
         <strong><Sparkles size={15} /> {t("ai:assistant")}</strong>
         <div className="ai-header-actions">
           <button title={t("ai:allConversations")} aria-label={t("ai:allConversations")} onClick={() => setShowHistory(!showHistory)}><History size={15} /></button>
-          <button title={t("ai:newConversation")} aria-label={t("ai:newConversation")} onClick={newConversation} disabled={!!running}><Plus size={15} /></button>
+          <button type="button" title={t("ai:newConversation")} aria-label={t("ai:newConversation")} onClick={newConversation} disabled={!!running}><Plus size={15} /></button>
+          <div className="ai-header-options" ref={optionsRef}>
+            <button type="button" title={t("ai:executionStrategy")} aria-label={t("ai:executionStrategy")}
+              aria-expanded={showOptions} aria-controls="ai-execution-options"
+              onClick={() => { setShowOptions(value => !value); setShowHistory(false); }}>
+              <MoreHorizontal size={16} />
+            </button>
+            {showOptions && (
+              <div id="ai-execution-options" className="ai-options-menu">
+                <label htmlFor="ai-execution-choice">{t("ai:operationMethod")}</label>
+                <select id="ai-execution-choice" title={t("ai:executionStrategy")}
+                  value={execution} disabled={submitting || !!running}
+                  onChange={e => setExecution(e.target.value as "auto" | "independent" | "terminal")}>
+                  <option value="auto">{t("ai:autoRecommended")}</option>
+                  <option value="independent">{t("ai:independent")}</option>
+                  <option value="terminal">{t("ai:currentTerminal")}</option>
+                </select>
+                <p className="ai-options-hint">
+                  {execution === "auto" ? t("ai:autoCapabilityHelp") :
+                    execution === "terminal" ? terminalAlternate ? t("ai:interactiveProgram") :
+                      !terminalSingleTarget ? t("ai:terminalOnlyOne") : t("ai:terminalIdleHelp") :
+                      t("ai:independentHelp")}
+                </p>
+              </div>
+            )}
+          </div>
           <button title={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")} aria-label={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")} onClick={onTogglePin}>
             {pinned ? <Pin size={15} /> : <PinOff size={15} />}
           </button>
@@ -266,8 +319,11 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
           )}
           <div className="ai-controls">
             <div className="ai-selector">
-              <button className="ai-selector-button" onClick={() => setShowTargets(!showTargets)} aria-expanded={showTargets}>
-                {t("ai:sessionsLabel")}{targets.map(tab => tab.session.name).join("、") || t("ai:noConnectedSessions")} <ChevronDown size={13} />
+              <button type="button" className="ai-selector-button" onClick={() => setShowTargets(!showTargets)}
+                aria-expanded={showTargets}
+                title={`${t("ai:sessionsLabel")}${targets.map(tab => tab.session.name).join("、") || t("ai:noConnectedSessions")}`}>
+                <span className="ai-selector-label">{t("ai:sessionsLabel")}{targets.map(tab => tab.session.name).join("、") || t("ai:noConnectedSessions")}</span>
+                <ChevronDown size={13} aria-hidden="true" />
               </button>
               {showTargets && (
                 <div className="ai-target-menu">
@@ -282,35 +338,15 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
               )}
             </div>
             <select value={mode} disabled={submitting || !!running}
-              onChange={e => setMode(e.target.value as "review" | "auto")} title={t("ai:executionMode")}>
-              <option value="review">{t("ai:reviewMode")}</option>
-              <option value="auto">{t("ai:automaticMode")}</option>
+              onChange={e => setMode(e.target.value as "review" | "auto")}
+              aria-label={t("ai:executionMode")} title={mode === "review" ? t("ai:reviewMode") : t("ai:automaticMode")}>
+              <option value="review">{t("ai:reviewModeShort")}</option>
+              <option value="auto">{t("ai:automaticModeShort")}</option>
             </select>
           </div>
-          <div className="ai-execution-row">
-            <label htmlFor="ai-execution-choice">{t("ai:operationMethod")}</label>
-            <select id="ai-execution-choice" title={t("ai:executionStrategy")}
-              value={execution} disabled={submitting || !!running}
-              onChange={e => setExecution(e.target.value as "auto" | "independent" | "terminal")}>
-              <option value="auto">{t("ai:autoRecommended")}</option>
-              <option value="independent">{t("ai:independent")}</option>
-              <option value="terminal">{t("ai:currentTerminal")}</option>
-            </select>
-          </div>
-          {execution === "auto" && (
-            <div className="ai-terminal-ready">
-              <p>{t("ai:autoCapabilityHelp")}</p>
-            </div>
-          )}
-          {execution === "terminal" && (
-            <div className="ai-terminal-ready">
-              {terminalAlternate ? (
-                <p>{t("ai:interactiveProgram")}</p>
-              ) : !terminalSingleTarget ? (
-                <p>{t("ai:terminalOnlyOne")}</p>
-              ) : (
-                <p>{t("ai:terminalIdleHelp")}</p>
-              )}
+          {execution === "terminal" && (terminalAlternate || !terminalSingleTarget) && (
+            <div className="ai-session-warning ai-execution-warning" role="status">
+              {terminalAlternate ? t("ai:interactiveProgram") : t("ai:terminalOnlyOne")}
             </div>
           )}
           {legacyHistoryNeedsRebind && (
@@ -355,7 +391,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
           </div>
           <form className="ai-compose" onSubmit={submit}>
             <div className="ai-compose-box">
-              <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3}
+              <textarea ref={textareaRef} value={message} onChange={e => setMessage(e.target.value)} rows={2}
                 placeholder={t("ai:messagePlaceholder")}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}/>
               <div className="ai-compose-actions">
