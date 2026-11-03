@@ -160,3 +160,24 @@ test("alternate terminal screen rejects visible-terminal execution", async () =>
   expect(screen.getByText(/正在运行全屏交互程序/)).toBeTruthy();
   expect(screen.queryByRole("checkbox", { name: /终端已停留/ })).toBeNull();
 });
+
+test("AI defaults to automatic SSH execution routing", async () => {
+  vi.mocked(api.AIProviders).mockResolvedValueOnce([{
+    id: "p1", name: "provider", baseUrl: "https://example.test/v1", hasKey: true,
+    models: [{ id: "test", name: "test" }],
+  }]);
+  await act(async () => {
+    render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+      pinned isOpen onTogglePin={vi.fn()} onClose={vi.fn()} />);
+  });
+  const select = screen.getByTitle("AI 操作方式") as HTMLSelectElement;
+  expect(select.value).toBe("auto");
+  expect(screen.getByText(/普通 SSH 优先独立执行/)).toBeTruthy();
+  fireEvent.change(screen.getByPlaceholderText("描述需要 AI 执行的任务..."), {
+    target: { value: "检查服务器" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() => expect(api.AIStart).toHaveBeenCalledWith(expect.objectContaining({
+    execution: "auto", targets: [connectedTab.ref],
+  })));
+});
