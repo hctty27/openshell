@@ -10,6 +10,7 @@ import {
   Server,
   Network,
   Settings2,
+  Sparkles,
   Info,
   Terminal,
   FolderOpen,
@@ -24,6 +25,7 @@ import { useDialogs } from "./DialogProvider";
 import GeneralSettingsPanel from "./GeneralSettingsPanel";
 import ConnectionSettingsPanel from "./ConnectionSettingsPanel";
 import TerminalSettingsPanel from "./TerminalSettingsPanel";
+import AIProviderSettings from "./AIProviderSettings";
 import type {
   Session,
   LocalForward,
@@ -189,6 +191,7 @@ export default function SettingsDialog(p: Props) {
                 { id: "general", label: t("settings:general"), icon: Settings2 },
                 { id: "terminal", label: t("settings:terminal"), icon: Terminal },
                 { id: "connection", label: t("settings:connection"), icon: Network },
+                { id: "ai", label: t("settings:aiModels"), icon: Sparkles },
                 { id: "about", label: t("settings:about"), icon: Info },
               ].map(({ id, label, icon: Icon }) => (
                 <button
@@ -437,6 +440,7 @@ export default function SettingsDialog(p: Props) {
               onTheme={p.onTheme}
             />
           )}
+          {tab === "ai" && <AIProviderSettings />}
           {tab === "about" && (
             <section className="settings-panel" aria-labelledby="settings-about-title">
               <div className="settings-panel-heading">
