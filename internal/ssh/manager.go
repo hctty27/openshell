@@ -48,6 +48,7 @@ type connection struct {
 	filter   interface { Close(); SetTerminalColumns(int32); IsTransferringFiles() bool; StopTransferringFiles(bool) }
 	writer   *terminalWriter
 	aiController *AITerminalLease
+	readiness terminalShellReadiness
 	transferring bool
 	zmodemSelection *zmodemSelection
 	history  *History
