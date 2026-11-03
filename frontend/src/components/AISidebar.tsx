@@ -33,7 +33,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [providerID, setProviderID] = useState(lastModelRef.current.providerId);
   const [modelID, setModelID] = useState(lastModelRef.current.modelId);
   const [mode, setMode] = useState<"review" | "auto">("review");
-  const [execution, setExecution] = useState<"independent" | "terminal">("independent");
+  const [execution, setExecution] = useState<"auto" | "independent" | "terminal">("auto");
   const [targetIDs, setTargetIDs] = useState<string[]>([]);
   const [historySessionIDs, setHistorySessionIDs] = useState<string[]>([]);
   const [historyBindings, setHistoryBindings] = useState<AITargetBinding[]>([]);
@@ -169,7 +169,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setProviderID(item.providerId);
     setModelID(item.modelId);
     setMode(item.mode);
-    setExecution(item.execution === "terminal" ? "terminal" : "independent");
+    setExecution("auto");
     setShowHistory(false);
     setStream("");
     setStatus("");
@@ -183,7 +183,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setHistoryBindings([]);
     setLegacyHistoryNeedsRebind(false);
     setConversationID("");
-    setExecution("independent");
+    setExecution("auto");
     setProviderID(lastModelRef.current.providerId);
     setModelID(lastModelRef.current.modelId);
     setMessage("");
@@ -287,11 +287,17 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
             <label htmlFor="ai-execution-choice">操作方式</label>
             <select id="ai-execution-choice" title="AI 操作方式"
               value={execution} disabled={submitting || !!running}
-              onChange={e => setExecution(e.target.value as "independent" | "terminal")}>
+              onChange={e => setExecution(e.target.value as "auto" | "independent" | "terminal")}>
+              <option value="auto">自动选择（推荐）</option>
               <option value="independent">独立执行</option>
               <option value="terminal">当前终端</option>
             </select>
           </div>
+          {execution === "auto" && (
+            <div className="ai-terminal-ready">
+              <p>自动检测执行能力：普通 SSH 优先独立执行；JumpServer 已进入资产 Shell 时使用当前终端。无法确认时不会发送命令。</p>
+            </div>
+          )}
           {execution === "terminal" && (
             <div className="ai-terminal-ready">
               {terminalAlternate ? (
