@@ -463,7 +463,7 @@
   color: var(--text-muted);
   font-size: 10px;
 }
-.ai-step-card--success .ai-step-status { color: var(--success); }
+.ai-step-card--success .ai-step-status { color: var(--connected); }
 .ai-step-card--failed .ai-step-status { color: var(--danger); }
 .ai-step-summary > svg:last-child { flex: 0 0 auto; }
 .ai-step-detail { border-top: 1px solid var(--border); padding: 9px; }
