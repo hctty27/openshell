@@ -8,7 +8,11 @@ import type { Ref, SFTPEntry } from "../types";
 type Direction = "upload" | "download";
 interface PickerRequest { ref: Ref; id: number; direction: Direction; protocol?: "zmodem" | "trzsz"; allowDirectories?: boolean }
 interface Places { home: string; roots: string[] }
-interface Props { activeRef?: Ref; onNotice(error: unknown): void }
+interface Props {
+  activeRef?: Ref;
+  onNotice(error: unknown): void;
+  onClosed?(ref: Ref): void;
+}
 
 const refKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generation}`;
 const parentPath = (directory: string) => {
@@ -19,7 +23,7 @@ const parentPath = (directory: string) => {
 const niceSize = (size: number) =>
   size < 1024 ? `${size} B` : `${(size / 1048576).toFixed(1)} MB`;
 
-export default function ZmodemFilePicker({ activeRef, onNotice }: Props) {
+export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Props) {
   useTranslation();
   const [requests, setRequests] = useState<Record<string, PickerRequest>>({});
   const activeRequest = activeRef ? requests[refKey(activeRef)] : undefined;
@@ -35,6 +39,11 @@ export default function ZmodemFilePicker({ activeRef, onNotice }: Props) {
   const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const submittingKey = useRef("");
+  const currentRequestKey = useRef(requestKey);
+  const onClosedRef = useRef(onClosed);
+  currentRequestKey.current = requestKey;
+  onClosedRef.current = onClosed;
 
   useEffect(() => {
     const offPick = listen("ssh:zmodem-pick", (request: PickerRequest) => {
@@ -72,9 +81,11 @@ export default function ZmodemFilePicker({ activeRef, onNotice }: Props) {
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
     }
+    const closingRef = activeRequest.ref;
     return () => {
       if (dialog.open && typeof dialog.close === "function") dialog.close();
       else dialog.removeAttribute("open");
+      onClosedRef.current?.(closingRef);
     };
   }, [requestKey]);
 
@@ -86,6 +97,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice }: Props) {
     setPlaces(null);
     setEntries([]);
     setSelected([]);
+    submittingKey.current = "";
     setBusy(false);
     setError("");
     void api.ZmodemLocalPlaces().then((result: Places) => {
@@ -121,19 +133,27 @@ export default function ZmodemFilePicker({ activeRef, onNotice }: Props) {
     setReload(value => value + 1);
   };
   const submit = async (paths: string[]) => {
-    if (busy) return;
+    if (busy || submittingKey.current === requestKey) return;
+    submittingKey.current = requestKey;
     setBusy(true);
     setError("");
     try {
       await api.SubmitZmodemSelection(request.ref, request.id, paths);
+      if (currentRequestKey.current !== requestKey) return;
+      // Submission only acknowledges the paths. The transfer continues after the picker closes.
+      if (dialogRef.current?.open) dialogRef.current.close();
       setRequests(previous => {
+        const key = refKey(request.ref);
+        if (previous[key]?.id !== request.id) return previous;
         const next = { ...previous };
-        if (next[refKey(request.ref)]?.id === request.id) delete next[refKey(request.ref)];
+        delete next[key];
         return next;
       });
     } catch (err) {
+      if (currentRequestKey.current !== requestKey) return;
       setError(errorText(err));
       setBusy(false);
+      submittingKey.current = "";
     }
   };
   const download = request.direction === "download";
