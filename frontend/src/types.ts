@@ -93,6 +93,13 @@ export interface AIMessage {
   tool_calls?: AIToolCall[];
   tool_call_id?: string;
 }
+export interface AITargetBinding {
+  sessionId: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+}
 export interface AIConversation {
   id: string;
   title: string;
@@ -101,6 +108,7 @@ export interface AIConversation {
   mode: "review" | "auto";
   targetNames: string[];
   targetSessionIds?: string[];
+  targetBindings?: AITargetBinding[];
   messages: AIMessage[];
   updatedAt: string;
 }
