@@ -228,3 +228,20 @@
 .ai-form-actions { display: flex; justify-content: end; align-items: center; gap: 7px; }
 .ai-form-actions .ai-danger { margin-right: auto; }
 @media (prefers-reduced-motion: reduce) { .ai-dock--auto .ai-panel { transition: none; } }
+
+.ai-session-warning {
+  margin: 7px 10px;
+  padding: 9px 10px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--field-bg);
+}
+.ai-session-warning button {
+  color: var(--accent-fill);
+  font-weight: 600;
+  padding: 0 3px;
+  vertical-align: baseline;
+}
