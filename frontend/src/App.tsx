@@ -207,6 +207,29 @@ function Workspace({ initialState }: { initialState: AppState }) {
     } | null>(null),
     [login, setLogin] = useState<{ tab: Tab; secret: string } | null>(null);
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
+  const [aiTerminalControls, setAITerminalControls] = useState<Record<string, {taskId: string; generation: number}>>({});
+  const [alternateTerminals, setAlternateTerminals] = useState<Record<string, {generation: number; active: boolean}>>({});
+  useEffect(() => {
+    const off = listen("ai:terminal-control", (event: {
+      taskId: string; ref: Ref; active: boolean;
+    }) => {
+      if (event.active) {
+        setAITerminalControls(previous => ({
+          ...previous,
+          [event.ref.tabId]: { taskId: event.taskId, generation: event.ref.generation },
+        }));
+      } else {
+        setAITerminalControls(previous => {
+          const current = previous[event.ref.tabId];
+          if (!current || current.taskId !== event.taskId) return previous;
+          const next = { ...previous };
+          delete next[event.ref.tabId];
+          return next;
+        });
+      }
+    });
+    return off;
+  }, []);
   const [aiSidebarMode, setAISidebarMode] = useState<"pinned" | "auto-hide">(
     initialState.aiSidebarMode === "pinned" ? "pinned" : "auto-hide",
   );
@@ -1163,6 +1186,20 @@ function Workspace({ initialState }: { initialState: AppState }) {
                     }
                   } : undefined}
                   onActivate={() => setActiveID(tab.id)}
+                  aiControlled={Boolean(tab.ref && aiTerminalControls[tab.id]?.generation === tab.ref.generation)}
+                  onTakeControl={() => {
+                    const task = aiTerminalControls[tab.id];
+                    if (task) void api.AIStop(task.taskId).catch(notify);
+                  }}
+                  onAlternateScreenChange={(ref, alternate) => {
+                    const current = tabsRef.current.find(item => item.id === ref.tabId);
+                    if (!current?.ref || current.ref.generation !== ref.generation) return;
+                    setAlternateTerminals(previous => {
+                      const existing = previous[ref.tabId];
+                      if (existing?.generation === ref.generation && existing.active === alternate) return previous;
+                      return { ...previous, [ref.tabId]: { generation: ref.generation, active: alternate } };
+                    });
+                  }}
                   onRemoteOutput={onRemoteOutput}
                   onDirectoryChange={(ref, directory) => {
                     update(ref.tabId, current =>
@@ -1304,6 +1341,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           )}
           {aiPinned && <div className="ai-dock-splitter" onPointerDown={startAIResize} role="separator" aria-label="调整 AI 侧栏宽度" />}
           <AISidebar tabs={tabs} active={active} pinned={aiSidebarMode === "pinned"} isOpen={aiOpen}
+            terminalAlternate={Boolean(active?.ref && alternateTerminals[activeID]?.generation === active.ref.generation && alternateTerminals[activeID]?.active)}
             onTogglePin={toggleAIPin} onClose={closeAI} />
         </div>
       </div>
