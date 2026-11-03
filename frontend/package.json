@@ -1,6 +1,6 @@
 {
   "name": "openshell",
-  "version": "0.1.86",
+  "version": "0.1.87",
   "private": true,
   "type": "module",
   "scripts": {
