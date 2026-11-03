@@ -9,8 +9,8 @@ import TransferCenter from "./TransferCenter";
 interface Props {
   tabs: Tab[];
   onSettings(): void;
-  onAI(): void;
-  aiActive: boolean;
+  onAI?(): void;
+  aiActive?: boolean;
   onNotice(error: unknown): void;
 }
 
