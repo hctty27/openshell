@@ -1276,8 +1276,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
           </>
         )}
       </main>
-      {aiVisible && (
-        <div className={`ai-dock ${aiSidebarMode === "auto-hide" ? "ai-dock--auto" : ""} ${aiHoverOpen || aiFocusOpen ? "is-open" : ""}`}
+      {
+        <div style={!aiVisible ? { display: "none" } : undefined} className={`ai-dock ${aiSidebarMode === "auto-hide" ? "ai-dock--auto" : ""} ${aiHoverOpen || aiFocusOpen ? "is-open" : ""}`}
           onMouseEnter={() => {
             if (aiCloseTimer.current !== null) window.clearTimeout(aiCloseTimer.current);
             if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
@@ -1307,7 +1307,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           <AISidebar tabs={tabs} active={active} pinned={aiSidebarMode === "pinned"}
             onTogglePin={toggleAIPin} onClose={toggleAIVisible} />
         </div>
-      )}
+      }
       </div>
       {showSessionPicker && (
         <SessionPicker
