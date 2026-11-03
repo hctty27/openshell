@@ -73,13 +73,17 @@ vi.mock("./bridge", async () => ({
   },
 }));
 afterEach(cleanup);
-test("shows a focused SSH workspace without AI controls", async () => {
+test("shows a focused SSH workspace with an optional AI sidebar", async () => {
   await act(async () => {
     render(<App />);
   });
   expect(screen.getAllByText("会话管理")[0]).toBeTruthy();
   expect(document.querySelector(".workspace-header")).toBeNull();
-  expect(screen.queryByText("AI 助手")).toBeNull();
+  const aiDock = document.querySelector(".ai-dock") as HTMLElement;
+  expect(aiDock.style.display).toBe("none");
+  fireEvent.click(screen.getByRole("button", { name: "打开 AI 助手" }));
+  expect(aiDock.style.display).not.toBe("none");
+  expect(screen.getByRole("button", { name: "关闭 AI 助手" })).toBeTruthy();
 });
 test("session sidebar can auto-hide, hover open and pin without remounting the tree", async () => {
   vi.mocked(api.SavePreference).mockClear();
