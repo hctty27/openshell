@@ -32,6 +32,8 @@ test("rebinds the focused terminal input once after layout settles", () => {
   expect(focusTerminal).not.toHaveBeenCalled();
   vi.advanceTimersByTime(60);
   expect(blur).toHaveBeenCalledOnce();
+  expect(focusTerminal).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(60);
   expect(focusTerminal).toHaveBeenCalledOnce();
   expect(document.activeElement).toBe(textarea);
   recovery.dispose();
@@ -45,6 +47,8 @@ test("never interrupts an in-progress IME composition", () => {
   expect(focusTerminal).not.toHaveBeenCalled();
   textarea.dispatchEvent(new Event("compositionend"));
   vi.advanceTimersByTime(160);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(60);
   expect(focusTerminal).toHaveBeenCalledOnce();
   recovery.dispose();
 });
@@ -67,6 +71,19 @@ test("does not re-focus an inactive session", () => {
   setActive(false);
   vi.advanceTimersByTime(200);
   expect(focusTerminal).not.toHaveBeenCalled();
+  recovery.dispose();
+});
+
+test("does not steal focus if another input is clicked during the reanchor gap", () => {
+  const { focusTerminal, recovery } = setup();
+  const search = document.createElement("input");
+  document.body.appendChild(search);
+  recovery.schedule();
+  vi.advanceTimersByTime(160);
+  search.focus();
+  vi.advanceTimersByTime(60);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(search);
   recovery.dispose();
 });
 
