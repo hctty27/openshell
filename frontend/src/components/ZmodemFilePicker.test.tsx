@@ -79,3 +79,55 @@ test("trz -d selects a local directory using the embedded picker", async () => {
   await waitFor(() => expect(api.SubmitZmodemSelection)
     .toHaveBeenCalledWith(ref, 5, ["/home/user/folder"]));
 });
+
+
+test("submission is single-flight and closes the picker after backend acknowledgement", async () => {
+  let acknowledge!: () => void;
+  vi.mocked(api.SubmitZmodemSelection).mockImplementationOnce(
+    () => new Promise<void>(resolve => { acknowledge = resolve; }),
+  );
+  const onClosed = vi.fn();
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} onClosed={onClosed} />);
+  emit("ssh:zmodem-pick", { ref, id: 6, direction: "upload" });
+  fireEvent.click(await screen.findByText("hello.txt"));
+  const send = screen.getByRole("button", { name: "上传选中文件" });
+  fireEvent.click(send);
+  fireEvent.click(send);
+  expect(api.SubmitZmodemSelection).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("dialog")).toBeTruthy();
+
+  await act(async () => { acknowledge(); });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(onClosed).toHaveBeenCalledWith(ref);
+});
+
+test("submission errors keep the picker open and allow retry", async () => {
+  vi.mocked(api.SubmitZmodemSelection).mockRejectedValueOnce(new Error("file not found"));
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:zmodem-pick", { ref, id: 7, direction: "upload" });
+  fireEvent.click(await screen.findByText("hello.txt"));
+  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
+  expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Error: file not found");
+  expect(screen.getByRole("dialog")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
+  await waitFor(() => expect(api.SubmitZmodemSelection).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+test("a delayed acknowledgement cannot close the next picker request", async () => {
+  let acknowledge!: () => void;
+  vi.mocked(api.SubmitZmodemSelection).mockImplementationOnce(
+    () => new Promise<void>(resolve => { acknowledge = resolve; }),
+  );
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:zmodem-pick", { ref, id: 8, direction: "upload" });
+  fireEvent.click(await screen.findByText("hello.txt"));
+  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
+
+  emit("ssh:zmodem-pick-ended", { ref, id: 8 });
+  emit("ssh:zmodem-pick", { ref, id: 9, direction: "upload" });
+  expect(await screen.findByText("hello.txt")).toBeTruthy();
+  await act(async () => { acknowledge(); });
+  expect(screen.getByRole("dialog")).toBeTruthy();
+});
