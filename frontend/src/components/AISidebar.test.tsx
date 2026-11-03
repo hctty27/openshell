@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import AISidebar from "./AISidebar";
 import { api } from "../bridge";
@@ -10,6 +10,7 @@ vi.mock("../bridge", () => ({
   api: {
     AIProviders: vi.fn(async () => []),
     AIConversations: vi.fn(async () => []),
+    AIStart: vi.fn(async () => ({ taskId: "task-1", conversationId: "conversation-1" })),
   },
   errorText: (value: unknown) => String(value),
   listen: (name: string, callback: (data: any) => void) => {
@@ -121,4 +122,41 @@ test("legacy conversation requires explicit target rebinding", async () => {
   expect(screen.getByText(/没有可验证的目标服务器信息/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "使用当前所选会话" }));
   expect(screen.queryByText(/没有可验证的目标服务器信息/)).toBeNull();
+});
+
+test("visible terminal execution requires explicit readiness and sends selected execution mode", async () => {
+  vi.mocked(api.AIProviders).mockResolvedValueOnce([{
+    id: "p1", name: "cpa", baseUrl: "https://example.test/v1", hasKey: true,
+    models: [{ id: "gpt-test", name: "gpt-test" }],
+  }]);
+  await act(async () => {
+    render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+      pinned isOpen onTogglePin={vi.fn()} onClose={vi.fn()} />);
+  });
+  fireEvent.change(screen.getByTitle("AI 操作方式"), { target: { value: "terminal" } });
+  fireEvent.change(screen.getByPlaceholderText("描述需要 AI 执行的任务..."), {
+    target: { value: "检查当前目录" },
+  });
+  const send = screen.getByRole("button", { name: "发送" }) as HTMLButtonElement;
+  expect(send.disabled).toBe(true);
+  fireEvent.click(screen.getByRole("checkbox", { name: /终端已停留在空白 Shell 提示符/ }));
+  expect(send.disabled).toBe(false);
+  fireEvent.click(send);
+  await waitFor(() => expect(api.AIStart).toHaveBeenCalledWith(expect.objectContaining({
+    execution: "terminal", terminalReady: true, targets: [connectedTab.ref],
+  })));
+});
+
+test("alternate terminal screen rejects visible-terminal execution", async () => {
+  vi.mocked(api.AIProviders).mockResolvedValueOnce([{
+    id: "p1", name: "cpa", baseUrl: "https://example.test/v1", hasKey: true,
+    models: [{ id: "gpt-test", name: "gpt-test" }],
+  }]);
+  await act(async () => {
+    render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+      terminalAlternate pinned isOpen onTogglePin={vi.fn()} onClose={vi.fn()} />);
+  });
+  fireEvent.change(screen.getByTitle("AI 操作方式"), { target: { value: "terminal" } });
+  expect(screen.getByText(/正在运行全屏交互程序/)).toBeTruthy();
+  expect(screen.queryByRole("checkbox", { name: /终端已停留/ })).toBeNull();
 });
