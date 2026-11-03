@@ -20,7 +20,7 @@ type AIProvider struct {
 	ID string `json:"id"`
 	Name string `json:"name"`
 	BaseURL string `json:"baseUrl"`
-	SecretRef string `json:"-"`
+	SecretRef string `json:"secretRef,omitempty"`
 	HasKey bool `json:"hasKey"`
 	Models []AIModel `json:"models"`
 }
