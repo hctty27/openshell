@@ -70,13 +70,17 @@
   color: var(--text-primary);
 }
 .ai-header {
+  position: relative;
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px 8px 12px;
-  min-height: 44px;
+  box-sizing: border-box;
+  flex: 0 0 var(--chrome-bar-height);
+  height: var(--chrome-bar-height);
+  padding: 0 8px 0 12px;
   border-bottom: 1px solid var(--border);
-  gap: 4px;
+  gap: 6px;
 }
 .ai-header strong,
 .ai-header-actions,
@@ -84,40 +88,104 @@
 .ai-status,
 .ai-history-entry,
 .ai-settings-list { display: flex; align-items: center; gap: 7px; }
-.ai-header strong { font-size: 12px; white-space: nowrap; }
-.ai-header strong svg { color: var(--accent-fill); }
-.ai-header-actions { gap: 1px; }
-.ai-header-actions button { padding: 5px; color: var(--text-muted); }
+.ai-header strong {
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ai-header strong svg { flex: 0 0 auto; color: var(--accent-fill); }
+.ai-header-actions { gap: 0; flex: 0 0 auto; }
+.ai-header-actions button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-muted);
+}
+.ai-header-options { position: relative; }
+.ai-header-options > button[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+.ai-options-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  width: min(270px, calc(100vw - 28px));
+  box-sizing: border-box;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--raised);
+  box-shadow: 0 10px 24px #0004;
+  color: var(--text-secondary);
+}
+.ai-options-menu label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.ai-options-menu select {
+  display: block;
+  width: 100%;
+  height: 30px;
+  padding: 4px 7px;
+  color: var(--text-primary);
+  font-size: 11px;
+}
+.ai-options-hint {
+  margin: 9px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 .ai-controls {
   display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  flex: 0 0 var(--chrome-bar-height);
+  height: var(--chrome-bar-height);
   gap: 7px;
-  padding: 9px 10px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--border);
 }
-.ai-selector { position: relative; flex: 1; min-width: 0; }
+.ai-selector { position: relative; flex: 1 1 auto; min-width: 0; }
 .ai-selector-button {
-  width: 100%;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
-  height: 31px;
+  gap: 5px;
+  width: 100%;
+  height: 24px;
+  min-width: 0;
+  padding: 3px 7px;
   background: var(--field-bg);
   border: 1px solid var(--border);
   font-size: 11px;
+}
+.ai-selector-button > svg { flex: 0 0 auto; }
+.ai-selector-label {
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .ai-controls select {
-  flex: 0 0 102px;
-  width: 102px;
-  padding: 6px;
+  flex: 0 1 112px;
+  width: 112px;
+  min-width: 92px;
+  max-width: 120px;
+  height: 24px;
+  padding: 2px 5px;
   font-size: 11px;
   color: var(--text-primary);
 }
 .ai-target-menu {
   position: absolute;
   z-index: 25;
-  top: 34px;
+  top: 28px;
   left: 0;
   right: 0;
   max-height: 250px;
@@ -146,10 +214,19 @@
   flex-direction: column;
   gap: 12px;
 }
-.ai-welcome { margin: auto; text-align: center; color: var(--text-muted); }
+.ai-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: auto;
+  padding: 8px;
+  text-align: center;
+  color: var(--text-muted);
+}
 .ai-welcome svg { color: var(--accent-fill); }
-.ai-welcome h3 { font-size: 13px; color: var(--text-primary); }
-.ai-welcome p { font-size: 11px; }
+.ai-welcome h3 { margin: 0; font-size: 13px; color: var(--text-primary); }
+.ai-welcome p { margin: 0; font-size: 11px; line-height: 1.5; }
 .ai-message { font-size: 12px; max-width: 100%; }
 .ai-message--user {
   margin-left: 14px;
@@ -178,13 +255,13 @@
 .ai-compose {
   flex: 0 0 auto;
   border-top: 1px solid var(--border);
-  padding: 10px;
+  padding: 8px 10px;
   position: relative;
   z-index: 27;
 }
 .ai-compose-box {
   min-width: 0;
-  padding: 9px;
+  padding: 8px 9px 7px;
   background: var(--field-bg);
   border: 1px solid var(--border);
   border-radius: 11px;
@@ -196,13 +273,14 @@
 .ai-compose textarea {
   display: block;
   width: 100%;
-  min-height: 70px;
-  max-height: 150px;
+  min-height: 44px;
+  max-height: 148px;
   padding: 2px 3px;
   border: 0;
   box-shadow: none;
   outline: none;
-  resize: vertical;
+  resize: none;
+  overflow-y: auto;
   background: transparent;
   color: var(--text-primary);
   font-size: 12px;
@@ -218,14 +296,14 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-top: 7px;
+  margin-top: 5px;
   min-width: 0;
 }
 .ai-compose-actions > button {
-  flex: 0 0 32px;
+  flex: 0 0 30px;
   margin-left: auto;
-  height: 32px;
-  width: 32px;
+  height: 30px;
+  width: 30px;
   border-radius: 8px;
 }
 .ai-model-picker {
@@ -331,7 +409,7 @@
 .ai-history {
   position: absolute;
   z-index: 26;
-  top: 46px;
+  top: calc(var(--chrome-bar-height) + 4px);
   left: 8px;
   right: 8px;
   padding: 9px 10px;
@@ -375,44 +453,12 @@
 }
 
 
-.ai-execution-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 1px 10px 8px;
-  border-bottom: 1px solid var(--border);
+.ai-execution-warning {
+  flex: 0 0 auto;
+  margin: 6px 10px 0;
+  padding: 7px 9px;
+  border-color: var(--warning);
 }
-.ai-execution-row label {
-  color: var(--text-muted);
-  font-size: 11px;
-  flex: 1;
-}
-.ai-execution-row select {
-  min-width: 116px;
-  flex: 0 0 116px;
-  padding: 5px 7px;
-  color: var(--text-primary);
-  font-size: 11px;
-}
-.ai-terminal-ready {
-  margin: 8px 10px 2px;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--field-bg);
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.55;
-}
-.ai-terminal-ready label {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  cursor: pointer;
-}
-.ai-terminal-ready input { margin-top: 3px; flex: 0 0 auto; }
-.ai-terminal-ready p { margin: 0; }
 
 /* AI tool executions are concise by default and retain full auditable details. */
 .ai-step-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }

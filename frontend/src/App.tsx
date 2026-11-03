@@ -234,7 +234,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     initialState.aiSidebarMode === "pinned" ? "pinned" : "auto-hide",
   );
   const [aiSidebarWidth, setAISidebarWidth] = useState(
-    Math.max(320, Math.min(600, initialState.aiSidebarWidth ?? 400)),
+    Math.max(320, Math.min(480, initialState.aiSidebarWidth ?? 360)),
   );
   const [aiHoverOpen, setAIHoverOpen] = useState(false);
   const [aiFocusOpen, setAIFocusOpen] = useState(false);
@@ -266,7 +266,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     const initial = aiSidebarWidth;
     let changed = initial;
     const move = (e: PointerEvent) => {
-      changed = Math.max(320, Math.min(600, initial + start - e.clientX));
+      changed = Math.max(320, Math.min(480, initial + start - e.clientX));
       setAISidebarWidth(changed);
     };
     const end = () => {
