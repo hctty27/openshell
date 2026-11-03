@@ -37,8 +37,23 @@ test("backdrop dismisses but clicks inside do not", () => {
   const dialog = screen.getByRole("dialog", { name: "Editor" });
   fireEvent.click(screen.getByRole("button", { name: "Inside" }));
   expect(onDismiss).not.toHaveBeenCalled();
+  fireEvent.pointerDown(dialog, { button: 0, clientX: -10, clientY: -10 });
   fireEvent.click(dialog, { clientX: -10, clientY: -10 });
   expect(onDismiss).toHaveBeenCalledOnce();
+});
+
+test("dragging a text selection outside the dialog does not dismiss it", () => {
+  const onDismiss = vi.fn();
+  render(
+    <ModalSurface aria-label="Editor" onDismiss={onDismiss}>
+      <input aria-label="Host" defaultValue="192.168.1.1" />
+    </ModalSurface>,
+  );
+  const dialog = screen.getByRole("dialog", { name: "Editor" });
+  fireEvent.pointerDown(screen.getByRole("textbox", { name: "Host" }), { button: 0 });
+  fireEvent.pointerUp(dialog, { clientX: -10, clientY: -10 });
+  fireEvent.click(dialog, { clientX: -10, clientY: -10 });
+  expect(onDismiss).not.toHaveBeenCalled();
 });
 
 test("returns focus to the triggering element on close", () => {

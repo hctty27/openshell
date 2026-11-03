@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { message } from "../i18n/message";
 import { t } from "../i18n";
 import type { Language } from "../i18n/languages";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   X,
   Server,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { api, errorText } from "../bridge";
 import ModalSurface from "./ModalSurface";
+import { useDialogs } from "./DialogProvider";
 import GeneralSettingsPanel from "./GeneralSettingsPanel";
 import ConnectionSettingsPanel from "./ConnectionSettingsPanel";
 import TerminalSettingsPanel from "./TerminalSettingsPanel";
@@ -82,6 +83,7 @@ const emptySession: Session = {
 };
 export default function SettingsDialog(p: Props) {
   useTranslation();
+  const dialogs = useDialogs();
   const [tab, setTab] = useState(
     p.kind === "session" ? "session" : "general",
   );
@@ -90,6 +92,7 @@ export default function SettingsDialog(p: Props) {
     groupId: p.groupID ?? "",
     ...p.session,
   });
+  const initialSession = useRef(session);
   const [keepAliveSeconds, setKeepAliveSeconds] = useState(p.keepAliveSeconds ?? 30);
   const [autoReconnect, setAutoReconnect] = useState(p.autoReconnect !== false);
   const [maxReconnectAttempts, setMaxReconnectAttempts] = useState(p.maxReconnectAttempts ?? 10);
@@ -103,6 +106,24 @@ export default function SettingsDialog(p: Props) {
   const [error, setError] = useState<unknown>("");
   const [success, setSuccess] = useState<DisplayText>("");
   const [busy, setBusy] = useState(false);
+  const sessionDirty = JSON.stringify(session) !== JSON.stringify(initialSession.current) ||
+    secret !== "" || saveSecret !== !!p.session?.credentialRef;
+  const requestClose = () => {
+    if (busy) return;
+    if (p.kind !== "session" || !sessionDirty) {
+      p.onClose();
+      return;
+    }
+    void dialogs.confirm({
+      title: message("settings:unsavedSessionChangesTitle"),
+      description: message("settings:unsavedSessionChangesDescription"),
+      confirmLabel: message("settings:discardSessionChanges"),
+      cancelLabel: message("settings:continueEditing"),
+      tone: "warning",
+    }).then((discard) => {
+      if (discard) p.onClose();
+    });
+  };
   const groupPath = (g: Group): string => {
     const names = [g.name];
     const seen = new Set([g.id]);
@@ -143,7 +164,8 @@ export default function SettingsDialog(p: Props) {
     <ModalSurface
       className={`settings-dialog settings-dialog--${p.kind}`}
       aria-label={p.kind === "session" ? t(p.session ? "common:editSession" : "common:newSshSession") : t("settings:settingsTitle")}
-      onDismiss={p.onClose}
+      onDismiss={requestClose}
+      closeOnBackdrop={p.kind !== "session"}
       locked={busy}
     >
         <header>
@@ -156,7 +178,7 @@ export default function SettingsDialog(p: Props) {
                 : t("settings:settingsTitle")}
             </h2>
           </div>
-          <button title={t("common:close")} disabled={busy} onClick={p.onClose}>
+          <button title={t("common:close")} disabled={busy} onClick={requestClose}>
             <X size={19} />
           </button>
         </header>
@@ -480,7 +502,7 @@ export default function SettingsDialog(p: Props) {
         </div>
         </div>
         <footer>
-          <button className="secondary" disabled={busy} onClick={p.onClose}>
+          <button className="secondary" disabled={busy} onClick={requestClose}>
             {t("common:close")}
           </button>
           <div>
