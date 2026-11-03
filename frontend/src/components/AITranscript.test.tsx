@@ -141,7 +141,7 @@ test("risk notes remain visible even when tool details are collapsed", () => {
 
 test("English tool cards preserve the original command result", async () => {
   await initializeI18n("en");
-  const result = "container running\\n退出状态: 0";
+  const result = "container running\n退出状态: 0";
   render(<AITranscript messages={[
     { role: "assistant", content: "", tool_calls: tool("english-tool", "ssh_exec", {
       target: "target_1", command: "docker ps",
