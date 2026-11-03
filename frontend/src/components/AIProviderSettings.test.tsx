@@ -36,7 +36,7 @@ test("adds multiple models for one provider and notifies the open sidebar", asyn
     target: { value: "https://example.test/v1" },
   });
   fireEvent.change(screen.getByPlaceholderText("sk-..."), { target: { value: "sk-sample" } });
-  fireEvent.change(screen.getByPlaceholderText("model-one\nmodel-two"), {
+  fireEvent.change(screen.getByLabelText("模型 ID（每行一个）"), {
     target: { value: "grok-4.7\ngpt-6" },
   });
   fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
