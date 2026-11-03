@@ -89,3 +89,25 @@ func TestAcquireAITerminalRejectsUnknownStateWithoutWriting(t *testing.T) {
 	if err!=nil { t.Fatal(err) }
 	lease.Release()
 }
+
+func TestJumpServerMenuCannotBeUsedAsAIShell(t *testing.T) {
+	var state terminalShellReadiness
+	state.observe([]byte("欢迎使用JumpServer开源堡垒机系统\r\nOpt> "))
+	if !state.isJumpServer() { t.Fatal("JumpServer welcome/menu not detected") }
+	if err := state.checkReady(); err == nil || !strings.Contains(err.Error(), "资产菜单") {
+		t.Fatalf("expected asset menu rejection, got %v", err)
+	}
+
+	// A previous shell marker must never authorize the KoKo asset menu.
+	state.observe([]byte("\x1b]133;B\x07"))
+	state.observe([]byte("\r\nOpt> "))
+	if err := state.checkReady(); err == nil || !strings.Contains(err.Error(), "资产菜单") {
+		t.Fatalf("stale shell marker allowed JumpServer menu: %v", err)
+	}
+	state.observe([]byte("\r\nroot@asset:~# "))
+	state.mu.Lock()
+	state.lastOutput = time.Now().Add(-time.Second)
+	state.mu.Unlock()
+	if err := state.checkReady(); err != nil { t.Fatalf("asset shell did not become ready: %v", err) }
+	if !state.isJumpServer() { t.Fatal("bastion identity must survive asset changes") }
+}

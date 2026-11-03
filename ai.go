@@ -127,8 +127,8 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	req.Text = strings.TrimSpace(req.Text)
 	if len(req.Text) == 0 || len(req.Text) > 12000 { return AITaskStart{}, errors.New("消息长度无效") }
 	if req.Mode != "review" && req.Mode != "auto" { return AITaskStart{}, errors.New("执行模式无效") }
-	if req.Execution == "" { req.Execution = "independent" }
-	if req.Execution != "independent" && req.Execution != "terminal" { return AITaskStart{}, errors.New("终端操作方式无效") }
+	if req.Execution == "" { req.Execution = "auto" }
+	if req.Execution != "auto" && req.Execution != "independent" && req.Execution != "terminal" { return AITaskStart{}, errors.New("终端操作方式无效") }
 	if req.Execution == "terminal" && len(req.Targets) != 1 {
 		return AITaskStart{},errors.New("当前终端操作仅支持一个已连接 SSH 会话")
 	}
@@ -157,8 +157,27 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 			SessionID: ref.SessionID, Name: s.Name, Host: s.Host, Port: s.Port, Username: s.Username,
 		})
 	}
+	ctx := a.ctx
+	if ctx == nil { ctx = context.Background() }
+	selectedExecution := req.Execution
+	if req.Execution == "auto" || req.Execution == "independent" {
+		selectedExecution = "independent"
+		for _, ref := range req.Targets {
+			capability, err := a.ssh.AIExecutionMode(ctx, ref)
+			if err != nil { return AITaskStart{}, fmt.Errorf("检测 SSH 执行能力失败: %w", err) }
+			if capability == "terminal" {
+				if req.Execution == "independent" {
+					return AITaskStart{}, errors.New("当前连接不支持安全的独立执行，请选择自动选择或当前终端")
+				}
+				if len(req.Targets) != 1 {
+					return AITaskStart{}, errors.New("部分目标不支持独立执行。自动模式暂不支持多会话终端接管，请仅选择一个目标")
+				}
+				selectedExecution = "terminal"
+			}
+		}
+	}
 	var terminalLease *sshclient.AITerminalLease
-	if req.Execution == "terminal" {
+	if selectedExecution == "terminal" {
 		var err error
 		terminalLease,err = a.ssh.AcquireAITerminal(req.Targets[0])
 		if err != nil { return AITaskStart{},err }
@@ -166,8 +185,6 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	// Every failure after acquisition must give terminal input back to the user.
 	accepted := false
 	defer func() { if !accepted && terminalLease != nil { terminalLease.Release() } }()
-	ctx := a.ctx
-	if ctx == nil { ctx = context.Background() }
 	c := store.AIConversation{ ID: domain.NewID(), Title: truncateAIRunes(req.Text, 40), Messages: []store.AIMessage{} }
 	if req.ConversationID != "" {
 		existing, err := a.store.GetAIConversation(ctx, req.ConversationID)
@@ -175,7 +192,7 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 		c = existing
 	}
 	c.ProviderID, c.ModelID, c.Mode, c.TargetNames = req.ProviderID, req.ModelID, req.Mode, names
-	c.Execution = req.Execution
+	c.Execution = selectedExecution
 	c.TargetSessionIDs = sessionIDs
 	c.TargetBindings = bindings
 	c.Messages = append(c.Messages, store.AIMessage{Role: "user", Content: req.Text})

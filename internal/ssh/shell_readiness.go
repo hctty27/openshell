@@ -26,6 +26,8 @@ type terminalShellReadiness struct {
 	prompt bool
 	alternate bool
 	manualInput bool
+	jumpServer bool
+	assetMenu bool
 	lastOutput time.Time
 }
 
@@ -60,15 +62,28 @@ func (r *terminalShellReadiness) observe(p []byte) {
 
 	// For plain shells without integration, infer readiness only from a
 	// recognizable full prompt at the end of the current output.
-	if !r.integration {
-		stripped := terminalOSCPattern.ReplaceAll(combined, nil)
-		stripped = terminalCSIPattern.ReplaceAll(stripped, nil)
-		visible := strings.TrimRight(string(stripped), "\x00")
-		if index := strings.LastIndexAny(visible, "\r\n"); index >= 0 {
-			visible = visible[index+1:]
-		}
+	if strings.Contains(strings.ToLower(string(combined)), "jumpserver") { r.jumpServer = true }
+	stripped := terminalOSCPattern.ReplaceAll(combined, nil)
+	stripped = terminalCSIPattern.ReplaceAll(stripped, nil)
+	visible := strings.TrimRight(string(stripped), "\x00")
+	if index := strings.LastIndexAny(visible, "\r\n"); index >= 0 {
+		visible = visible[index+1:]
+	}
+	// Returning to KoKo invalidates shell integration markers from the
+	// previously selected asset; the next asset may use a different shell.
+	if strings.TrimSpace(visible) == "Opt>" {
+		r.jumpServer = true
+		r.assetMenu = true
+		r.integration = false
+		r.prompt = false
+	}
+	if !r.integration && !r.assetMenu {
 		r.prompt = shellPromptPattern.MatchString(visible)
 		if r.prompt { r.manualInput = false }
+	} else if r.assetMenu && shellPromptPattern.MatchString(visible) {
+		r.prompt = true
+		r.assetMenu = false
+		r.manualInput = false
 	}
 
 	r.lastOutput = time.Now()
@@ -86,9 +101,18 @@ func (r *terminalShellReadiness) userInput(p []byte) {
 	r.mu.Unlock()
 }
 
+func (r *terminalShellReadiness) isJumpServer() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.jumpServer
+}
+
 func (r *terminalShellReadiness) checkReady() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.assetMenu {
+		return errors.New("当前处于 JumpServer 资产菜单（Opt>），请先选择资产并进入 Shell")
+	}
 	if r.alternate {
 		return errors.New("当前终端正在使用全屏程序，无法交给 AI 操作")
 	}

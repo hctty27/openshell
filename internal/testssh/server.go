@@ -107,6 +107,10 @@ func StartWithMode(t testing.TB, mode string) *Server {
 						for r := range requests {
 							switch r.Type {
 							case "exec":
+								if mode == "noexec" {
+									r.Reply(false, nil)
+									return
+								}
 								if mode == "start" {
 									continue
 								}
