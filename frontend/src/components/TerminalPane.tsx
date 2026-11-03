@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { message } from "../i18n/message";
 import { t } from "../i18n";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
@@ -42,6 +42,9 @@ interface Props {
   onError(text: unknown): void;
   onSelection?(text: string): void;
   onDirectoryChange?(ref: Ref, directory: string): void;
+  onAlternateScreenChange?(ref: Ref, alternate: boolean): void;
+  aiControlled?: boolean;
+  onTakeControl?(): void;
 }
 export default function TerminalPane(p: Props) {
   useTranslation();
@@ -124,6 +127,12 @@ export default function TerminalPane(p: Props) {
     terminal.current = term;
     fit.current = addon;
     term.open(container.current);
+    const bufferListener = term.buffer.onBufferChange(buffer => {
+      if (!disposed && ref && !local) {
+        callbacks.current.onAlternateScreenChange?.(ref, buffer.type === "alternate");
+      }
+    });
+    if (ref && !local) callbacks.current.onAlternateScreenChange?.(ref, term.buffer.active.type === "alternate");
     const imeRecovery = attachImeFocusRecovery(
       navigator.userAgent.includes("Windows") ? term.textarea : undefined,
       () => callbacks.current.active,
@@ -208,7 +217,7 @@ export default function TerminalPane(p: Props) {
       });
     };
     const input = term.onData((data) => {
-      if (terminalMode === "offline") return;
+      if (terminalMode === "offline" || (terminalMode === "ssh" && callbacks.current.aiControlled)) return;
       inputQueue.push(data);
       scheduleInput();
     });
@@ -271,7 +280,7 @@ export default function TerminalPane(p: Props) {
       }, 0);
     };
     const pasteFromClipboard = async () => {
-      if (pastePending || disposed || !callbacks.current.active) return;
+      if (pastePending || disposed || !callbacks.current.active || callbacks.current.aiControlled) return;
       pastePending = true;
       try {
         const text = await Clipboard.Text();
@@ -434,6 +443,7 @@ export default function TerminalPane(p: Props) {
       document.removeEventListener("mouseup", onMouseUp, true);
       paneElement.removeEventListener("contextmenu", onContextMenu, true);
       input.dispose();
+      bufferListener.dispose();
       for (const hook of cwdHooks) hook.dispose();
       resizeSubscription.dispose();
       selection.dispose();
@@ -616,6 +626,14 @@ export default function TerminalPane(p: Props) {
           width: p.paneBounds.width, height: p.paneBounds.height } : {}),
       } as CSSProperties}>
       <div className="terminal-surface" ref={container} />
+      {p.aiControlled && (
+        <div className="terminal-ai-control" role="status">
+          <Sparkles size={14} aria-hidden="true" />
+          <span>AI 正在操作 · {p.tab.session.name}</span>
+          <button type="button" onClick={p.onTakeControl}
+            title="停止 AI 并重新接管终端">接管终端</button>
+        </div>
+      )}
       {p.paneBounds && p.onUndock && (
         <button type="button" className="terminal-pane-undock"
           title={t("terminal:undockPane")} aria-label={t("terminal:undockPane")}
