@@ -22,6 +22,7 @@
   "automaticMode": "Fully automatic",
   "operationMethod": "Execution method",
   "executionStrategy": "AI execution method",
+  "moreOptions": "More options",
   "autoRecommended": "Auto-select (recommended)",
   "independent": "Independent execution",
   "independentHelp": "Run commands over a separate SSH connection without typing into the active terminal.",
