@@ -124,7 +124,7 @@ export default function TerminalPane(p: Props) {
     fit.current = addon;
     term.open(container.current);
     const imeRecovery = attachImeFocusRecovery(
-      term.textarea,
+      navigator.userAgent.includes("Windows") ? term.textarea : undefined,
       () => callbacks.current.active,
       () => { if (!disposed) term.focus(); },
     );
