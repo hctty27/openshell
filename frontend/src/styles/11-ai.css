@@ -505,3 +505,17 @@
   cursor: pointer;
 }
 .ai-step-orphan pre { margin-top: 8px; }
+
+
+.ai-step-warning {
+  margin: 0 0 3px;
+  padding: 7px 9px;
+  border-left: 2px solid var(--warning);
+  border-radius: 4px;
+  background: var(--field-bg);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
