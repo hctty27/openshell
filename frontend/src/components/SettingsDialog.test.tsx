@@ -1,0 +1,99 @@
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { initializeI18n } from "../i18n";
+import { DialogProvider } from "./DialogProvider";
+import SettingsDialog from "./SettingsDialog";
+
+beforeEach(() => initializeI18n("zh-CN"));
+afterEach(cleanup);
+
+function renderSessionEditor() {
+  const onClose = vi.fn();
+  const onSession = vi.fn(async () => {});
+  render(
+    <DialogProvider>
+      <SettingsDialog
+        kind="session"
+        session={{
+          id: "session-1",
+          groupId: "",
+          name: "Example",
+          host: "192.168.1.10",
+          port: 22,
+          username: "root",
+          authType: "password",
+          privateKeyPath: "",
+          credentialRef: "",
+        }}
+        groups={[]}
+        fontSize={14}
+        theme="dark"
+        onTheme={vi.fn()}
+        terminalTheme="follow"
+        onTerminalTheme={vi.fn()}
+        autoCopySelection={false}
+        onAutoCopySelection={vi.fn()}
+        rightClickPaste={false}
+        onRightClickPaste={vi.fn()}
+        confirmMultilinePaste={true}
+        logHighlights={false}
+        onLogHighlights={vi.fn()}
+        onConfirmMultilinePaste={vi.fn()}
+        onClose={onClose}
+        onSession={onSession}
+        onRefresh={vi.fn(async () => {})}
+        onFont={vi.fn()}
+      />
+    </DialogProvider>,
+  );
+  return { onClose, onSession };
+}
+
+test("session editor stays open when selecting a host outside the dialog", () => {
+  const { onClose } = renderSessionEditor();
+  const dialog = screen.getByRole("dialog", { name: "编辑会话" });
+  const host = screen.getByPlaceholderText("IP 地址或域名");
+  fireEvent.pointerDown(host, { button: 0 });
+  fireEvent.pointerUp(dialog, { clientX: -10, clientY: -10 });
+  fireEvent.click(dialog, { clientX: -10, clientY: -10 });
+  fireEvent.pointerDown(dialog, { button: 0, clientX: -10, clientY: -10 });
+  fireEvent.click(dialog, { clientX: -10, clientY: -10 });
+  expect(onClose).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog", { name: "编辑会话" })).toBeTruthy();
+});
+
+test("closing an unchanged session editor requires no confirmation", () => {
+  const { onClose } = renderSessionEditor();
+  fireEvent.click(screen.getByTitle("关闭"));
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("dialog", { name: "放弃未保存的修改？" })).toBeNull();
+});
+
+test("unsaved session changes require confirmation and can be retained", () => {
+  const { onClose } = renderSessionEditor();
+  const host = screen.getByPlaceholderText("IP 地址或域名") as HTMLInputElement;
+  fireEvent.change(host, { target: { value: "10.0.0.2" } });
+  fireEvent.click(screen.getByTitle("关闭"));
+  expect(screen.getByRole("dialog", { name: "放弃未保存的修改？" })).toBeTruthy();
+  expect(onClose).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "继续编辑" }));
+  expect(host.value).toBe("10.0.0.2");
+  expect(onClose).not.toHaveBeenCalled();
+
+  fireEvent(screen.getByRole("dialog", { name: "编辑会话" }), new Event("cancel", { cancelable: true }));
+  expect(screen.getByRole("dialog", { name: "放弃未保存的修改？" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "放弃修改" }));
+  return waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+});
+
+test("saving a modified session closes without a discard confirmation", async () => {
+  const { onClose, onSession } = renderSessionEditor();
+  fireEvent.change(screen.getByPlaceholderText("IP 地址或域名"), {
+    target: { value: "10.0.0.2" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "保存会话" }));
+  await waitFor(() => expect(onSession).toHaveBeenCalledOnce());
+  await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  expect(screen.queryByRole("dialog", { name: "放弃未保存的修改？" })).toBeNull();
+});
