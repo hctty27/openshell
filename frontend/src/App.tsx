@@ -57,6 +57,7 @@ import { useTransferActivity } from "./features/transfers/useTransferActivity";
 import QuickCommandBar from "./components/QuickCommandBar";
 import QuickCommandManager from "./components/QuickCommandManager";
 import { quickCommandTerminalInput } from "./quickCommands";
+import { normalizeRemoteDirectory } from "./terminalCwd";
 import { DialogProvider, useDialogs } from "./components/DialogProvider";
 import ModalSurface from "./components/ModalSurface";
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || packageManifest.version;
@@ -462,6 +463,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       manualDisconnected: false,
       localFallbackPending: false,
       retryCount: 0,
+      cloneCwd: t.everConnected ? undefined : t.cloneCwd,
       error: "",
     }));
     try {
@@ -493,7 +495,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       if (!tabsRef.current.find(t => t.id === tab.id)?.manualDisconnected) notify(e);
     }
   };
-  const open = (session: Session, afterTabID?: string) => {
+  const open = (session: Session, afterTabID?: string, cloneCwd?: string) => {
     const tab: Tab = {
       id: id(),
       session,
@@ -502,6 +504,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       home: "",
       cwd: "",
       cwdReported: false,
+      cloneCwd,
       error: "",
     };
     setTabs((old) => {
@@ -977,7 +980,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
         <WorkspaceTabStrip tabs={tabs} activeID={activeID} unreadTabIDs={unreadTabIDs}
           disconnectBehavior={state.disconnectBehavior ?? "local"}
           onActivate={setActiveID}
-          onDuplicate={tab => open(tab.session, tab.id)}
+          onDuplicate={tab => open(tab.session, tab.id,
+            tab.status === "connected" && tab.cwdReported
+              ? normalizeRemoteDirectory(tab.cwd) ?? undefined : undefined)}
           onClose={tab => { void close(tab); }}
           onNewTab={() => setShowSessionPicker(true)}
           onTabPointerMove={onTabPointerMove}
@@ -1193,8 +1198,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   style={visible ? undefined : { display: "none" }}>
                   {visible && (
                     <SFTPView refID={tab.ref!} onNotice={notify}
-                      initialRemoteDirectory={active?.cwd}
-                      cwdReported={active?.cwdReported === true}
+                      initialRemoteDirectory={tab.cwdReported ? tab.cwd : tab.cloneCwd ?? tab.cwd}
+                      cwdReported={tab.cwdReported === true}
                       onRemoteDirectoryChange={directory => {
                         remoteUploadDirs.current[tab.id] = directory;
                       }} hideTaskQueue />

@@ -10,6 +10,13 @@ export function normalizeRemoteDirectory(value: string): string | null {
   return value;
 }
 
+/** Safely change the working directory of a newly duplicated SSH shell. */
+export function buildRemoteCdCommand(directory: string): string | null {
+  const valid = normalizeRemoteDirectory(directory);
+  if (!valid) return null;
+  return `cd -- '${valid.replace(/'/g, "'\\''")}'\r`;
+}
+
 export function parseOsc7Directory(payload: string): string | null {
   try {
     const url = new URL(payload);

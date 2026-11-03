@@ -53,6 +53,7 @@ export interface Tab {
   home: string;
   cwd: string;
   cwdReported?: boolean;
+  cloneCwd?: string;
   error: unknown;
 }
 export type Theme = "dark" | "light";

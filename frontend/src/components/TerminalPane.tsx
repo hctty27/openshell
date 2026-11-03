@@ -13,7 +13,7 @@ import { api, listen, errorText } from "../bridge";
 import { Browser, Clipboard } from "@wailsio/runtime";
 import type { Tab, Ref, Theme, TerminalTheme, DisconnectBehavior, LocalShell } from "../types";
 import { resolveTerminalTheme } from "../terminalThemes";
-import { parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
+import { buildRemoteCdCommand, parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
 import { useDialogs } from "./DialogProvider";
 import { attachImeFocusRecovery } from "../features/terminal/imeFocusRecovery";
 interface Props {
@@ -59,6 +59,7 @@ export default function TerminalPane(p: Props) {
   const searchInput = useRef<HTMLInputElement>(null);
   const scrollbackSnapshot = useRef("");
   const localSequence = useRef(0);
+  const cloneCwdSent = useRef(false);
   const terminalMode = p.tab.status === "connected" && p.tab.ref ? "ssh"
     : p.tab.ref && p.tab.everConnected && ["disconnected", "error"].includes(p.tab.status)
       ? (p.tab.localFallbackPending || p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
@@ -388,6 +389,17 @@ export default function TerminalPane(p: Props) {
           lastSize = `${cols}x${rows}`;
           sendResize();
           if (callbacks.current.active) term.focus();
+          if (!local && ref && !cloneCwdSent.current) {
+            cloneCwdSent.current = true;
+            const command = buildRemoteCdCommand(callbacks.current.tab.cloneCwd ?? "");
+            if (command) {
+              const bytes = new TextEncoder().encode(command);
+              const binary = Array.from(bytes, byte => String.fromCharCode(byte)).join("");
+              void api.WriteTerminal(ref, btoa(binary)).catch(error => {
+                if (!disposed) callbacks.current.onNotice(error);
+              });
+            }
+          }
         })
         .catch((e) => {
           // A reconnect can cancel a pending ConPTY launch or SSH open.

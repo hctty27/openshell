@@ -18,8 +18,9 @@ const transferEvents = vi.hoisted(() => ({
 }));
 vi.mock("./components/TerminalPane", () => ({
   default: (props: {
-    tab: { id: string };
+    tab: { id: string; ref?: { tabId: string; sessionId: string; generation: number } | null; cloneCwd?: string };
     active: boolean;
+    onDirectoryChange?: (ref: { tabId: string; sessionId: string; generation: number }, directory: string) => void;
     visible?: boolean;
     onActivate?: () => void;
   }) => (
@@ -27,9 +28,11 @@ vi.mock("./components/TerminalPane", () => ({
       data-testid="terminal-pane-stub"
       className={`terminal-pane ${props.visible ? "visible" : ""}`}
       data-tab-id={props.tab.id}
+      data-clone-cwd={props.tab.cloneCwd ?? ""}
       data-active={props.active}
       data-visible={props.visible}
       onMouseDown={props.onActivate}
+      onDoubleClick={() => { if (props.tab.ref) props.onDirectoryChange?.(props.tab.ref, "/data/my project"); }}
     />
   ),
 }));
@@ -370,6 +373,26 @@ test("edits an active session without disconnecting and updates every open tab",
   expect(api.Connect).toHaveBeenCalledTimes(2);
   expect(screen.getByText(/新参数将在下次连接时生效/)).toBeTruthy();
   expect(screen.getByRole("button", { name: "选中会话 US Updated" })).toBeTruthy();
+});
+
+test("duplicate tab inherits a reported working directory for SSH and SFTP", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{ id: "copy-id", groupId: "", name: "copy", host: "example.test",
+      port: 22, username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved" }],
+    groups: [], fontSize: "14", language: "zh-CN", version: "test",
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选中会话 copy" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  fireEvent.doubleClick(screen.getByTestId("terminal-pane-stub"));
+  fireEvent.doubleClick(screen.getByTitle("双击复制会话"));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
+  const panes = screen.getAllByTestId("terminal-pane-stub");
+  expect(panes[1].getAttribute("data-clone-cwd")).toBe("/data/my project");
+  fireEvent.click(screen.getByTitle("打开 SFTP 文件管理"));
+  expect(screen.getByTestId("sftp-panel-stub").getAttribute("data-initial-directory"))
+    .toBe("/data/my project");
 });
 
 test("double-clicking a terminal tab opens an independent SSH session beside it with the same name", async () => {

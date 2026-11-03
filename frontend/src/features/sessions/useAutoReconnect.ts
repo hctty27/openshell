@@ -68,6 +68,7 @@ export function useAutoReconnect({
           update(tab.id, t => ({
             ...t, ref: result.ref,
             status: "connected", everConnected: true, home: result.home, cwd: result.home,
+            cwdReported: false, cloneCwd: undefined,
             retryCount: 0, error: "", manualDisconnected: false,
           }));
         } catch (error) {
