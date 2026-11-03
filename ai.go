@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hctty27/openshell/internal/domain"
+	"github.com/hctty27/openshell/internal/apperror"
 	sshclient "github.com/hctty27/openshell/internal/ssh"
 	"github.com/hctty27/openshell/internal/store"
 )
@@ -67,14 +68,14 @@ func (a *App) AISaveProvider(req AISaveProviderRequest) (store.AIProvider, error
 	parsed, err := url.Parse(p.BaseURL)
 	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") ||
 		parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return store.AIProvider{}, errors.New("无效的 API Base URL")
+		return store.AIProvider{}, apperror.New("aiInvalidBaseURL", nil)
 	}
 	if p.Name == "" || len(p.Name) > 100 || len(p.Models) == 0 || len(p.Models) > 40 {
-		return store.AIProvider{}, errors.New("请填写名称并添加 1–40 个模型")
+		return store.AIProvider{}, apperror.New("aiInvalidProviderDetails", nil)
 	}
 	for _, model := range p.Models {
 		if model.ID == "" || len(model.ID) > 150 || strings.ContainsAny(model.ID, "\r\n") {
-			return store.AIProvider{}, errors.New("模型 ID 无效")
+			return store.AIProvider{}, apperror.New("aiInvalidModelID", nil)
 		}
 	}
 	if p.ID == "" { p.ID = domain.NewID() }
@@ -91,7 +92,7 @@ func (a *App) AISaveProvider(req AISaveProviderRequest) (store.AIProvider, error
 		}
 		if old.SecretRef != "" { _ = a.secrets.Delete(a.ctx, old.SecretRef) }
 	} else {
-		if p.SecretRef == "" { return store.AIProvider{}, errors.New("需要填写 API Key") }
+		if p.SecretRef == "" { return store.AIProvider{}, apperror.New("aiMissingAPIKey", nil) }
 		if err := a.store.SaveAIProvider(a.ctx, p); err != nil { return store.AIProvider{}, err }
 	}
 	p.HasKey = true
@@ -116,7 +117,7 @@ func (a *App) AIDeleteConversation(id string) error {
 	for _, task := range a.aiTasks {
 		if task.conversationID == id {
 			a.aiMu.Unlock()
-			return errors.New("不能删除正在执行的对话")
+			return apperror.New("aiCannotDeleteRunningConversation", nil)
 		}
 	}
 	a.aiMu.Unlock()
@@ -125,19 +126,19 @@ func (a *App) AIDeleteConversation(id string) error {
 
 func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	req.Text = strings.TrimSpace(req.Text)
-	if len(req.Text) == 0 || len(req.Text) > 12000 { return AITaskStart{}, errors.New("消息长度无效") }
-	if req.Mode != "review" && req.Mode != "auto" { return AITaskStart{}, errors.New("执行模式无效") }
+	if len(req.Text) == 0 || len(req.Text) > 12000 { return AITaskStart{}, apperror.New("aiInvalidMessageLength", nil) }
+	if req.Mode != "review" && req.Mode != "auto" { return AITaskStart{}, apperror.New("aiInvalidMode", nil) }
 	if req.Execution == "" { req.Execution = "auto" }
-	if req.Execution != "auto" && req.Execution != "independent" && req.Execution != "terminal" { return AITaskStart{}, errors.New("终端操作方式无效") }
+	if req.Execution != "auto" && req.Execution != "independent" && req.Execution != "terminal" { return AITaskStart{}, apperror.New("aiInvalidExecution", nil) }
 	if req.Execution == "terminal" && len(req.Targets) != 1 {
-		return AITaskStart{},errors.New("当前终端操作仅支持一个已连接 SSH 会话")
+		return AITaskStart{},apperror.New("aiTerminalSingleTarget", nil)
 	}
 	provider, err := a.store.GetAIProvider(a.ctx, req.ProviderID)
 	if err != nil { return AITaskStart{}, err }
 	validModel := false
 	for _, model := range provider.Models { if model.ID == req.ModelID { validModel = true; break } }
-	if !validModel { return AITaskStart{}, errors.New("请选择已配置模型") }
-	if len(req.Targets) == 0 || len(req.Targets) > 12 { return AITaskStart{}, errors.New("请选择 1–12 个目标会话") }
+	if !validModel { return AITaskStart{}, apperror.New("aiSelectConfiguredModel", nil) }
+	if len(req.Targets) == 0 || len(req.Targets) > 12 { return AITaskStart{}, apperror.New("aiTargetCount", nil) }
 	// Each turn gets a fresh, task-local alias. Historical tab IDs are never executable.
 	allowed := make(map[string]domain.ConnectionRef)
 	seenTabs := make(map[string]bool)
@@ -164,13 +165,13 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 		selectedExecution = "independent"
 		for _, ref := range req.Targets {
 			capability, err := a.ssh.AIExecutionMode(ctx, ref)
-			if err != nil { return AITaskStart{}, fmt.Errorf("检测 SSH 执行能力失败: %w", err) }
+			if err != nil { return AITaskStart{}, apperror.Wrap("aiExecutionProbeFailed", err, nil) }
 			if capability == "terminal" {
 				if req.Execution == "independent" {
-					return AITaskStart{}, errors.New("当前连接不支持安全的独立执行，请选择自动选择或当前终端")
+					return AITaskStart{}, apperror.New("aiIndependentUnsupported", nil)
 				}
 				if len(req.Targets) != 1 {
-					return AITaskStart{}, errors.New("部分目标不支持独立执行。自动模式暂不支持多会话终端接管，请仅选择一个目标")
+					return AITaskStart{}, apperror.New("aiMultiTargetTerminalUnsupported", nil)
 				}
 				selectedExecution = "terminal"
 			}
@@ -201,7 +202,7 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	for _, running := range a.aiTasks {
 		if running.conversationID == c.ID {
 			a.aiMu.Unlock()
-			return AITaskStart{}, errors.New("该对话已有任务正在运行")
+			return AITaskStart{}, apperror.New("aiConversationRunning", nil)
 		}
 	}
 	if err := a.store.SaveAIConversation(ctx, c); err != nil { a.aiMu.Unlock(); return AITaskStart{}, err }
@@ -540,10 +541,10 @@ func requestAICompletion(ctx context.Context, baseURL, key, model string, messag
 	for i:=0;i<len(parts);i++ {
 		call:=parts[i]
 		if call==nil {continue}
-		if call.ID=="" {return store.AIMessage{},errors.New("AI API 返回的工具调用缺少 ID")}
+		if call.ID=="" {return store.AIMessage{},apperror.New("aiMissingToolCallID", nil)}
 		out.ToolCalls=append(out.ToolCalls,*call)
 	}
-	if out.Content=="" && len(out.ToolCalls)==0 {return store.AIMessage{},errors.New("AI API 返回了空响应")}
+	if out.Content=="" && len(out.ToolCalls)==0 {return store.AIMessage{},apperror.New("aiEmptyResponse", nil)}
 	return out,nil
 }
 
