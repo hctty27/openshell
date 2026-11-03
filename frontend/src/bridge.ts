@@ -16,6 +16,14 @@ import type {
   SFTPSyncPreview,
 } from "./types";
 type Backend = {
+  AIProviders(): Promise<import("./types").AIProvider[]>;
+  AISaveProvider(req: {provider: import("./types").AIProvider; apiKey: string}): Promise<import("./types").AIProvider>;
+  AIDeleteProvider(id: string): Promise<void>;
+  AIConversations(): Promise<import("./types").AIConversation[]>;
+  AIDeleteConversation(id: string): Promise<void>;
+  AIStart(req: {conversationId: string; providerId: string; modelId: string; mode: "review" | "auto"; text: string; targets: Ref[]}): Promise<import("./types").AIStartResponse>;
+  AIStop(taskID: string): Promise<void>;
+  AIApprove(approvalID: string, approved: boolean): Promise<void>;
   SFTPHome(ref: Ref): Promise<SFTPPaths>;
   SFTPChooseDirectory(): Promise<string>;
   SFTPList(ref: Ref, side: string, directory: string): Promise<SFTPEntry[]>;
