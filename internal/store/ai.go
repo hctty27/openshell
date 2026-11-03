@@ -57,6 +57,7 @@ type AIConversation struct {
 	ProviderID string `json:"providerId"`
 	ModelID string `json:"modelId"`
 	Mode string `json:"mode"`
+	Execution string `json:"execution,omitempty"`
 	TargetNames []string `json:"targetNames"`
 	TargetSessionIDs []string `json:"targetSessionIds,omitempty"`
 	TargetBindings []AITargetBinding `json:"targetBindings,omitempty"`
