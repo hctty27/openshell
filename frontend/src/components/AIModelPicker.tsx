@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { Check, ChevronDown, Cpu, Search } from "lucide-react";
+import { Check, ChevronDown, Cpu } from "lucide-react";
 import type { AIProvider } from "../types";
 import { t } from "../i18n";
 import { useTranslation } from "react-i18next";
@@ -22,37 +22,28 @@ type ModelOption = {
 export default function AIModelPicker({ providers, providerID, modelID, disabled, onChange }: Props) {
   useTranslation("ai");
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listID = useId();
 
   const options: ModelOption[] = providers.flatMap(provider =>
     provider.models.map(model => ({
-      providerID: provider.id, providerName: provider.name,
-      modelID: model.id, modelName: model.name || model.id,
+      providerID: provider.id,
+      providerName: provider.name,
+      modelID: model.id,
+      modelName: model.name || model.id,
     })),
   );
-  const selected = options.find(option =>
+  const selectedIndex = options.findIndex(option =>
     option.providerID === providerID && option.modelID === modelID,
   );
+  const selected = options[selectedIndex];
   const missing = Boolean(providerID && modelID && !selected);
-  const filtered = options.filter(option =>
-    `${option.providerName} ${option.modelName} ${option.modelID}`.toLocaleLowerCase()
-      .includes(query.trim().toLocaleLowerCase()),
-  );
 
   useEffect(() => {
-    if (!open) return;
-    setHighlighted(Math.max(0, filtered.findIndex(option =>
-      option.providerID === providerID && option.modelID === modelID,
-    )));
-    searchRef.current?.focus();
-  // Reinitialize only when opening, not after each keystroke.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+    if (open) setHighlighted(Math.max(0, selectedIndex));
+  }, [open, selectedIndex]);
 
   useEffect(() => {
     if (!open) return;
@@ -63,9 +54,16 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !options.length) return;
+    const option = document.getElementById(`${listID}-option-${highlighted}`);
+    if (option && typeof option.scrollIntoView === "function") {
+      option.scrollIntoView({ block: "nearest" });
+    }
+  }, [open, highlighted, listID, options.length]);
+
   const close = () => {
     setOpen(false);
-    setQuery("");
     triggerRef.current?.focus();
   };
 
@@ -74,19 +72,29 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
     close();
   };
 
-  const onSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Escape") {
+  const onTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "Escape" && open) {
       event.preventDefault();
+      event.stopPropagation();
       close();
-    } else if (event.key === "ArrowDown") {
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      setHighlighted(index => Math.min(filtered.length - 1, index + 1));
-    } else if (event.key === "ArrowUp") {
+      if (!open) setOpen(true);
+      else setHighlighted(index =>
+        Math.max(0, Math.min(options.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))
+      );
+      return;
+    }
+    if (open && (event.key === "Home" || event.key === "End")) {
       event.preventDefault();
-      setHighlighted(index => Math.max(0, index - 1));
-    } else if (event.key === "Enter") {
+      setHighlighted(event.key === "Home" ? 0 : Math.max(0, options.length - 1));
+      return;
+    }
+    if (open && (event.key === "Enter" || event.key === " ")) {
       event.preventDefault();
-      const option = filtered[highlighted];
+      const option = options[highlighted];
       if (option) choose(option);
     }
   };
@@ -96,18 +104,13 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
       <button ref={triggerRef} type="button"
         className="ai-model-picker__trigger"
         role="combobox" aria-label={t("ai:chooseModel")}
-        aria-expanded={open} aria-haspopup="listbox" aria-controls={listID}
+        aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? listID : undefined}
+        aria-activedescendant={open && options.length ? `${listID}-option-${highlighted}` : undefined}
         aria-invalid={missing || undefined}
         title={selected ? `${selected.providerName} · ${selected.modelName}` : t("ai:selectModel")}
         disabled={disabled}
         onClick={() => setOpen(value => !value)}
-        onKeyDown={event => {
-          if (!open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-            event.preventDefault();
-            setOpen(true);
-          }
-          if (open && event.key === "Escape") { event.preventDefault(); close(); }
-        }}>
+        onKeyDown={onTriggerKeyDown}>
         <Cpu size={13} aria-hidden="true" />
         <span>{selected ? `${selected.providerName} · ${selected.modelName}` :
           missing ? t("ai:modelUnavailable") : t("ai:selectModel")}</span>
@@ -115,42 +118,25 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
       </button>
       {open && (
         <div className="ai-model-picker__popup">
-          <label className="ai-model-picker__search">
-            <Search size={14} aria-hidden="true" />
-            <input ref={searchRef} type="search" aria-label={t("ai:searchApiModel")}
-              placeholder={t("ai:searchApiModelPlaceholder")}
-              value={query}
-              onChange={event => { setQuery(event.target.value); setHighlighted(0); }}
-              onKeyDown={onSearchKeyDown} />
-          </label>
           <div id={listID} role="listbox" aria-label={t("ai:availableModels")} className="ai-model-picker__options">
-            {providers.map(provider => {
-              const items = filtered.filter(option => option.providerID === provider.id);
-              if (items.length === 0) return null;
+            {options.map((option, index) => {
+              const isSelected = index === selectedIndex;
               return (
-                <div role="group" aria-label={provider.name} key={provider.id}>
-                  <div className="ai-model-picker__group-title">{provider.name}</div>
-                  {items.map(option => {
-                    const isSelected = selected?.providerID === option.providerID &&
-                      selected?.modelID === option.modelID;
-                    const isHighlighted = filtered[highlighted] === option;
-                    return (
-                      <button type="button" role="option"
-                        aria-selected={isSelected} key={option.modelID}
-                        className={[isSelected && "is-selected", isHighlighted && "is-highlighted"].filter(Boolean).join(" ")}
-                        onMouseEnter={() => setHighlighted(filtered.indexOf(option))}
-                        onClick={() => choose(option)}>
-                        <span>{option.modelName}</span>
-                        {isSelected && <Check size={14} aria-hidden="true" />}
-                      </button>
-                    );
-                  })}
-                </div>
+                <button type="button" role="option"
+                  id={`${listID}-option-${index}`}
+                  aria-selected={isSelected}
+                  key={JSON.stringify([option.providerID, option.modelID])}
+                  title={`${option.providerName} · ${option.modelName}`}
+                  tabIndex={-1}
+                  className={[isSelected && "is-selected", highlighted === index && "is-highlighted"].filter(Boolean).join(" ")}
+                  onMouseEnter={() => setHighlighted(index)}
+                  onClick={() => choose(option)}>
+                  <span>{option.providerName} · {option.modelName}</span>
+                  {isSelected && <Check size={14} aria-hidden="true" />}
+                </button>
               );
             })}
-            {filtered.length === 0 && (
-              <p className="ai-muted">{options.length ? t("ai:noMatchingModels") : t("ai:addModelFirst")}</p>
-            )}
+            {!options.length && <p className="ai-muted">{t("ai:addModelFirst")}</p>}
           </div>
         </div>
       )}
