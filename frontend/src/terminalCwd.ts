@@ -17,6 +17,40 @@ export function buildRemoteCdCommand(directory: string): string | null {
   return `cd -- '${valid.replace(/'/g, "'\\''")}'\r`;
 }
 
+export type CloneDirectoryAction = "wait" | "skip" | "send";
+
+/**
+ * A new SSH PTY may start in an asset selector instead of a shell. Restore a
+ * cloned directory only after recognizing a shell prompt, and avoid a no-op cd.
+ */
+export function decideCloneDirectoryAction(
+  directory: string,
+  home: string,
+  promptLine: string,
+  reportedDirectory?: string,
+): CloneDirectoryAction {
+  const target = normalizeRemoteDirectory(directory);
+  if (!target) return "skip";
+
+  const prompt = promptLine.trim();
+  if (/^Opt>$/i.test(prompt)) return "skip";
+
+  // Debian/Ubuntu: user@host:~$; RHEL/CentOS: [user@host ~]$.
+  const match = /^(?:[\w.-]+@[\w.-]+:(.+)|\[[\w.-]+@[\w.-]+ (.+)\])([#$%])$/.exec(prompt);
+  if (!match) return "wait";
+
+  const shownDirectory = (match[1] ?? match[2]).trim();
+  let current = normalizeRemoteDirectory(reportedDirectory ?? "");
+  if (!current) {
+    if (shownDirectory === "~") current = normalizeRemoteDirectory(home);
+    else if (shownDirectory.startsWith("~/")) {
+      current = normalizeRemoteDirectory(home.replace(/\/+$/, "") + shownDirectory.slice(1));
+    } else current = normalizeRemoteDirectory(shownDirectory);
+  }
+  const comparable = (value: string) => value.replace(/\/+$/, "") || "/";
+  return current && comparable(current) === comparable(target) ? "skip" : "send";
+}
+
 export function parseOsc7Directory(payload: string): string | null {
   try {
     const url = new URL(payload);
