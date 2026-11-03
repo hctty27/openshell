@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { BASH_CWD_REPORT_COMMAND, buildRemoteCdCommand, normalizeRemoteDirectory, parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "./terminalCwd";
+import { BASH_CWD_REPORT_COMMAND, buildRemoteCdCommand, decideCloneDirectoryAction, normalizeRemoteDirectory, parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "./terminalCwd";
 
 test("parses reported Linux cwd including percent-encoded spaces and Unicode", () => {
   expect(parseOsc7Directory("file://server01/data/my%20logs")).toBe("/data/my logs");
@@ -43,4 +43,28 @@ test("cloned SSH directories are shell-quoted and invalid paths are ignored", ()
   expect(buildRemoteCdCommand("/data/$(whoami);`id`")).toBe("cd -- '/data/$(whoami);`id`'\r");
   expect(buildRemoteCdCommand("relative/path")).toBeNull();
   expect(buildRemoteCdCommand("/data/bad\npath")).toBeNull();
+});
+
+test("cloned SSH directory restoration waits for a shell and skips JumpServer menus", () => {
+  expect(decideCloneDirectoryAction("/data", "/root", "何程，欢迎使用JumpServer开源堡垒机系统")).toBe("wait");
+  expect(decideCloneDirectoryAction("/data", "/root", "Opt>")).toBe("skip");
+  expect(decideCloneDirectoryAction("/data", "/root", "Opt>  ")).toBe("skip");
+  expect(decideCloneDirectoryAction("/data", "/root", "No assets found")).toBe("wait");
+  expect(decideCloneDirectoryAction("/data", "/root", "bash-5.2$")).toBe("wait");
+  expect(decideCloneDirectoryAction("/data", "/root", "vim -- INSERT --")).toBe("wait");
+});
+
+test("cloned SSH directory restoration avoids redundant cd commands", () => {
+  expect(decideCloneDirectoryAction("/root", "/root", "root@us-server:~#")).toBe("skip");
+  expect(decideCloneDirectoryAction("/root/", "/root", "root@us-server:/root#")).toBe("skip");
+  expect(decideCloneDirectoryAction("/root", "/root", "[root@VM-64-6-centos ~]#")).toBe("skip");
+  expect(decideCloneDirectoryAction("/data/logs", "/root", "[root@server /data/logs]#")).toBe("skip");
+  expect(decideCloneDirectoryAction("/data/logs", "/root", "root@server:~#", "/data/logs")).toBe("skip");
+});
+
+test("cloned SSH directory restoration still changes directories when needed", () => {
+  expect(decideCloneDirectoryAction("/data/project", "/root", "root@us-server:~#")).toBe("send");
+  expect(decideCloneDirectoryAction("/data/project", "/root", "[root@host ~]#")).toBe("send");
+  expect(decideCloneDirectoryAction("/data/project", "/root", "root@host:/tmp#", "/tmp")).toBe("send");
+  expect(decideCloneDirectoryAction("relative/path", "/root", "root@host:~#")).toBe("skip");
 });
