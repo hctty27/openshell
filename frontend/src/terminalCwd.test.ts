@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { BASH_CWD_REPORT_COMMAND, normalizeRemoteDirectory, parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "./terminalCwd";
+import { BASH_CWD_REPORT_COMMAND, buildRemoteCdCommand, normalizeRemoteDirectory, parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "./terminalCwd";
 
 test("parses reported Linux cwd including percent-encoded spaces and Unicode", () => {
   expect(parseOsc7Directory("file://server01/data/my%20logs")).toBe("/data/my logs");
@@ -35,4 +35,12 @@ test("Bash OSC 7 reporting escapes URL delimiters in directory names", () => {
   expect(BASH_CWD_REPORT_COMMAND).toContain("${PWD//%/%25}");
   expect(BASH_CWD_REPORT_COMMAND).toContain("${path//#/%23}");
   expect(BASH_CWD_REPORT_COMMAND).toContain("${path//\\?/%3F}");
+});
+
+test("cloned SSH directories are shell-quoted and invalid paths are ignored", () => {
+  expect(buildRemoteCdCommand("/data/my logs")).toBe("cd -- '/data/my logs'\r");
+  expect(buildRemoteCdCommand("/data/a'b")).toBe("cd -- '/data/a'\\''b'\r");
+  expect(buildRemoteCdCommand("/data/$(whoami);`id`")).toBe("cd -- '/data/$(whoami);`id`'\r");
+  expect(buildRemoteCdCommand("relative/path")).toBeNull();
+  expect(buildRemoteCdCommand("/data/bad\npath")).toBeNull();
 });
