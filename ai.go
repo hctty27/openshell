@@ -136,6 +136,7 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	seenTabs := make(map[string]bool)
 	names := make([]string, 0, len(req.Targets))
 	sessionIDs := make([]string, 0, len(req.Targets))
+	bindings := make([]store.AITargetBinding, 0, len(req.Targets))
 	for _, ref := range req.Targets {
 		if seenTabs[ref.TabID] { continue }
 		s, err := a.ssh.ConnectedSession(ref)
@@ -145,6 +146,9 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 		allowed[target] = ref
 		names = append(names, fmt.Sprintf("%s (%s@%s)", s.Name, s.Username, s.Host))
 		sessionIDs = append(sessionIDs, ref.SessionID)
+		bindings = append(bindings, store.AITargetBinding{
+			SessionID: ref.SessionID, Name: s.Name, Host: s.Host, Port: s.Port, Username: s.Username,
+		})
 	}
 	ctx := a.ctx
 	if ctx == nil { ctx = context.Background() }
@@ -156,6 +160,7 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	}
 	c.ProviderID, c.ModelID, c.Mode, c.TargetNames = req.ProviderID, req.ModelID, req.Mode, names
 	c.TargetSessionIDs = sessionIDs
+	c.TargetBindings = bindings
 	c.Messages = append(c.Messages, store.AIMessage{Role: "user", Content: req.Text})
 	a.aiMu.Lock()
 	if a.aiTasks == nil { a.aiTasks = make(map[string]*aiRunningTask) }
