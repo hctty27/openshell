@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { readFileSync } from "node:fs";
 import { i18n, initializeI18n, resources } from ".";
 import { normalizeLanguage } from "./languages";
 test("defaults to English and uses bundled Chinese resources", async () => {
@@ -38,4 +39,14 @@ test("missing Chinese translation falls back to English", async () => {
   await initializeI18n("zh-CN");
   i18n.addResource("en", "common", "fallbackProbe", "English fallback");
   expect(i18n.t("common:fallbackProbe" as never)).toBe("English fallback");
+});
+
+
+test("AI interface components do not reintroduce hard-coded Chinese UI strings", () => {
+  for (const file of ["../components/AISidebar.tsx", "../components/AIModelPicker.tsx",
+    "../components/TerminalPane.tsx", "../App.tsx"]) {
+    const source = readFileSync(new URL(file, import.meta.url), "utf8");
+    const implementation = source.split("\\n").filter(line => !line.trim().startsWith("//")).join("\\n");
+    expect(implementation, file).not.toMatch(/[\\u3400-\\u9fff]/);
+  }
 });
