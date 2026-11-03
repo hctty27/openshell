@@ -41,3 +41,26 @@ func TestAICompletionHTTPError(t *testing.T) {
 	_, err := requestAICompletion(context.Background(), server.URL+"/v1", "bad", "model", nil, nil, func(string){})
 	if err == nil || !strings.Contains(err.Error(),"401") { t.Fatalf("want HTTP 401, got %v",err) }
 }
+
+func TestAIHistoryContextNeverReplaysHistoricalTools(t *testing.T) {
+	oldTab := "obsolete-tab-1234"
+	messages := []store.AIMessage{
+		{Role: "user", Content: "检查 Docker"},
+		{Role: "assistant", Content: "正在检查", ToolCalls: []store.AIToolCall{{
+			ID: "call-old", Type: "function",
+			Function: store.AIFunction{Name: "ssh_exec", Arguments: `{"tab_id":"obsolete-tab-1234","command":"docker ps"}`},
+		}}},
+		{Role: "tool", ToolCallID: "call-old", Content: "旧检查结果"},
+	}
+	history := aiHistoryContext(messages)
+	if len(history) != 3 { t.Fatalf("unexpected length: %d", len(history)) }
+	for _, m := range history {
+		if m.Role == "tool" || len(m.ToolCalls) > 0 || m.ToolCallID != "" {
+			t.Fatalf("historical tool call was replayed: %#v", m)
+		}
+		if strings.Contains(m.Content, oldTab) { t.Fatalf("stale tab ID leaked: %q", m.Content) }
+	}
+	if !strings.Contains(history[2].Content, "历史工具结果") {
+		t.Fatalf("tool output lost historical labeling: %#v", history[2])
+	}
+}
