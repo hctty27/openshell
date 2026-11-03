@@ -13,13 +13,16 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import TerminalPane from "./TerminalPane";
 import { DialogProvider } from "./DialogProvider";
 import { api } from "../bridge";
-import {
-  ClipboardGetText,
-  ClipboardSetText,
-} from "../../wailsjs/runtime/runtime";
+import { Browser, Clipboard } from "@wailsio/runtime";
 import type { Tab } from "../types";
 
-const refs = vi.hoisted(() => ({ terms: [] as any[], webgl: [] as any[], searches: [] as any[], fits: [] as any[] }));
+const refs = vi.hoisted(() => ({
+  terms: [] as any[],
+  webgl: [] as any[],
+  searches: [] as any[],
+  fits: [] as any[],
+  links: [] as Array<(event: MouseEvent, url: string) => void>,
+}));
 const events = vi.hoisted(() => ({ listeners: new Map<string, (payload: any) => void>() }));
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
@@ -77,7 +80,11 @@ vi.mock("@xterm/addon-search", () => ({
   },
 }));
 vi.mock("@xterm/addon-web-links", () => ({
-  WebLinksAddon: class { constructor(_handler: unknown) {} },
+  WebLinksAddon: class {
+    constructor(handler: (event: MouseEvent, url: string) => void) {
+      refs.links.push(handler);
+    }
+  },
 }));
 vi.mock("@xterm/addon-webgl", () => ({
   WebglAddon: class {
@@ -117,10 +124,12 @@ vi.mock("../bridge", () => ({
   },
   errorText: (value: unknown) => String(value),
 }));
-vi.mock("../../wailsjs/runtime/runtime", () => ({
-  BrowserOpenURL: vi.fn(),
-  ClipboardGetText: vi.fn(async () => "echo hello"),
-  ClipboardSetText: vi.fn(async () => true),
+vi.mock("@wailsio/runtime", () => ({
+  Browser: { OpenURL: vi.fn(async () => {}) },
+  Clipboard: {
+    Text: vi.fn(async () => "echo hello"),
+    SetText: vi.fn(async () => {}),
+  },
 }));
 
 const tab: Tab = {
@@ -172,6 +181,7 @@ beforeEach(() => {
   refs.webgl.length = 0;
   refs.searches.length = 0;
   refs.fits.length = 0;
+  refs.links.length = 0;
   events.listeners.clear();
   vi.clearAllMocks();
   vi.stubGlobal(
@@ -199,9 +209,9 @@ test("copies selected text on left mouse release, but not when disabled", async 
   fireEvent.mouseDown(pane, { button: 0 });
   fireEvent.mouseUp(document, { button: 0 });
   await waitFor(() =>
-    expect(ClipboardSetText).toHaveBeenCalledWith("root@server:~"),
+    expect(Clipboard.SetText).toHaveBeenCalledWith("root@server:~"),
   );
-  vi.mocked(ClipboardSetText).mockClear();
+  vi.mocked(Clipboard.SetText).mockClear();
   rerender(
     <DialogProvider>
       <TerminalPane
@@ -223,7 +233,7 @@ test("copies selected text on left mouse release, but not when disabled", async 
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 5));
   });
-  expect(ClipboardSetText).not.toHaveBeenCalled();
+  expect(Clipboard.SetText).not.toHaveBeenCalled();
 });
 
 test("right click pastes via terminal input, multi-line paste requires confirmation", async () => {
@@ -234,7 +244,7 @@ test("right click pastes via terminal input, multi-line paste requires confirmat
     expect(refs.terms[0].paste).toHaveBeenCalledWith("echo hello"),
   );
   expect(api.WriteTerminal).toHaveBeenCalled();
-  vi.mocked(ClipboardGetText).mockResolvedValueOnce("pwd\nrm -rf example");
+  vi.mocked(Clipboard.Text).mockResolvedValueOnce("pwd\nrm -rf example");
   fireEvent.contextMenu(pane);
   expect(
     await screen.findByRole("dialog", { name: "确认粘贴多行命令" }),
@@ -245,6 +255,56 @@ test("right click pastes via terminal input, multi-line paste requires confirmat
   expect(refs.terms[0].paste).toHaveBeenCalledTimes(1);
 });
 
+test("clipboard writes report Wails v3 failures without expecting a boolean result", async () => {
+  vi.mocked(Clipboard.SetText).mockRejectedValueOnce(new Error("clipboard unavailable"));
+  const onNotice = vi.fn();
+  const { container } = renderTerminal({ onNotice });
+  refs.terms[0].selected = "text to copy";
+  const pane = container.querySelector(".terminal-pane")!;
+  fireEvent.mouseDown(pane, { button: 0 });
+  fireEvent.mouseUp(document, { button: 0 });
+
+  await waitFor(() => expect(Clipboard.SetText).toHaveBeenCalledWith("text to copy"));
+  await waitFor(() => expect(onNotice).toHaveBeenCalledWith(
+    expect.objectContaining({ message: "clipboard unavailable" }),
+  ));
+});
+
+test("clipboard read failures report an error and never paste", async () => {
+  vi.mocked(Clipboard.Text).mockRejectedValueOnce(new Error("clipboard read failed"));
+  const onNotice = vi.fn();
+  const { container } = renderTerminal({ onNotice });
+
+  fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
+  await waitFor(() => expect(onNotice).toHaveBeenCalledWith(
+    expect.objectContaining({ message: "clipboard read failed" }),
+  ));
+  expect(refs.terms[0].paste).not.toHaveBeenCalled();
+});
+
+test("Ctrl+Shift+V uses Wails v3 clipboard and preserves terminal input", async () => {
+  renderTerminal();
+  const keyEvent = {
+    type: "keydown", key: "v", ctrlKey: true, shiftKey: true,
+    altKey: false, metaKey: false, preventDefault: vi.fn(),
+  } as unknown as KeyboardEvent;
+
+  expect(refs.terms[0].keyHandler(keyEvent)).toBe(false);
+  expect(keyEvent.preventDefault).toHaveBeenCalled();
+  await waitFor(() => expect(Clipboard.Text).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(refs.terms[0].paste).toHaveBeenCalledWith("echo hello"));
+  expect(api.WriteTerminal).toHaveBeenCalled();
+});
+
+test("external HTTP links use the Wails v3 browser runtime", async () => {
+  renderTerminal();
+  expect(refs.links).toHaveLength(1);
+  refs.links[0](new MouseEvent("click"), "https://example.com");
+  await waitFor(() => expect(Browser.OpenURL).toHaveBeenCalledWith("https://example.com"));
+  refs.links[0](new MouseEvent("click"), "file:///secret");
+  expect(Browser.OpenURL).toHaveBeenCalledTimes(1);
+});
+
 test("TUI mouse handling is preserved when right-click paste is disabled", () => {
   const { container } = renderTerminal({ rightClickPaste: false });
   refs.terms[0].modes.mouseTrackingMode = "vt200";
@@ -253,7 +313,7 @@ test("TUI mouse handling is preserved when right-click paste is disabled", () =>
   const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 2 });
   expect(pane.dispatchEvent(down)).toBe(true);
   fireEvent.contextMenu(pane);
-  expect(ClipboardGetText).not.toHaveBeenCalled();
+  expect(Clipboard.Text).not.toHaveBeenCalled();
 });
 
 test("xterm 6.1 selects and copies in TUIs by default, Alt enables app mouse control", async () => {
@@ -268,16 +328,16 @@ test("xterm 6.1 selects and copies in TUIs by default, Alt enables app mouse con
   fireEvent.mouseDown(pane, { button: 0, altKey: true });
   fireEvent.mouseUp(document, { button: 0 });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
-  expect(ClipboardSetText).not.toHaveBeenCalled();
+  expect(Clipboard.SetText).not.toHaveBeenCalled();
 
   fireEvent.mouseDown(pane, { button: 0 });
   fireEvent.mouseUp(document, { button: 0 });
-  await waitFor(() => expect(ClipboardSetText).toHaveBeenCalledWith("selected TUI output"));
-  vi.mocked(ClipboardSetText).mockClear();
+  await waitFor(() => expect(Clipboard.SetText).toHaveBeenCalledWith("selected TUI output"));
+  vi.mocked(Clipboard.SetText).mockClear();
 
   fireEvent.mouseDown(pane, { button: 0, shiftKey: true });
   fireEvent.mouseUp(document, { button: 0 });
-  await waitFor(() => expect(ClipboardSetText).toHaveBeenCalledWith("selected TUI output"));
+  await waitFor(() => expect(Clipboard.SetText).toHaveBeenCalledWith("selected TUI output"));
 });
 
 test("right-click paste overrides TUI mouse capture when enabled", async () => {
@@ -309,11 +369,11 @@ test("Alt+right mouse remains available to TUIs and does not paste", () => {
   });
   expect(pane.dispatchEvent(up)).toBe(true);
   fireEvent.contextMenu(pane, { altKey: true });
-  expect(ClipboardGetText).not.toHaveBeenCalled();
+  expect(Clipboard.Text).not.toHaveBeenCalled();
 });
 
 test("multiline confirmation restores terminal focus before and after paste", async () => {
-  vi.mocked(ClipboardGetText).mockResolvedValueOnce("first\nsecond");
+  vi.mocked(Clipboard.Text).mockResolvedValueOnce("first\nsecond");
   const { container } = renderTerminal();
   const term = refs.terms[0];
   fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
@@ -329,7 +389,7 @@ test("multiline confirmation restores terminal focus before and after paste", as
 });
 
 test("multiline confirmation only pastes to the original connected tab", async () => {
-  vi.mocked(ClipboardGetText).mockResolvedValueOnce("pwd\nwhoami");
+  vi.mocked(Clipboard.Text).mockResolvedValueOnce("pwd\nwhoami");
   const { container, rerender } = renderTerminal();
   fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
   expect(
@@ -396,7 +456,7 @@ test("keyboard clipboard shortcuts preserve normal Ctrl+C and ordered writes", a
   expect(terminal.keyHandler(key("c", false))).toBe(true);
   terminal.selected = "selected output";
   expect(terminal.keyHandler(key("c", true))).toBe(false);
-  await waitFor(() => expect(ClipboardSetText).toHaveBeenCalledWith("selected output"));
+  await waitFor(() => expect(Clipboard.SetText).toHaveBeenCalledWith("selected output"));
   terminal.onDataCallback("first");
   terminal.onDataCallback("second");
   await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalled());
@@ -456,7 +516,7 @@ test("right click in terminal search does not paste into shell", async () => {
   refs.terms[0].keyHandler(keyEvent);
   const field = await screen.findByRole("textbox", { name: "搜索终端内容" });
   fireEvent.contextMenu(field);
-  expect(ClipboardGetText).not.toHaveBeenCalled();
+  expect(Clipboard.Text).not.toHaveBeenCalled();
 });
 
 test("repeated resize notifications do not duplicate SSH window changes", async () => {

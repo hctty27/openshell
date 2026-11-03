@@ -10,11 +10,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { api, listen, errorText } from "../bridge";
-import {
-  BrowserOpenURL,
-  ClipboardGetText,
-  ClipboardSetText,
-} from "../../wailsjs/runtime/runtime";
+import { Browser, Clipboard } from "@wailsio/runtime";
 import type { Tab, Ref, Theme, TerminalTheme, DisconnectBehavior, LocalShell } from "../types";
 import { resolveTerminalTheme } from "../terminalThemes";
 import { parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
@@ -117,7 +113,9 @@ export default function TerminalPane(p: Props) {
     term.loadAddon(search);
     searchAddon.current = search;
     term.loadAddon(new WebLinksAddon((_event, url) => {
-      if (/^https?:\/\//i.test(url)) BrowserOpenURL(url);
+      if (/^https?:\/\//i.test(url)) {
+        void Browser.OpenURL(url).catch((error) => callbacks.current.onNotice(error));
+      }
     }));
     terminal.current = term;
     fit.current = addon;
@@ -216,6 +214,12 @@ export default function TerminalPane(p: Props) {
       callbacks.current.onSelection?.(term.getSelection()),
     );
     let selectingWithMouse = false;
+    const copyToClipboard = (text: string) => {
+      if (!text) return;
+      void Clipboard.SetText(text).catch((error) => {
+        if (!disposed) callbacks.current.onNotice(error);
+      });
+    };
     const paneElement = container.current.parentElement ?? container.current;
     const onMouseDown = (event: MouseEvent) => {
       if ((event.target as HTMLElement).closest(".terminal-find, .terminal-transfer-indicator, .terminal-pane-undock")) return;
@@ -252,21 +256,14 @@ export default function TerminalPane(p: Props) {
           return;
         const text = term.getSelection();
         if (!text) return;
-        void ClipboardSetText(text)
-          .then((success) => {
-            if (!success)
-              callbacks.current.onNotice(
-                message("terminal:failedToCopySelection"),
-              );
-          })
-          .catch((error) => callbacks.current.onNotice(error));
+        copyToClipboard(text);
       }, 0);
     };
     const pasteFromClipboard = async () => {
       if (pastePending || disposed || !callbacks.current.active) return;
       pastePending = true;
       try {
-        const text = await ClipboardGetText();
+        const text = await Clipboard.Text();
         if (disposed || !callbacks.current.active || !text) return;
         if (callbacks.current.confirmMultilinePaste && /[\r\n]/.test(text)) {
           const accepted = await dialogsRef.current.confirm({
@@ -319,9 +316,7 @@ export default function TerminalPane(p: Props) {
         case "c": {
           event.preventDefault();
           const selected = term.getSelection();
-          if (selected) {
-            void ClipboardSetText(selected).catch((error) => callbacks.current.onNotice(error));
-          }
+          copyToClipboard(selected);
           return false;
         }
         case "v":
