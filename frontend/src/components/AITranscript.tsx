@@ -174,11 +174,13 @@ export default function AITranscript({ messages, execution = "independent" }: {
     <>
       {entries.map(entry => {
         if (entry.kind === "tools") {
+          const importantNote = /警告|风险|注意|失败|异常|不可逆|丢失|谨慎|请确认|无法|已停止/.test(entry.note);
           return (
             <div key={entry.id} className="ai-step-group" aria-label="执行记录">
+              {importantNote && <p className="ai-step-warning">{entry.note}</p>}
               {entry.steps.map((step, index) => (
                 <AIToolCard key={step.call.id || index} step={step} execution={execution}
-                  note={index === 0 ? entry.note : undefined} />
+                  note={index === 0 && !importantNote ? entry.note : undefined} />
               ))}
             </div>
           );
