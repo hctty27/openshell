@@ -49,6 +49,9 @@ type connection struct {
 	writer   *terminalWriter
 	aiController *AITerminalLease
 	readiness terminalShellReadiness
+	serverVersion string
+	aiExecProbed bool
+	aiExecSupported bool
 	transferring bool
 	zmodemSelection *zmodemSelection
 	history  *History
@@ -142,7 +145,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 		if errors.As(err, &hostErr) { return ref, hostErr }
 		return ref, domain.Error("connect", apperror.Wrap("sshConnect", err, nil).Error())
 	}
-	c := &connection{ref: ref, session: s, client: client, hops: jumpClients, history: NewHistory(1024 * 1024)}
+	c := &connection{ref: ref, session: s, client: client, serverVersion: string(client.ServerVersion()), hops: jumpClients, history: NewHistory(1024 * 1024)}
 	if err := m.prepareLocalForwards(c, s.LocalForwards); err != nil {
 		closeSSHConnection(c)
 		return ref, domain.Error("local_forward", err.Error())
