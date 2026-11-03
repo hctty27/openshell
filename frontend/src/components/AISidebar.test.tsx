@@ -124,7 +124,7 @@ test("legacy conversation requires explicit target rebinding", async () => {
   expect(screen.queryByText(/没有可验证的目标服务器信息/)).toBeNull();
 });
 
-test("visible terminal execution requires explicit readiness and sends selected execution mode", async () => {
+test("visible terminal mode uses automatic readiness detection without confirmation checkbox", async () => {
   vi.mocked(api.AIProviders).mockResolvedValueOnce([{
     id: "p1", name: "cpa", baseUrl: "https://example.test/v1", hasKey: true,
     models: [{ id: "gpt-test", name: "gpt-test" }],
@@ -138,12 +138,12 @@ test("visible terminal execution requires explicit readiness and sends selected 
     target: { value: "检查当前目录" },
   });
   const send = screen.getByRole("button", { name: "发送" }) as HTMLButtonElement;
-  expect(send.disabled).toBe(true);
-  fireEvent.click(screen.getByRole("checkbox", { name: /终端已停留在空白 Shell 提示符/ }));
+  expect(screen.getByText(/自动检测 Shell 是否空闲/)).toBeTruthy();
+  expect(screen.queryByRole("checkbox", { name: /终端已停留在空白 Shell 提示符/ })).toBeNull();
   expect(send.disabled).toBe(false);
   fireEvent.click(send);
   await waitFor(() => expect(api.AIStart).toHaveBeenCalledWith(expect.objectContaining({
-    execution: "terminal", terminalReady: true, targets: [connectedTab.ref],
+    execution: "terminal", targets: [connectedTab.ref],
   })));
 });
 
