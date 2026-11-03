@@ -39,9 +39,12 @@ func (r *terminalShellReadiness) observe(p []byte) {
 
 	// Integration events may span SSH data chunks. Process only complete
 	// escapes, keeping just enough lookbehind to recognize split sequences.
-	for _, match := range shellBoundaryPattern.FindAllSubmatch(combined, -1) {
+	previousBytes := len(r.tail)
+	for _, match := range shellBoundaryPattern.FindAllSubmatchIndex(combined, -1) {
+		// Avoid replaying a marker fully contained in the lookbehind.
+		if match[1] <= previousBytes { continue }
 		r.integration = true
-		switch match[1][0] {
+		switch combined[match[2]] {
 		case 'B':
 			r.prompt = true
 			r.manualInput = false
@@ -49,8 +52,9 @@ func (r *terminalShellReadiness) observe(p []byte) {
 			r.prompt = false
 		}
 	}
-	for _, match := range alternateBufferPattern.FindAllSubmatch(combined, -1) {
-		r.alternate = match[1][0] == 'h'
+	for _, match := range alternateBufferPattern.FindAllSubmatchIndex(combined, -1) {
+		if match[1] <= previousBytes { continue }
+		r.alternate = combined[match[2]] == 'h'
 		if r.alternate { r.prompt = false }
 	}
 
