@@ -46,6 +46,8 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
   const finishedTasks = useRef(new Set<string>());
 
   useEffect(() => {
+    // Older test fixtures may not expose the optional AI service methods.
+    if (typeof api.AIProviders !== "function" || typeof api.AIConversations !== "function") return;
     let valid = true;
     Promise.all([api.AIProviders(), api.AIConversations()])
       .then(([p, c]) => {
