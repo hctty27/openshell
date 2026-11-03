@@ -185,6 +185,7 @@ beforeEach(() => {
     cb(0);
     return 1;
   });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
 });
 afterEach(() => {
   cleanup();
@@ -782,4 +783,67 @@ test("local terminal returns output credits after xterm parses and ignores stale
     expect(api.AcknowledgeLocalTerminalOutput).toHaveBeenCalledWith(tab.id, localID, 2),
   );
   expect(api.AcknowledgeTerminalOutput).not.toHaveBeenCalled();
+});
+
+
+test("transfer focus restoration is scoped to the active connection and respects focused controls", () => {
+  const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  const pane = (request?: { ref: NonNullable<Tab["ref"]> }, active = true) => (
+    <DialogProvider>
+      <TerminalPane tab={tab} active={active} fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} transferFocusRequest={request} />
+    </DialogProvider>
+  );
+  const { rerender } = render(pane());
+  const terminal = refs.terms[0];
+  terminal.focus.mockClear();
+
+  rerender(pane({ ref: { ...tab.ref!, generation: 2 } }));
+  expect(terminal.focus).not.toHaveBeenCalled();
+
+  rerender(pane({ ref: tab.ref! }));
+  expect(terminal.focus).toHaveBeenCalledTimes(1);
+  terminal.focus.mockClear();
+
+  const external = document.createElement("button");
+  document.body.append(external);
+  external.focus();
+  rerender(pane({ ref: tab.ref! }));
+  expect(terminal.focus).not.toHaveBeenCalled();
+
+  external.remove();
+  hasFocus.mockReturnValue(false);
+  rerender(pane({ ref: tab.ref! }));
+  expect(terminal.focus).not.toHaveBeenCalled();
+
+  hasFocus.mockReturnValue(true);
+  rerender(pane({ ref: tab.ref! }, false));
+  expect(terminal.focus).not.toHaveBeenCalled();
+  hasFocus.mockRestore();
+});
+
+test("transfer completion does not focus a terminal behind a modal dialog", () => {
+  const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  const pane = (request?: { ref: NonNullable<Tab["ref"]> }) => (
+    <DialogProvider>
+      <TerminalPane tab={tab} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} transferFocusRequest={request} />
+    </DialogProvider>
+  );
+  const { rerender } = render(pane());
+  const terminal = refs.terms[0];
+  terminal.focus.mockClear();
+
+  const dialog = document.createElement("dialog");
+  dialog.setAttribute("open", "");
+  document.body.append(dialog);
+  rerender(pane({ ref: tab.ref! }));
+  expect(terminal.focus).not.toHaveBeenCalled();
+
+  dialog.remove();
+  rerender(pane({ ref: tab.ref! }));
+  expect(terminal.focus).toHaveBeenCalledTimes(1);
+  hasFocus.mockRestore();
 });
