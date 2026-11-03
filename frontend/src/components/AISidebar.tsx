@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Check, ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Send, Settings2, Sparkles, Square, Trash2, X } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, Tab } from "../types";
@@ -43,6 +43,7 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
   const [approval, setApproval] = useState<Approval | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const finishedTasks = useRef(new Set<string>());
 
   useEffect(() => {
     let valid = true;
@@ -60,6 +61,7 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
     const offConversation = listen("ai:conversation", (next: AIConversation) => {
       setConversations(old => [next, ...old.filter(item => item.id !== next.id)]
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+      setStream("");
     });
     const offDelta = listen("ai:delta", (event: { taskId: string; text: string }) => {
       setStream(old => old + event.text);
@@ -67,7 +69,8 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
     const offState = listen("ai:state", (event: { taskId: string; status: string; detail: string }) => {
       setStatus(event.status === "completed" ? "任务完成" : event.status === "running" ? "正在执行" : event.detail || event.status);
       if (event.status !== "running") {
-        setRunning(null);
+        finishedTasks.current.add(event.taskId);
+        setRunning(old => old?.taskId === event.taskId ? null : old);
         setStream("");
         setApproval(null);
       }
@@ -159,7 +162,7 @@ export default function AISidebar({ tabs, active, pinned, onTogglePin, onClose }
         conversationId: conversationID, providerId: provider.id, modelId: model.id,
         mode, text, targets: targets.map(tab => tab.ref!),
       });
-      setRunning(started);
+      if (!finishedTasks.current.has(started.taskId)) setRunning(started);
       setConversationID(started.conversationId);
       setMessage("");
     } catch (e) { setError(errorText(e)); setStatus(""); }
