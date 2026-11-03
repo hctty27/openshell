@@ -46,7 +46,7 @@ test("AI interface components do not reintroduce hard-coded Chinese UI strings",
   for (const file of ["../components/AISidebar.tsx", "../components/AIModelPicker.tsx",
     "../components/TerminalPane.tsx", "../App.tsx"]) {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
-    const implementation = source.split("\\n").filter(line => !line.trim().startsWith("//")).join("\\n");
-    expect(implementation, file).not.toMatch(/[\\u3400-\\u9fff]/);
+    const implementation = source.split("\n").filter(line => !line.trim().startsWith("//")).join("\n");
+    expect(implementation, file).not.toMatch(/[\u3400-\u9fff]/);
   }
 });
