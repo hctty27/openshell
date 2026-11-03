@@ -150,6 +150,7 @@
   "connectionLostReasonConnectionLost": "网络连接中断",
   "sessionTabs": "已打开的终端标签",
   "sessionTabDescription": "{{name}}。拖动调整顺序，或按 Alt+Shift+左右方向键移动；双击复制会话。",
+  "backgroundSessionOutput": "后台有新的终端输出",
   "connectionFailed": "连接失败",
   "localTerminal": "本地终端",
   "closeActiveSessionTitle": "关闭 SSH 会话？",
