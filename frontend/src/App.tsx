@@ -49,6 +49,7 @@ import SFTPView from "./components/SFTPView";
 import WindowTitleBar from "./components/WindowTitleBar";
 import ZmodemFilePicker from "./components/ZmodemFilePicker";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
+import { useTabActivity } from "./features/sessions/useTabActivity";
 import { useAutoReconnect } from "./features/sessions/useAutoReconnect";
 import { useSplitWorkspace } from "./features/terminal/useSplitWorkspace";
 import { useTabSplitDrop } from "./features/terminal/useTabSplitDrop";
@@ -273,6 +274,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
   } = useSplitWorkspace({
     tabs, activeID, showSFTP, initialRatio: initialState.splitRatio, onError: notify,
   });
+  const { unreadTabIDs, onRemoteOutput } = useTabActivity({ tabs, visibleTabIDs, hasActiveTransfers });
   const { splitDropPreview, onTabPointerMove, onTabPointerDrop, clearDropPreview } = useTabSplitDrop({
     tabs, layout, splitContainerRef, showSFTP, applyDrop, setActiveID, onError: notify,
   });
@@ -972,7 +974,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           setAutoSidebarOpen(false);
         }
       }}>
-        <WorkspaceTabStrip tabs={tabs} activeID={activeID}
+        <WorkspaceTabStrip tabs={tabs} activeID={activeID} unreadTabIDs={unreadTabIDs}
           disconnectBehavior={state.disconnectBehavior ?? "local"}
           onActivate={setActiveID}
           onDuplicate={tab => open(tab.session, tab.id)}
@@ -1100,6 +1102,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                     }
                   } : undefined}
                   onActivate={() => setActiveID(tab.id)}
+                  onRemoteOutput={onRemoteOutput}
                   onDirectoryChange={(ref, directory) => {
                     update(ref.tabId, current =>
                       current.ref?.sessionId === ref.sessionId &&
