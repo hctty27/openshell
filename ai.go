@@ -248,6 +248,7 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 		if e == nil { targets = append(targets, fmt.Sprintf("%s = %s (%s@%s)", target, s.Name, s.Username, s.Host)) }
 	}
 	system += strings.Join(targets, "\n")
+	system += "\\n回答应简洁、具体。调用工具前通常无需输出“我先检查”“正在执行”等无信息量的说明，直接调用工具。用户已经能通过执行卡片查看命令与原始输出，所以最终答复只概括关键发现、异常、是否处理成功和必要的下一步，不重复粘贴长日志或逐条复述全部命令。遇到失败、风险或重要不确定性必须明确说明，不得省略；不得因为简洁而省略必需的用户确认。"
 	toolDescription := "在已授权的 SSH 会话中使用独立 SSH channel 执行非交互命令，不影响用户当前终端。请审慎决定是否需要确认。"
 	if terminalLease != nil {
 		system += "\n当前是可见终端操作模式：所有 ssh_exec 命令会在用户已打开的同一 Shell 中执行并显示在终端，工作目录和 Shell 环境可持续保留。不要运行交互式 TUI、需要密码交互的命令、后台持续输出或长时间不结束的命令；不要调用 exit。终端会被临时独占，失败时不得猜测命令完成。"
