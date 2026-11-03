@@ -43,6 +43,14 @@ type AIMessage struct {
 	ToolCallID string `json:"tool_call_id,omitempty"`
 }
 
+type AITargetBinding struct {
+	SessionID string `json:"sessionId"`
+	Name string `json:"name"`
+	Host string `json:"host"`
+	Port int `json:"port"`
+	Username string `json:"username"`
+}
+
 type AIConversation struct {
 	ID string `json:"id"`
 	Title string `json:"title"`
@@ -51,6 +59,7 @@ type AIConversation struct {
 	Mode string `json:"mode"`
 	TargetNames []string `json:"targetNames"`
 	TargetSessionIDs []string `json:"targetSessionIds,omitempty"`
+	TargetBindings []AITargetBinding `json:"targetBindings,omitempty"`
 	Messages []AIMessage `json:"messages"`
 	UpdatedAt string `json:"updatedAt"`
 }
