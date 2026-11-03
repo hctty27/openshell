@@ -100,3 +100,15 @@ test("terminal mode offers original terminal output and pending calls remain cle
   expect(screen.getByText(/在当前终端查看/)).toBeTruthy();
   expect(screen.getByText("等待执行结果…")).toBeTruthy();
 });
+
+test("uncertain tool result is visible without claiming success", () => {
+  render(<AITranscript messages={[
+    { role: "assistant", content: "", tool_calls: tool("unknown-1", "sftp_read", {
+      target: "t1", path: "/tmp/config",
+    }) },
+    { role: "tool", tool_call_id: "unknown-1", content: "ssh: session not active" },
+  ]} />);
+  expect(screen.getByText("待核对")).toBeTruthy();
+  expect(screen.getByRole("button", { name: /读取文件/ }).getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByText("ssh: session not active")).toBeTruthy();
+});
