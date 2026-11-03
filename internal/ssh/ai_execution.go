@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"io"
-
-	"golang.org/x/crypto/ssh"
 	"strings"
 	"time"
 
 	"github.com/hctty27/openshell/internal/domain"
+	"golang.org/x/crypto/ssh"
 )
 
 // AIExecutionMode decides the command transport before sending an AI command.
@@ -69,22 +68,36 @@ func probeAIExec(ctx context.Context, client interface{ NewSession() (*ssh.Sessi
 	if client == nil { return false }
 	probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	session, err := client.NewSession()
-	if err != nil { return false }
-	defer session.Close()
+	result := make(chan bool, 1)
 
-	token := "OPEN_SHELL_AI_EXEC_" + strings.ReplaceAll(domain.NewID(), "-", "")
-	output := &aiProbeOutput{}
-	session.Stdout = output
-	session.Stderr = io.Discard
-	done := make(chan error, 1)
-	go func() { done <- session.Run("printf '%s' '" + token + "'") }()
+	go func() {
+		// NewSession itself may block if the SSH peer never replies to the
+		// channel-open request. Keep the caller bounded without closing the
+		// shared SSH transport or touching the user's visible terminal.
+		session, err := client.NewSession()
+		if err != nil { result <- false; return }
+		defer session.Close()
+		if probeCtx.Err() != nil { result <- false; return }
+
+		token := "OPEN_SHELL_AI_EXEC_" + strings.ReplaceAll(domain.NewID(), "-", "")
+		output := &aiProbeOutput{}
+		session.Stdout = output
+		session.Stderr = io.Discard
+		done := make(chan error, 1)
+		go func() { done <- session.Run("printf '%s' '" + token + "'") }()
+		select {
+		case err := <-done:
+			result <- err == nil && string(output.data) == token
+		case <-probeCtx.Done():
+			_ = session.Close()
+			result <- false
+		}
+	}()
 
 	select {
-	case err := <-done:
-		return err == nil && string(output.data) == token
+	case supported := <-result:
+		return supported
 	case <-probeCtx.Done():
-		_ = session.Close()
 		return false
 	}
 }
