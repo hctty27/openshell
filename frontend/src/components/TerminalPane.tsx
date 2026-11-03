@@ -13,7 +13,7 @@ import { api, listen, errorText } from "../bridge";
 import { Browser, Clipboard } from "@wailsio/runtime";
 import type { Tab, Ref, Theme, TerminalTheme, DisconnectBehavior, LocalShell } from "../types";
 import { resolveTerminalTheme } from "../terminalThemes";
-import { buildRemoteCdCommand, parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
+import { buildRemoteCdCommand, decideCloneDirectoryAction, parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
 import { useDialogs } from "./DialogProvider";
 import { attachImeFocusRecovery } from "../features/terminal/imeFocusRecovery";
 interface Props {
@@ -145,8 +145,12 @@ export default function TerminalPane(p: Props) {
     if (local && p.showDisconnectReason !== false) {
       term.write(`\r\n\x1b[90m[${t("terminal:remoteConnectionClosed")}]\x1b[0m\r\n`);
     }
+    let initialReportedDirectory: string | undefined;
     const reportDirectory = (directory: string | null) => {
-      if (!disposed && directory && ref && terminalMode === "ssh") callbacks.current.onDirectoryChange?.(ref, directory);
+      if (!disposed && directory && ref && terminalMode === "ssh") {
+        initialReportedDirectory = directory;
+        callbacks.current.onDirectoryChange?.(ref, directory);
+      }
       return Boolean(directory);
     };
     const cwdHooks = [
@@ -166,6 +170,28 @@ export default function TerminalPane(p: Props) {
     let lastSize = "";
     const same = (r: Ref) =>
       !!ref && r.tabId === ref.tabId && r.generation === ref.generation;
+    const restoreClonedDirectory = () => {
+      if (!opened || disposed || local || !ref || cloneCwdSent.current || term.buffer.active.type !== "normal") return;
+      if (!callbacks.current.tab.ref || !same(callbacks.current.tab.ref)) return;
+
+      const buffer = term.buffer.normal;
+      const prompt = buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(true) ?? "";
+      const directory = callbacks.current.tab.cloneCwd ?? "";
+      const action = decideCloneDirectoryAction(
+        directory, callbacks.current.tab.home, prompt, initialReportedDirectory,
+      );
+      if (action === "wait") return;
+      cloneCwdSent.current = true;
+      if (action !== "send") return;
+
+      const command = buildRemoteCdCommand(directory);
+      if (!command) return;
+      const bytes = new TextEncoder().encode(command);
+      const binary = Array.from(bytes, byte => String.fromCharCode(byte)).join("");
+      void api.WriteTerminal(ref, btoa(binary)).catch(error => {
+        if (!disposed) callbacks.current.onNotice(error);
+      });
+    };
     const off = listen(local ? "local:output" : "ssh:output", (payload) => {
       if (disposed || terminalMode === "offline") return;
       if (local ? (payload.tabId !== p.tab.id || payload.terminalId !== localID) : !same(payload.ref)) return;
@@ -178,6 +204,7 @@ export default function TerminalPane(p: Props) {
       term.write(bytes, () => {
         lastProcessedSequence = Math.max(lastProcessedSequence, sequence);
         acknowledge();
+        restoreClonedDirectory();
       });
     });
     const encoder = new TextEncoder();
@@ -218,6 +245,8 @@ export default function TerminalPane(p: Props) {
     };
     const input = term.onData((data) => {
       if (terminalMode === "offline" || (terminalMode === "ssh" && callbacks.current.aiControlled)) return;
+      // Never inject an automatic cd after the user has started interacting.
+      if (terminalMode === "ssh" && callbacks.current.tab.cloneCwd) cloneCwdSent.current = true;
       inputQueue.push(data);
       scheduleInput();
     });
@@ -398,17 +427,7 @@ export default function TerminalPane(p: Props) {
           lastSize = `${cols}x${rows}`;
           sendResize();
           if (callbacks.current.active) term.focus();
-          if (!local && ref && !cloneCwdSent.current) {
-            cloneCwdSent.current = true;
-            const command = buildRemoteCdCommand(callbacks.current.tab.cloneCwd ?? "");
-            if (command) {
-              const bytes = new TextEncoder().encode(command);
-              const binary = Array.from(bytes, byte => String.fromCharCode(byte)).join("");
-              void api.WriteTerminal(ref, btoa(binary)).catch(error => {
-                if (!disposed) callbacks.current.onNotice(error);
-              });
-            }
-          }
+          restoreClonedDirectory();
         })
         .catch((e) => {
           // A reconnect can cancel a pending ConPTY launch or SSH open.
