@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { initializeI18n } from "../i18n";
 import AIModelPicker from "./AIModelPicker";
 import type { AIProvider } from "../types";
 
@@ -14,6 +15,7 @@ const providers: AIProvider[] = [
   },
 ];
 
+beforeEach(async () => { await initializeI18n("zh-CN"); });
 afterEach(cleanup);
 
 test("combines provider and model in a single searchable picker", () => {
@@ -54,4 +56,13 @@ test("picker is disabled while AI is executing", () => {
   render(<AIModelPicker providers={providers} providerID="p1" modelID="gpt-6"
     disabled onChange={vi.fn()} />);
   expect((screen.getByRole("combobox", { name: "选择 AI 模型" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+
+test("model picker labels follow the current language", async () => {
+  await initializeI18n("en");
+  render(<AIModelPicker providers={providers} providerID="p1" modelID="missing"
+    onChange={vi.fn()} />);
+  expect(screen.getByRole("combobox", { name: "Choose AI model" })).toBeTruthy();
+  expect(screen.getByText("Model unavailable. Select another model.")).toBeTruthy();
 });

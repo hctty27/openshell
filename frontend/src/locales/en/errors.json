@@ -202,5 +202,22 @@
   "noActiveFileTransfer": "No active ZMODEM transfer to cancel",
   "inspectionCommandNotAllowed": "This command is not on the parallel read-only inspection allowlist. Run it against a specific target with confirmation instead.",
   "parallelInspectionDoesNotAcceptTargetId": "Parallel inspection uses all authorized sessions and must not specify a target ID.",
-  "credentialsInCommandNotAllowed": "AI commands must not embed plaintext credentials. Use a managed credential or authenticate manually."
+  "credentialsInCommandNotAllowed": "AI commands must not embed plaintext credentials. Use a managed credential or authenticate manually.",
+  "aiInvalidBaseURL": "Invalid API Base URL",
+  "aiInvalidProviderDetails": "Enter a name and add 1–40 models",
+  "aiInvalidModelID": "Invalid model ID",
+  "aiMissingAPIKey": "Enter an API key",
+  "aiCannotDeleteRunningConversation": "Stop the running task before deleting this conversation",
+  "aiInvalidMessageLength": "Message is empty or too long (maximum 12,000 bytes)",
+  "aiInvalidMode": "Invalid execution review mode",
+  "aiInvalidExecution": "Invalid AI execution method",
+  "aiTerminalSingleTarget": "Current-terminal execution requires exactly one connected SSH session",
+  "aiSelectConfiguredModel": "Select a configured AI model",
+  "aiTargetCount": "Select 1–12 target sessions",
+  "aiIndependentUnsupported": "This connection does not safely support independent execution. Select Auto or Current terminal.",
+  "aiMultiTargetTerminalUnsupported": "Some targets do not support independent execution. Automatic terminal control currently supports only one target.",
+  "aiConversationRunning": "This conversation already has a running task",
+  "aiMissingToolCallID": "AI API returned a tool call without an ID",
+  "aiEmptyResponse": "AI API returned an empty response",
+  "aiExecutionProbeFailed": "Could not determine SSH execution capabilities"
 }

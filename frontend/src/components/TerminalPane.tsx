@@ -648,9 +648,9 @@ export default function TerminalPane(p: Props) {
       {p.aiControlled && (
         <div className="terminal-ai-control" role="status">
           <Sparkles size={14} aria-hidden="true" />
-          <span>AI 正在操作 · {p.tab.session.name}</span>
+          <span>{t("ai:terminalInUse", { name: p.tab.session.name })}</span>
           <button type="button" onClick={p.onTakeControl}
-            title="停止 AI 并重新接管终端">接管终端</button>
+            title={t("ai:stopAiAndTakeControl")}>{t("ai:takeControl")}</button>
         </div>
       )}
       {p.paneBounds && p.onUndock && (

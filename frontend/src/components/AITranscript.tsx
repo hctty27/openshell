@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Clock3, FilePenLine, FileText, FolderOpen, Terminal } from "lucide-react";
 import type { AIMessage, AIToolCall } from "../types";
+import { t } from "../i18n";
+import { useTranslation } from "react-i18next";
 
 interface ToolStep {
   call: AIToolCall;
@@ -103,13 +105,13 @@ function toolTitle(call: AIToolCall): { label: string; detail: string } {
   const path = stringArg(args.path);
   switch (call.function.name) {
     case "ssh_exec":
-      return { label: "终端命令", detail: stringArg(args.command) || "命令参数不可解析" };
+      return { label: t("ai:terminalCommand"), detail: stringArg(args.command) || t("ai:invalidCommandArgs") };
     case "sftp_list":
-      return { label: "查看目录", detail: path || "/" };
+      return { label: t("ai:listDirectory"), detail: path || "/" };
     case "sftp_read":
-      return { label: "读取文件", detail: path || "文件路径未知" };
+      return { label: t("ai:readFile"), detail: path || t("ai:unknownFilePath") };
     case "sftp_write":
-      return { label: "修改文件", detail: path || "文件路径未知" };
+      return { label: t("ai:writeFile"), detail: path || t("ai:unknownFilePath") };
     default:
       return { label: call.function.name, detail: "" };
   }
@@ -120,6 +122,7 @@ function AIToolCard({ step, execution, note }: {
   execution: "independent" | "terminal";
   note?: string;
 }) {
+  useTranslation("ai");
   const { call, result } = step;
   const state = toolState(call, result);
   const [expanded, setExpanded] = useState(state === "failed" || state === "unknown");
@@ -127,8 +130,8 @@ function AIToolCard({ step, execution, note }: {
     if (state === "failed" || state === "unknown") setExpanded(true);
   }, [state]);
   const title = toolTitle(call);
-  const statusLabel = state === "success" ? "成功" :
-    state === "failed" ? "失败" : state === "running" ? "执行中" : "待核对";
+  const statusLabel = state === "success" ? t("ai:success") :
+    state === "failed" ? t("ai:failed") : state === "running" ? t("ai:inProgress") : t("ai:needsReview");
   const Icon = call.function.name === "ssh_exec" ? Terminal :
     call.function.name === "sftp_list" ? FolderOpen :
       call.function.name === "sftp_write" ? FilePenLine : FileText;
@@ -154,11 +157,11 @@ function AIToolCard({ step, execution, note }: {
         <div id={id} className="ai-step-detail">
           {note?.trim() && <p className="ai-step-note">{note.trim()}</p>}
           {call.function.name === "ssh_exec" && execution === "terminal" &&
-            <p className="ai-step-hint">命令执行过程也可以在当前终端查看。</p>}
-          <div className="ai-step-detail-heading">调用参数</div>
+            <p className="ai-step-hint">{t("ai:terminalExecutionHint")}</p>}
+          <div className="ai-step-detail-heading">{t("ai:toolArguments")}</div>
           <pre>{call.function.arguments}</pre>
-          <div className="ai-step-detail-heading">执行结果</div>
-          <pre>{result?.content || (state === "running" ? "等待执行结果…" : "无输出")}</pre>
+          <div className="ai-step-detail-heading">{t("ai:toolResult")}</div>
+          <pre>{result?.content || (state === "running" ? t("ai:waitingForResult") : t("ai:noOutput"))}</pre>
         </div>
       )}
     </div>
@@ -169,14 +172,15 @@ export default function AITranscript({ messages, execution = "independent" }: {
   messages: AIMessage[];
   execution?: "independent" | "terminal";
 }) {
+  useTranslation("ai");
   const entries = buildTranscript(messages);
   return (
     <>
       {entries.map(entry => {
         if (entry.kind === "tools") {
-          const importantNote = /警告|风险|注意|失败|异常|不可逆|丢失|谨慎|请确认|无法|已停止/.test(entry.note);
+          const importantNote = /警告|风险|注意|失败|异常|不可逆|丢失|谨慎|请确认|无法|已停止|warning|risk|caution|failed|error|irreversible|lost|confirm|unable|stopped/i.test(entry.note);
           return (
-            <div key={entry.id} className="ai-step-group" aria-label="执行记录">
+            <div key={entry.id} className="ai-step-group" aria-label={t("ai:executionHistory")}>
               {importantNote && <p className="ai-step-warning">{entry.note}</p>}
               {entry.steps.map((step, index) => (
                 <AIToolCard key={step.call.id || index} step={step} execution={execution}
@@ -188,7 +192,7 @@ export default function AITranscript({ messages, execution = "independent" }: {
         if (entry.kind === "orphan") {
           return (
             <details key={entry.id} className="ai-step-orphan">
-              <summary>历史工具结果（查看详情）</summary>
+              <summary>{t("ai:previousToolResults")}</summary>
               <pre>{entry.message.content}</pre>
             </details>
           );

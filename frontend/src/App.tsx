@@ -1336,10 +1336,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
           }}
         >
           {!aiPinned && (
-            <button className="ai-rail" title="展开 AI 助手" aria-label="展开 AI 助手"
+            <button className="ai-rail" title={tr("ai:expandAiAssistant")} aria-label={tr("ai:expandAiAssistant")}
               aria-expanded={aiOpen} onClick={() => setAIHoverOpen(true)} />
           )}
-          {aiPinned && <div className="ai-dock-splitter" onPointerDown={startAIResize} role="separator" aria-label="调整 AI 侧栏宽度" />}
+          {aiPinned && <div className="ai-dock-splitter" onPointerDown={startAIResize} role="separator" aria-label={tr("ai:resizeAiSidebar")} />}
           <AISidebar tabs={tabs} active={active} pinned={aiSidebarMode === "pinned"} isOpen={aiOpen}
             terminalAlternate={Boolean(active?.ref && alternateTerminals[activeID]?.generation === active.ref.generation && alternateTerminals[activeID]?.active)}
             onTogglePin={toggleAIPin} onClose={closeAI} />

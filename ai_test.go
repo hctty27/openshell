@@ -64,3 +64,13 @@ func TestAIHistoryContextNeverReplaysHistoricalTools(t *testing.T) {
 		t.Fatalf("tool output lost historical labeling: %#v", history[2])
 	}
 }
+
+
+func TestAIPromptTextUsesCurrentLanguage(t *testing.T) {
+	if got := aiPromptText("en", "English", "中文"); got != "English" {
+		t.Fatalf("English prompt: %q", got)
+	}
+	if got := aiPromptText("zh-CN", "English", "中文"); got != "中文" {
+		t.Fatalf("Chinese prompt: %q", got)
+	}
+}

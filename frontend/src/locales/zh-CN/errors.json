@@ -202,5 +202,22 @@
   "noActiveFileTransfer": "当前没有可取消的 ZMODEM 文件传输",
   "inspectionCommandNotAllowed": "此命令不属于允许并行执行的只读检查，请改为逐台执行并确认",
   "parallelInspectionDoesNotAcceptTargetId": "并行检查自动使用全部已授权会话，不接受单独的目标会话 ID",
-  "credentialsInCommandNotAllowed": "AI 命令不能携带明文凭据，请使用受控凭据配置或手动认证"
+  "credentialsInCommandNotAllowed": "AI 命令不能携带明文凭据，请使用受控凭据配置或手动认证",
+  "aiInvalidBaseURL": "无效的 API Base URL",
+  "aiInvalidProviderDetails": "请填写名称并添加 1–40 个模型",
+  "aiInvalidModelID": "模型 ID 无效",
+  "aiMissingAPIKey": "需要填写 API Key",
+  "aiCannotDeleteRunningConversation": "不能删除正在执行的对话",
+  "aiInvalidMessageLength": "消息为空或超过长度限制（最大 12,000 字节）",
+  "aiInvalidMode": "执行模式无效",
+  "aiInvalidExecution": "终端操作方式无效",
+  "aiTerminalSingleTarget": "当前终端操作仅支持一个已连接 SSH 会话",
+  "aiSelectConfiguredModel": "请选择已配置模型",
+  "aiTargetCount": "请选择 1–12 个目标会话",
+  "aiIndependentUnsupported": "当前连接不支持安全的独立执行，请选择自动选择或当前终端",
+  "aiMultiTargetTerminalUnsupported": "部分目标不支持独立执行。自动模式暂不支持多会话终端接管，请仅选择一个目标",
+  "aiConversationRunning": "该对话已有任务正在运行",
+  "aiMissingToolCallID": "AI API 返回的工具调用缺少 ID",
+  "aiEmptyResponse": "AI API 返回了空响应",
+  "aiExecutionProbeFailed": "检测 SSH 执行能力失败"
 }

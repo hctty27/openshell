@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown, Cpu, Search } from "lucide-react";
 import type { AIProvider } from "../types";
+import { t } from "../i18n";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   providers: AIProvider[];
@@ -18,6 +20,7 @@ type ModelOption = {
 };
 
 export default function AIModelPicker({ providers, providerID, modelID, disabled, onChange }: Props) {
+  useTranslation("ai");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
@@ -92,10 +95,10 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
     <div className="ai-model-picker" ref={rootRef}>
       <button ref={triggerRef} type="button"
         className="ai-model-picker__trigger"
-        role="combobox" aria-label="选择 AI 模型"
+        role="combobox" aria-label={t("ai:chooseModel")}
         aria-expanded={open} aria-haspopup="listbox" aria-controls={listID}
         aria-invalid={missing || undefined}
-        title={selected ? `${selected.providerName} · ${selected.modelName}` : "选择模型"}
+        title={selected ? `${selected.providerName} · ${selected.modelName}` : t("ai:selectModel")}
         disabled={disabled}
         onClick={() => setOpen(value => !value)}
         onKeyDown={event => {
@@ -107,20 +110,20 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
         }}>
         <Cpu size={13} aria-hidden="true" />
         <span>{selected ? `${selected.providerName} · ${selected.modelName}` :
-          missing ? "模型不可用，请重新选择" : "选择模型"}</span>
+          missing ? t("ai:modelUnavailable") : t("ai:selectModel")}</span>
         <ChevronDown size={13} aria-hidden="true" />
       </button>
       {open && (
         <div className="ai-model-picker__popup">
           <label className="ai-model-picker__search">
             <Search size={14} aria-hidden="true" />
-            <input ref={searchRef} type="search" aria-label="搜索 API 或模型"
-              placeholder="搜索 API 或模型..."
+            <input ref={searchRef} type="search" aria-label={t("ai:searchApiModel")}
+              placeholder={t("ai:searchApiModelPlaceholder")}
               value={query}
               onChange={event => { setQuery(event.target.value); setHighlighted(0); }}
               onKeyDown={onSearchKeyDown} />
           </label>
-          <div id={listID} role="listbox" aria-label="可用 AI 模型" className="ai-model-picker__options">
+          <div id={listID} role="listbox" aria-label={t("ai:availableModels")} className="ai-model-picker__options">
             {providers.map(provider => {
               const items = filtered.filter(option => option.providerID === provider.id);
               if (items.length === 0) return null;
@@ -146,7 +149,7 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
               );
             })}
             {filtered.length === 0 && (
-              <p className="ai-muted">{options.length ? "没有匹配的模型" : "请先在全局设置中添加 AI 模型"}</p>
+              <p className="ai-muted">{options.length ? t("ai:noMatchingModels") : t("ai:addModelFirst")}</p>
             )}
           </div>
         </div>

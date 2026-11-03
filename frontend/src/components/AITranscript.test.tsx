@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
+import { initializeI18n } from "../i18n";
 import AITranscript from "./AITranscript";
 import type { AIMessage } from "../types";
 
@@ -7,6 +8,7 @@ const tool = (id: string, name: string, args: Record<string, unknown>): AIMessag
   id, type: "function", function: { name, arguments: JSON.stringify(args) },
 }];
 
+beforeEach(async () => { await initializeI18n("zh-CN"); });
 afterEach(cleanup);
 
 test("pairs commands with their outputs and collapses successful steps", () => {
@@ -134,4 +136,19 @@ test("risk notes remain visible even when tool details are collapsed", () => {
   ]} />);
   expect(screen.getByText(/此操作可能覆盖配置/)).toBeTruthy();
   expect(screen.getByRole("button", { name: /终端命令/ }).getAttribute("aria-expanded")).toBe("false");
+});
+
+
+test("English tool cards preserve the original command result", async () => {
+  await initializeI18n("en");
+  const result = "container running\n退出状态: 0";
+  render(<AITranscript messages={[
+    { role: "assistant", content: "", tool_calls: tool("english-tool", "ssh_exec", {
+      target: "target_1", command: "docker ps",
+    }) },
+    { role: "tool", tool_call_id: "english-tool", content: result },
+  ]} />);
+  expect(screen.getByText("Success")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /Terminal command/ }));
+  expect(screen.getByText((_, element) => element?.tagName === "PRE" && element.textContent === result)).toBeTruthy();
 });
