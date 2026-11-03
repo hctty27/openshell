@@ -24,6 +24,7 @@ export interface ConfirmDialogOptions {
   title: DisplayText;
   description: DisplayText;
   confirmLabel?: DisplayText;
+  cancelLabel?: DisplayText;
   tone?: "default" | "warning" | "danger";
   preview?: string;
 }
@@ -195,7 +196,9 @@ function DialogContent({
             className="app-dialog__secondary"
             onClick={cancel}
           >
-            {t("common:cancel")}
+            {!isInput && (options as ConfirmDialogOptions).cancelLabel
+              ? renderMessage((options as ConfirmDialogOptions).cancelLabel!)
+              : t("common:cancel")}
           </button>
           <button
             type="submit"
