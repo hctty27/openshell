@@ -22,6 +22,7 @@
   "automaticMode": "完全自动",
   "operationMethod": "操作方式",
   "executionStrategy": "AI 操作方式",
+  "moreOptions": "更多选项",
   "autoRecommended": "自动选择（推荐）",
   "independent": "独立执行",
   "independentHelp": "通过独立 SSH 连接执行命令，不会向当前终端发送输入。",
