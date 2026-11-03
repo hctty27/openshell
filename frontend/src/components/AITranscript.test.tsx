@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
+import { initializeI18n } from "../i18n";
 import AITranscript from "./AITranscript";
 import type { AIMessage } from "../types";
 
@@ -7,6 +8,7 @@ const tool = (id: string, name: string, args: Record<string, unknown>): AIMessag
   id, type: "function", function: { name, arguments: JSON.stringify(args) },
 }];
 
+beforeEach(async () => { await initializeI18n("zh-CN"); });
 afterEach(cleanup);
 
 test("pairs commands with their outputs and collapses successful steps", () => {
