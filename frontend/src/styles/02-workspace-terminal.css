@@ -687,3 +687,43 @@
   color: var(--accent);
   font-size: 12px;
 }
+
+
+/* The AI control strip belongs to the visible PTY, not to the chat panel. */
+.terminal-ai-control {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 21;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  max-width: calc(100% - 20px);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--raised);
+  box-shadow: 0 4px 14px #0006;
+  color: var(--text-primary);
+  white-space: nowrap;
+  font-size: 11px;
+}
+.terminal-ai-control svg { flex: 0 0 auto; color: var(--accent); }
+.terminal-ai-control span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.terminal-ai-control button {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--field-bg);
+  font-size: 11px;
+}
+.terminal-ai-control button:hover {
+  color: var(--accent);
+  background: var(--hover);
+}
