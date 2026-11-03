@@ -1,7 +1,6 @@
 /**
- * WebView2 may keep an outdated TSF caret location after the host window is
- * resized. Rebinding the focused xterm textarea after layout settles restores
- * the native IME anchor without recreating the terminal or touching its input.
+ * Work around stale native IME caret coordinates after a WebView2 host resize.
+ * A real focus transition must include a short gap for the TSF layout to reset.
  */
 export function attachImeFocusRecovery(
   textarea: HTMLTextAreaElement | undefined,
@@ -10,46 +9,74 @@ export function attachImeFocusRecovery(
 ) {
   let disposed = false;
   let composing = false;
+  let restoring = false;
   let pending = false;
-  let timer: number | undefined;
+  let layoutTimer: number | undefined;
+  let focusTimer: number | undefined;
 
-  const clearTimer = () => {
-    if (timer !== undefined) {
-      window.clearTimeout(timer);
-      timer = undefined;
+  const clearLayoutTimer = () => {
+    if (layoutTimer !== undefined) {
+      window.clearTimeout(layoutTimer);
+      layoutTimer = undefined;
     }
   };
-
-  const recover = () => {
-    timer = undefined;
-    if (disposed || composing || !pending) return;
-    pending = false;
-    if (!textarea || !isActive() || !document.hasFocus() || document.activeElement !== textarea) return;
-
-    // A focus transition refreshes WebView2's native IME caret coordinates.
-    // Never do this during an active composition: it can drop committed text.
-    textarea.blur();
-    focusTerminal();
+  const clearFocusTimer = () => {
+    if (focusTimer !== undefined) {
+      window.clearTimeout(focusTimer);
+      focusTimer = undefined;
+    }
   };
 
   const schedule = () => {
     if (disposed || !textarea) return;
     pending = true;
-    clearTimer();
-    if (!composing) timer = window.setTimeout(recover, 160);
+    clearLayoutTimer();
+    if (!composing && !restoring) layoutTimer = window.setTimeout(recover, 160);
   };
+
+  function recover() {
+    layoutTimer = undefined;
+    if (disposed || composing || restoring || !pending) return;
+    pending = false;
+    if (!textarea || !isActive() || !document.hasFocus() || document.activeElement !== textarea) return;
+
+    const selectionStart = textarea.selectionStart;
+    const selectionEnd = textarea.selectionEnd;
+    const selectionDirection = textarea.selectionDirection;
+    const scrollTop = textarea.scrollTop;
+    const scrollLeft = textarea.scrollLeft;
+    restoring = true;
+    textarea.blur();
+    focusTimer = window.setTimeout(() => {
+      focusTimer = undefined;
+      restoring = false;
+      if (!disposed && !composing && isActive() && document.hasFocus() &&
+          (document.activeElement === document.body ||
+           document.activeElement === document.documentElement)) {
+        focusTerminal();
+        if (document.activeElement === textarea) {
+          textarea.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+          textarea.scrollTop = scrollTop;
+          textarea.scrollLeft = scrollLeft;
+        }
+      }
+      if (pending && !disposed) schedule();
+    }, 60);
+  }
 
   const onCompositionStart = () => {
     composing = true;
-    clearTimer();
+    clearLayoutTimer();
   };
   const onCompositionEnd = () => {
     composing = false;
     if (pending) schedule();
   };
   const onBlur = () => {
+    if (restoring) return;
     pending = false;
-    clearTimer();
+    clearLayoutTimer();
+    clearFocusTimer();
   };
 
   textarea?.addEventListener("compositionstart", onCompositionStart, true);
@@ -60,7 +87,8 @@ export function attachImeFocusRecovery(
     schedule,
     dispose: () => {
       disposed = true;
-      clearTimer();
+      clearLayoutTimer();
+      clearFocusTimer();
       textarea?.removeEventListener("compositionstart", onCompositionStart, true);
       textarea?.removeEventListener("compositionend", onCompositionEnd, true);
       textarea?.removeEventListener("blur", onBlur);
