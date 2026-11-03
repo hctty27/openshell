@@ -40,6 +40,7 @@ interface Props {
   onNotice(text: unknown): void;
   commandFocusVersion?: number;
   searchFocusVersion?: number;
+  transferFocusRequest?: { ref: Ref };
   onError(text: unknown): void;
   onSelection?(text: string): void;
   onDirectoryChange?(ref: Ref, directory: string): void;
@@ -528,6 +529,24 @@ export default function TerminalPane(p: Props) {
   useEffect(() => {
     if (p.active && p.commandFocusVersion && !searchOpen) terminal.current?.focus();
   }, [p.commandFocusVersion]);
+  useEffect(() => {
+    const requested = p.transferFocusRequest?.ref;
+    const current = p.tab.ref;
+    if (!requested || !current || !p.active || p.tab.status !== "connected" || searchOpen ||
+        requested.tabId !== current.tabId ||
+        requested.sessionId !== current.sessionId ||
+        requested.generation !== current.generation) return;
+
+    const frame = requestAnimationFrame(() => {
+      if (!callbacks.current.active || !document.hasFocus()) return;
+      if (document.querySelector("dialog[open], [aria-modal='true']")) return;
+      const focused = document.activeElement;
+      if (focused && focused !== document.body && focused !== document.documentElement &&
+          !container.current?.contains(focused)) return;
+      terminal.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [p.transferFocusRequest, p.active, p.tab.ref, p.tab.status, searchOpen]);
   useEffect(() => {
     if (p.active && p.searchFocusVersion) setSearchOpen(true);
   }, [p.searchFocusVersion]);
