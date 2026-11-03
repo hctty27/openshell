@@ -71,7 +71,46 @@ export interface QuickCommand {
   mode?: "run" | "insert"; // Legacy persisted action.
   confirm: boolean;
 }
+export interface AIModel {
+  id: string;
+  name: string;
+}
+export interface AIProvider {
+  id: string;
+  name: string;
+  baseUrl: string;
+  hasKey: boolean;
+  models: AIModel[];
+}
+export interface AIToolCall {
+  id: string;
+  type: string;
+  function: { name: string; arguments: string };
+}
+export interface AIMessage {
+  role: "user" | "assistant" | "tool" | "system";
+  content: string;
+  tool_calls?: AIToolCall[];
+  tool_call_id?: string;
+}
+export interface AIConversation {
+  id: string;
+  title: string;
+  providerId: string;
+  modelId: string;
+  mode: "review" | "auto";
+  targetNames: string[];
+  messages: AIMessage[];
+  updatedAt: string;
+}
+export interface AIStartResponse {
+  taskId: string;
+  conversationId: string;
+}
 export interface AppState {
+  aiSidebarMode?: "pinned" | "auto-hide";
+  aiSidebarWidth?: number;
+  aiVisible?: boolean;
   language?: import("./i18n/languages").Language;
   quickCommands?: QuickCommand[];
   quickCommandLayout?: QuickCommandLayout;
