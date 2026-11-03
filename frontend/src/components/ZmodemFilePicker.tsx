@@ -141,7 +141,11 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       await api.SubmitZmodemSelection(request.ref, request.id, paths);
       if (currentRequestKey.current !== requestKey) return;
       // Submission only acknowledges the paths. The transfer continues after the picker closes.
-      if (dialogRef.current?.open) dialogRef.current.close();
+      const dialog = dialogRef.current;
+      if (dialog?.open) {
+        if (typeof dialog.close === "function") dialog.close();
+        else dialog.removeAttribute("open");
+      }
       setRequests(previous => {
         const key = refKey(request.ref);
         if (previous[key]?.id !== request.id) return previous;
