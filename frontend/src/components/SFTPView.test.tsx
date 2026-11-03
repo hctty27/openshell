@@ -5,6 +5,7 @@ import { DialogProvider } from "./DialogProvider";
 import { initializeI18n } from "../i18n";
 import { Clipboard } from "@wailsio/runtime";
 import { BASH_CWD_REPORT_COMMAND } from "../terminalCwd";
+import { api } from "../bridge";
 import type { Ref } from "../types";
 
 vi.mock("../bridge", () => ({
@@ -42,4 +43,17 @@ test("Bash cwd helper reports success when Wails v3 clipboard resolves", async (
   fireEvent.click(screen.getByRole("button", { name: "复制 Bash 目录同步命令" }));
   await waitFor(() => expect(Clipboard.SetText).toHaveBeenCalledWith(BASH_CWD_REPORT_COMMAND));
   await waitFor(() => expect(onNotice).toHaveBeenCalledWith(expect.stringContaining("已复制 Bash")));
+});
+
+test("SFTP context menu copies a file path with Wails v3 clipboard", async () => {
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) => side === "remote"
+    ? [{ name: "test.txt", path: "/root/test.txt", isDir: false, isSymlink: false,
+      size: 1, modified: 0, mode: "-rw-r--r--" }]
+    : []);
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+
+  const row = await screen.findByRole("listitem", { name: /test\.txt/ });
+  fireEvent.contextMenu(row);
+  fireEvent.click(await screen.findByRole("menuitem", { name: "复制路径" }));
+  await waitFor(() => expect(Clipboard.SetText).toHaveBeenCalledWith("/root/test.txt"));
 });
