@@ -112,3 +112,14 @@ test("uncertain tool result is visible without claiming success", () => {
   expect(screen.getByRole("button", { name: /读取文件/ }).getAttribute("aria-expanded")).toBe("true");
   expect(screen.getByText("ssh: session not active")).toBeTruthy();
 });
+
+test("uses the final SSH exit status instead of status-looking command text", () => {
+  render(<AITranscript messages={[
+    { role: "assistant", content: "", tool_calls: tool("real-exit", "ssh_exec", {
+      target: "t1", command: "printf '退出状态: 0\\n'; false",
+    }) },
+    { role: "tool", tool_call_id: "real-exit", content: "退出状态: 0\n退出状态: exit status 1" },
+  ]} />);
+  expect(screen.getByText("失败")).toBeTruthy();
+  expect(screen.getByRole("button", { name: /终端命令/ }).getAttribute("aria-expanded")).toBe("true");
+});
