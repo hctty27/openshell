@@ -30,6 +30,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   const [modelID, setModelID] = useState("");
   const [mode, setMode] = useState<"review" | "auto">("review");
   const [targetIDs, setTargetIDs] = useState<string[]>([]);
+  const [historySessionIDs, setHistorySessionIDs] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [showHistory, setShowHistory] = useState(false);
@@ -93,7 +94,19 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
 
   const connected = tabs.filter(tab => tab.status === "connected" && tab.ref);
   const requiredID = active?.status === "connected" ? active.id : "";
-  const targetSet = useMemo(() => new Set([...targetIDs, ...(requiredID ? [requiredID] : [])]), [targetIDs, requiredID]);
+  // Restore logical session selections against live tabs, never stale connection references.
+  const restoredTabIDs = historySessionIDs.flatMap(sessionID => {
+    const matched = connected.filter(tab => tab.session.id === sessionID);
+    const preferred = matched.find(tab => tab.id === requiredID) ?? matched[0];
+    return preferred ? [preferred.id] : [];
+  });
+  const unavailableSessionIDs = historySessionIDs.filter(sessionID =>
+    !connected.some(tab => tab.session.id === sessionID)
+  );
+  const targetSet = useMemo(
+    () => new Set([...targetIDs, ...restoredTabIDs, ...(requiredID ? [requiredID] : [])]),
+    [targetIDs, restoredTabIDs.join("|"), requiredID],
+  );
   const targets = connected.filter(tab => targetSet.has(tab.id));
   const provider = providers.find(item => item.id === providerID) ?? providers[0];
   const model = provider?.models.find(item => item.id === modelID) ?? provider?.models[0];
@@ -108,10 +121,18 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   );
   const toggleTarget = (id: string) => {
     if (id === requiredID) return;
-    setTargetIDs(old => old.includes(id) ? old.filter(x => x !== id) : [...old, id]);
+    const sessionID = connected.find(tab => tab.id === id)?.session.id;
+    if (targetSet.has(id)) {
+      setTargetIDs(old => old.filter(selected => selected !== id));
+      if (sessionID) setHistorySessionIDs(old => old.filter(saved => saved !== sessionID));
+    } else {
+      setTargetIDs(old => [...old, id]);
+    }
   };
   const selectConversation = (item: AIConversation) => {
     followOutputRef.current = true;
+    setTargetIDs([]);
+    setHistorySessionIDs(item.targetSessionIds ?? []);
     setConversationID(item.id);
     setProviderID(item.providerId);
     setModelID(item.modelId);
@@ -124,6 +145,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   const newConversation = () => {
     if (running) return;
     followOutputRef.current = true;
+    setTargetIDs([]);
+    setHistorySessionIDs([]);
     setConversationID("");
     setMessage("");
     setStream("");
@@ -171,7 +194,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const text = message.trim();
-    if (!text || !provider || !model || !targets.length || submitting || running) return;
+    if (!text || !provider || !model || !targets.length || unavailableSessionIDs.length || submitting || running) return;
     followOutputRef.current = true;
     setError("");
     setStatus("正在执行");
@@ -264,6 +287,15 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
               <option value="auto">完全自动</option>
             </select>
           </div>
+          {unavailableSessionIDs.length > 0 && (
+            <div className="ai-session-warning" role="status">
+              历史对话有 {unavailableSessionIDs.length} 个目标会话尚未连接。请先重新连接，或
+              <button type="button" onClick={() => setHistorySessionIDs(old => old.filter(id =>
+                connected.some(tab => tab.session.id === id)
+              ))}>忽略离线目标</button>
+              后继续。不会自动把操作转移到其他服务器。
+            </div>
+          )}
           <div className="ai-messages" ref={messagesRef} onScroll={onMessagesScroll}>
             {!current?.messages.length && <div className="ai-welcome"><Sparkles size={26}/><h3>让 AI 帮你操作服务器</h3><p>选择会话和模型，描述需要完成的任务。</p></div>}
             {current?.messages.filter(m => m.role !== "system").map((m, i) => (
@@ -299,7 +331,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
                 {(provider?.models ?? []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
               {running ? <button type="button" title="停止任务" onClick={() => void api.AIStop(running.taskId)}><Square size={15} /></button> :
-                <button type="submit" title="发送" className="ai-primary" disabled={submitting || !provider || !targets.length || !message.trim()}><Send size={15} /></button>}
+                <button type="submit" title="发送" className="ai-primary" disabled={submitting || !provider || !targets.length || unavailableSessionIDs.length > 0 || !message.trim()}><Send size={15} /></button>}
             </div>
           </form>
         </>
