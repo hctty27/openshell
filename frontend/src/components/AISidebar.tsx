@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { Check, ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Send, Settings2, Sparkles, Square, Trash2, X } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, Tab } from "../types";
@@ -103,10 +103,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   const unavailableSessionIDs = historySessionIDs.filter(sessionID =>
     !connected.some(tab => tab.session.id === sessionID)
   );
-  const targetSet = useMemo(
-    () => new Set([...targetIDs, ...restoredTabIDs, ...(requiredID ? [requiredID] : [])]),
-    [targetIDs, restoredTabIDs.join("|"), requiredID],
-  );
+  const targetSet = new Set([...targetIDs, ...restoredTabIDs, ...(requiredID ? [requiredID] : [])]);
   const targets = connected.filter(tab => targetSet.has(tab.id));
   const provider = providers.find(item => item.id === providerID) ?? providers[0];
   const model = provider?.models.find(item => item.id === modelID) ?? provider?.models[0];
