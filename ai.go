@@ -32,7 +32,6 @@ type AIStartRequest struct {
 	ModelID string `json:"modelId"`
 	Mode string `json:"mode"`
 	Execution string `json:"execution"`
-	TerminalReady bool `json:"terminalReady"`
 	Text string `json:"text"`
 	Targets []domain.ConnectionRef `json:"targets"`
 }
