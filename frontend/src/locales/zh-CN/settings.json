@@ -128,5 +128,9 @@
   "forwardTargetHost": "远端目标地址",
   "forwardTargetPort": "远端目标端口",
   "removeForward": "删除端口转发",
-  "addForward": "添加端口转发"
+  "addForward": "添加端口转发",
+  "unsavedSessionChangesTitle": "放弃未保存的修改？",
+  "unsavedSessionChangesDescription": "会话信息已修改但尚未保存，关闭后这些修改将丢失。",
+  "discardSessionChanges": "放弃修改",
+  "continueEditing": "继续编辑"
 }
