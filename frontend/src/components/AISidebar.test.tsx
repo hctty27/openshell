@@ -183,3 +183,14 @@ test("AI defaults to automatic SSH execution routing", async () => {
     execution: "auto", targets: [connectedTab.ref],
   })));
 });
+
+
+test("AI sidebar is usable in English without leftover Chinese controls", async () => {
+  await initializeI18n("en");
+  render(<AISidebar tabs={[]} pinned={false} isOpen={true} onTogglePin={vi.fn()} onClose={vi.fn()} />);
+  expect(screen.getByRole("complementary", { name: "AI Assistant" })).toBeTruthy();
+  expect(screen.getByText("Let AI help manage your servers")).toBeTruthy();
+  expect(screen.getByTitle("AI execution method")).toBeTruthy();
+  expect(screen.getByText(/Execution capabilities are detected automatically/)).toBeTruthy();
+  expect(screen.getByPlaceholderText("Describe the task for AI...")).toBeTruthy();
+});
