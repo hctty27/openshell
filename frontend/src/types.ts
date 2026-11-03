@@ -100,6 +100,7 @@ export interface AIConversation {
   modelId: string;
   mode: "review" | "auto";
   targetNames: string[];
+  targetSessionIds?: string[];
   messages: AIMessage[];
   updatedAt: string;
 }
