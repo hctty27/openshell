@@ -333,7 +333,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
           <div className="ai-messages" ref={messagesRef} onScroll={onMessagesScroll}>
             {!current?.messages.length && <div className="ai-welcome"><Sparkles size={26}/><h3>让 AI 帮你操作服务器</h3><p>选择会话和模型，描述需要完成的任务。</p></div>}
             <AITranscript messages={current?.messages ?? []}
-              execution={current?.execution === "terminal" ? "terminal" : execution} />
+              execution={current?.execution === "terminal" ? "terminal" : "independent"} />
             {stream && <div className="ai-message ai-message--assistant ai-message--stream"><pre>{stream}</pre></div>}
             {approval && (
               <div className="ai-approval">
