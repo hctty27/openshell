@@ -130,10 +130,12 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
                   {items.map(option => {
                     const isSelected = selected?.providerID === option.providerID &&
                       selected?.modelID === option.modelID;
+                    const isHighlighted = filtered[highlighted] === option;
                     return (
                       <button type="button" role="option"
                         aria-selected={isSelected} key={option.modelID}
-                        className={isSelected ? "is-selected" : ""}
+                        className={[isSelected && "is-selected", isHighlighted && "is-highlighted"].filter(Boolean).join(" ")}
+                        onMouseEnter={() => setHighlighted(filtered.indexOf(option))}
                         onClick={() => choose(option)}>
                         <span>{option.modelName}</span>
                         {isSelected && <Check size={14} aria-hidden="true" />}
