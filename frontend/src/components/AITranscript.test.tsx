@@ -150,5 +150,5 @@ test("English tool cards preserve the original command result", async () => {
   ]} />);
   expect(screen.getByText("Success")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: /Terminal command/ }));
-  expect(screen.getByText(result)).toBeTruthy();
+  expect(screen.getByText((_, element) => element?.tagName === "PRE" && element.textContent === result)).toBeTruthy();
 });
