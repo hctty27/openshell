@@ -234,7 +234,7 @@
   height: var(--chrome-bar-height);
   min-height: var(--chrome-bar-height);
   min-width: 0;
-  padding: 2px 12px 2px 16px;
+  padding: 2px 8px;
   background: var(--panel);
   border-top: 1px solid var(--border);
 }
