@@ -25,6 +25,15 @@ test("both languages have matching keys and interpolation parameters", () => {
     }
   }
 });
+test("AI translations switch between English and Chinese", async () => {
+  await initializeI18n("en");
+  expect(i18n.t("ai:currentTerminal")).toBe("Current terminal");
+  expect(i18n.t("ai:running")).toBe("Running");
+  await initializeI18n("zh-CN");
+  expect(i18n.t("ai:currentTerminal")).toBe("当前终端");
+  expect(i18n.t("ai:running")).toBe("正在执行");
+});
+
 test("missing Chinese translation falls back to English", async () => {
   await initializeI18n("zh-CN");
   i18n.addResource("en", "common", "fallbackProbe", "English fallback");
