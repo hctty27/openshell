@@ -206,7 +206,8 @@
   resize: vertical;
   background: transparent;
   color: var(--text-primary);
-  font: 12px/1.55 inherit;
+  font-size: 12px;
+  line-height: 1.55;
   font-family: inherit;
 }
 .ai-compose textarea:focus {
@@ -315,7 +316,8 @@
   text-align: left;
 }
 .ai-model-picker__options [role="option"]:hover,
-.ai-model-picker__options [role="option"].is-selected {
+.ai-model-picker__options [role="option"].is-selected,
+.ai-model-picker__options [role="option"].is-highlighted {
   background: var(--accent-soft);
   color: var(--accent);
 }
