@@ -397,7 +397,14 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	}
 	m.mu.Lock()
 	c := m.connections[ref.TabID]
-	if c == nil || c.ref != ref || c.stdin == nil {
+	m.mu.Unlock()
+	if c == nil { return io.ErrClosedPipe }
+	// Serialize manual input with AI takeover. Recheck after taking stdinMu,
+	// so pending manual writes cannot cross the ownership transition.
+	c.stdinMu.Lock()
+	defer c.stdinMu.Unlock()
+	m.mu.Lock()
+	if current := m.connections[ref.TabID]; current != c || c.ref != ref || c.stdin == nil {
 		m.mu.Unlock()
 		return io.ErrClosedPipe
 	}
