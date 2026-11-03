@@ -39,6 +39,21 @@ test("rebinds the focused terminal input once after layout settles", () => {
   recovery.dispose();
 });
 
+test("postpones focus rebinding while the user keeps typing", () => {
+  const { textarea, focusTerminal, recovery } = setup();
+  recovery.schedule();
+  vi.advanceTimersByTime(100);
+  textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
+  vi.advanceTimersByTime(100);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(textarea);
+  vi.advanceTimersByTime(60);
+  expect(document.activeElement).toBe(document.body);
+  vi.advanceTimersByTime(60);
+  expect(focusTerminal).toHaveBeenCalledOnce();
+  recovery.dispose();
+});
+
 test("never interrupts an in-progress IME composition", () => {
   const { textarea, focusTerminal, recovery } = setup();
   textarea.dispatchEvent(new Event("compositionstart"));
