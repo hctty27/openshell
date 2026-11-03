@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { Check, ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Send, Settings2, Sparkles, Square, Trash2, X } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
-import type { AIConversation, AIProvider, AIStartResponse, Tab } from "../types";
+import type { AIConversation, AIProvider, AIStartResponse, AITargetBinding, Tab } from "../types";
 
 interface Props {
   tabs: Tab[];
@@ -31,6 +31,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   const [mode, setMode] = useState<"review" | "auto">("review");
   const [targetIDs, setTargetIDs] = useState<string[]>([]);
   const [historySessionIDs, setHistorySessionIDs] = useState<string[]>([]);
+  const [historyBindings, setHistoryBindings] = useState<AITargetBinding[]>([]);
+  const [legacyHistoryNeedsRebind, setLegacyHistoryNeedsRebind] = useState(false);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [showHistory, setShowHistory] = useState(false);
@@ -95,13 +97,22 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   const connected = tabs.filter(tab => tab.status === "connected" && tab.ref);
   const requiredID = active?.status === "connected" ? active.id : "";
   // Restore logical session selections against live tabs, never stale connection references.
+  const matchesHistoryTarget = (tab: Tab, sessionID: string) => {
+    if (tab.session.id !== sessionID) return false;
+    const binding = historyBindings.find(saved => saved.sessionId === sessionID);
+    if (!binding) return true;
+    return tab.session.host === binding.host
+      && tab.session.port === binding.port
+      && tab.session.username === binding.username;
+  };
   const restoredTabIDs = historySessionIDs.flatMap(sessionID => {
-    const matched = connected.filter(tab => tab.session.id === sessionID);
+    if (legacyHistoryNeedsRebind) return [];
+    const matched = connected.filter(tab => matchesHistoryTarget(tab, sessionID));
     const preferred = matched.find(tab => tab.id === requiredID) ?? matched[0];
     return preferred ? [preferred.id] : [];
   });
   const unavailableSessionIDs = historySessionIDs.filter(sessionID =>
-    !connected.some(tab => tab.session.id === sessionID)
+    !connected.some(tab => matchesHistoryTarget(tab, sessionID))
   );
   const targetSet = new Set([...targetIDs, ...restoredTabIDs, ...(requiredID ? [requiredID] : [])]);
   const targets = connected.filter(tab => targetSet.has(tab.id));
@@ -121,7 +132,10 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
     const sessionID = connected.find(tab => tab.id === id)?.session.id;
     if (targetSet.has(id)) {
       setTargetIDs(old => old.filter(selected => selected !== id));
-      if (sessionID) setHistorySessionIDs(old => old.filter(saved => saved !== sessionID));
+      if (sessionID) {
+        setHistorySessionIDs(old => old.filter(saved => saved !== sessionID));
+        setHistoryBindings(old => old.filter(saved => saved.sessionId !== sessionID));
+      }
     } else {
       setTargetIDs(old => [...old, id]);
     }
@@ -129,7 +143,10 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   const selectConversation = (item: AIConversation) => {
     followOutputRef.current = true;
     setTargetIDs([]);
-    setHistorySessionIDs(item.targetSessionIds ?? []);
+    const bindings = item.targetBindings ?? [];
+    setHistoryBindings(bindings);
+    setHistorySessionIDs(bindings.length ? bindings.map(saved => saved.sessionId) : (item.targetSessionIds ?? []));
+    setLegacyHistoryNeedsRebind(item.targetNames.length > 0 && bindings.length === 0);
     setConversationID(item.id);
     setProviderID(item.providerId);
     setModelID(item.modelId);
@@ -144,6 +161,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
     followOutputRef.current = true;
     setTargetIDs([]);
     setHistorySessionIDs([]);
+    setHistoryBindings([]);
+    setLegacyHistoryNeedsRebind(false);
     setConversationID("");
     setMessage("");
     setStream("");
@@ -191,7 +210,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const text = message.trim();
-    if (!text || !provider || !model || !targets.length || unavailableSessionIDs.length || submitting || running) return;
+    if (!text || !provider || !model || !targets.length || unavailableSessionIDs.length || legacyHistoryNeedsRebind || submitting || running) return;
     followOutputRef.current = true;
     setError("");
     setStatus("正在执行");
@@ -284,13 +303,25 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
               <option value="auto">完全自动</option>
             </select>
           </div>
-          {unavailableSessionIDs.length > 0 && (
+          {legacyHistoryNeedsRebind && (
             <div className="ai-session-warning" role="status">
-              历史对话有 {unavailableSessionIDs.length} 个目标会话尚未连接。请先重新连接，或
-              <button type="button" onClick={() => setHistorySessionIDs(old => old.filter(id =>
-                connected.some(tab => tab.session.id === id)
-              ))}>忽略离线目标</button>
-              后继续。不会自动把操作转移到其他服务器。
+              此历史对话没有可验证的目标服务器信息。请检查上方选择的会话，
+              <button type="button" onClick={() => {
+                setHistorySessionIDs([]);
+                setHistoryBindings([]);
+                setLegacyHistoryNeedsRebind(false);
+              }}>使用当前所选会话</button>
+              后才能继续执行。
+            </div>
+          )}
+          {!legacyHistoryNeedsRebind && unavailableSessionIDs.length > 0 && (
+            <div className="ai-session-warning" role="status">
+              历史对话有 {unavailableSessionIDs.length} 个目标未连接，或服务器地址、账号已改变。请先恢复原连接，或
+              <button type="button" onClick={() => {
+                setHistorySessionIDs(old => old.filter(id => !unavailableSessionIDs.includes(id)));
+                setHistoryBindings(old => old.filter(binding => !unavailableSessionIDs.includes(binding.sessionId)));
+              }}>忽略未匹配目标</button>
+              后继续。不会自动改用其他服务器。
             </div>
           )}
           <div className="ai-messages" ref={messagesRef} onScroll={onMessagesScroll}>
@@ -328,7 +359,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
                 {(provider?.models ?? []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
               {running ? <button type="button" title="停止任务" onClick={() => void api.AIStop(running.taskId)}><Square size={15} /></button> :
-                <button type="submit" title="发送" className="ai-primary" disabled={submitting || !provider || !targets.length || unavailableSessionIDs.length > 0 || !message.trim()}><Send size={15} /></button>}
+                <button type="submit" title="发送" className="ai-primary" disabled={submitting || !provider || !targets.length || legacyHistoryNeedsRebind || unavailableSessionIDs.length > 0 || !message.trim()}><Send size={15} /></button>}
             </div>
           </form>
         </>
