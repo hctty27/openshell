@@ -825,6 +825,8 @@ test("AI header aligns with SSH title bar", async ({ page }) => {
   await page.getByText("保存到 Windows 凭据管理器").click();
   await page.getByRole("button", { name: "保存会话", exact: true }).click();
   await page.getByRole("button", { name: "选中会话 对齐测试" }).dblclick();
+  await page.getByRole("button", { name: "信任并连接" }).click();
+  await expect(page.locator(".terminal-toolbar")).toBeVisible();
 
   await page.locator(".ai-rail").click();
   await page.getByRole("button", { name: "固定 AI 栏" }).click();
