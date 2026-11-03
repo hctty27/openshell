@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hctty27/openshell/internal/domain"
+	sshclient "github.com/hctty27/openshell/internal/ssh"
 	"github.com/hctty27/openshell/internal/store"
 )
 
@@ -30,6 +31,8 @@ type AIStartRequest struct {
 	ProviderID string `json:"providerId"`
 	ModelID string `json:"modelId"`
 	Mode string `json:"mode"`
+	Execution string `json:"execution"`
+	TerminalReady bool `json:"terminalReady"`
 	Text string `json:"text"`
 	Targets []domain.ConnectionRef `json:"targets"`
 }
@@ -125,6 +128,11 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	req.Text = strings.TrimSpace(req.Text)
 	if len(req.Text) == 0 || len(req.Text) > 12000 { return AITaskStart{}, errors.New("消息长度无效") }
 	if req.Mode != "review" && req.Mode != "auto" { return AITaskStart{}, errors.New("执行模式无效") }
+	if req.Execution == "" { req.Execution = "independent" }
+	if req.Execution != "independent" && req.Execution != "terminal" { return AITaskStart{}, errors.New("终端操作方式无效") }
+	if req.Execution == "terminal" && (!req.TerminalReady || len(req.Targets) != 1) {
+		return AITaskStart{},errors.New("当前终端操作仅支持一个已连接会话，必须先确认终端位于空白 Shell 提示符")
+	}
 	provider, err := a.store.GetAIProvider(a.ctx, req.ProviderID)
 	if err != nil { return AITaskStart{}, err }
 	validModel := false
@@ -150,6 +158,15 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 			SessionID: ref.SessionID, Name: s.Name, Host: s.Host, Port: s.Port, Username: s.Username,
 		})
 	}
+	var terminalLease *sshclient.AITerminalLease
+	if req.Execution == "terminal" {
+		var err error
+		terminalLease,err = a.ssh.AcquireAITerminal(req.Targets[0])
+		if err != nil { return AITaskStart{},err }
+	}
+	// Every failure after acquisition must give terminal input back to the user.
+	accepted := false
+	defer func() { if !accepted && terminalLease != nil { terminalLease.Release() } }()
 	ctx := a.ctx
 	if ctx == nil { ctx = context.Background() }
 	c := store.AIConversation{ ID: domain.NewID(), Title: truncateAIRunes(req.Text, 40), Messages: []store.AIMessage{} }
@@ -159,6 +176,7 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 		c = existing
 	}
 	c.ProviderID, c.ModelID, c.Mode, c.TargetNames = req.ProviderID, req.ModelID, req.Mode, names
+	c.Execution = req.Execution
 	c.TargetSessionIDs = sessionIDs
 	c.TargetBindings = bindings
 	c.Messages = append(c.Messages, store.AIMessage{Role: "user", Content: req.Text})
@@ -176,7 +194,9 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	a.aiTasks[taskID] = &aiRunningTask{cancel: cancel, conversationID: c.ID}
 	a.aiMu.Unlock()
 	a.emit("ai:conversation", c)
-	go a.runAI(runCtx, cancel, taskID, c, provider, allowed)
+	if terminalLease != nil { a.emit("ai:terminal-control",map[string]any{"taskId":taskID,"ref":terminalLease.Ref(),"active":true}) }
+	accepted = true
+	go a.runAI(runCtx, cancel, taskID, c, provider, allowed, terminalLease)
 	return AITaskStart{TaskID:taskID, ConversationID:c.ID}, nil
 }
 
@@ -200,7 +220,13 @@ func (a *App) stopAllAI() {
 	a.aiMu.Unlock()
 }
 
-func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID string, c store.AIConversation, provider store.AIProvider, allowed map[string]domain.ConnectionRef) {
+func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID string, c store.AIConversation, provider store.AIProvider, allowed map[string]domain.ConnectionRef, terminalLease *sshclient.AITerminalLease) {
+	if terminalLease != nil {
+		defer func(){
+			terminalLease.Release()
+			a.emit("ai:terminal-control",map[string]any{"taskId":taskID,"ref":terminalLease.Ref(),"active":false})
+		}()
+	}
 	defer cancel()
 	defer func() {
 		a.aiMu.Lock()
@@ -223,10 +249,15 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 		if e == nil { targets = append(targets, fmt.Sprintf("%s = %s (%s@%s)", target, s.Name, s.Username, s.Host)) }
 	}
 	system += strings.Join(targets, "\n")
+	toolDescription := "在已授权的 SSH 会话中使用独立 SSH channel 执行非交互命令，不影响用户当前终端。请审慎决定是否需要确认。"
+	if terminalLease != nil {
+		system += "\n当前是可见终端操作模式：所有 ssh_exec 命令会在用户已打开的同一 Shell 中执行并显示在终端，工作目录和 Shell 环境可持续保留。不要运行交互式 TUI、需要密码交互的命令、后台持续输出或长时间不结束的命令；不要调用 exit。终端会被临时独占，失败时不得猜测命令完成。"
+		toolDescription = "在用户正在查看的已授权 SSH PTY 终端中执行一条非交互命令，保留当前目录和 Shell 环境。不要使用 vim、top、tail -f 等交互程序。"
+	}
 	toolSpec := []map[string]any{{
 		"type": "function",
 		"function": map[string]any{
-			"name": "ssh_exec", "description": "在已授权的 SSH 会话中使用独立 SSH channel 执行非交互命令，不影响用户当前终端。请审慎决定是否需要确认。",
+			"name": "ssh_exec", "description": toolDescription,
 			"parameters": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -281,17 +312,21 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 		a.emit("ai:conversation", c)
 		if len(msg.ToolCalls) == 0 { end("completed",""); return }
 		for _, call := range msg.ToolCalls {
-			output := a.executeAITool(ctx, taskID, call, allowed, c.Mode)
+			output := a.executeAITool(ctx, taskID, call, allowed, c.Mode, terminalLease)
 			c.Messages = append(c.Messages, store.AIMessage{Role:"tool", ToolCallID:call.ID,Content:output})
 			if err := a.store.SaveAIConversation(context.Background(), c); err != nil { end("failed",err.Error()); return }
 			a.emit("ai:conversation",c)
+			if terminalLease != nil && terminalLease.Failed() {
+				end("failed", "当前终端没有返回可靠的命令结束标记，AI 已停止继续操作")
+				return
+			}
 			if ctx.Err() != nil { end("cancelled",ctx.Err().Error()); return }
 		}
 	}
 	end("failed", "已到达单次任务最大执行步数（12）")
 }
 
-func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToolCall, allowed map[string]domain.ConnectionRef, mode string) string {
+func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToolCall, allowed map[string]domain.ConnectionRef, mode string, terminalLease *sshclient.AITerminalLease) string {
 	var args struct {
 		Target string `json:"target"`
 		Command string `json:"command"`
@@ -328,6 +363,12 @@ func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToo
 	switch call.Function.Name {
 	case "ssh_exec":
 		if len(args.Command) == 0 || len(args.Command) > 8192 { return "命令长度无效" }
+		if terminalLease != nil {
+			if ref != terminalLease.Ref() { return "终端控制目标不属于本次授权" }
+			output,err := terminalLease.Run(execCtx,args.Command)
+			if err != nil { return "终端执行失败: "+err.Error() }
+			return output
+		}
 		return a.executeAICommand(execCtx,ref,args.Command)
 	case "sftp_list":
 		entries,err:=a.SFTPList(ref,"remote",args.Path)
