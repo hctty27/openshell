@@ -36,6 +36,7 @@ func (m *Manager) AIExecutionMode(ctx context.Context, ref domain.ConnectionRef)
 	// This harmless, bounded request confirms exec works on this transport.
 	// It never contains the user's command and cannot modify the remote host.
 	supported := probeAIExec(ctx, client)
+	if err := ctx.Err(); err != nil { return "", err }
 
 	m.mu.Lock()
 	active := m.connections[ref.TabID] == c && c.ref == ref
@@ -45,7 +46,8 @@ func (m *Manager) AIExecutionMode(ctx context.Context, ref domain.ConnectionRef)
 	}
 	m.mu.Unlock()
 	if !active { return "", errors.New("SSH 会话已断开或发生变化，请重新连接") }
-	if err := ctx.Err(); err != nil { return "", err }
+	// A slow server may show the KoKo menu while the probe is in flight.
+	if c.readiness.isJumpServer() { return "terminal", nil }
 	if supported { return "independent", nil }
 	return "terminal", nil
 }
