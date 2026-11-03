@@ -222,6 +222,28 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 			},
 		},
 	}}
+	toolSpec = append(toolSpec,
+		map[string]any{"type":"function","function":map[string]any{
+			"name":"sftp_list","description":"列出授权服务器的远程目录",
+			"parameters":map[string]any{"type":"object","properties":map[string]any{
+				"tab_id":map[string]any{"type":"string"},"path":map[string]any{"type":"string"},
+			},"required":[]string{"tab_id","path"}},
+		}},
+		map[string]any{"type":"function","function":map[string]any{
+			"name":"sftp_read","description":"读取授权服务器上的 UTF-8 文本文件并返回修订版本；修改文件前先读取",
+			"parameters":map[string]any{"type":"object","properties":map[string]any{
+				"tab_id":map[string]any{"type":"string"},"path":map[string]any{"type":"string"},
+			},"required":[]string{"tab_id","path"}},
+		}},
+		map[string]any{"type":"function","function":map[string]any{
+			"name":"sftp_write","description":"使用乐观锁版本号保存远程 UTF-8 文本；自动审查模式下由模型决定是否申请确认",
+			"parameters":map[string]any{"type":"object","properties":map[string]any{
+				"tab_id":map[string]any{"type":"string"},"path":map[string]any{"type":"string"},
+				"revision":map[string]any{"type":"string"},"content":map[string]any{"type":"string"},
+				"needs_confirmation":map[string]any{"type":"boolean"},"reason":map[string]any{"type":"string"},
+			},"required":[]string{"tab_id","path","revision","content","needs_confirmation"}},
+		}},
+	)
 	end("running", "")
 	for step:=0; step<12; step++ {
 		if err := ctx.Err(); err != nil { end("cancelled", err.Error()); return }
@@ -247,36 +269,70 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 }
 
 func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToolCall, allowed map[string]domain.ConnectionRef, mode string) string {
-	if call.Function.Name != "ssh_exec" { return "未知工具" }
 	var args struct {
 		TabID string `json:"tab_id"`
 		Command string `json:"command"`
+		Path string `json:"path"`
+		Revision string `json:"revision"`
+		Content string `json:"content"`
 		NeedsConfirmation bool `json:"needs_confirmation"`
 		Reason string `json:"reason"`
 	}
 	if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil { return err.Error() }
 	ref, ok := allowed[args.TabID]
 	if !ok { return "未授权的会话" }
-	if len(args.Command)==0 || len(args.Command)>8192 { return "命令长度无效" }
-	if mode == "review" && args.NeedsConfirmation {
-		approvalID:=domain.NewID()
-		ch:=make(chan bool,1)
+	needsReview := call.Function.Name == "ssh_exec" || call.Function.Name == "sftp_write"
+	summary := args.Command
+	if summary == "" { summary = call.Function.Name + ": " + args.Path }
+	if mode == "review" && needsReview && args.NeedsConfirmation {
+		approvalID := domain.NewID()
+		ch := make(chan bool, 1)
 		a.aiMu.Lock()
-		if a.aiApprovals == nil { a.aiApprovals=make(map[string]chan bool) }
-		a.aiApprovals[approvalID]=ch
+		if a.aiApprovals == nil { a.aiApprovals = make(map[string]chan bool) }
+		a.aiApprovals[approvalID] = ch
 		a.aiMu.Unlock()
-		defer func(){a.aiMu.Lock();delete(a.aiApprovals,approvalID);a.aiMu.Unlock()}()
-		a.emit("ai:approval",map[string]any{"taskId":taskID,"approvalId":approvalID,"command":args.Command,"reason":args.Reason,"tabId":args.TabID})
+		defer func() { a.aiMu.Lock();delete(a.aiApprovals,approvalID);a.aiMu.Unlock() }()
+		a.emit("ai:approval",map[string]any{"taskId":taskID,"approvalId":approvalID,"command":summary,"reason":args.Reason,"tabId":args.TabID})
 		select {
 		case approved:=<-ch:
 			if !approved { return "用户拒绝执行" }
 		case <-ctx.Done(): return "任务已取消"
 		}
 	}
-	a.emit("ai:tool", map[string]any{"taskId":taskID,"tabId":args.TabID,"command":args.Command})
+	a.emit("ai:tool",map[string]any{"taskId":taskID,"tabId":args.TabID,"command":summary})
 	execCtx,cancel:=context.WithTimeout(ctx,45*time.Second)
 	defer cancel()
-	return a.executeAICommand(execCtx, ref, args.Command)
+	switch call.Function.Name {
+	case "ssh_exec":
+		if len(args.Command) == 0 || len(args.Command) > 8192 { return "命令长度无效" }
+		return a.executeAICommand(execCtx,ref,args.Command)
+	case "sftp_list":
+		entries,err:=a.SFTPList(ref,"remote",args.Path)
+		if err!=nil{return err.Error()}
+		if len(entries)>120 {entries=entries[:120]}
+		b,_:=json.Marshal(entries)
+		return truncateAIOutput(string(b),65536)
+	case "sftp_read":
+		doc,err:=a.SFTPReadRemoteText(ref,args.Path)
+		if err!=nil{return err.Error()}
+		if len(doc.Content)>65536 {return "文件超过 AI 读取上限（64 KiB），请缩小文件范围"}
+		b,_:=json.Marshal(doc)
+		return string(b)
+	case "sftp_write":
+		if len(args.Content)>65536 {return "AI 写入内容超过 64 KiB"}
+		// 修订号必须由 sftp_read 获取，防止基于旧版本覆盖服务器文件。
+		if args.Revision=="" {return "缺少文件修订号，请先调用 sftp_read"}
+		doc,err:=a.SFTPSaveRemoteText(ref,args.Path,args.Revision,args.Content)
+		if err!=nil{return err.Error()}
+		return fmt.Sprintf("保存成功，revision=%s",doc.Revision)
+	default:
+		return "未知工具"
+	}
+}
+
+func truncateAIOutput(data string, limit int) string {
+	if len(data)>limit {return data[:limit]+"\n[内容已截断]"}
+	return data
 }
 
 type aiLimitedWriter struct {
