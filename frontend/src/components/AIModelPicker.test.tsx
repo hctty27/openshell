@@ -18,20 +18,23 @@ const providers: AIProvider[] = [
 beforeEach(async () => { await initializeI18n("zh-CN"); });
 afterEach(cleanup);
 
-test("combines provider and model in a single searchable picker", () => {
+test("shows flat provider-model labels without search or group headers", () => {
   const onChange = vi.fn();
   render(<AIModelPicker providers={providers} providerID="p1" modelID="grok-4.7"
     onChange={onChange} />);
   const picker = screen.getByRole("combobox", { name: "选择 AI 模型" });
   expect(picker.textContent).toContain("cpa · grok-4.7");
   fireEvent.click(picker);
-  expect(screen.getByRole("group", { name: "cpa" })).toBeTruthy();
-  expect(screen.getByRole("group", { name: "Custom API" })).toBeTruthy();
-  const search = screen.getByRole("searchbox", { name: "搜索 API 或模型" });
-  fireEvent.change(search, { target: { value: "high" } });
-  expect(screen.getAllByRole("option")).toHaveLength(1);
-  fireEvent.keyDown(search, { key: "Enter" });
-  expect(onChange).toHaveBeenCalledWith("p2", "model-high");
+
+  expect(screen.queryByRole("searchbox")).toBeNull();
+  expect(screen.queryByRole("group")).toBeNull();
+  expect(screen.getAllByRole("option").map(option => option.textContent?.trim())).toEqual([
+    "cpa · grok-4.7", "cpa · gpt-6",
+    "Custom API · grok-4.7", "Custom API · model-high",
+  ]);
+  fireEvent.keyDown(picker, { key: "ArrowDown" });
+  fireEvent.keyDown(picker, { key: "Enter" });
+  expect(onChange).toHaveBeenCalledWith("p1", "gpt-6");
   expect(screen.queryByRole("listbox")).toBeNull();
 });
 
@@ -40,9 +43,29 @@ test("same model ID in different providers remains unambiguous", () => {
   render(<AIModelPicker providers={providers} providerID="p1" modelID="grok-4.7"
     onChange={onChange} />);
   fireEvent.click(screen.getByRole("combobox", { name: "选择 AI 模型" }));
-  const secondGroup = screen.getByRole("group", { name: "Custom API" });
-  fireEvent.click(secondGroup.querySelector<HTMLButtonElement>('[role="option"]')!);
+  const duplicate = screen.getByRole("option", { name: "Custom API · grok-4.7" });
+  fireEvent.click(duplicate);
   expect(onChange).toHaveBeenCalledWith("p2", "grok-4.7");
+});
+
+test("picker supports Home, End and Escape with trigger focus", () => {
+  const onChange = vi.fn();
+  render(<AIModelPicker providers={providers} providerID="p1" modelID="grok-4.7"
+    onChange={onChange} />);
+  const picker = screen.getByRole("combobox", { name: "选择 AI 模型" });
+  fireEvent.click(picker);
+  fireEvent.keyDown(picker, { key: "End" });
+  expect(picker.getAttribute("aria-activedescendant")).toBe(
+    screen.getByRole("option", { name: "Custom API · model-high" }).id,
+  );
+  fireEvent.keyDown(picker, { key: "Escape" });
+  expect(screen.queryByRole("listbox")).toBeNull();
+  expect(onChange).not.toHaveBeenCalled();
+
+  fireEvent.click(picker);
+  fireEvent.keyDown(picker, { key: "End" });
+  fireEvent.keyDown(picker, { key: "Enter" });
+  expect(onChange).toHaveBeenCalledWith("p2", "model-high");
 });
 
 test("deleted historical model is not silently replaced", () => {
