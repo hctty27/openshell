@@ -53,15 +53,19 @@ type terminalAIResult struct {
 
 func (m *Manager) AcquireAITerminal(ref domain.ConnectionRef) (*AITerminalLease, error) {
     m.mu.Lock()
-    defer m.mu.Unlock()
     conn := m.connections[ref.TabID]
-    if conn == nil || conn.ref != ref || conn.terminal == nil || conn.stdin == nil ||
-        conn.filter == nil || conn.transferring || conn.zmodemSelection != nil {
+    m.mu.Unlock()
+    if conn == nil { return nil,errAITerminalUnavailable }
+    conn.stdinMu.Lock()
+    defer conn.stdinMu.Unlock()
+    m.mu.Lock()
+    defer m.mu.Unlock()
+    if m.connections[ref.TabID] != conn || conn.ref != ref ||
+        conn.terminal == nil || conn.stdin == nil || conn.filter == nil ||
+        conn.transferring || conn.zmodemSelection != nil {
         return nil, errAITerminalUnavailable
     }
-    if conn.aiController != nil {
-        return nil, errAITerminalBusy
-    }
+    if conn.aiController != nil { return nil, errAITerminalBusy }
     lease := &AITerminalLease{manager:m,connection:conn,ref:ref,closed:make(chan struct{})}
     conn.aiController = lease
     return lease,nil
@@ -70,6 +74,8 @@ func (m *Manager) AcquireAITerminal(ref domain.ConnectionRef) (*AITerminalLease,
 func (lease *AITerminalLease) Release() {
     lease.once.Do(func() {
         close(lease.closed)
+        lease.connection.stdinMu.Lock()
+        defer lease.connection.stdinMu.Unlock()
         m := lease.manager
         m.mu.Lock()
         if c := m.connections[lease.ref.TabID]; c == lease.connection && c.aiController == lease {
@@ -105,6 +111,8 @@ func (lease *AITerminalLease) validInput() (interface{ Write([]byte)(int,error) 
 }
 
 func (lease *AITerminalLease) send(data []byte) error {
+    lease.connection.stdinMu.Lock()
+    defer lease.connection.stdinMu.Unlock()
     input, err := lease.validInput()
     if err != nil { return err }
     _,err = input.Write(data)
@@ -112,6 +120,8 @@ func (lease *AITerminalLease) send(data []byte) error {
 }
 
 func (lease *AITerminalLease) interrupt() {
+    lease.connection.stdinMu.Lock()
+    defer lease.connection.stdinMu.Unlock()
     input, err := lease.validInput()
     if err == nil { _,_ = input.Write([]byte{3}) }
 }
@@ -184,6 +194,10 @@ func (lease *AITerminalLease) Run(ctx context.Context, command string) (string,e
     }
     result,err := lease.runMarker(ctx,command,false)
     if err != nil { return "",err }
+    if result.code < 0 {
+        lease.markFailed()
+        return "",errors.New("终端命令结束标记格式无效，已停止继续执行")
+    }
     return fmt.Sprintf("%s\n退出状态: %d",result.output,result.code),nil
 }
 
