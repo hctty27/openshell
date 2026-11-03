@@ -123,3 +123,15 @@ test("uses the final SSH exit status instead of status-looking command text", ()
   expect(screen.getByText("失败")).toBeTruthy();
   expect(screen.getByRole("button", { name: /终端命令/ }).getAttribute("aria-expanded")).toBe("true");
 });
+
+
+test("risk notes remain visible even when tool details are collapsed", () => {
+  render(<AITranscript messages={[
+    { role: "assistant", content: "注意：此操作可能覆盖配置，请先检查备份。", tool_calls: tool("risk", "ssh_exec", {
+      target: "t1", command: "cat /etc/nginx/nginx.conf",
+    }) },
+    { role: "tool", tool_call_id: "risk", content: "configuration available\n退出状态: 0" },
+  ]} />);
+  expect(screen.getByText(/此操作可能覆盖配置/)).toBeTruthy();
+  expect(screen.getByRole("button", { name: /终端命令/ }).getAttribute("aria-expanded")).toBe("false");
+});
