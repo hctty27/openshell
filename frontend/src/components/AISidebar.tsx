@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { Check, ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Send, Settings2, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Send, Sparkles, Square, Trash2, X } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, AITargetBinding, Tab } from "../types";
+import AIModelPicker from "./AIModelPicker";
+import { AI_PROVIDERS_CHANGED } from "../features/ai/providerEvents";
+import { readLastModel, saveLastModel } from "../features/ai/modelSelection";
 
 interface Props {
   tabs: Tab[];
@@ -20,14 +23,13 @@ interface Approval {
   tabId: string;
 }
 
-const emptyProvider = (): AIProvider => ({ id: "", name: "", baseUrl: "", hasKey: false, models: [] });
-
 export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, onClose }: Props) {
+  const lastModelRef = useRef(readLastModel());
   const [providers, setProviders] = useState<AIProvider[]>([]);
   const [conversations, setConversations] = useState<AIConversation[]>([]);
   const [conversationID, setConversationID] = useState("");
-  const [providerID, setProviderID] = useState("");
-  const [modelID, setModelID] = useState("");
+  const [providerID, setProviderID] = useState(lastModelRef.current.providerId);
+  const [modelID, setModelID] = useState(lastModelRef.current.modelId);
   const [mode, setMode] = useState<"review" | "auto">("review");
   const [targetIDs, setTargetIDs] = useState<string[]>([]);
   const [historySessionIDs, setHistorySessionIDs] = useState<string[]>([]);
@@ -37,10 +39,6 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   const [search, setSearch] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [showTargets, setShowTargets] = useState(false);
-  const [showProviders, setShowProviders] = useState(false);
-  const [draft, setDraft] = useState<AIProvider>(emptyProvider);
-  const [draftKey, setDraftKey] = useState("");
-  const [draftModels, setDraftModels] = useState("");
   const [running, setRunning] = useState<AIStartResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [stream, setStream] = useState("");
@@ -69,7 +67,16 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
         setConversations(c ?? []);
       })
       .catch(e => { if (valid) setError(errorText(e)); });
-    return () => { valid = false; };
+    const refreshProviders = () => {
+      void api.AIProviders().then(items => {
+        if (valid) setProviders(items ?? []);
+      }).catch(e => { if (valid) setError(errorText(e)); });
+    };
+    window.addEventListener(AI_PROVIDERS_CHANGED, refreshProviders);
+    return () => {
+      valid = false;
+      window.removeEventListener(AI_PROVIDERS_CHANGED, refreshProviders);
+    };
   }, []);
 
   useEffect(() => {
@@ -116,8 +123,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
   );
   const targetSet = new Set([...targetIDs, ...restoredTabIDs, ...(requiredID ? [requiredID] : [])]);
   const targets = connected.filter(tab => targetSet.has(tab.id));
-  const provider = providers.find(item => item.id === providerID) ?? providers[0];
-  const model = provider?.models.find(item => item.id === modelID) ?? provider?.models[0];
+  const provider = providerID ? providers.find(item => item.id === providerID) : providers[0];
+  const model = modelID ? provider?.models.find(item => item.id === modelID) : provider?.models[0];
   const current = conversations.find(item => item.id === conversationID);
   useLayoutEffect(() => {
     const node = messagesRef.current;
@@ -164,41 +171,20 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
     setHistoryBindings([]);
     setLegacyHistoryNeedsRebind(false);
     setConversationID("");
+    setProviderID(lastModelRef.current.providerId);
+    setModelID(lastModelRef.current.modelId);
     setMessage("");
     setStream("");
     setStatus("");
     setError("");
     setShowHistory(false);
-    setShowProviders(false);
   };
-  const beginEdit = (item?: AIProvider) => {
-    setDraft(item ? { ...item } : emptyProvider());
-    setDraftKey("");
-    setDraftModels((item?.models ?? []).map(m => m.id).join("\n"));
-    setShowProviders(true);
-    setShowHistory(false);
-  };
-  const saveProvider = async (event: FormEvent) => {
-    event.preventDefault();
-    setError("");
-    const models = [...new Set(draftModels.split(/[\r\n,]+/).map(x => x.trim()).filter(Boolean))].map(id => ({ id, name: id }));
-    try {
-      const saved = await api.AISaveProvider({ provider: { ...draft, models }, apiKey: draftKey.trim() });
-      setProviders(old => [...old.filter(p => p.id !== saved.id), saved]);
-      setProviderID(saved.id);
-      setModelID(saved.models[0]?.id ?? "");
-      setDraftKey("");
-      setShowProviders(false);
-    } catch (e) { setError(errorText(e)); }
-  };
-  const removeProvider = async () => {
-    if (!draft.id || !window.confirm("确定删除此 API 提供商？")) return;
-    try {
-      await api.AIDeleteProvider(draft.id);
-      setProviders(old => old.filter(p => p.id !== draft.id));
-      if (providerID === draft.id) setProviderID("");
-      setShowProviders(false);
-    } catch (e) { setError(errorText(e)); }
+  const chooseModel = (nextProviderID: string, nextModelID: string) => {
+    setProviderID(nextProviderID);
+    setModelID(nextModelID);
+    const selected = { providerId: nextProviderID, modelId: nextModelID };
+    lastModelRef.current = selected;
+    saveLastModel(selected);
   };
   const removeHistory = async (id: string) => {
     try {
@@ -233,9 +219,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
       <header className="ai-header">
         <strong><Sparkles size={15} /> AI 助手</strong>
         <div className="ai-header-actions">
-          <button title="全局对话记录" aria-label="全局对话记录" onClick={() => { setShowHistory(!showHistory); setShowProviders(false); }}><History size={15} /></button>
+          <button title="全局对话记录" aria-label="全局对话记录" onClick={() => setShowHistory(!showHistory)}><History size={15} /></button>
           <button title="新对话" aria-label="新对话" onClick={newConversation} disabled={!!running}><Plus size={15} /></button>
-          <button title="模型设置" aria-label="模型设置" onClick={() => showProviders ? setShowProviders(false) : beginEdit(provider)}><Settings2 size={15} /></button>
           <button title={pinned ? "自动隐藏 AI 栏" : "固定 AI 栏"} aria-label={pinned ? "自动隐藏 AI 栏" : "固定 AI 栏"} onClick={onTogglePin}>
             {pinned ? <Pin size={15} /> : <PinOff size={15} />}
           </button>
@@ -243,28 +228,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
         </div>
       </header>
 
-      {showProviders ? (
-        <div className="ai-settings">
-          <div className="ai-settings-list">
-            {providers.map(p => (
-              <button key={p.id} className={draft.id === p.id ? "selected" : ""} onClick={() => beginEdit(p)}>{p.name}</button>
-            ))}
-            <button onClick={() => beginEdit()}><Plus size={13} /> 添加 API</button>
-          </div>
-          <form onSubmit={saveProvider}>
-            <label>API 名称<input value={draft.name} onChange={e => setDraft(p => ({ ...p, name: e.target.value }))} placeholder="My API" required /></label>
-            <label>Base URL<input value={draft.baseUrl} onChange={e => setDraft(p => ({ ...p, baseUrl: e.target.value }))} placeholder="https://example.com/v1" required /></label>
-            <label>API Key<input type="password" autoComplete="off" value={draftKey} onChange={e => setDraftKey(e.target.value)} placeholder={draft.hasKey ? "留空保持原密钥" : "输入 API Key"} /></label>
-            <label>模型 ID（每行一个）<textarea rows={5} value={draftModels} onChange={e => setDraftModels(e.target.value)} placeholder={"model-1\nmodel-2"} required /></label>
-            <div className="ai-form-actions">
-              {draft.id && <button type="button" className="ai-danger" onClick={() => void removeProvider()}><Trash2 size={13} /> 删除</button>}
-              <button type="button" onClick={() => setShowProviders(false)}>取消</button>
-              <button className="ai-primary" type="submit"><Check size={13} /> 保存</button>
-            </div>
-          </form>
-        </div>
-      ) : (
-        <>
+      <>
           {showHistory && (
             <div className="ai-history">
               <label className="ai-search"><Search size={14} /><input placeholder="搜索所有对话..." value={search} onChange={e => setSearch(e.target.value)} /></label>
@@ -347,23 +311,24 @@ export default function AISidebar({ tabs, active, pinned, isOpen, onTogglePin, o
             {error && <p className="ai-error" role="alert">{error}</p>}
           </div>
           <form className="ai-compose" onSubmit={submit}>
-            <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3}
-              placeholder="描述需要 AI 执行的任务..."
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}/>
-            <div className="ai-compose-actions">
-              <select value={provider?.id ?? ""} onChange={e => { setProviderID(e.target.value); setModelID(""); }} aria-label="API 提供商">
-                {!providers.length && <option value="">请配置 API</option>}
-                {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <select value={model?.id ?? ""} onChange={e => setModelID(e.target.value)} aria-label="模型">
-                {(provider?.models ?? []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-              {running ? <button type="button" title="停止任务" onClick={() => void api.AIStop(running.taskId)}><Square size={15} /></button> :
-                <button type="submit" title="发送" className="ai-primary" disabled={submitting || !provider || !targets.length || legacyHistoryNeedsRebind || unavailableSessionIDs.length > 0 || !message.trim()}><Send size={15} /></button>}
+            <div className="ai-compose-box">
+              <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3}
+                placeholder="描述需要 AI 执行的任务..."
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}/>
+              <div className="ai-compose-actions">
+                <AIModelPicker providers={providers}
+                  providerID={provider?.id ?? providerID} modelID={model?.id ?? modelID}
+                  onChange={chooseModel} disabled={submitting || !!running} />
+                {running ? <button type="button" title="停止任务" aria-label="停止任务"
+                    onClick={() => void api.AIStop(running.taskId)}><Square size={15} /></button> :
+                  <button type="submit" title="发送" aria-label="发送" className="ai-primary"
+                    disabled={submitting || !provider || !model || !targets.length || legacyHistoryNeedsRebind || unavailableSessionIDs.length > 0 || !message.trim()}>
+                    <Send size={15} />
+                  </button>}
+              </div>
             </div>
           </form>
-        </>
-      )}
+      </>
     </aside>
   );
 }
