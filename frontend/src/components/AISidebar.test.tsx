@@ -135,6 +135,7 @@ test("visible terminal mode uses automatic readiness detection without confirmat
     render(<AISidebar tabs={[connectedTab]} active={connectedTab}
       pinned isOpen onTogglePin={vi.fn()} onClose={vi.fn()} />);
   });
+  fireEvent.click(screen.getByRole("button", { name: "AI 操作方式" }));
   fireEvent.change(screen.getByTitle("AI 操作方式"), { target: { value: "terminal" } });
   fireEvent.change(screen.getByPlaceholderText("描述需要 AI 执行的任务..."), {
     target: { value: "检查当前目录" },
@@ -158,8 +159,9 @@ test("alternate terminal screen rejects visible-terminal execution", async () =>
     render(<AISidebar tabs={[connectedTab]} active={connectedTab}
       terminalAlternate pinned isOpen onTogglePin={vi.fn()} onClose={vi.fn()} />);
   });
+  fireEvent.click(screen.getByRole("button", { name: "AI 操作方式" }));
   fireEvent.change(screen.getByTitle("AI 操作方式"), { target: { value: "terminal" } });
-  expect(screen.getByText(/正在运行全屏交互程序/)).toBeTruthy();
+  expect(screen.getAllByText(/正在运行全屏交互程序/).length).toBeGreaterThan(0);
   expect(screen.queryByRole("checkbox", { name: /终端已停留/ })).toBeNull();
 });
 
@@ -172,6 +174,8 @@ test("AI defaults to automatic SSH execution routing", async () => {
     render(<AISidebar tabs={[connectedTab]} active={connectedTab}
       pinned isOpen onTogglePin={vi.fn()} onClose={vi.fn()} />);
   });
+  expect(screen.queryByText(/普通 SSH 优先独立执行/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "AI 操作方式" }));
   const select = screen.getByTitle("AI 操作方式") as HTMLSelectElement;
   expect(select.value).toBe("auto");
   expect(screen.getByText(/普通 SSH 优先独立执行/)).toBeTruthy();
@@ -190,7 +194,26 @@ test("AI sidebar is usable in English without leftover Chinese controls", async 
   render(<AISidebar tabs={[]} pinned={false} isOpen={true} onTogglePin={vi.fn()} onClose={vi.fn()} />);
   expect(screen.getByRole("complementary", { name: "AI Assistant" })).toBeTruthy();
   expect(screen.getByText("Let AI help manage your servers")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "AI execution method" }));
   expect(screen.getByTitle("AI execution method")).toBeTruthy();
   expect(screen.getByText(/Execution capabilities are detected automatically/)).toBeTruthy();
   expect(screen.getByPlaceholderText("Describe the task for AI...")).toBeTruthy();
+});
+
+test("AI sidebar keeps execution details in an accessible compact menu", () => {
+  render(<AISidebar tabs={[connectedTab]} active={connectedTab} pinned={true}
+    isOpen={true} onTogglePin={vi.fn()} onClose={vi.fn()} />);
+  expect(screen.getByRole("combobox", { name: "执行模式" })).toBeTruthy();
+  expect(screen.getByRole("option", { name: "自动审查" })).toBeTruthy();
+  expect(screen.queryByText(/普通 SSH 优先独立执行/)).toBeNull();
+  const options = screen.getByRole("button", { name: "AI 操作方式" });
+  expect(options.getAttribute("aria-expanded")).toBe("false");
+
+  fireEvent.click(options);
+  expect(options.getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByTitle("AI 操作方式")).toBeTruthy();
+  expect(screen.getByText(/普通 SSH 优先独立执行/)).toBeTruthy();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(options.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByText(/普通 SSH 优先独立执行/)).toBeNull();
 });
