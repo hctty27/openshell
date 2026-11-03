@@ -57,3 +57,12 @@ test("picker is disabled while AI is executing", () => {
     disabled onChange={vi.fn()} />);
   expect((screen.getByRole("combobox", { name: "选择 AI 模型" }) as HTMLButtonElement).disabled).toBe(true);
 });
+
+
+test("model picker labels follow the current language", async () => {
+  await initializeI18n("en");
+  render(<AIModelPicker providers={providers} providerID="p1" modelID="missing"
+    onChange={vi.fn()} />);
+  expect(screen.getByRole("combobox", { name: "Choose AI model" })).toBeTruthy();
+  expect(screen.getByText("Model unavailable. Select another model.")).toBeTruthy();
+});
