@@ -7,6 +7,7 @@ import AITranscript from "./AITranscript";
 import { AI_PROVIDERS_CHANGED } from "../features/ai/providerEvents";
 import { readLastModel, saveLastModel } from "../features/ai/modelSelection";
 import { t } from "../i18n";
+import { decodeAppError } from "../i18n/errors";
 import { useTranslation } from "react-i18next";
 
 interface Props {
@@ -348,7 +349,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
               </div>
             )}
             {status && <p className={`ai-status ${running ? "" : "ai-status--error"}`}>
-              {running && <LoaderCircle size={13} className="spin" />} {status === "running" ? t("ai:running") : status}
+              {running && <LoaderCircle size={13} className="spin" />} {status === "running" ? t("ai:running") : decodeAppError(status) ? errorText(status) : status}
             </p>}
             {error && <p className="ai-error" role="alert">{error}</p>}
           </div>
