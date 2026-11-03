@@ -74,3 +74,27 @@ test("SFTP and terminal transfers share the same center", () => {
   expect(screen.getByText("Server B")).toBeTruthy();
   expect(screen.getByText("50%")).toBeTruthy();
 });
+
+test("badge counts only active jobs while failed transfers remain visible", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  const toggle = screen.getByRole("button", { name: "传输任务" });
+  const badge = () => container.querySelector(".transfer-center-count");
+
+  expect(badge()).toBeNull();
+  const task = {
+    id: "badge-job", ref: refA, direction: "upload", source: "C:\\file.zip",
+    destination: "/tmp/file.zip", name: "file.zip", bytes: 0, total: 100,
+    status: "queued", overwrite: false, resume: false, error: "", created: 11,
+  };
+  emit("sftp:transfer", task);
+  expect(badge()?.textContent).toBe("1");
+
+  emit("sftp:transfer", { ...task, status: "running", bytes: 50 });
+  expect(badge()?.textContent).toBe("1");
+
+  emit("sftp:transfer", { ...task, status: "failed", error: "connection lost" });
+  expect(badge()).toBeNull();
+  fireEvent.click(toggle);
+  expect(screen.getByText("file.zip")).toBeTruthy();
+  expect(container.querySelector(".transfer-center-line button")).not.toBeNull();
+});
