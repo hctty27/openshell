@@ -50,6 +50,7 @@ type AIConversation struct {
 	ModelID string `json:"modelId"`
 	Mode string `json:"mode"`
 	TargetNames []string `json:"targetNames"`
+	TargetSessionIDs []string `json:"targetSessionIds,omitempty"`
 	Messages []AIMessage `json:"messages"`
 	UpdatedAt string `json:"updatedAt"`
 }
