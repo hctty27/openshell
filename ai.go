@@ -141,7 +141,7 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 		s, err := a.ssh.ConnectedSession(ref)
 		if err != nil { return AITaskStart{}, err }
 		seenTabs[ref.TabID] = true
-		target := fmt.Sprintf("target_%d", len(allowed)+1)
+		target := "target_" + domain.NewID()[:10]
 		allowed[target] = ref
 		names = append(names, fmt.Sprintf("%s (%s@%s)", s.Name, s.Username, s.Host))
 		sessionIDs = append(sessionIDs, ref.SessionID)
