@@ -814,3 +814,41 @@ test("bilingual settings and session picker fit a compact window", async ({
   await page.screenshot({ path: "../tmp/i18n-zh-picker-compact.png" });
 });
 
+
+test("AI header aligns with SSH title bar", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 700 });
+  await page.goto("/");
+  await page.getByTitle("新建会话", { exact: true }).first().click();
+  await page.getByLabel("会话名称", { exact: true }).fill("对齐测试");
+  await page.getByLabel("主机地址").fill("127.0.0.1");
+  await page.getByLabel("登录密码").fill("fixture-password");
+  await page.getByText("保存到 Windows 凭据管理器").click();
+  await page.getByRole("button", { name: "保存会话", exact: true }).click();
+  await page.getByRole("button", { name: "选中会话 对齐测试" }).dblclick();
+
+  await page.locator(".ai-rail").click();
+  await page.getByRole("button", { name: "固定 AI 栏" }).click();
+  await expect(page.locator(".ai-panel")).toBeVisible();
+  const alignment = await page.evaluate(() => {
+    const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+    const tabs = rect(".tab-strip");
+    const connection = rect(".terminal-toolbar");
+    const aiHeader = rect(".ai-header");
+    const aiControls = rect(".ai-controls");
+    return {
+      tabHeight: tabs.height, headerHeight: aiHeader.height,
+      connectionHeight: connection.height, controlsHeight: aiControls.height,
+      headerOffset: aiHeader.top - tabs.top,
+      controlsOffset: aiControls.top - connection.top,
+      horizontalOverflow: document.querySelector(".ai-panel")!.scrollWidth
+        > document.querySelector(".ai-panel")!.clientWidth + 1,
+    };
+  });
+  expect(alignment.tabHeight).toBe(30);
+  expect(alignment.headerHeight).toBe(30);
+  expect(alignment.connectionHeight).toBe(30);
+  expect(alignment.controlsHeight).toBe(30);
+  expect(Math.abs(alignment.headerOffset)).toBeLessThanOrEqual(1);
+  expect(Math.abs(alignment.controlsOffset)).toBeLessThanOrEqual(1);
+  expect(alignment.horizontalOverflow).toBe(false);
+});
