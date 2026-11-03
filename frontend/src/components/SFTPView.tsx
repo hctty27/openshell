@@ -7,7 +7,7 @@ import { mergeTransferHistory, sameTransferRef } from "../features/transfers/tra
 import { useDialogs } from "./DialogProvider";
 import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMenu";
 import { i18n, t } from "../i18n";
-import { ClipboardSetText } from "../../wailsjs/runtime/runtime";
+import { Clipboard } from "@wailsio/runtime";
 import { BASH_CWD_REPORT_COMMAND } from "../terminalCwd";
 
 type Side = "local" | "remote";
@@ -244,7 +244,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
       ...(side==="remote" && !item.isDir && !item.isSymlink ? [{label:t("sftp:editText"),icon:FileText,onSelect:()=>void openEditor(item)}] : []),
       {label:t("sftp:rename"),icon:Pencil,onSelect:()=>void operate(side,"rename",item)},
       {label:t("sftp:chmod"),icon:Shield,onSelect:()=>void operate(side,"chmod",item)},
-      {label:t("sftp:copyPath"),icon:ClipboardCopy,onSelect:()=>void navigator.clipboard.writeText(item.path)},
+      {label:t("sftp:copyPath"),icon:ClipboardCopy,onSelect:()=>void Clipboard.SetText(item.path).catch(onNotice)},
       {label:t("sftp:delete"),icon:Trash2,danger:true,separatorBefore:true,onSelect:()=>void operate(side,"delete",item)}
     ];
     setSelection(s=>({...s,[side]:[item.path]}));
@@ -321,10 +321,9 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
           onFileDrop={event=>drop("local",event)}/>
         <FilePanel side="remote" directory={remoteDir} entries={remoteFiles} selected={selection.remote} loading={remoteBusy} error={remoteError} showHidden={hidden}
           onToggleHidden={()=>setHidden(s=>!s)} onDir={dir=>changeDir("remote",dir)} onReload={()=>setVersion(v=>v+1)}
-          onCwdHelp={!cwdReported ? () => void ClipboardSetText(BASH_CWD_REPORT_COMMAND).then(copied => {
-            if (!copied) throw new Error(t("sftp:cwdCommandCopyFailed"));
-            onNotice(t("sftp:cwdCommandCopied"));
-          }).catch(onNotice) : undefined}
+          onCwdHelp={!cwdReported ? () => void Clipboard.SetText(BASH_CWD_REPORT_COMMAND)
+            .then(() => onNotice(t("sftp:cwdCommandCopied")))
+            .catch(onNotice) : undefined}
           onOpenFile={item=>void openEditor(item)} onSelect={(item,multi)=>choose("remote",item,multi)} onTransfer={()=>void transfer("remote",selection.remote,localDir)}
           onOperate={(action,entry)=>void operate("remote",action,entry)} onContext={(event,item)=>context(event,"remote",item)}
           onFileDrop={event=>drop("remote",event)}/>
