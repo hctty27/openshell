@@ -72,6 +72,9 @@ export function attachImeFocusRecovery(
     composing = false;
     if (pending) schedule();
   };
+  const onKeyDown = () => {
+    if (pending && !composing && !restoring) schedule();
+  };
   const onBlur = () => {
     if (restoring) return;
     pending = false;
@@ -81,6 +84,7 @@ export function attachImeFocusRecovery(
 
   textarea?.addEventListener("compositionstart", onCompositionStart, true);
   textarea?.addEventListener("compositionend", onCompositionEnd, true);
+  textarea?.addEventListener("keydown", onKeyDown, true);
   textarea?.addEventListener("blur", onBlur);
 
   return {
@@ -91,6 +95,7 @@ export function attachImeFocusRecovery(
       clearFocusTimer();
       textarea?.removeEventListener("compositionstart", onCompositionStart, true);
       textarea?.removeEventListener("compositionend", onCompositionEnd, true);
+      textarea?.removeEventListener("keydown", onKeyDown, true);
       textarea?.removeEventListener("blur", onBlur);
     },
   };
