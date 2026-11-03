@@ -414,6 +414,7 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		return errAITerminalBusy
 	}
 	stdin := c.stdin
+	c.readiness.userInput(p)
 	m.mu.Unlock()
 	_, e = stdin.Write(p)
 	return e
