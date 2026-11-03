@@ -12,6 +12,11 @@ interface ModalSurfaceProps extends Omit<DialogHTMLAttributes<HTMLDialogElement>
  * Shared native modal: browser-managed top layer, focus containment and
  * Escape handling. The previous focus target is restored on unmount.
  */
+function outsideDialog(dialog: HTMLDialogElement, x: number, y: number): boolean {
+  const bounds = dialog.getBoundingClientRect();
+  return x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom;
+}
+
 export default function ModalSurface({
   children,
   className = "",
@@ -22,6 +27,7 @@ export default function ModalSurface({
   ...attributes
 }: ModalSurfaceProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const pressedOnBackdrop = useRef(false);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -46,13 +52,18 @@ export default function ModalSurface({
         event.preventDefault();
         if (!locked) onDismiss();
       }}
+      onPointerDown={(event) => {
+        pressedOnBackdrop.current = event.button === 0 &&
+          event.target === event.currentTarget &&
+          outsideDialog(event.currentTarget, event.clientX, event.clientY);
+      }}
+      onPointerCancel={() => { pressedOnBackdrop.current = false; }}
       onClick={(event) => {
-        if (locked || !closeOnBackdrop || event.target !== event.currentTarget) return;
-        const bounds = event.currentTarget.getBoundingClientRect();
-        if (
-          event.clientX < bounds.left || event.clientX > bounds.right ||
-          event.clientY < bounds.top || event.clientY > bounds.bottom
-        ) onDismiss();
+        const startedOnBackdrop = pressedOnBackdrop.current;
+        pressedOnBackdrop.current = false;
+        if (locked || !closeOnBackdrop || !startedOnBackdrop ||
+            event.target !== event.currentTarget) return;
+        if (outsideDialog(event.currentTarget, event.clientX, event.clientY)) onDismiss();
       }}
     >
       {children}
