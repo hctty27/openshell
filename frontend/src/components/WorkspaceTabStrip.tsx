@@ -12,6 +12,7 @@ interface DragPreview { id: string; x: number; y: number; insertion: number; wid
 interface Props {
   tabs: Tab[];
   activeID: string;
+  unreadTabIDs?: ReadonlySet<string>;
   disconnectBehavior: DisconnectBehavior;
   onActivate(tabID: string): void;
   onDuplicate(tab: Tab): void;
@@ -171,12 +172,13 @@ export default function WorkspaceTabStrip(p: Props) {
           const shiftingRight = !!drag && drag.insertion >= 0 && index < draggedIndex &&
             index >= drag.insertion;
           const shift = shiftingLeft ? -drag!.width : shiftingRight ? drag!.width : 0;
+          const hasActivity = p.activeID !== tab.id && p.unreadTabIDs?.has(tab.id);
           return (
             <div key={tab.id} data-tab-id={tab.id}
               className={`terminal-tab ${p.activeID === tab.id ? "active" : ""} ${drag?.id === tab.id ? "dragging" : ""}`}
               style={{ transform: shift ? `translateX(${shift}px)` : undefined }}>
               <button title={t("common:doubleClickToDuplicateSession")}
-                aria-label={t("common:sessionTabDescription", { name: tab.session.name })}
+                aria-label={`${t("common:sessionTabDescription", { name: tab.session.name })}${hasActivity ? ` ${t("common:backgroundSessionOutput")}` : ""}`}
                 aria-keyshortcuts="Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"
                 onPointerDown={event => beginDrag(tab.id, event)}
                 onKeyDown={event => moveWithKeyboard(tab.id, index, event)}
@@ -193,6 +195,7 @@ export default function WorkspaceTabStrip(p: Props) {
                   localShell={p.disconnectBehavior === "local" && !!tab.ref && !!tab.everConnected
                     && !tab.localFallbackPending} />
                 <span>{tab.session.name}</span>
+                {hasActivity && <span className="terminal-tab-activity" title={t("common:backgroundSessionOutput")} aria-hidden="true" />}
               </button>
               <button className="terminal-tab-close"
                 title={t("common:closeTab", { name: tab.session.name })}
