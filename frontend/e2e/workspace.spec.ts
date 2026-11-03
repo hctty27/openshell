@@ -862,7 +862,11 @@ test("AI header aligns with SSH title bar", async ({ page }) => {
   await page.getByText("保存到 Windows 凭据管理器").click();
   await page.getByRole("button", { name: "保存会话", exact: true }).click();
   await page.getByRole("button", { name: "选中会话 第二台非常长名称的服务器" }).dblclick();
-  await page.getByRole("button", { name: "信任并连接" }).click();
+  const trustButton = page.getByRole("button", { name: "信任并连接" });
+  const connectedTab = page.locator(".terminal-tab.active .connection-state-connected");
+  await expect.poll(async () => (await trustButton.isVisible()) || (await connectedTab.isVisible())).toBe(true);
+  if (await trustButton.isVisible()) await trustButton.click();
+  await expect(connectedTab).toHaveAttribute("aria-label", "SSH 已连接");
 
   const geometry = async () => page.locator(".ai-controls").evaluate(element => {
     const selector = element.querySelector(".ai-selector-button")!.getBoundingClientRect();
