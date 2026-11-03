@@ -129,8 +129,8 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	if req.Mode != "review" && req.Mode != "auto" { return AITaskStart{}, errors.New("执行模式无效") }
 	if req.Execution == "" { req.Execution = "independent" }
 	if req.Execution != "independent" && req.Execution != "terminal" { return AITaskStart{}, errors.New("终端操作方式无效") }
-	if req.Execution == "terminal" && (!req.TerminalReady || len(req.Targets) != 1) {
-		return AITaskStart{},errors.New("当前终端操作仅支持一个已连接会话，必须先确认终端位于空白 Shell 提示符")
+	if req.Execution == "terminal" && len(req.Targets) != 1 {
+		return AITaskStart{},errors.New("当前终端操作仅支持一个已连接 SSH 会话")
 	}
 	provider, err := a.store.GetAIProvider(a.ctx, req.ProviderID)
 	if err != nil { return AITaskStart{}, err }
