@@ -245,17 +245,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     setAISidebarMode(next);
     void api.SavePreference("aiSidebarMode", next).catch(notify);
   };
-  const closeAI = () => {
-    if (aiSidebarMode === "pinned") {
-      setAISidebarMode("auto-hide");
-      void api.SavePreference("aiSidebarMode", "auto-hide").catch(notify);
-    }
-    if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
-    if (aiCloseTimer.current !== null) window.clearTimeout(aiCloseTimer.current);
-    setAIHoverOpen(false);
-    setAIFocusOpen(false);
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-  };
   useEffect(() => () => {
     if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
     if (aiCloseTimer.current !== null) window.clearTimeout(aiCloseTimer.current);
@@ -1342,7 +1331,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           {aiPinned && <div className="ai-dock-splitter" onPointerDown={startAIResize} role="separator" aria-label={tr("ai:resizeAiSidebar")} />}
           <AISidebar tabs={tabs} active={active} pinned={aiSidebarMode === "pinned"} isOpen={aiOpen}
             terminalAlternate={Boolean(active?.ref && alternateTerminals[activeID]?.generation === active.ref.generation && alternateTerminals[activeID]?.active)}
-            onTogglePin={toggleAIPin} onClose={closeAI} />
+            onTogglePin={toggleAIPin} />
         </div>
       </div>
       {showSessionPicker && (

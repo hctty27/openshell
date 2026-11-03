@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { ChevronDown, History, LoaderCircle, MoreHorizontal, Pin, PinOff, Plus, Search, Send, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ChevronDown, History, LoaderCircle, MoreHorizontal, Pin, PinOff, Plus, Search, Send, Sparkles, Square, Trash2 } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, AITargetBinding, Tab } from "../types";
 import AIModelPicker from "./AIModelPicker";
@@ -17,7 +17,6 @@ interface Props {
   isOpen: boolean;
   terminalAlternate?: boolean;
   onTogglePin(): void;
-  onClose(): void;
 }
 
 interface Approval {
@@ -28,7 +27,7 @@ interface Approval {
   tabId: string;
 }
 
-export default function AISidebar({ tabs, active, pinned, isOpen, terminalAlternate = false, onTogglePin, onClose }: Props) {
+export default function AISidebar({ tabs, active, pinned, isOpen, terminalAlternate = false, onTogglePin }: Props) {
   useTranslation("ai");
   const lastModelRef = useRef(readLastModel());
   const [providers, setProviders] = useState<AIProvider[]>([]);
@@ -158,6 +157,11 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   );
   const targetSet = new Set([...targetIDs, ...restoredTabIDs, ...(requiredID ? [requiredID] : [])]);
   const targets = connected.filter(tab => targetSet.has(tab.id));
+  const primaryTarget = targets.find(tab => tab.id === requiredID) ?? targets[0];
+  const selectedTargetLabel = primaryTarget
+    ? `${primaryTarget.session.name}${targets.length > 1 ? ` +${targets.length - 1}` : ""}`
+    : t("ai:noConnectedSessions");
+  const selectedTargetTitle = `${t("ai:sessionsLabel")}${targets.map(tab => tab.session.name).join("、") || t("ai:noConnectedSessions")}`;
   const terminalSingleTarget = Boolean(
     active?.ref && targets.length === 1 &&
     targets[0]?.ref?.tabId === active.ref.tabId &&
@@ -296,7 +300,6 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
           <button title={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")} aria-label={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")} onClick={onTogglePin}>
             {pinned ? <Pin size={15} /> : <PinOff size={15} />}
           </button>
-          <button title={t("ai:collapseSidebar")} aria-label={t("ai:collapseSidebar")} onClick={onClose}><X size={15} /></button>
         </div>
       </header>
 
@@ -321,8 +324,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
             <div className="ai-selector">
               <button type="button" className="ai-selector-button" onClick={() => setShowTargets(!showTargets)}
                 aria-expanded={showTargets}
-                title={`${t("ai:sessionsLabel")}${targets.map(tab => tab.session.name).join("、") || t("ai:noConnectedSessions")}`}>
-                <span className="ai-selector-label">{t("ai:sessionsLabel")}{targets.map(tab => tab.session.name).join("、") || t("ai:noConnectedSessions")}</span>
+                title={selectedTargetTitle} aria-label={selectedTargetTitle}>
+                <span className="ai-selector-label">{t("ai:sessionsLabel")}{selectedTargetLabel}</span>
                 <ChevronDown size={13} aria-hidden="true" />
               </button>
               {showTargets && (

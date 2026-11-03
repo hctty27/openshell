@@ -853,4 +853,34 @@ test("AI header aligns with SSH title bar", async ({ page }) => {
   expect(Math.abs(alignment.headerOffset)).toBeLessThanOrEqual(1);
   expect(Math.abs(alignment.controlsOffset)).toBeLessThanOrEqual(1);
   expect(alignment.horizontalOverflow).toBe(false);
+  await expect(page.getByRole("button", { name: "收起 AI 栏" })).toHaveCount(0);
+
+  await page.getByTitle("新建会话", { exact: true }).first().click();
+  await page.getByLabel("会话名称", { exact: true }).fill("第二台非常长名称的服务器");
+  await page.getByLabel("主机地址").fill("127.0.0.2");
+  await page.getByLabel("登录密码").fill("fixture-password");
+  await page.getByText("保存到 Windows 凭据管理器").click();
+  await page.getByRole("button", { name: "保存会话", exact: true }).click();
+  await page.getByRole("button", { name: "选中会话 第二台非常长名称的服务器" }).dblclick();
+  const trustButton = page.getByRole("button", { name: "信任并连接" });
+  const connectedTab = page.locator(".terminal-tab.active .connection-state-connected");
+  await expect.poll(async () => (await trustButton.isVisible()) || (await connectedTab.isVisible())).toBe(true);
+  if (await trustButton.isVisible()) await trustButton.click();
+  await expect(connectedTab).toHaveAttribute("aria-label", "SSH 已连接");
+
+  const geometry = async () => page.locator(".ai-controls").evaluate(element => {
+    const selector = element.querySelector(".ai-selector-button")!.getBoundingClientRect();
+    const review = element.querySelector("select")!.getBoundingClientRect();
+    return { selectorX: selector.x, selectorWidth: selector.width, reviewX: review.x, reviewWidth: review.width };
+  });
+  const before = await geometry();
+  await page.locator(".ai-selector-button").click();
+  await page.locator(".ai-target-menu input[type=checkbox]").first().check();
+  const after = await geometry();
+  expect(after.selectorX).toBe(before.selectorX);
+  expect(after.selectorWidth).toBe(before.selectorWidth);
+  expect(after.reviewX).toBe(before.reviewX);
+  expect(after.reviewWidth).toBe(before.reviewWidth);
+  await expect(page.locator(".ai-selector-label")).toContainText("+1");
+  await expect(page.locator(".ai-target-menu")).toBeVisible();
 });

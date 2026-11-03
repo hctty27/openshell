@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 test("AI output follows new chunks near the bottom, but respects manual scrollback", async () => {
-  render(<AISidebar tabs={[]} pinned={false} isOpen={true} onTogglePin={vi.fn()} onClose={vi.fn()} />);
+  render(<AISidebar tabs={[]} pinned={false} isOpen={true} onTogglePin={vi.fn()} />);
   const node = screen.getByRole("complementary", { name: "AI 助手" })
     .querySelector<HTMLElement>(".ai-messages")!;
 
@@ -89,7 +89,7 @@ test("historical session uses the current connection after reconnect", async () 
   vi.mocked(api.AIConversations).mockResolvedValueOnce([oldConversation()]);
   await act(async () => {
     render(<AISidebar tabs={[connectedTab]} active={connectedTab} pinned={true}
-      isOpen={true} onTogglePin={vi.fn()} onClose={vi.fn()} />);
+      isOpen={true} onTogglePin={vi.fn()} />);
   });
   fireEvent.click(screen.getByRole("button", { name: "全局对话记录" }));
   fireEvent.click(screen.getByRole("button", { name: /历史 Docker 检查/ }));
@@ -101,7 +101,7 @@ test("changed host in historical conversation never silently rebinds", async () 
   vi.mocked(api.AIConversations).mockResolvedValueOnce([oldConversation("other.test")]);
   await act(async () => {
     render(<AISidebar tabs={[connectedTab]} active={connectedTab} pinned={true}
-      isOpen={true} onTogglePin={vi.fn()} onClose={vi.fn()} />);
+      isOpen={true} onTogglePin={vi.fn()} />);
   });
   fireEvent.click(screen.getByRole("button", { name: "全局对话记录" }));
   fireEvent.click(screen.getByRole("button", { name: /历史 Docker 检查/ }));
@@ -117,7 +117,7 @@ test("legacy conversation requires explicit target rebinding", async () => {
   vi.mocked(api.AIConversations).mockResolvedValueOnce([legacy]);
   await act(async () => {
     render(<AISidebar tabs={[connectedTab]} active={connectedTab} pinned={true}
-      isOpen={true} onTogglePin={vi.fn()} onClose={vi.fn()} />);
+      isOpen={true} onTogglePin={vi.fn()} />);
   });
   fireEvent.click(screen.getByRole("button", { name: "全局对话记录" }));
   fireEvent.click(screen.getByRole("button", { name: /历史 Docker 检查/ }));
@@ -133,7 +133,7 @@ test("visible terminal mode uses automatic readiness detection without confirmat
   }]);
   await act(async () => {
     render(<AISidebar tabs={[connectedTab]} active={connectedTab}
-      pinned isOpen onTogglePin={vi.fn()} onClose={vi.fn()} />);
+      pinned isOpen onTogglePin={vi.fn()} />);
   });
   fireEvent.click(screen.getByRole("button", { name: "AI 操作方式" }));
   fireEvent.change(screen.getByTitle("AI 操作方式"), { target: { value: "terminal" } });
@@ -157,7 +157,7 @@ test("alternate terminal screen rejects visible-terminal execution", async () =>
   }]);
   await act(async () => {
     render(<AISidebar tabs={[connectedTab]} active={connectedTab}
-      terminalAlternate pinned isOpen onTogglePin={vi.fn()} onClose={vi.fn()} />);
+      terminalAlternate pinned isOpen onTogglePin={vi.fn()} />);
   });
   fireEvent.click(screen.getByRole("button", { name: "AI 操作方式" }));
   fireEvent.change(screen.getByTitle("AI 操作方式"), { target: { value: "terminal" } });
@@ -172,7 +172,7 @@ test("AI defaults to automatic SSH execution routing", async () => {
   }]);
   await act(async () => {
     render(<AISidebar tabs={[connectedTab]} active={connectedTab}
-      pinned isOpen onTogglePin={vi.fn()} onClose={vi.fn()} />);
+      pinned isOpen onTogglePin={vi.fn()} />);
   });
   expect(screen.queryByText(/普通 SSH 优先独立执行/)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "AI 操作方式" }));
@@ -191,7 +191,7 @@ test("AI defaults to automatic SSH execution routing", async () => {
 
 test("AI sidebar is usable in English without leftover Chinese controls", async () => {
   await initializeI18n("en");
-  render(<AISidebar tabs={[]} pinned={false} isOpen={true} onTogglePin={vi.fn()} onClose={vi.fn()} />);
+  render(<AISidebar tabs={[]} pinned={false} isOpen={true} onTogglePin={vi.fn()} />);
   expect(screen.getByRole("complementary", { name: "AI Assistant" })).toBeTruthy();
   expect(screen.getByText("Let AI help manage your servers")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "AI execution method" }));
@@ -202,7 +202,7 @@ test("AI sidebar is usable in English without leftover Chinese controls", async 
 
 test("AI sidebar keeps execution details in an accessible compact menu", () => {
   render(<AISidebar tabs={[connectedTab]} active={connectedTab} pinned={true}
-    isOpen={true} onTogglePin={vi.fn()} onClose={vi.fn()} />);
+    isOpen={true} onTogglePin={vi.fn()} />);
   expect(screen.getByRole("combobox", { name: "执行模式" })).toBeTruthy();
   expect(screen.getByRole("option", { name: "自动审查" })).toBeTruthy();
   expect(screen.queryByText(/普通 SSH 优先独立执行/)).toBeNull();
@@ -216,4 +216,40 @@ test("AI sidebar keeps execution details in an accessible compact menu", () => {
   fireEvent.keyDown(document, { key: "Escape" });
   expect(options.getAttribute("aria-expanded")).toBe("false");
   expect(screen.queryByText(/普通 SSH 优先独立执行/)).toBeNull();
+});
+
+test("multi-session summary stays compact and selection retains exact targets", async () => {
+  const extraTabs: Tab[] = [
+    { ...connectedTab, id: "extra-1",
+      session: { ...connectedTab.session, id: "region-1", name: "一台名称很长的服务器一号" },
+      ref: { tabId: "extra-1", sessionId: "region-1", generation: 1 } },
+    { ...connectedTab, id: "extra-2",
+      session: { ...connectedTab.session, id: "region-2", name: "另一台名称很长的服务器二号" },
+      ref: { tabId: "extra-2", sessionId: "region-2", generation: 1 } },
+  ];
+  render(<AISidebar tabs={[connectedTab, ...extraTabs]} active={connectedTab}
+    pinned isOpen onTogglePin={vi.fn()} />);
+  expect(screen.queryByRole("button", { name: "收起 AI 栏" })).toBeNull();
+
+  const selector = screen.getByRole("button", { name: /会话：hk/ });
+  fireEvent.click(selector);
+  const choices = screen.getAllByRole("checkbox");
+  expect(choices).toHaveLength(3);
+  expect((choices[0] as HTMLInputElement).disabled).toBe(true);
+
+  fireEvent.click(choices[1]);
+  expect(selector.textContent).toContain("hk +1");
+  expect(selector.getAttribute("title")).toContain("一台名称很长的服务器一号");
+  expect(selector.getAttribute("aria-expanded")).toBe("true");
+
+  fireEvent.click(choices[2]);
+  expect(selector.textContent).toContain("hk +2");
+  expect(selector.getAttribute("title")).toContain("另一台名称很长的服务器二号");
+  expect(selector.getAttribute("aria-expanded")).toBe("true");
+
+  fireEvent.click(choices[1]);
+  expect(selector.textContent).toContain("hk +1");
+  expect((choices[0] as HTMLInputElement).checked).toBe(true);
+  expect((choices[1] as HTMLInputElement).checked).toBe(false);
+  expect((choices[2] as HTMLInputElement).checked).toBe(true);
 });
