@@ -4,13 +4,13 @@ OpenShell defaults to English (en). Select English or 简体中文 (zh-CN) in Se
 
 ## Translation resources
 
-The bundled JSON resources live in frontend/src/locales/{en,zh-CN}/. Seven namespaces cover common controls, sessions, settings, terminal, AI, SFTP and errors. Keep stable semantic keys and translate complete sentences with parameters. Use i18next count-based plural forms for quantities. Missing translations fall back to English.
+The bundled JSON resources live in frontend/src/locales/{en,zh-CN}/. Seven namespaces cover common controls, sessions, settings, terminal, AI, SFTP and errors. AI UI labels live in `ai.json`; original terminal output and historical tool results stay unchanged. Keep stable semantic keys and translate complete sentences with parameters. Use i18next count-based plural forms for quantities. Missing translations fall back to English.
 
 React components subscribe with useTranslation and use the typed t helper. Deferred application dialogs and temporary notices use message(key, values), rendered only when displayed. For startup errors, supply localized copy with a predictable English fallback before preferences load. User names, commands, server output and historical messages stay unchanged. Do not translate protocol values or use translated text for logic.
 
 ## Add a language
 
-1. Add the six namespace JSON files using English resources as the key/parameter reference.
+1. Add the seven namespace JSON files using English resources as the key/parameter reference.
 2. Register its code and native display name in frontend/src/i18n/languages.ts. Extend normalizeLanguage there and NormalizeLanguage / SavePreference validation in Go.
 3. Import and register the resources and supported language in frontend/src/i18n/index.ts. Extend the language type inferred from the registry.
 4. Add its default AI response-language instruction in internal/ai/system.go and native private-key picker title in main.go.
@@ -18,7 +18,7 @@ React components subscribe with useTranslation and use the typed t helper. Defer
 
 ## Errors and task status
 
-Application errors use internal/apperror with a stable code and parameters. Wails v2 sends Error() through Promise rejection; the OPENSHELL_ERROR: JSON envelope is decoded centrally in frontend/src/i18n/errors.ts. Never match translated prose. Unknown third-party errors retain diagnostic text. Native Windows file-picker titles use the current preference. SFTP transfer error strings and Xshell/backup skipped-entry reasons are translated at render time; filenames and raw diagnostics remain intact.
+Application errors use internal/apperror with a stable code and parameters. Wails exposes Error() through Promise rejection; the OPENSHELL_ERROR: JSON envelope is decoded centrally in frontend/src/i18n/errors.ts. Never match translated prose. Unknown third-party errors retain diagnostic text. Native Windows file-picker titles use the current preference. SFTP transfer error strings and Xshell/backup skipped-entry reasons are translated at render time; filenames and raw diagnostics remain intact.
 
 Execution results and automatic task snapshots carry reasonCode / reasonParams alongside a readable reason fallback. Use reasonText when displaying live states or creating a localized historical snapshot. Do not render error envelopes directly into chat.
 
@@ -28,7 +28,7 @@ Ordinary requests and continuations read the current language at request start. 
 
 ## Validation limits
 
-The implementation was checked with Go integration tests using real local SSH and an SSE model fixture, frontend unit tests, Chromium E2E, production bundling, generated Wails v2.17 bindings and Windows amd64 cross-compilation. Native Windows desktop interaction still requires a smoke test.
+The implementation was checked with Go integration tests using real local SSH and an SSE model fixture, frontend unit tests, Chromium E2E, production bundling, generated Wails v3 bindings and Windows amd64 cross-compilation. Native Windows desktop interaction still requires a smoke test.
 
 Known minor deferral: a pending quick-command confirmation can retain its translated run/insert action word if the global language changes externally while that modal is open. Command execution is unaffected; normal Settings access is blocked behind the modal.
 
