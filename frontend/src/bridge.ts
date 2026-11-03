@@ -21,7 +21,7 @@ type Backend = {
   AIDeleteProvider(id: string): Promise<void>;
   AIConversations(): Promise<import("./types").AIConversation[]>;
   AIDeleteConversation(id: string): Promise<void>;
-  AIStart(req: {conversationId: string; providerId: string; modelId: string; mode: "review" | "auto"; execution: "independent" | "terminal"; terminalReady: boolean; text: string; targets: Ref[]}): Promise<import("./types").AIStartResponse>;
+  AIStart(req: {conversationId: string; providerId: string; modelId: string; mode: "review" | "auto"; execution: "independent" | "terminal"; text: string; targets: Ref[]}): Promise<import("./types").AIStartResponse>;
   AIStop(taskID: string): Promise<void>;
   AIApprove(approvalID: string, approved: boolean): Promise<void>;
   SFTPHome(ref: Ref): Promise<SFTPPaths>;
