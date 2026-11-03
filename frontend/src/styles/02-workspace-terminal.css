@@ -165,6 +165,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.terminal-tab-activity {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #e4a23a;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 10%);
+}
 .terminal-tab > button:last-child {
   width: 22px;
   height: 24px;

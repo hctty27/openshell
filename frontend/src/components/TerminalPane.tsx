@@ -34,6 +34,7 @@ interface Props {
   logHighlights?: boolean;
   confirmMultilinePaste: boolean;
   onNotice(text: unknown): void;
+  onRemoteOutput?(ref: Ref, bytes: Uint8Array): void;
   commandFocusVersion?: number;
   searchFocusVersion?: number;
   transferFocusRequest?: { ref: Ref };
@@ -151,6 +152,7 @@ export default function TerminalPane(p: Props) {
       if (disposed || terminalMode === "offline") return;
       if (local ? (payload.tabId !== p.tab.id || payload.terminalId !== localID) : !same(payload.ref)) return;
       const bytes = Uint8Array.from(atob(payload.data), (c) => c.charCodeAt(0));
+      if (!local && ref) callbacks.current.onRemoteOutput?.(ref, bytes);
       const sequence = typeof payload.sequence === "number" ? payload.sequence : 0;
       lastReceivedSequence = Math.max(lastReceivedSequence, sequence);
       // Go pauses reading at the high watermark and resumes only when

@@ -138,6 +138,24 @@ describe("WorkspaceTabStrip", () => {
     expect(onClose).toHaveBeenCalledWith(tabs[0]);
   });
 
+  it("shows an activity dot only for an unread background tab", () => {
+    const onActivate = vi.fn();
+    const make = (activeID: string, unreadTabIDs: ReadonlySet<string>) => (
+      <WorkspaceTabStrip tabs={[makeTab("A"), makeTab("B")]} activeID={activeID}
+        unreadTabIDs={unreadTabIDs} disconnectBehavior="local"
+        onActivate={onActivate} onDuplicate={vi.fn()} onClose={vi.fn()}
+        onNewTab={vi.fn()} onReorder={vi.fn()} />
+    );
+    const { container, rerender } = render(make("B", new Set(["A"])));
+    expect(container.querySelectorAll(".terminal-tab-activity")).toHaveLength(1);
+    expect(container.querySelector('[data-tab-id="A"] .terminal-tab-activity')).not.toBeNull();
+    expect(container.querySelector('[data-tab-id="B"] .terminal-tab-activity')).toBeNull();
+    fireEvent.click(container.querySelector('[data-tab-id="A"] button')!);
+    expect(onActivate).toHaveBeenCalledWith("A");
+    rerender(make("A", new Set()));
+    expect(container.querySelector(".terminal-tab-activity")).toBeNull();
+  });
+
   it("distinguishes connected, local and failed states", () => {
     const { container } = setup();
     expect(container.querySelector(".connection-state-connected")).not.toBeNull();

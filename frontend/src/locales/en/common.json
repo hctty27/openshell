@@ -150,6 +150,7 @@
   "connectionLostReasonConnectionLost": "Network connection lost",
   "sessionTabs": "Open terminal tabs",
   "sessionTabDescription": "{{name}}. Drag to reorder, or press Alt+Shift+Left/Right to move; double-click to duplicate.",
+  "backgroundSessionOutput": "New background terminal output",
   "connectionFailed": "Connection failed",
   "localTerminal": "Local terminal",
   "closeActiveSessionTitle": "Close active SSH session?",
