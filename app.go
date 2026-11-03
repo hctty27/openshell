@@ -20,6 +20,9 @@ import (
 )
 
 type App struct {
+	aiMu sync.Mutex
+	aiTasks map[string]*aiRunningTask
+	aiApprovals map[string]chan bool
 	closeGuardReady bool
 	quitApproved bool
 	connectEpoch map[string]uint64
@@ -57,6 +60,9 @@ type QuickCommand struct {
 }
 
 type AppState struct {
+	AISidebarMode string `json:"aiSidebarMode"`
+	AISidebarWidth int `json:"aiSidebarWidth"`
+	AIVisible bool `json:"aiVisible"`
 	Language              string              `json:"language"`
 	Sessions              []domain.Session    `json:"sessions"`
 	Groups                []domain.Group      `json:"groups"`
@@ -109,7 +115,9 @@ func NewApp() (*App, error) {
 }
 func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*App, error) {
 	db, e := store.Open(path)
-	if e != nil {
+	if e != nil { return nil,e }
+	if e = db.InitAI(context.Background()); e != nil {
+		_ = db.Close()
 		return nil, e
 	}
 	if emit == nil {
@@ -156,6 +164,7 @@ func (a *App) QuitConfirmed() {
  if a.quit != nil { a.quit() }
 }
 func (a *App) shutdown(context.Context) {
+	a.stopAllAI()
 	a.sftp.Close()
 	a.closeAllLocalTerminals()
 	a.ssh.Close()
@@ -270,6 +279,15 @@ func (a *App) State() (AppState, error) {
 	if e != nil { return AppState{}, e }
 	width, err := strconv.Atoi(widthRaw)
 	if err != nil || width < 190 || width > 360 { width = 235 }
+	aiSidebarMode, e := a.store.GetPreference(a.ctx, "aiSidebarMode")
+	if e != nil { return AppState{}, e }
+	if aiSidebarMode != "pinned" { aiSidebarMode = "auto-hide" }
+	aiSidebarWidthRaw, e := a.store.GetPreference(a.ctx, "aiSidebarWidth")
+	if e != nil { return AppState{}, e }
+	aiSidebarWidth, e := strconv.Atoi(aiSidebarWidthRaw)
+	if e != nil || aiSidebarWidth < 320 || aiSidebarWidth > 600 { aiSidebarWidth = 400 }
+	aiVisibleRaw, e := a.store.GetPreference(a.ctx, "aiVisible")
+	if e != nil { return AppState{}, e }
 	detailsExpanded, e := a.store.GetPreference(a.ctx, "sessionDetailsExpanded")
 	if e != nil { return AppState{}, e }
 	return AppState{
@@ -290,6 +308,7 @@ func (a *App) State() (AppState, error) {
 		LogHighlights: logHighlights == "true", SplitRatio: splitRatio,
 		SessionSidebarMode: mode, SessionSidebarWidth: width,
 		SessionDetailsExpanded: detailsExpanded == "true",
+		AISidebarMode: aiSidebarMode, AISidebarWidth: aiSidebarWidth, AIVisible: aiVisibleRaw == "true",
 		Version:               branding.Version,
 	}, nil
 }
@@ -453,6 +472,13 @@ func (a *App) SavePreference(key, value string) error {
 		if err != nil || n < 20 || n > 80 { return apperror.New("unsupportedPreference", nil) }
 	case "sessionDetailsExpanded":
 		if value != "true" && value != "false" { return apperror.New("booleanSettingsMustBeTrueOrFalse", nil) }
+	case "aiVisible":
+		if value != "true" && value != "false" { return apperror.New("unsupportedPreference", nil) }
+	case "aiSidebarMode":
+		if value != "pinned" && value != "auto-hide" { return apperror.New("unsupportedPreference", nil) }
+	case "aiSidebarWidth":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 320 || n > 600 { return apperror.New("unsupportedPreference", nil) }
 	case "sessionSidebarMode":
 		if value != "pinned" && value != "auto-hide" { return apperror.New("unsupportedPreference", nil) }
 	case "sessionSidebarWidth":

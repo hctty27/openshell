@@ -37,7 +37,14 @@ vi.mock("@xterm/xterm", () => ({
         return { dispose: vi.fn(() => this.parser.handlers.delete(id)) };
       }),
     };
-    buffer = { active: { viewportY: 4 } };
+    bufferChangeHandler = (_buffer: {type: "normal" | "alternate"}) => {};
+    buffer = {
+      active: { viewportY: 4, type: "normal" as "normal" | "alternate" },
+      onBufferChange: vi.fn((callback: (buffer: {type: "normal" | "alternate"}) => void) => {
+        this.bufferChangeHandler = callback;
+        return { dispose: vi.fn() };
+      }),
+    };
     scrollToLine = vi.fn();
     clearSelection = vi.fn();
     selected = "";
@@ -906,4 +913,37 @@ test("transfer completion does not focus a terminal behind a modal dialog", () =
   rerender(pane({ ref: tab.ref! }));
   expect(terminal.focus).toHaveBeenCalledTimes(1);
   hasFocus.mockRestore();
+});
+
+test("AI takeover disables manual typing until user reclaims the terminal", async () => {
+  const onTakeControl = vi.fn();
+  const { rerender } = renderTerminal({ aiControlled: true, onTakeControl });
+  expect(screen.getByRole("status").textContent).toContain("AI 正在操作");
+  refs.terms[0].onDataCallback("echo manual\\r");
+  expect(api.WriteTerminal).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "接管终端" }));
+  expect(onTakeControl).toHaveBeenCalledOnce();
+  rerender(
+    <DialogProvider>
+      <TerminalPane tab={tab} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()}
+        aiControlled={false} onTakeControl={onTakeControl} />
+    </DialogProvider>,
+  );
+  await act(async () => {
+    refs.terms[0].onDataCallback("pwd\\r");
+    await Promise.resolve();
+  });
+  expect(api.WriteTerminal).toHaveBeenCalled();
+});
+
+test("alternate-screen transitions notify the AI target guard", () => {
+  const onAlternateScreenChange = vi.fn();
+  renderTerminal({ onAlternateScreenChange });
+  const term = refs.terms[0];
+  term.bufferChangeHandler({ type: "alternate" });
+  expect(onAlternateScreenChange).toHaveBeenCalledWith(tab.ref, true);
+  term.bufferChangeHandler({ type: "normal" });
+  expect(onAlternateScreenChange).toHaveBeenCalledWith(tab.ref, false);
 });

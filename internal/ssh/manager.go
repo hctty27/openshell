@@ -44,8 +44,11 @@ type connection struct {
 	forwards []*localForward
 	terminal *ssh.Session
 	stdin    interface{ Write([]byte) (int, error) }
+	stdinMu sync.Mutex
 	filter   interface { Close(); SetTerminalColumns(int32); IsTransferringFiles() bool; StopTransferringFiles(bool) }
 	writer   *terminalWriter
+	aiController *AITerminalLease
+	readiness terminalShellReadiness
 	transferring bool
 	zmodemSelection *zmodemSelection
 	history  *History
@@ -227,6 +230,7 @@ func (m *Manager) Disconnect(ref domain.ConnectionRef) error {
 	releaseZmodemSelection(c)
 	if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	m.mu.Unlock()
+	if c.aiController != nil { c.aiController.Release() }
 	closeForwardListeners(c)
 	e := c.client.Close()
 	closeHopClients(c.hops)
@@ -247,7 +251,10 @@ func (m *Manager) Close() {
 	m.mu.Unlock()
 
 	for _, cancel := range pending { cancel() }
-	for _, c := range live { closeSSHConnection(c) }
+	for _, c := range live {
+		if c.aiController != nil { c.aiController.Release() }
+		closeSSHConnection(c)
+	}
 }
 func (m *Manager) Home(ref domain.ConnectionRef) (string, error) {
 	s, e := m.OpenSession(ref)
@@ -282,7 +289,10 @@ func (m *Manager) CancelTab(tab string) {
 		if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	}
 	m.mu.Unlock()
-	if c != nil { closeSSHConnection(c) }
+	if c != nil {
+		if c.aiController != nil { c.aiController.Release() }
+		closeSSHConnection(c)
+	}
 }
 
 // Client returns the authenticated SSH transport for a live tab reference.

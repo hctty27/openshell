@@ -132,5 +132,14 @@
   "unsavedSessionChangesTitle": "Discard unsaved changes?",
   "unsavedSessionChangesDescription": "You have unsaved session changes. Closing the editor will discard them.",
   "discardSessionChanges": "Discard changes",
-  "continueEditing": "Continue editing"
+  "continueEditing": "Continue editing",
+  "aiModels": "AI Models",
+  "aiProviderList": "API providers",
+  "aiLoading": "Loading...",
+  "aiModelCount": "models",
+  "aiAddProvider": "Add API",
+  "aiEditProvider": "Edit API",
+  "aiModelIDs": "Model IDs (one per line)",
+  "aiModelIDsHelp": "Add multiple models under one API; the key and base URL are shared.",
+  "aiProviderSaved": "API provider saved"
 }

@@ -46,6 +46,7 @@ import XshellImportDialog from "./components/XshellImportDialog";
 import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
 import SFTPView from "./components/SFTPView";
+import AISidebar from "./components/AISidebar";
 import WindowTitleBar from "./components/WindowTitleBar";
 import ZmodemFilePicker from "./components/ZmodemFilePicker";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
@@ -206,6 +207,78 @@ function Workspace({ initialState }: { initialState: AppState }) {
     } | null>(null),
     [login, setLogin] = useState<{ tab: Tab; secret: string } | null>(null);
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
+  const [aiTerminalControls, setAITerminalControls] = useState<Record<string, {taskId: string; generation: number}>>({});
+  const [alternateTerminals, setAlternateTerminals] = useState<Record<string, {generation: number; active: boolean}>>({});
+  useEffect(() => {
+    const off = listen("ai:terminal-control", (event: {
+      taskId: string; ref: Ref; active: boolean;
+    }) => {
+      if (event.active) {
+        setAITerminalControls(previous => ({
+          ...previous,
+          [event.ref.tabId]: { taskId: event.taskId, generation: event.ref.generation },
+        }));
+      } else {
+        setAITerminalControls(previous => {
+          const current = previous[event.ref.tabId];
+          if (!current || current.taskId !== event.taskId) return previous;
+          const next = { ...previous };
+          delete next[event.ref.tabId];
+          return next;
+        });
+      }
+    });
+    return off;
+  }, []);
+  const [aiSidebarMode, setAISidebarMode] = useState<"pinned" | "auto-hide">(
+    initialState.aiSidebarMode === "pinned" ? "pinned" : "auto-hide",
+  );
+  const [aiSidebarWidth, setAISidebarWidth] = useState(
+    Math.max(320, Math.min(600, initialState.aiSidebarWidth ?? 400)),
+  );
+  const [aiHoverOpen, setAIHoverOpen] = useState(false);
+  const [aiFocusOpen, setAIFocusOpen] = useState(false);
+  const aiHoverTimer = useRef<number | null>(null);
+  const aiCloseTimer = useRef<number | null>(null);
+  const toggleAIPin = () => {
+    const next = aiSidebarMode === "pinned" ? "auto-hide" : "pinned";
+    setAISidebarMode(next);
+    void api.SavePreference("aiSidebarMode", next).catch(notify);
+  };
+  const closeAI = () => {
+    if (aiSidebarMode === "pinned") {
+      setAISidebarMode("auto-hide");
+      void api.SavePreference("aiSidebarMode", "auto-hide").catch(notify);
+    }
+    if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
+    if (aiCloseTimer.current !== null) window.clearTimeout(aiCloseTimer.current);
+    setAIHoverOpen(false);
+    setAIFocusOpen(false);
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  };
+  useEffect(() => () => {
+    if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
+    if (aiCloseTimer.current !== null) window.clearTimeout(aiCloseTimer.current);
+  }, []);
+  const startAIResize = (event: React.PointerEvent) => {
+    if (aiSidebarMode !== "pinned") return;
+    const start = event.clientX;
+    const initial = aiSidebarWidth;
+    let changed = initial;
+    const move = (e: PointerEvent) => {
+      changed = Math.max(320, Math.min(600, initial + start - e.clientX));
+      setAISidebarWidth(changed);
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      if (changed !== initial) void api.SavePreference("aiSidebarWidth", String(changed)).catch(notify);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
   const sidebarDockRef = useRef<HTMLDivElement>(null);
   const sidebarHovered = useRef(false);
   const sidebarKeyboardFocused = useRef(false);
@@ -227,6 +300,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const active = tabs.find((t) => t.id === activeID);
   const activeTerminalBackground = resolveTerminalTheme(theme, terminalTheme, active?.session.terminalTheme).background;
   const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
+  const aiPinned = aiSidebarMode === "pinned" && !showSFTP;
+  const aiOpen = aiPinned || aiHoverOpen || aiFocusOpen;
   const notify = (error: unknown) => setToast(error);
   const quitPromptInProgress = useRef(false);
   const onQuitRequested = useRef<() => void>(() => {});
@@ -859,6 +934,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       style={
         {
           "--session-width": `${sessionWidth}px`,
+          "--ai-width": `${aiSidebarWidth}px`,
         } as React.CSSProperties
       }
     >
@@ -1062,7 +1138,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 <button
                   title={tr(showSFTP ? "sftp:closeFilePanel" : "sftp:openFileManager")}
                   disabled={active?.status !== "connected"}
-                  onClick={() => active && setFileViews(old => ({...old, [active.id]: !old[active.id]}))}
+                  onClick={() => {
+                    if (!active) return;
+                    setFileViews(old => ({ ...old, [active.id]: !old[active.id] }));
+                  }}
                 >
                   {showSFTP ? <PanelRightOpen size={14} /> : <FolderOpen size={14} />}
                 </button>
@@ -1107,6 +1186,20 @@ function Workspace({ initialState }: { initialState: AppState }) {
                     }
                   } : undefined}
                   onActivate={() => setActiveID(tab.id)}
+                  aiControlled={Boolean(tab.ref && aiTerminalControls[tab.id]?.generation === tab.ref.generation)}
+                  onTakeControl={() => {
+                    const task = aiTerminalControls[tab.id];
+                    if (task) void api.AIStop(task.taskId).catch(notify);
+                  }}
+                  onAlternateScreenChange={(ref, alternate) => {
+                    const current = tabsRef.current.find(item => item.id === ref.tabId);
+                    if (!current?.ref || current.ref.generation !== ref.generation) return;
+                    setAlternateTerminals(previous => {
+                      const existing = previous[ref.tabId];
+                      if (existing?.generation === ref.generation && existing.active === alternate) return previous;
+                      return { ...previous, [ref.tabId]: { generation: ref.generation, active: alternate } };
+                    });
+                  }}
                   onRemoteOutput={onRemoteOutput}
                   onDirectoryChange={(ref, directory) => {
                     update(ref.tabId, current =>
@@ -1220,6 +1313,37 @@ function Workspace({ initialState }: { initialState: AppState }) {
           </>
         )}
       </main>
+      <div className={`ai-dock ${!aiPinned ? "ai-dock--auto" : ""} ${aiOpen ? "is-open" : ""}`}
+          onMouseEnter={() => {
+            if (aiCloseTimer.current !== null) window.clearTimeout(aiCloseTimer.current);
+            if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
+            aiHoverTimer.current = window.setTimeout(() => setAIHoverOpen(true), 150);
+          }}
+          onMouseLeave={() => {
+            if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
+            aiCloseTimer.current = window.setTimeout(() => setAIHoverOpen(false), 250);
+          }}
+          onFocusCapture={() => setAIFocusOpen(true)}
+          onBlurCapture={event => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setAIFocusOpen(false);
+          }}
+          onKeyDown={event => {
+            if (event.key === "Escape" && !aiPinned) {
+              setAIHoverOpen(false);
+              setAIFocusOpen(false);
+              (event.currentTarget.querySelector(".ai-rail") as HTMLButtonElement | null)?.focus();
+            }
+          }}
+        >
+          {!aiPinned && (
+            <button className="ai-rail" title="展开 AI 助手" aria-label="展开 AI 助手"
+              aria-expanded={aiOpen} onClick={() => setAIHoverOpen(true)} />
+          )}
+          {aiPinned && <div className="ai-dock-splitter" onPointerDown={startAIResize} role="separator" aria-label="调整 AI 侧栏宽度" />}
+          <AISidebar tabs={tabs} active={active} pinned={aiSidebarMode === "pinned"} isOpen={aiOpen}
+            terminalAlternate={Boolean(active?.ref && alternateTerminals[activeID]?.generation === active.ref.generation && alternateTerminals[activeID]?.active)}
+            onTogglePin={toggleAIPin} onClose={closeAI} />
+        </div>
       </div>
       {showSessionPicker && (
         <SessionPicker
