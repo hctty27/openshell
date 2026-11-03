@@ -288,7 +288,10 @@ func (m *Manager) CancelTab(tab string) {
 		if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	}
 	m.mu.Unlock()
-	if c != nil { closeSSHConnection(c) }
+	if c != nil {
+		if c.aiController != nil { c.aiController.Release() }
+		closeSSHConnection(c)
+	}
 }
 
 // Client returns the authenticated SSH transport for a live tab reference.
