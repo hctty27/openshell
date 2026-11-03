@@ -126,6 +126,10 @@ func (w *terminalWriter) Write(p []byte) (int, error) {
 		return 0, io.ErrClosedPipe
 	}
 	w.c.history.Write(p)
+	w.m.mu.Lock()
+	controller := w.c.aiController
+	w.m.mu.Unlock()
+	if controller != nil { controller.Observe(p) }
 	w.buffer = append(w.buffer, p...)
 	for len(w.buffer) >= terminalOutputChunkSize {
 		// Consume the chunk before emitLocked can wait and release w.mu.
@@ -396,6 +400,10 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	if c == nil || c.ref != ref || c.stdin == nil {
 		m.mu.Unlock()
 		return io.ErrClosedPipe
+	}
+	if c.aiController != nil {
+		m.mu.Unlock()
+		return errAITerminalBusy
 	}
 	stdin := c.stdin
 	m.mu.Unlock()
