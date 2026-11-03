@@ -3,6 +3,7 @@ import { ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Send, Sp
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, AITargetBinding, Tab } from "../types";
 import AIModelPicker from "./AIModelPicker";
+import AITranscript from "./AITranscript";
 import { AI_PROVIDERS_CHANGED } from "../features/ai/providerEvents";
 import { readLastModel, saveLastModel } from "../features/ai/modelSelection";
 
@@ -91,7 +92,9 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
       setStream(old => old + event.text);
     });
     const offState = listen("ai:state", (event: { taskId: string; status: string; detail: string }) => {
-      setStatus(event.status === "completed" ? "任务完成" : event.status === "running" ? "正在执行" : event.detail || event.status);
+      setStatus(event.status === "completed" ? "" :
+        event.status === "running" ? "正在执行" :
+        event.detail || (event.status === "cancelled" ? "任务已取消" : "执行失败"));
       if (event.status !== "running") {
         finishedTasks.current.add(event.taskId);
         setRunning(old => old?.taskId === event.taskId ? null : old);
@@ -323,14 +326,9 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
           )}
           <div className="ai-messages" ref={messagesRef} onScroll={onMessagesScroll}>
             {!current?.messages.length && <div className="ai-welcome"><Sparkles size={26}/><h3>让 AI 帮你操作服务器</h3><p>选择会话和模型，描述需要完成的任务。</p></div>}
-            {current?.messages.filter(m => m.role !== "system").map((m, i) => (
-              <div key={i} className={`ai-message ai-message--${m.role}`}>
-                <span className="ai-message-role">{m.role === "user" ? "你" : m.role === "assistant" ? "AI" : "工具结果"}</span>
-                {m.content && <pre>{m.content}</pre>}
-                {m.tool_calls?.map(call => <div className="ai-tool-call" key={call.id}>执行工具：{call.function.name}<pre>{call.function.arguments}</pre></div>)}
-              </div>
-            ))}
-            {stream && <div className="ai-message ai-message--assistant"><span className="ai-message-role">AI · 输出中</span><pre>{stream}</pre></div>}
+            <AITranscript messages={current?.messages ?? []}
+              execution={current?.execution === "terminal" ? "terminal" : execution} />
+            {stream && <div className="ai-message ai-message--assistant ai-message--stream"><pre>{stream}</pre></div>}
             {approval && (
               <div className="ai-approval">
                 <strong>AI 请求执行确认</strong>
@@ -340,7 +338,9 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                   <button className="ai-primary" onClick={() => { void api.AIApprove(approval.approvalId, true); setApproval(null); }}>允许执行</button></div>
               </div>
             )}
-            {status && <p className="ai-status">{running && <LoaderCircle size={13} className="spin" />} {status}</p>}
+            {status && <p className={`ai-status ${running ? "" : "ai-status--error"}`}>
+              {running && <LoaderCircle size={13} className="spin" />} {status}
+            </p>}
             {error && <p className="ai-error" role="alert">{error}</p>}
           </div>
           <form className="ai-compose" onSubmit={submit}>
