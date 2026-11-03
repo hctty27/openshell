@@ -118,13 +118,13 @@ function AIToolCard({ step, execution, note }: {
 }) {
   const { call, result } = step;
   const state = toolState(call, result);
-  const [expanded, setExpanded] = useState(state === "failed");
+  const [expanded, setExpanded] = useState(state === "failed" || state === "unknown");
   useEffect(() => {
-    if (state === "failed") setExpanded(true);
+    if (state === "failed" || state === "unknown") setExpanded(true);
   }, [state]);
   const title = toolTitle(call);
   const statusLabel = state === "success" ? "成功" :
-    state === "failed" ? "失败" : state === "running" ? "执行中" : "已返回";
+    state === "failed" ? "失败" : state === "running" ? "执行中" : "待核对";
   const Icon = call.function.name === "ssh_exec" ? Terminal :
     call.function.name === "sftp_list" ? FolderOpen :
       call.function.name === "sftp_write" ? FilePenLine : FileText;
