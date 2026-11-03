@@ -106,6 +106,7 @@ export interface AIConversation {
   providerId: string;
   modelId: string;
   mode: "review" | "auto";
+  execution?: "independent" | "terminal";
   targetNames: string[];
   targetSessionIds?: string[];
   targetBindings?: AITargetBinding[];
