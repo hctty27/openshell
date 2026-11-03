@@ -1,0 +1,79 @@
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { attachImeFocusRecovery } from "./imeFocusRecovery";
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.spyOn(document, "hasFocus").mockReturnValue(true);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  document.body.replaceChildren();
+});
+
+function setup() {
+  const textarea = document.createElement("textarea");
+  document.body.appendChild(textarea);
+  textarea.focus();
+  let active = true;
+  const focusTerminal = vi.fn(() => textarea.focus());
+  const recovery = attachImeFocusRecovery(textarea, () => active, focusTerminal);
+  return { textarea, focusTerminal, recovery, setActive: (value: boolean) => { active = value; } };
+}
+
+test("rebinds the focused terminal input once after layout settles", () => {
+  const { textarea, focusTerminal, recovery } = setup();
+  const blur = vi.spyOn(textarea, "blur");
+  recovery.schedule();
+  vi.advanceTimersByTime(100);
+  recovery.schedule();
+  vi.advanceTimersByTime(100);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(60);
+  expect(blur).toHaveBeenCalledOnce();
+  expect(focusTerminal).toHaveBeenCalledOnce();
+  expect(document.activeElement).toBe(textarea);
+  recovery.dispose();
+});
+
+test("never interrupts an in-progress IME composition", () => {
+  const { textarea, focusTerminal, recovery } = setup();
+  textarea.dispatchEvent(new Event("compositionstart"));
+  recovery.schedule();
+  vi.advanceTimersByTime(500);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  textarea.dispatchEvent(new Event("compositionend"));
+  vi.advanceTimersByTime(160);
+  expect(focusTerminal).toHaveBeenCalledOnce();
+  recovery.dispose();
+});
+
+test("does not steal focus from search or another input", () => {
+  const { focusTerminal, recovery } = setup();
+  const search = document.createElement("input");
+  document.body.appendChild(search);
+  recovery.schedule();
+  search.focus();
+  vi.advanceTimersByTime(200);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(search);
+  recovery.dispose();
+});
+
+test("does not re-focus an inactive session", () => {
+  const { focusTerminal, recovery, setActive } = setup();
+  recovery.schedule();
+  setActive(false);
+  vi.advanceTimersByTime(200);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  recovery.dispose();
+});
+
+test("cancels scheduled recovery on unmount", () => {
+  const { focusTerminal, recovery } = setup();
+  recovery.schedule();
+  recovery.dispose();
+  vi.advanceTimersByTime(200);
+  expect(focusTerminal).not.toHaveBeenCalled();
+});
