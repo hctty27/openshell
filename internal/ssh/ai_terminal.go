@@ -66,6 +66,7 @@ func (m *Manager) AcquireAITerminal(ref domain.ConnectionRef) (*AITerminalLease,
         return nil, errAITerminalUnavailable
     }
     if conn.aiController != nil { return nil, errAITerminalBusy }
+    if err := conn.readiness.checkReady(); err != nil { return nil, err }
     lease := &AITerminalLease{manager:m,connection:conn,ref:ref,closed:make(chan struct{})}
     conn.aiController = lease
     return lease,nil
