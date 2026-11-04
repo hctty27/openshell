@@ -40,6 +40,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
   const [reload, setReload] = useState(0);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const submittingKey = useRef("");
+  const navigatedDirectory = useRef("");
   const currentRequestKey = useRef(requestKey);
   const onClosedRef = useRef(onClosed);
   currentRequestKey.current = requestKey;
@@ -92,6 +93,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
   useEffect(() => {
     if (!activeRequest) return;
     let current = true;
+    navigatedDirectory.current = "";
     setDirectory("");
     setDraft("");
     setPlaces(null);
@@ -100,11 +102,15 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     submittingKey.current = "";
     setBusy(false);
     setError("");
-    void api.ZmodemLocalPlaces().then((result: Places) => {
+    void api.ZmodemLocalPlaces().then(async (result: Places) => {
+      let initialDirectory = result.home;
+      try {
+        initialDirectory = await api.GetTransferLocalDir(activeRequest.ref.sessionId);
+      } catch { /* use the local home directory if the preference cannot be read */ }
       if (!current) return;
       setPlaces(result);
-      setDirectory(result.home);
-      setDraft(result.home);
+      setDirectory(initialDirectory);
+      setDraft(initialDirectory);
     }).catch(err => { if (current) setError(errorText(err)); });
     return () => { current = false; };
   }, [requestKey]);
@@ -117,7 +123,13 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     setSelected([]);
     setDraft(directory);
     void api.SFTPList(activeRequest.ref, "local", directory).then((result: SFTPEntry[]) => {
-      if (current) setEntries(result);
+      if (current) {
+        setEntries(result);
+        if (navigatedDirectory.current === directory) {
+          navigatedDirectory.current = "";
+          void api.SaveTransferLocalDir(activeRequest.ref.sessionId, directory).catch(onNotice);
+        }
+      }
     }).catch(err => { if (current) { setEntries([]); setError(errorText(err)); } })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
@@ -128,6 +140,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
   const visible = entries.filter(item => showHidden || !item.name.startsWith("."));
   const goTo = (path: string) => {
     if (!path || busy) return;
+    navigatedDirectory.current = path;
     setDirectory(path);
     setDraft(path);
     setReload(value => value + 1);
@@ -140,6 +153,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     try {
       await api.SubmitZmodemSelection(request.ref, request.id, paths);
       if (currentRequestKey.current !== requestKey) return;
+      if (paths.length > 0) void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
       // Submission only acknowledges the paths. The transfer continues after the picker closes.
       const dialog = dialogRef.current;
       if (dialog?.open) {
