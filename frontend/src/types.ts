@@ -49,6 +49,8 @@ export interface Tab {
   manualDisconnected?: boolean;
   localFallbackPending?: boolean;
   everConnected?: boolean;
+  hasUserInput?: boolean;
+  hasExecutedAction?: boolean;
   retryCount?: number;
   home: string;
   cwd: string;

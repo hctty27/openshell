@@ -27,7 +27,7 @@ import {
 import { api, desktop, listen, errorText } from "./bridge";
 import { normalizeTerminalTheme, resolveTerminalTheme } from "./terminalThemes";
 import { reorderTabs } from "./features/sessions/tabOrder";
-import { hasInterruptibleWork, isActiveRemoteSession, sessionLabel } from "./features/sessions/closeProtection";
+import { hasInterruptibleWork, isActiveRemoteSession, needsCloseConfirmation, sessionLabel } from "./features/sessions/closeProtection";
 import WorkspaceTabStrip from "./components/WorkspaceTabStrip";
 import type {
   Session,
@@ -152,6 +152,17 @@ function Workspace({ initialState }: { initialState: AppState }) {
   };
   const dialogs = useDialogs();
   const { tabs, setTabs, tabsRef, activeID, setActiveID, activeIDRef, update } = useWorkspaceTabs();
+  const executedActionMarked = useRef(new Set<string>());
+  const markExecutedAction = (ref: Ref) => {
+    if (executedActionMarked.current.has(ref.tabId)) return;
+    const current = tabsRef.current.find(tab => tab.id === ref.tabId);
+    if (!current?.ref || current.ref.generation !== ref.generation ||
+      current.ref.sessionId !== ref.sessionId) return;
+    executedActionMarked.current.add(ref.tabId);
+    update(ref.tabId, tab => tab.ref?.generation === ref.generation &&
+      tab.ref.sessionId === ref.sessionId
+        ? { ...tab, hasExecutedAction: true } : tab);
+  };
   const { hasActiveTransfers } = useTransferActivity();
   const [transferFocusRequest, setTransferFocusRequest] = useState<{ ref: Ref } | null>(null);
   useEffect(() => {
@@ -160,8 +171,12 @@ function Workspace({ initialState }: { initialState: AppState }) {
     });
     const offState = listen("ssh:transfer-state", (event: { ref: Ref; active: boolean }) => {
       if (event?.ref && event.active === false) setTransferFocusRequest({ ref: event.ref });
+      if (event?.ref && event.active) markExecutedAction(event.ref);
     });
-    return () => { offFinished(); offState(); };
+    const offSFTP = listen("sftp:transfer", (event: { ref: Ref; status: string }) => {
+      if (event?.ref && ["queued", "running"].includes(event.status)) markExecutedAction(event.ref);
+    });
+    return () => { offFinished(); offState(); offSFTP(); };
   }, []);
   const [state, setState] = useState(initialState),
     [sidebarMode, setSidebarMode] = useState<"pinned" | "auto-hide">(
@@ -214,11 +229,17 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const terminalHistoryScopes = useRef<Record<string, string>>({});
   const [aiTerminalControls, setAITerminalControls] = useState<Record<string, {taskId: string; generation: number}>>({});
   const [alternateTerminals, setAlternateTerminals] = useState<Record<string, {generation: number; active: boolean}>>({});
+  const aiTerminalControlsRef = useRef(aiTerminalControls);
+  aiTerminalControlsRef.current = aiTerminalControls;
+  const alternateTerminalsRef = useRef(alternateTerminals);
+  alternateTerminalsRef.current = alternateTerminals;
+  const userInputMarked = useRef(new Set<string>());
   useEffect(() => {
     const off = listen("ai:terminal-control", (event: {
       taskId: string; ref: Ref; active: boolean;
     }) => {
       if (event.active) {
+        markExecutedAction(event.ref);
         setAITerminalControls(previous => ({
           ...previous,
           [event.ref.tabId]: { taskId: event.taskId, generation: event.ref.generation },
@@ -557,6 +578,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       let binary = "";
       for (const byte of bytes) binary += String.fromCharCode(byte);
       await api.WriteTerminal(tab.ref, btoa(binary));
+      markExecutedAction(tab.ref);
       setQuickCommandFocus((n) => n + 1);
     } catch (e) {
       notify(e);
@@ -711,45 +733,93 @@ function Workspace({ initialState }: { initialState: AppState }) {
     }
   };
   const closingTabs = useRef(new Set<string>());
-  const close = async (tab: Tab) => {
-    if (closingTabs.current.has(tab.id)) return;
-    const initial = tabsRef.current.find(item => item.id === tab.id);
-    if (!initial) return;
-    closingTabs.current.add(tab.id);
+  const activeAIFor = (tab: Tab) => Boolean(tab.ref &&
+    aiTerminalControlsRef.current[tab.id]?.generation === tab.ref.generation);
+  const alternateScreenFor = (tab: Tab) => Boolean(tab.ref &&
+    alternateTerminalsRef.current[tab.id]?.generation === tab.ref.generation &&
+    alternateTerminalsRef.current[tab.id].active);
+  const requiresCloseConfirmation = (tab: Tab) => needsCloseConfirmation(
+    tab, hasActiveTransfers, activeAIFor(tab), alternateScreenFor(tab));
+
+  const requestCloseTabs = async (tabIDs: string[]) => {
+    const wanted = new Set(tabIDs);
+    const initial = tabsRef.current.filter(tab =>
+      wanted.has(tab.id) && !closingTabs.current.has(tab.id));
+    if (!initial.length) return;
+    initial.forEach(tab => closingTabs.current.add(tab.id));
     try {
-      const active = isActiveRemoteSession(initial);
-      const busy = hasInterruptibleWork(initial, hasActiveTransfers);
-      if (active || busy) {
-        const accepted = await dialogs.confirm({
+      const protectedTabs = initial.filter(requiresCloseConfirmation);
+      const protectedAtStart = new Set(protectedTabs.map(tab => tab.id));
+      if (protectedTabs.length) {
+        const multiple = initial.length > 1;
+        const active = isActiveRemoteSession(initial[0]);
+        const busy = initial.some(tab =>
+          hasInterruptibleWork(tab, hasActiveTransfers) || activeAIFor(tab));
+        const accepted = await dialogs.confirm(multiple ? {
+          title: message("common:closeMultipleSessionsTitle"),
+          description: message("common:closeMultipleSessionsDescription", {
+            count: initial.length, protectedCount: protectedTabs.length,
+          }),
+          preview: protectedTabs.map(sessionLabel).join("\n"),
+          tone: "warning",
+          confirmLabel: message("common:closeSessionAndDisconnect"),
+        } : {
           title: message(active ? "common:closeActiveSessionTitle" : "common:closeRunningTask"),
           description: message(active
             ? busy ? "common:closeActiveSessionBusyDescription" : "common:closeActiveSessionDescription"
-            : "common:closeActiveSessionDescription", { name: initial.session.name }),
-          preview: sessionLabel(initial),
+            : "common:closeActiveSessionDescription", { name: initial[0].session.name }),
+          preview: sessionLabel(initial[0]),
           tone: "warning",
           confirmLabel: message(active ? "common:closeSessionAndDisconnect" : "common:closeAnyway"),
         });
         if (!accepted) return;
       }
-      const current = tabsRef.current.find(item => item.id === tab.id);
-      if (!current) return;
-      // Do not close a new SSH connection using approval for an older generation.
-      if (current.ref?.generation !== initial.ref?.generation ||
-        (!active && isActiveRemoteSession(current))) return;
-      stopRetryTimer(tab.id);
-      await api.CloseTab(tab.id);
-      setTabs((old) => old.filter((t) => t.id !== tab.id));
-      setTerminalSearchOpen(current => setTerminalSearchState(current, tab.id, false));
-      if (activeIDRef.current === tab.id) {
-        const rest = tabsRef.current.filter((t) => t.id !== tab.id);
-        setActiveID(rest.at(-1)?.id ?? "");
+
+      const closed = new Set<string>();
+      const errors: unknown[] = [];
+      for (const snapshot of initial) {
+        const current = tabsRef.current.find(tab => tab.id === snapshot.id);
+        if (!current) continue;
+        // Never close a newer SSH generation based on an older confirmation.
+        if (current.ref?.generation !== snapshot.ref?.generation ||
+          (!isActiveRemoteSession(snapshot) && isActiveRemoteSession(current))) continue;
+        // If an untouched tab became busy while confirming, leave it open.
+        if (!protectedAtStart.has(snapshot.id) && requiresCloseConfirmation(current)) continue;
+        try {
+          stopRetryTimer(snapshot.id);
+          await api.CloseTab(snapshot.id);
+          closed.add(snapshot.id);
+        } catch (error) {
+          errors.push(error);
+        }
       }
-    } catch (e) {
-      notify(e);
+      if (closed.size) {
+        const currentTabs = tabsRef.current;
+        const currentActiveID = activeIDRef.current;
+        if (closed.has(currentActiveID)) {
+          const activeIndex = currentTabs.findIndex(tab => tab.id === currentActiveID);
+          const remaining = currentTabs.filter(tab => !closed.has(tab.id));
+          const neighbor = remaining.filter(tab => currentTabs.indexOf(tab) < activeIndex).at(-1) ??
+            remaining.find(tab => currentTabs.indexOf(tab) > activeIndex);
+          setActiveID(neighbor?.id ?? "");
+        }
+        setTabs(old => old.filter(tab => !closed.has(tab.id)));
+        setTerminalSearchOpen(old => {
+          let next = old;
+          for (const tabID of closed) next = setTerminalSearchState(next, tabID, false);
+          return next;
+        });
+        for (const tabID of closed) {
+          userInputMarked.current.delete(tabID);
+          executedActionMarked.current.delete(tabID);
+        }
+      }
+      if (errors.length) notify(errors[0]);
     } finally {
-      closingTabs.current.delete(tab.id);
+      initial.forEach(tab => closingTabs.current.delete(tab.id));
     }
   };
+  const close = (tab: Tab) => requestCloseTabs([tab.id]);
   const removeSession = async (s: Session) => {
     if (tabs.some((t) => t.session.id === s.id)) {
       notify(message("common:closeThisSessionSTerminalTabsFirst"));
@@ -1097,6 +1167,9 @@ function Workspace({ initialState }: { initialState: AppState }) {
             tab.status === "connected" && tab.cwdReported
               ? normalizeRemoteDirectory(tab.cwd) ?? undefined : undefined)}
           onClose={tab => { void close(tab); }}
+          onCloseTabs={targetTabs => { void requestCloseTabs(targetTabs.map(tab => tab.id)); }}
+          onReconnect={manualConnect}
+          onDisconnect={tab => { void disconnectTab(tab); }}
           onNewTab={() => setShowSessionPicker(true)}
           onTabPointerMove={onTabPointerMove}
           onTabPointerDrop={onTabPointerDrop}
@@ -1267,6 +1340,16 @@ function Workspace({ initialState }: { initialState: AppState }) {
                     });
                   }}
                   onRemoteOutput={onRemoteOutput}
+                  onUserInput={ref => {
+                    if (userInputMarked.current.has(ref.tabId)) return;
+                    const current = tabsRef.current.find(tab => tab.id === ref.tabId);
+                    if (!current?.ref || current.ref.generation !== ref.generation ||
+                      current.ref.sessionId !== ref.sessionId) return;
+                    userInputMarked.current.add(ref.tabId);
+                    update(ref.tabId, tab => tab.ref?.generation === ref.generation &&
+                      tab.ref.sessionId === ref.sessionId
+                        ? { ...tab, hasUserInput: true } : tab);
+                  }}
                   onDirectoryChange={(ref, directory) => {
                     update(ref.tabId, current =>
                       current.ref?.sessionId === ref.sessionId &&

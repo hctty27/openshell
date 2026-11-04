@@ -167,5 +167,12 @@
   "minimizeWindow": "最小化",
   "maximizeWindow": "最大化",
   "restoreWindow": "还原窗口",
-  "closeWindow": "关闭窗口"
+  "closeWindow": "关闭窗口",
+  "duplicateCurrentTab": "复制当前会话",
+  "closeCurrentTab": "关闭当前会话",
+  "closeOtherTabs": "关闭其他会话",
+  "closeTabsToRight": "关闭右侧会话",
+  "closeAllTabs": "关闭全部会话",
+  "closeMultipleSessionsTitle": "关闭所选会话？",
+  "closeMultipleSessionsDescription": "即将关闭 {{count}} 个会话，其中 {{protectedCount}} 个存在终端操作或运行中的任务。关闭将断开对应 SSH 连接。"
 }

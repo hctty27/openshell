@@ -167,5 +167,12 @@
   "minimizeWindow": "Minimize",
   "maximizeWindow": "Maximize",
   "restoreWindow": "Restore",
-  "closeWindow": "Close window"
+  "closeWindow": "Close window",
+  "duplicateCurrentTab": "Duplicate current tab",
+  "closeCurrentTab": "Close current tab",
+  "closeOtherTabs": "Close other tabs",
+  "closeTabsToRight": "Close tabs to the right",
+  "closeAllTabs": "Close all tabs",
+  "closeMultipleSessionsTitle": "Close selected sessions?",
+  "closeMultipleSessionsDescription": "Close {{count}} sessions? {{protectedCount}} have terminal activity or running tasks. Their SSH connections will be disconnected."
 }
