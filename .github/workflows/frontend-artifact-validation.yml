@@ -1,0 +1,51 @@
+name: Validate Windows frontend artifact reuse
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/windows-release.yml"
+      - ".github/workflows/frontend-artifact-validation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-artifact-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build tested frontend bundle
+        shell: bash
+        run: |
+          echo "VITE_APP_VERSION=$(node -p 'require("./frontend/package.json").version')" >> "$GITHUB_ENV"
+          cd frontend
+          npm ci
+          npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openshell-frontend-dist
+          path: frontend/dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  windows:
+    needs: frontend
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/windows-release.yml
+    with:
+      publish: false
+      use_frontend_artifact: true
