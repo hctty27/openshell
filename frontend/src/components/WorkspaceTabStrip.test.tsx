@@ -28,6 +28,9 @@ describe("WorkspaceTabStrip", () => {
     const onReorder = vi.fn();
     const onDuplicate = vi.fn();
     const onClose = vi.fn();
+    const onCloseTabs = vi.fn();
+    const onReconnect = vi.fn();
+    const onDisconnect = vi.fn();
     const onTabPointerMove = vi.fn();
     const onTabPointerDrop = vi.fn();
     const onDropOnStrip = vi.fn();
@@ -35,12 +38,13 @@ describe("WorkspaceTabStrip", () => {
     const result = render(
       <WorkspaceTabStrip tabs={tabs} activeID="first" disconnectBehavior="local"
         onActivate={vi.fn()} onDuplicate={onDuplicate} onClose={onClose}
+        onCloseTabs={onCloseTabs} onReconnect={onReconnect} onDisconnect={onDisconnect}
         onNewTab={vi.fn()} onReorder={onReorder}
         onTabPointerMove={onTabPointerMove} onTabPointerDrop={onTabPointerDrop}
         onDropOnStrip={onDropOnStrip} />,
     );
     geometry(result.container);
-    return { ...result, onReorder, onDuplicate, onClose, tabs,
+    return { ...result, onReorder, onDuplicate, onClose, onCloseTabs, onReconnect, onDisconnect, tabs,
       onTabPointerMove, onTabPointerDrop, onDropOnStrip };
   }
 
@@ -125,6 +129,28 @@ describe("WorkspaceTabStrip", () => {
     expect(onDuplicate).toHaveBeenCalledWith(tabs[0]);
     fireEvent.keyDown(button, { key: "ArrowRight", altKey: true, shiftKey: true });
     expect(onReorder).toHaveBeenCalledWith("first", "second", "after");
+  });
+
+  it("opens a background tab menu without activating it", () => {
+    const { container, tabs, onDuplicate, onCloseTabs } = setup();
+    fireEvent.contextMenu(container.querySelector('[data-tab-id="second"]')!, { clientX: 70, clientY: 50 });
+    expect(screen.getByRole("menu")).not.toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: /复制当前会话|Duplicate current tab/ }));
+    expect(onDuplicate).toHaveBeenCalledWith(tabs[1]);
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.contextMenu(container.querySelector('[data-tab-id="second"]')!);
+    fireEvent.click(screen.getByRole("menuitem", { name: /关闭其他会话|Close other tabs/ }));
+    expect(onCloseTabs).toHaveBeenCalledWith([tabs[0], tabs[2]]);
+  });
+
+  it("closes only tabs right of the target and dismisses on Escape", () => {
+    const { container, tabs, onCloseTabs } = setup();
+    fireEvent.contextMenu(container.querySelector('[data-tab-id="second"]')!);
+    fireEvent.click(screen.getByRole("menuitem", { name: /关闭右侧会话|Close tabs to the right/ }));
+    expect(onCloseTabs).toHaveBeenCalledWith([tabs[2]]);
+    fireEvent.contextMenu(container.querySelector('[data-tab-id="first"]')!);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("never starts a drag from the close button", () => {
