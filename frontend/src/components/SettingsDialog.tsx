@@ -10,6 +10,7 @@ import {
   Server,
   Network,
   Settings2,
+  Palette,
   Sparkles,
   Info,
   Terminal,
@@ -23,6 +24,7 @@ import { api, errorText } from "../bridge";
 import ModalSurface from "./ModalSurface";
 import { useDialogs } from "./DialogProvider";
 import GeneralSettingsPanel from "./GeneralSettingsPanel";
+import AppearanceSettingsPanel from "./AppearanceSettingsPanel";
 import ConnectionSettingsPanel from "./ConnectionSettingsPanel";
 import TerminalSettingsPanel from "./TerminalSettingsPanel";
 import AIProviderSettings from "./AIProviderSettings";
@@ -189,9 +191,10 @@ export default function SettingsDialog(p: Props) {
             <nav className="settings-sidebar" aria-label={t("settings:settingsNavigation")}>
               {[
                 { id: "general", label: t("settings:general"), icon: Settings2 },
+                { id: "appearance", label: t("settings:appearance"), icon: Palette },
                 { id: "terminal", label: t("settings:terminal"), icon: Terminal },
                 { id: "connection", label: t("settings:connection"), icon: Network },
-                { id: "ai", label: t("settings:aiModels"), icon: Sparkles },
+                { id: "ai", label: t("settings:aiSettings"), icon: Sparkles },
                 { id: "about", label: t("settings:about"), icon: Info },
               ].map(({ id, label, icon: Icon }) => (
                 <button
@@ -436,8 +439,16 @@ export default function SettingsDialog(p: Props) {
               onLanguageError={setError}
               onExportSessionBackup={p.onExportSessionBackup}
               onImportSessionBackup={p.onImportSessionBackup}
+            />
+          )}
+          {tab === "appearance" && (
+            <AppearanceSettingsPanel
               theme={p.theme}
               onTheme={p.onTheme}
+              terminalTheme={p.terminalTheme}
+              onTerminalTheme={p.onTerminalTheme}
+              fontSize={p.fontSize}
+              onFont={p.onFont}
             />
           )}
           {tab === "ai" && <AIProviderSettings />}
@@ -477,11 +488,6 @@ export default function SettingsDialog(p: Props) {
           )}
           {tab === "terminal" && (
             <TerminalSettingsPanel
-              theme={p.theme}
-              terminalTheme={p.terminalTheme}
-              onTerminalTheme={p.onTerminalTheme}
-              fontSize={p.fontSize}
-              onFont={p.onFont}
               logHighlights={p.logHighlights}
               onLogHighlights={p.onLogHighlights}
               autoCopySelection={p.autoCopySelection}
