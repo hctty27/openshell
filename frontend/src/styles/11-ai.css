@@ -743,7 +743,7 @@
   background: transparent;
   color: var(--accent-fill);
 }
-.ai-context-ring svg { display: block; flex: 0 0 18px; }
+.ai-header .ai-header-actions .ai-context-ring > svg { display: block; flex: 0 0 18px; width: 18px; height: 18px; }
 .ai-context-percent {
   min-width: 23px;
   color: var(--text-secondary);
