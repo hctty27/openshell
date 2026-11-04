@@ -47,20 +47,27 @@ jobs:
             exit 1
           fi
           previous="$(tr -d '\r\n' < .github/release-version.txt)"
-          gh release view "$previous" --repo "$GITHUB_REPOSITORY" --json tagName >/dev/null || {
-            echo "::error::Previous version $previous is not published yet."
-            exit 1
-          }
+          if gh release view "$previous" --repo "$GITHUB_REPOSITORY" --json tagName >/dev/null 2>&1; then
+            echo "NEEDS_BUMP=true" >> "$GITHUB_ENV"
+          else
+            echo "Resuming prepared, unpublished release $previous (no additional version bump)."
+            echo "NEEDS_BUMP=false" >> "$GITHUB_ENV"
+          fi
       - name: Bump version, lockfile, Windows metadata and changelog
         shell: bash
         env:
           BUMP: ${{ inputs.bump }}
+        if: env.NEEDS_BUMP == 'true'
         run: python3 scripts/bump_release_version.py --bump "$BUMP"
       - name: Commit release metadata
         id: version
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "$NEEDS_BUMP" != "true" ]]; then
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/release-version.txt frontend/package.json frontend/package-lock.json build/windows/info.json CHANGELOG.md
