@@ -14,6 +14,7 @@ import (
 type AIModel struct {
 	ID string `json:"id"`
 	Name string `json:"name"`
+	ContextWindow int `json:"contextWindow,omitempty"`
 }
 
 type AIProvider struct {
@@ -51,6 +52,14 @@ type AITargetBinding struct {
 	Username string `json:"username"`
 }
 
+type AIContextStats struct {
+	Window int `json:"window"`
+	EstimatedTokens int `json:"estimatedTokens"`
+	LastPromptTokens int `json:"lastPromptTokens"`
+	CompactionCount int `json:"compactionCount"`
+	IsEstimate bool `json:"isEstimate"`
+}
+
 type AIConversation struct {
 	ID string `json:"id"`
 	Title string `json:"title"`
@@ -64,6 +73,10 @@ type AIConversation struct {
 	TargetSessionIDs []string `json:"targetSessionIds,omitempty"`
 	TargetBindings []AITargetBinding `json:"targetBindings,omitempty"`
 	Messages []AIMessage `json:"messages"`
+	Summary string `json:"summary,omitempty"`
+	CompactedThrough int `json:"compactedThrough,omitempty"`
+	CompactionCount int `json:"compactionCount,omitempty"`
+	Context AIContextStats `json:"context"`
 	UpdatedAt string `json:"updatedAt"`
 }
 
