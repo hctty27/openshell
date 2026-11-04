@@ -116,13 +116,42 @@ func safeIdentifier(value string) string {
     return b.String()
 }
 
+func allowedOperation(module, operation string) bool {
+    switch module {
+    case "ssh":
+        return operation == "Connect" || operation == "Reconnect"
+    case "sftp":
+        switch operation {
+        case "SFTPHome", "SFTPList", "SFTPOperate", "SFTPTransfer",
+            "SFTPReadRemoteText", "SFTPSaveRemoteText", "SFTPPreviewSync":
+            return true
+        }
+    case "ai":
+        return operation == "AIStart"
+    case "terminal":
+        return operation == "xterm_write_batch"
+    case "frontend":
+        return operation == "uncaught_error" || operation == "unhandled_rejection"
+    }
+    return false
+}
+
 func normalize(input Event) Event {
+    module, operation := safeIdentifier(input.Module), safeIdentifier(input.Operation)
+    if !allowedOperation(module, operation) { module, operation = "unknown", "unknown" }
+    code := ""
+    switch input.Code {
+    case "backend_call_failed", "uncaught_error", "unhandled_rejection":
+        code = input.Code
+    case "":
+    default:
+        code = "other"
+    }
     result := Event{
-        Time: time.Now(), Module: safeIdentifier(input.Module),
-        Operation: safeIdentifier(input.Operation), Code: safeIdentifier(input.Code),
+        Time: time.Now(), Module: module,
+        Operation: operation, Code: code,
         Status: input.Status, Count: input.Count, DurationMS: input.DurationMS,
     }
-    if input.Code == "" { result.Code = "" }
     if result.Status != "ok" && result.Status != "slow" && result.Status != "error" {
         result.Status = "ok"
     }
