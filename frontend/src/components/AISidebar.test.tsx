@@ -302,7 +302,7 @@ test("new conversation stays a draft until its first message is submitted", asyn
 
   fireEvent.click(screen.getByRole("button", { name: "全局对话记录" }));
   fireEvent.click(screen.getByRole("button", { name: /历史 Docker 检查/ }));
-  fireEvent.click(screen.getByRole("button", { name: "新建对话" }));
+  fireEvent.click(screen.getByRole("button", { name: "新对话" }));
 
   expect(api.AIStart).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "全局对话记录" }));
