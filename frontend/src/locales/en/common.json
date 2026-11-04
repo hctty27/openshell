@@ -67,6 +67,8 @@
   "connectionBlockedVerifyWhyTheServerKeyChanged": "Connection blocked. Verify why the server key changed. Overwriting a trusted fingerprint is not supported.",
   "verifyTheFingerprintWithYourServerAdministratorOr": "Verify the fingerprint with your server administrator or a trusted record before continuing.",
   "trustAndConnect": "Trust and connect",
+  "copyFingerprint": "Copy fingerprint",
+  "fingerprintCopied": "Fingerprint copied",
   "sendTerminalTextToAi": "Send terminal text to AI",
   "closePreview": "Close preview",
   "onlyTheTextBelowWillBeSentCommon": "Only the text below will be sent. Common sensitive fields have been masked where possible. Review before sending.",
