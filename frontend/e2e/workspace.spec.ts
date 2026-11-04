@@ -879,12 +879,16 @@ test("AI header aligns with SSH title bar", async ({ page }) => {
     const tabs = rect(".tab-strip");
     const connection = rect(".terminal-toolbar");
     const aiHeader = rect(".ai-header");
-    const aiControls = rect(".ai-controls");
+    const model = rect(".ai-model-picker__trigger");
+    const session = rect(".ai-compose-target");
+    const send = rect(".ai-send-split");
     return {
       tabHeight: tabs.height, headerHeight: aiHeader.height,
-      connectionHeight: connection.height, controlsHeight: aiControls.height,
+      connectionHeight: connection.height,
       headerOffset: aiHeader.top - tabs.top,
-      controlsOffset: aiControls.top - connection.top,
+      controlsRemoved: !document.querySelector(".ai-controls"),
+      controlsAligned: Math.abs(model.top - session.top) <= 2 &&
+        Math.abs(send.top - session.top) <= 2,
       horizontalOverflow: document.querySelector(".ai-panel")!.scrollWidth
         > document.querySelector(".ai-panel")!.clientWidth + 1,
     };
@@ -892,9 +896,9 @@ test("AI header aligns with SSH title bar", async ({ page }) => {
   expect(alignment.tabHeight).toBe(30);
   expect(alignment.headerHeight).toBe(30);
   expect(alignment.connectionHeight).toBe(30);
-  expect(alignment.controlsHeight).toBe(30);
+  expect(alignment.controlsRemoved).toBe(true);
   expect(Math.abs(alignment.headerOffset)).toBeLessThanOrEqual(1);
-  expect(Math.abs(alignment.controlsOffset)).toBeLessThanOrEqual(1);
+  expect(alignment.controlsAligned).toBe(true);
   expect(alignment.horizontalOverflow).toBe(false);
   await expect(page.getByRole("button", { name: "收起 AI 栏" })).toHaveCount(0);
 
@@ -911,19 +915,55 @@ test("AI header aligns with SSH title bar", async ({ page }) => {
   if (await trustButton.isVisible()) await trustButton.click();
   await expect(connectedTab).toHaveAttribute("aria-label", "SSH 已连接");
 
-  const geometry = async () => page.locator(".ai-controls").evaluate(element => {
+  const geometry = async () => page.locator(".ai-compose-actions").evaluate(element => {
     const selector = element.querySelector(".ai-selector-button")!.getBoundingClientRect();
-    const review = element.querySelector("select")!.getBoundingClientRect();
-    return { selectorX: selector.x, selectorWidth: selector.width, reviewX: review.x, reviewWidth: review.width };
+    const send = element.querySelector(".ai-send-split")!.getBoundingClientRect();
+    return { selectorX: selector.x, selectorWidth: selector.width, sendX: send.x, sendWidth: send.width };
   });
   const before = await geometry();
   await page.locator(".ai-selector-button").click();
-  await page.locator(".ai-target-menu input[type=checkbox]").first().check();
+  await page.locator(".ai-target-menu input[type=checkbox]:not(:checked)").first().check();
   const after = await geometry();
   expect(after.selectorX).toBe(before.selectorX);
   expect(after.selectorWidth).toBe(before.selectorWidth);
-  expect(after.reviewX).toBe(before.reviewX);
-  expect(after.reviewWidth).toBe(before.reviewWidth);
+  expect(after.sendX).toBe(before.sendX);
+  expect(after.sendWidth).toBe(before.sendWidth);
   await expect(page.locator(".ai-selector-label")).toContainText("+1");
   await expect(page.locator(".ai-target-menu")).toBeVisible();
+});
+
+
+test("AI floating dock does not overlap session tools across window sizes", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 760 });
+  await page.goto("/");
+  await page.getByTitle("新建会话", { exact: true }).first().click();
+  await page.getByLabel("会话名称", { exact: true }).fill("重叠检查");
+  await page.getByLabel("主机地址").fill("127.0.0.1");
+  await page.getByLabel("登录密码").fill("fixture-password");
+  await page.getByText("保存到 Windows 凭据管理器").click();
+  await page.getByRole("button", { name: "保存会话", exact: true }).click();
+  await page.getByRole("button", { name: "选中会话 重叠检查" }).dblclick();
+  await page.getByRole("button", { name: "信任并连接" }).click();
+  await expect(page.locator(".terminal-toolbar")).toBeVisible();
+  await page.getByRole("button", { name: "终端 AI" }).click();
+  const terminalAI = page.locator(".workspace-terminal-ai-panel");
+  await expect(terminalAI).toBeVisible();
+  await page.locator(".ai-rail").click();
+  await expect(page.locator(".ai-dock")).toHaveClass(/is-open/);
+  await expect(terminalAI).toBeHidden();
+  await expect(page.locator("#global-ai-panel")).toBeVisible();
+
+  await page.locator(".terminal-toolbar").click({ position: { x: 30, y: 15 } });
+  await expect(page.locator(".ai-dock")).not.toHaveClass(/is-open/);
+  await expect(terminalAI).toBeVisible();
+
+  await page.setViewportSize({ width: 1700, height: 800 });
+  await page.locator(".ai-rail").click();
+  await expect(terminalAI).toBeVisible();
+  await expect(page.locator("#global-ai-panel")).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => {
+    const session = document.querySelector(".workspace-terminal-ai-panel")!.getBoundingClientRect();
+    const global = document.querySelector("#global-ai-panel")!.getBoundingClientRect();
+    return global.left >= session.right - 1;
+  })).toBe(true);
 });

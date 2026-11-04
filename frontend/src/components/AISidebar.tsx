@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Send, Sparkles, Square, Trash2 } from "lucide-react";
+import { ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Server, Sparkles, Square, Trash2 } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, AITargetBinding, Tab } from "../types";
 import AIModelPicker from "./AIModelPicker";
+import AISendControl from "./AISendControl";
+import { readAIExecutionMode, saveAIExecutionMode, type AIExecutionMode } from "../features/ai/executionModePreference";
 import AITranscript from "./AITranscript";
 import { belongsToConversationScope } from "../features/ai/conversationScope";
 import { AI_PROVIDERS_CHANGED } from "../features/ai/providerEvents";
@@ -39,7 +41,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [conversationID, setConversationID] = useState("");
   const [providerID, setProviderID] = useState(lastModelRef.current.providerId);
   const [modelID, setModelID] = useState(lastModelRef.current.modelId);
-  const [mode, setMode] = useState<"review" | "auto">("review");
+  const [mode, setMode] = useState<AIExecutionMode>(() => readAIExecutionMode(isTerminal));
   const [targetIDs, setTargetIDs] = useState<string[]>([]);
   const [historySessionIDs, setHistorySessionIDs] = useState<string[]>([]);
   const [historyBindings, setHistoryBindings] = useState<AITargetBinding[]>([]);
@@ -48,6 +50,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [search, setSearch] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [showTargets, setShowTargets] = useState(false);
+  const targetSelectorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [running, setRunning] = useState<AIStartResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -61,6 +64,24 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   currentConversationRef.current = conversationID;
   const messagesRef = useRef<HTMLDivElement>(null);
   const followOutputRef = useRef(true);
+  const changeMode = (next: AIExecutionMode) => {
+    setMode(next);
+    saveAIExecutionMode(isTerminal, next);
+  };
+
+  useEffect(() => {
+    if (!showTargets || isTerminal || !isOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!targetSelectorRef.current?.contains(event.target as Node)) setShowTargets(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [showTargets, isTerminal, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) setShowTargets(false);
+  }, [isOpen]);
+
   const onMessagesScroll = () => {
     const node = messagesRef.current;
     if (!node) return;
@@ -198,6 +219,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setModelID(item.modelId);
     setMode(item.mode);
     setShowHistory(false);
+    setShowTargets(false);
     setStream("");
     setStatus("");
     setError("");
@@ -218,6 +240,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setStatus("");
     setError("");
     setShowHistory(false);
+    setShowTargets(false);
   };
   const chooseModel = (nextProviderID: string, nextModelID: string) => {
     setProviderID(nextProviderID);
@@ -262,7 +285,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     <aside id={isTerminal ? undefined : "global-ai-panel"} className="ai-panel"
       aria-label={t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")} aria-hidden={!isOpen}>
       <header className="ai-header">
-        <strong><Sparkles size={15} /> {t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")}</strong>
+        <strong title={isTerminal ? `${active?.session.name ?? ""} · ${active?.session.username ?? ""}@${active?.session.host ?? ""}` : undefined}><Sparkles size={15} /> {t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")}</strong>
         <div className="ai-header-actions">
           <button title={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")} aria-label={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")} onClick={() => setShowHistory(!showHistory)}><History size={15} /></button>
           <button type="button" title={t("ai:newConversation")} aria-label={t("ai:newConversation")} onClick={newConversation} disabled={!!running}><Plus size={15} /></button>
@@ -293,33 +316,6 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
               </div>
             </div>
           )}
-          <div className="ai-controls">
-            {isTerminal ? <span className="ai-current-target" title={active?.session.name}>{active?.session.name}</span> : <div className="ai-selector">
-              <button type="button" className="ai-selector-button" onClick={() => setShowTargets(!showTargets)}
-                aria-expanded={showTargets}
-                title={selectedTargetTitle} aria-label={selectedTargetTitle}>
-                <span className="ai-selector-label">{t("ai:sessionsLabel")}{selectedTargetLabel}</span>
-                <ChevronDown size={13} aria-hidden="true" />
-              </button>
-              {showTargets && (
-                <div className="ai-target-menu">
-                  {connected.map(tab => (
-                    <label key={tab.id}>
-                      <input type="checkbox" checked={targetSet.has(tab.id)} disabled={tab.id === requiredID} onChange={() => toggleTarget(tab.id)} />
-                      <span>{tab.session.name}{tab.id === requiredID ? t("ai:currentRequired") : ""}</span>
-                    </label>
-                  ))}
-                  {!connected.length && <p className="ai-muted">{t("ai:connectSshFirst")}</p>}
-                </div>
-              )}
-            </div>}
-            <select value={mode} disabled={submitting || !!running}
-              onChange={e => setMode(e.target.value as "review" | "auto")}
-              aria-label={t("ai:executionMode")} title={mode === "review" ? t("ai:reviewMode") : t("ai:automaticMode")}>
-              <option value="review">{t("ai:reviewModeShort")}</option>
-              <option value="auto">{t("ai:automaticModeShort")}</option>
-            </select>
-          </div>
           {isTerminal && (terminalAlternate || !terminalSingleTarget) && (
             <div className="ai-session-warning ai-execution-warning" role="status">
               {terminalAlternate ? t("ai:interactiveProgram") : t("ai:terminalOnlyOne")}
@@ -371,17 +367,47 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                 placeholder={t("ai:messagePlaceholder")}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}/>
               <div className="ai-compose-actions">
-                <AIModelPicker providers={providers}
-                  providerID={provider?.id ?? providerID} modelID={model?.id ?? modelID}
-                  onChange={chooseModel} disabled={submitting || !!running} />
+                <div className="ai-compose-config">
+                  <AIModelPicker providers={providers}
+                    providerID={provider?.id ?? providerID} modelID={model?.id ?? modelID}
+                    onChange={chooseModel} disabled={submitting || !!running} />
+                  {!isTerminal && (
+                    <div className="ai-selector ai-compose-target" ref={targetSelectorRef}>
+              <button type="button" className="ai-selector-button" onClick={() => setShowTargets(!showTargets)}
+                  onKeyDown={event => {
+                    if (event.key === "Escape" && showTargets) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setShowTargets(false);
+                    }
+                  }}
+                aria-expanded={showTargets}
+                title={selectedTargetTitle} aria-label={selectedTargetTitle}>
+                <Server size={13} aria-hidden="true" />
+                <span className="ai-selector-label">{selectedTargetLabel}</span>
+                <ChevronDown size={13} aria-hidden="true" />
+              </button>
+              {showTargets && (
+                <div className="ai-target-menu">
+                  {connected.map(tab => (
+                    <label key={tab.id}>
+                      <input type="checkbox" checked={targetSet.has(tab.id)} disabled={tab.id === requiredID} onChange={() => toggleTarget(tab.id)} />
+                      <span>{tab.session.name}{tab.id === requiredID ? t("ai:currentRequired") : ""}</span>
+                    </label>
+                  ))}
+                  {!connected.length && <p className="ai-muted">{t("ai:connectSshFirst")}</p>}
+                </div>
+              )}
+            </div>
+                  )}
+                </div>
                 {running ? <button type="button" title={t("ai:stopTask")} aria-label={t("ai:stopTask")}
-                    onClick={() => void api.AIStop(running.taskId)}><Square size={15} /></button> :
-                  <button type="submit" title={t("ai:send")} aria-label={t("ai:send")} className="ai-primary"
+                    className="ai-stop-button" onClick={() => void api.AIStop(running.taskId)}><Square size={15} /></button> :
+                  <AISendControl mode={mode} onModeChange={changeMode} modeDisabled={submitting}
                     disabled={submitting || !provider || !model || !targets.length || legacyHistoryNeedsRebind ||
                       unavailableSessionIDs.length > 0 || !message.trim() ||
-                      (isTerminal && !terminalAvailable)}>
-                    <Send size={15} />
-                  </button>}
+                      (isTerminal && !terminalAvailable)} />}
+
               </div>
             </div>
           </form>
