@@ -35,7 +35,7 @@
   "interactiveProgram": "A full-screen interactive program is running in this terminal. Exit it before enabling AI control.",
   "terminalOnlyOne": "Current-terminal mode requires exactly the active SSH session. Use independent execution for multiple sessions.",
   "terminalIdleHelp": "Shell idleness is checked automatically; no commands are sent if it cannot be verified. Use Take control to stop AI execution at any time.",
-  "legacyWarningBefore": "This conversation has no verifiable target-server details. Check the selected sessions, then choose",
+  "legacyWarningBefore": "This conversation has no verifiable target-server details. Check the sessions selected in the composer, then choose",
   "legacyUseSelected": "Use selected sessions",
   "legacyWarningAfter": "to continue.",
   "unavailableHistoryBefore": "{{count}} historical target(s) are disconnected or their host/account details changed. Restore the original connection or choose",
