@@ -554,6 +554,7 @@ test("terminal grid stays centered inside scrollbar left edge across sizes and t
     const viewport = pane.querySelector(".xterm-viewport")!;
     const screen = pane.querySelector(".xterm-screen")!;
     const scrollbar = pane.querySelector(".xterm-scrollbar.xterm-vertical")!;
+    const thumb = scrollbar.querySelector(".xterm-slider")!;
     const outer = container.getBoundingClientRect();
     const inner = pane.getBoundingClientRect();
     const content = surface.getBoundingClientRect();
@@ -595,6 +596,8 @@ test("terminal grid stays centered inside scrollbar left edge across sizes and t
       contentRight: content.right,
       contentBottom: content.bottom,
       scrollbarWidth: scroll.width,
+      thumbBorderLeft: getComputedStyle(thumb).borderLeftWidth,
+      thumbBorderRight: getComputedStyle(thumb).borderRightWidth,
     };
   });
 
@@ -609,7 +612,7 @@ test("terminal grid stays centered inside scrollbar left edge across sizes and t
   }
   expect(dark.contentPadding).toBe("0px");
   const aligned = (gaps: number[]) => gaps[0] >= 7 && gaps[2] >= 7 &&
-    Math.abs(gaps[0] - gaps[1]) <= 1.5 && Math.abs(gaps[2] - gaps[3]) <= 1.5;
+    Math.abs(gaps[0] - gaps[1]) <= 1 && Math.abs(gaps[2] - gaps[3]) <= 1;
   expect(dark.xtermPadding[1]).toBe("0px");
   expect(dark.xtermPadding[2]).toBe("0px");
   expect(dark.contentWidth).toBeGreaterThan(0);
@@ -619,6 +622,8 @@ test("terminal grid stays centered inside scrollbar left edge across sizes and t
   expect(dark.screenRight).toBeLessThanOrEqual(dark.contentRight + 1);
   expect(dark.screenBottom).toBeLessThanOrEqual(dark.contentBottom + 1);
   expect(dark.scrollbarWidth).toBe(8);
+  expect(dark.thumbBorderLeft).toBe("1px");
+  expect(dark.thumbBorderRight).toBe("1px");
 
   await page.setViewportSize({ width: 1040, height: 630 });
   await expect.poll(async () => {
@@ -628,6 +633,17 @@ test("terminal grid stays centered inside scrollbar left edge across sizes and t
       geometry.screenRight <= geometry.contentRight + 1 &&
       geometry.screenBottom <= geometry.contentBottom + 1;
   }).toBe(true);
+  for (const [width, height] of [[1103, 678], [1261, 731], [1459, 803]]) {
+    await page.setViewportSize({ width, height });
+    await expect.poll(async () => {
+      const geometry = await snapshot();
+      return geometry.scrollbarWidth === 8 &&
+        Math.abs(geometry.scrollbarRightInset) < 1 &&
+        aligned(geometry.gridGaps) &&
+        geometry.screenRight <= geometry.contentRight + 1 &&
+        geometry.screenBottom <= geometry.contentBottom + 1;
+    }).toBe(true);
+  }
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "终端", exact: true }).click();
