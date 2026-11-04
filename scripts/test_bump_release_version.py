@@ -21,9 +21,14 @@ class ReleaseVersionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "package-lock.json"
             path.write_text(
-                '{\n  "name": "openshell",\n  "version": "0.1.111",\n'
-                '  "packages": {"": {"version": "0.1.111"}, '
-                '"node_modules/example": {"version": "7.8.9"}}\n}\n',
+                json.dumps({
+                    "name": "openshell",
+                    "version": "0.1.111",
+                    "packages": {
+                        "": {"version": "0.1.111"},
+                        "node_modules/example": {"version": "7.8.9"},
+                    },
+                }, indent=2) + "\n",
                 encoding="utf-8",
             )
             release.update_version_field(path, "0.1.112", 2)
