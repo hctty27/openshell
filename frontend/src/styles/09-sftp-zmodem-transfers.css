@@ -228,3 +228,5 @@
   .sftp-editor {width:100%;height:95vh}
   .sftp-editor-status {gap:7px;padding:0 7px}
 }
+
+.sftp-editor-loading {padding:15px 22px;background:var(--panel);color:var(--text-primary);border:1px solid var(--border);border-radius:8px;font-size:12px}
