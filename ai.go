@@ -336,8 +336,13 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 			chatMessages = aiPreparedMessages(c, system, historyEnd, true)
 			estimated = aiEstimateRequest(chatMessages, toolSpec)
 		}
-		if (estimated+aiReservedOutputTokens)*100 >= window*90 &&
-			aiCompactBoundary(c, historyEnd) > c.CompactedThrough {
+		reserve := aiReservedOutputTokens
+		if window/8 < reserve { reserve = window/8 }
+		for attempt := 0; attempt < 2; attempt++ {
+			projected := estimated + reserve
+			if (attempt == 0 && projected*100 < window*90) ||
+				(attempt > 0 && projected*100 <= window*60) ||
+				aiCompactBoundary(c, historyEnd) <= c.CompactedThrough { break }
 			a.emit("ai:context", map[string]any{"conversationId":c.ID, "status":"compacting"})
 			_, compactErr := a.aiCompact(ctx, &c, provider, key, historyEnd)
 			if compactErr != nil { end("failed", "自动压缩上下文失败: "+compactErr.Error()); return }
@@ -345,7 +350,7 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 			estimated = aiEstimateRequest(chatMessages, toolSpec)
 			a.emit("ai:context", map[string]any{"conversationId":c.ID, "status":"running"})
 		}
-		if estimated+aiReservedOutputTokens > window {
+		if estimated+reserve > window {
 			end("failed", "当前请求超出模型上下文容量，请缩小输入或切换更大的模型")
 			return
 		}
