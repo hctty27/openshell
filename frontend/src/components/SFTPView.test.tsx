@@ -16,6 +16,7 @@ vi.mock("../bridge", () => ({
   api: {
     SFTPHome: vi.fn(async () => ({ local: "C:/temp", remote: "/root" })),
     SFTPTransfers: vi.fn(async () => []),
+    SaveTransferLocalDir: vi.fn(async () => {}),
     SFTPList: vi.fn(async () => []),
     SFTPOperate: vi.fn(async () => {}),
   },
@@ -250,4 +251,31 @@ test("batch deletion continues on individual failures and retains failed items f
   await waitFor(() => expect(onNotice).toHaveBeenCalledWith(expect.stringContaining("access denied")));
   expect(row("remote", "one.txt").classList.contains("selected")).toBe(true);
   expect(row("remote", "two.txt").classList.contains("selected")).toBe(false);
+});
+
+test("SFTP saves a successfully visited local folder for the saved SSH session", async () => {
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side, directory) =>
+    side === "local" && directory === "C:/temp"
+      ? [{...file("projects", "C:/temp/projects"), isDir: true}]
+      : []);
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  const folder = await screen.findByText("projects");
+  expect(api.SaveTransferLocalDir).not.toHaveBeenCalled();
+  fireEvent.doubleClick(folder.closest('[role="listitem"]')!);
+  await waitFor(() => expect(api.SaveTransferLocalDir)
+    .toHaveBeenCalledWith(ref.sessionId, "C:/temp/projects"));
+});
+
+test("SFTP does not persist a local folder that fails to load", async () => {
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side, directory) => {
+    if (side === "local" && directory === "C:/temp") {
+      return [{...file("missing", "C:/temp/missing"), isDir: true}];
+    }
+    if (side === "local" && directory === "C:/temp/missing") throw new Error("missing");
+    return [];
+  });
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  fireEvent.doubleClick((await screen.findByText("missing")).closest('[role="listitem"]')!);
+  expect(await screen.findByText("Error: missing")).toBeTruthy();
+  expect(api.SaveTransferLocalDir).not.toHaveBeenCalled();
 });
