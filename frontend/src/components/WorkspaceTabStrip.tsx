@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Server, X } from "lucide-react";
 import { t } from "../i18n";
@@ -34,6 +34,46 @@ export default function WorkspaceTabStrip(p: Props) {
   const frame = useRef<number | null>(null);
   const cleanup = useRef<(() => void) | null>(null);
   const suppressClick = useRef(false);
+  const tabOrder = p.tabs.map(tab => tab.id).join(",");
+
+  useLayoutEffect(() => {
+    const strip = stripRef.current;
+    const activeTab = Array.from(strip?.querySelectorAll<HTMLElement>(".terminal-tab") ?? [])
+      .find(tab => tab.dataset.tabId === p.activeID);
+    if (!strip || !activeTab) return;
+
+    const revealActiveTab = () => {
+      const stripBounds = strip.getBoundingClientRect();
+      const tabBounds = activeTab.getBoundingClientRect();
+      if (tabBounds.left < stripBounds.left) {
+        strip.scrollLeft += tabBounds.left - stripBounds.left;
+      } else if (tabBounds.right > stripBounds.right) {
+        strip.scrollLeft += tabBounds.right - stripBounds.right;
+      }
+    };
+
+    revealActiveTab();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(revealActiveTab);
+    observer.observe(strip);
+    observer.observe(activeTab);
+    return () => observer.disconnect();
+  }, [p.activeID, tabOrder]);
+
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey || strip.scrollWidth <= strip.clientWidth) return;
+      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (delta === 0) return;
+      const scale = event.deltaMode === 1 ? 20 : event.deltaMode === 2 ? strip.clientWidth : 1;
+      if (event.cancelable) event.preventDefault();
+      strip.scrollLeft += delta * scale;
+    };
+    strip.addEventListener("wheel", onWheel, { passive: false });
+    return () => strip.removeEventListener("wheel", onWheel);
+  }, []);
 
   useEffect(() => () => {
     cleanup.current?.();
