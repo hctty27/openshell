@@ -10,6 +10,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { useState } from "react";
 import TerminalPane from "./TerminalPane";
 import { DialogProvider } from "./DialogProvider";
 import { api } from "../bridge";
@@ -162,12 +163,27 @@ const tab: Tab = {
   
   error: "",
 };
+type TerminalPaneProps = Parameters<typeof TerminalPane>[0];
+type TestTerminalPaneProps = Omit<TerminalPaneProps, "searchOpen" | "onSearchOpenChange"> &
+  Partial<Pick<TerminalPaneProps, "searchOpen" | "onSearchOpenChange">>;
+
+function TestTerminalPane(props: TestTerminalPaneProps) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  return (
+    <TerminalPane
+      {...props}
+      searchOpen={props.searchOpen ?? searchOpen}
+      onSearchOpenChange={props.onSearchOpenChange ?? setSearchOpen}
+    />
+  );
+}
+
 const renderTerminal = (
   options: Partial<Parameters<typeof TerminalPane>[0]> = {},
 ) =>
   render(
     <DialogProvider>
-      <TerminalPane
+      <TestTerminalPane
         tab={tab}
         active
         fontSize={14}
@@ -220,7 +236,7 @@ test("copies selected text on left mouse release, but not when disabled", async 
   vi.mocked(Clipboard.SetText).mockClear();
   rerender(
     <DialogProvider>
-      <TerminalPane
+      <TestTerminalPane
         tab={tab}
         active
         fontSize={14}
@@ -403,7 +419,7 @@ test("multiline confirmation only pastes to the original connected tab", async (
   ).toBeTruthy();
   rerender(
     <DialogProvider>
-      <TerminalPane
+      <TestTerminalPane
         tab={tab}
         active={false}
         fontSize={14}
@@ -423,7 +439,7 @@ test("multiline confirmation only pastes to the original connected tab", async (
 });
 
 test("search shortcut opens localized terminal search and closes with Escape", async () => {
-  const { rerender } = renderTerminal({ searchFocusVersion: 0 });
+  const { rerender } = renderTerminal();
   const keyEvent = {
     type: "keydown",
     key: "f",
@@ -441,10 +457,10 @@ test("search shortcut opens localized terminal search and closes with Escape", a
   await waitFor(() => expect(screen.queryByRole("textbox", { name: "搜索终端内容" })).toBeNull());
   rerender(
     <DialogProvider>
-      <TerminalPane
+      <TestTerminalPane
         tab={tab} active fontSize={14} theme="dark"
         autoCopySelection rightClickPaste confirmMultilinePaste
-        searchFocusVersion={1}
+        searchOpen
         onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()}
       />
     </DialogProvider>,
@@ -475,7 +491,7 @@ test("short tab switches retain the WebGL renderer and context loss falls back",
   const first = refs.webgl[0];
   const pane = (active: boolean) => (
     <DialogProvider>
-      <TerminalPane tab={tab} active={active} fontSize={14} theme="dark"
+      <TestTerminalPane tab={tab} active={active} fontSize={14} theme="dark"
         autoCopySelection rightClickPaste confirmMultilinePaste
         onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
     </DialogProvider>
@@ -582,7 +598,7 @@ test("split-visible terminal activates on mouse click without creating a second 
   expect(onActivate).toHaveBeenCalledTimes(1);
   rerender(
     <DialogProvider>
-      <TerminalPane tab={tab} active visible onActivate={onActivate}
+      <TestTerminalPane tab={tab} active visible onActivate={onActivate}
         fontSize={14} theme="dark"
         autoCopySelection rightClickPaste confirmMultilinePaste
         onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
@@ -596,7 +612,7 @@ test("switching focus between visible split panes keeps the renderer and termina
   const onActivate = vi.fn();
   const renderPane = (active: boolean) => (
     <DialogProvider>
-      <TerminalPane tab={tab} active={active} visible onActivate={onActivate}
+      <TestTerminalPane tab={tab} active={active} visible onActivate={onActivate}
         fontSize={14} theme="dark"
         autoCopySelection rightClickPaste confirmMultilinePaste
         onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
@@ -697,7 +713,7 @@ test("live severity highlighting survives closing manual search and updates inde
   expect(warnings.clearDecorations).not.toHaveBeenCalled();
   rerender(
     <DialogProvider>
-      <TerminalPane tab={tab} active fontSize={14} theme="dark"
+      <TestTerminalPane tab={tab} active fontSize={14} theme="dark"
         autoCopySelection rightClickPaste confirmMultilinePaste logHighlights={false}
         onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
     </DialogProvider>,
@@ -737,7 +753,7 @@ test("disconnected SSH session uses local ConPTY and does not route input to SSH
   const disconnected: Tab = { ...tab, status: "disconnected", everConnected: true };
   const renderFallback = (current: Tab) => (
     <DialogProvider>
-      <TerminalPane tab={current} active fontSize={14} theme="dark"
+      <TestTerminalPane tab={current} active fontSize={14} theme="dark"
         disconnectBehavior="local" localShell="powershell" preserveHistory
         autoCopySelection={false} rightClickPaste={false} confirmMultilinePaste
         onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
@@ -775,12 +791,12 @@ test("waits for completed SSH shutdown before starting local ConPTY", async () =
     onNotice: vi.fn(), onError: vi.fn(), onSelection: vi.fn(),
   };
   const { rerender } = render(
-    <DialogProvider><TerminalPane tab={switching} {...props} /></DialogProvider>,
+    <DialogProvider><TestTerminalPane tab={switching} {...props} /></DialogProvider>,
   );
   expect(api.StartLocalTerminal).not.toHaveBeenCalled();
   rerender(
     <DialogProvider>
-      <TerminalPane tab={{ ...switching, localFallbackPending: false }} {...props} />
+      <TestTerminalPane tab={{ ...switching, localFallbackPending: false }} {...props} />
     </DialogProvider>,
   );
   await waitFor(() => expect(api.StartLocalTerminal).toHaveBeenCalledTimes(1));
@@ -805,7 +821,7 @@ test("history restoration strips unused screen padding without removing blank li
   const onError = vi.fn();
   const pane = (nextTab: Tab) => (
     <DialogProvider>
-      <TerminalPane tab={nextTab} active fontSize={14} theme="dark"
+      <TestTerminalPane tab={nextTab} active fontSize={14} theme="dark"
         autoCopySelection rightClickPaste confirmMultilinePaste
         onNotice={onNotice} onError={onError} onSelection={vi.fn()} />
     </DialogProvider>
@@ -839,7 +855,7 @@ test("late SSH open failure from a disposed pane does not break a new connection
   const onError = vi.fn();
   const pane = (nextTab: Tab) => (
     <DialogProvider>
-      <TerminalPane tab={nextTab} active fontSize={14} theme="dark"
+      <TestTerminalPane tab={nextTab} active fontSize={14} theme="dark"
         autoCopySelection rightClickPaste confirmMultilinePaste
         onNotice={vi.fn()} onError={onError} onSelection={vi.fn()} />
     </DialogProvider>
@@ -888,7 +904,7 @@ test("transfer focus restoration is scoped to the active connection and respects
   const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(true);
   const pane = (request?: { ref: NonNullable<Tab["ref"]> }, active = true) => (
     <DialogProvider>
-      <TerminalPane tab={tab} active={active} fontSize={14} theme="dark"
+      <TestTerminalPane tab={tab} active={active} fontSize={14} theme="dark"
         autoCopySelection rightClickPaste confirmMultilinePaste
         onNotice={vi.fn()} onError={vi.fn()} transferFocusRequest={request} />
     </DialogProvider>
@@ -925,7 +941,7 @@ test("transfer completion does not focus a terminal behind a modal dialog", () =
   const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(true);
   const pane = (request?: { ref: NonNullable<Tab["ref"]> }) => (
     <DialogProvider>
-      <TerminalPane tab={tab} active fontSize={14} theme="dark"
+      <TestTerminalPane tab={tab} active fontSize={14} theme="dark"
         autoCopySelection rightClickPaste confirmMultilinePaste
         onNotice={vi.fn()} onError={vi.fn()} transferFocusRequest={request} />
     </DialogProvider>
@@ -956,7 +972,7 @@ test("AI takeover disables manual typing until user reclaims the terminal", asyn
   expect(onTakeControl).toHaveBeenCalledOnce();
   rerender(
     <DialogProvider>
-      <TerminalPane tab={tab} active fontSize={14} theme="dark"
+      <TestTerminalPane tab={tab} active fontSize={14} theme="dark"
         autoCopySelection rightClickPaste confirmMultilinePaste
         onNotice={vi.fn()} onError={vi.fn()}
         aiControlled={false} onTakeControl={onTakeControl} />

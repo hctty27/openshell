@@ -20,6 +20,7 @@ vi.mock("./components/TerminalPane", () => ({
   default: (props: {
     tab: { id: string; ref?: { tabId: string; sessionId: string; generation: number } | null; cloneCwd?: string };
     active: boolean;
+    searchOpen?: boolean;
     onDirectoryChange?: (ref: { tabId: string; sessionId: string; generation: number }, directory: string) => void;
     visible?: boolean;
     onActivate?: () => void;
@@ -30,6 +31,7 @@ vi.mock("./components/TerminalPane", () => ({
       data-tab-id={props.tab.id}
       data-clone-cwd={props.tab.cloneCwd ?? ""}
       data-active={props.active}
+      data-search-open={String(props.searchOpen)}
       data-visible={props.visible}
       onMouseDown={props.onActivate}
       onDoubleClick={() => { if (props.tab.ref) props.onDirectoryChange?.(props.tab.ref, "/data/my project"); }}
@@ -166,15 +168,26 @@ test("workspace panel buttons keep their icons while highlighting the open panel
   fireEvent.doubleClick(screen.getByRole("button", { name: "选中会话 server-a" }));
   await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
 
-  const [terminalAI, sftp] = Array.from(
+  const [searchButton, terminalAI, sftp] = Array.from(
     document.querySelectorAll<HTMLButtonElement>(".terminal-toolbar .workspace-panel-toggle")
   );
+  expect(searchButton).toBeDefined();
   expect(terminalAI).toBeDefined();
   expect(sftp).toBeDefined();
+  const searchIcon = searchButton.querySelector("svg")?.outerHTML;
   const aiIcon = terminalAI.querySelector("svg")?.outerHTML;
   const sftpIcon = sftp.querySelector("svg")?.outerHTML;
+  expect(searchButton.getAttribute("aria-pressed")).toBe("false");
   expect(terminalAI.getAttribute("aria-pressed")).toBe("false");
   expect(sftp.getAttribute("aria-pressed")).toBe("false");
+
+  fireEvent.click(searchButton);
+  expect(searchButton.getAttribute("aria-pressed")).toBe("true");
+  expect(terminalAI.getAttribute("aria-pressed")).toBe("false");
+  expect(sftp.getAttribute("aria-pressed")).toBe("false");
+  expect(searchButton.querySelector("svg")?.outerHTML).toBe(searchIcon);
+  fireEvent.click(searchButton);
+  expect(searchButton.getAttribute("aria-pressed")).toBe("false");
 
   fireEvent.click(sftp);
   expect(sftp.getAttribute("aria-pressed")).toBe("true");
@@ -194,6 +207,38 @@ test("workspace panel buttons keep their icons while highlighting the open panel
   fireEvent.click(sftp);
   expect(sftp.getAttribute("aria-pressed")).toBe("false");
   expect(sftp.querySelector("svg")?.outerHTML).toBe(sftpIcon);
+});
+
+test("duplicating a terminal tab does not inherit its search panel", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{ id: "server-a", groupId: "", name: "server-a", host: "example.test",
+      port: 22, username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved" }],
+    groups: [], fontSize: "14", language: "zh-CN", version: "test",
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选中会话 server-a" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+
+  const searchButton = screen.getByRole("button", { name: "搜索终端内容" });
+  fireEvent.click(searchButton);
+  const original = screen.getByTestId("terminal-pane-stub");
+  expect(original.getAttribute("data-search-open")).toBe("true");
+
+  fireEvent.doubleClick(screen.getByTitle("双击复制会话"));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
+  const panes = screen.getAllByTestId("terminal-pane-stub");
+  expect(panes).toHaveLength(2);
+  expect(panes[0].getAttribute("data-search-open")).toBe("true");
+  expect(panes[1].getAttribute("data-search-open")).toBe("false");
+  expect(searchButton.getAttribute("aria-pressed")).toBe("false");
+
+  fireEvent.click(searchButton);
+  expect(panes[0].getAttribute("data-search-open")).toBe("true");
+  expect(panes[1].getAttribute("data-search-open")).toBe("true");
+  fireEvent.click(searchButton);
+  expect(panes[0].getAttribute("data-search-open")).toBe("true");
+  expect(panes[1].getAttribute("data-search-open")).toBe("false");
 });
 
 test("session sidebar can auto-hide, hover open and pin without remounting the tree", async () => {

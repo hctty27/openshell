@@ -40,7 +40,8 @@ interface Props {
   onNotice(text: unknown): void;
   onRemoteOutput?(ref: Ref, bytes: Uint8Array): void;
   commandFocusVersion?: number;
-  searchFocusVersion?: number;
+  searchOpen: boolean;
+  onSearchOpenChange(open: boolean): void;
   transferFocusRequest?: { ref: Ref };
   onError(text: unknown): void;
   onSelection?(text: string): void;
@@ -70,7 +71,7 @@ export default function TerminalPane(p: Props) {
     : p.tab.ref && p.tab.everConnected && ["disconnected", "error"].includes(p.tab.status)
       ? (p.tab.localFallbackPending || p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
       : "none";
-  const [searchOpen, setSearchOpen] = useState(false);
+  const searchOpen = p.searchOpen;
   const [searchText, setSearchText] = useState("");
   const [regexMode, setRegexMode] = useState(false);
   const resolvedTheme = resolveTerminalTheme(p.theme, p.terminalTheme, p.tab.session.terminalTheme);
@@ -439,7 +440,7 @@ export default function TerminalPane(p: Props) {
       switch (event.key.toLowerCase()) {
         case "f":
           event.preventDefault();
-          setSearchOpen(true);
+          callbacks.current.onSearchOpenChange(true);
           return false;
         case "c": {
           event.preventDefault();
@@ -697,11 +698,10 @@ export default function TerminalPane(p: Props) {
     return () => cancelAnimationFrame(frame);
   }, [p.transferFocusRequest, p.active, p.tab.ref, p.tab.status, searchOpen]);
   useEffect(() => {
-    if (p.active && p.searchFocusVersion) setSearchOpen(true);
-  }, [p.searchFocusVersion]);
+    if (!searchOpen) searchAddon.current?.clearDecorations();
+  }, [searchOpen]);
   const closeSearch = () => {
-    searchAddon.current?.clearDecorations();
-    setSearchOpen(false);
+    p.onSearchOpenChange(false);
     terminal.current?.focus();
   };
   const searchOptions = (regex: boolean) => ({
@@ -725,7 +725,7 @@ export default function TerminalPane(p: Props) {
     const pattern = "ERROR|WARN(?:ING)?|FATAL|FAIL(?:ED)?";
     setSearchText(pattern);
     setRegexMode(true);
-    setSearchOpen(true);
+    p.onSearchOpenChange(true);
     searchAddon.current?.findNext(pattern, searchOptions(true));
   };
   return (
