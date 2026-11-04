@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent } from "react";
+import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Info, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, ArrowLeftRight } from "lucide-react";
 import { api, listen, errorText } from "../bridge";
@@ -47,6 +47,39 @@ interface PanelProps {
   onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLElement>): void;
   onCwdHelp?(): void;
 }
+interface FileRowProps {
+  entry: SFTPEntry;
+  size: string;
+  modified: string;
+  selected: boolean;
+  deleting: boolean;
+  side: Side;
+  callbacks: { current: PanelProps };
+}
+
+// A selection change only renders rows whose selection state actually changed.
+const FileRow = memo(function FileRow({
+  entry, size, modified, selected, deleting, side, callbacks,
+}: FileRowProps) {
+  return (
+    <button type="button" role="listitem"
+      className={`sftp-file-row ${selected ? "selected" : ""}`}
+      draggable={!entry.isSymlink && !deleting}
+      onDragStart={event => event.dataTransfer.setData("application/x-openshell-entry", JSON.stringify({ side, path: entry.path }))}
+      onClick={event => callbacks.current.onSelect(entry, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "single")}
+      onDoubleClick={() => {
+        if (entry.isSymlink) return;
+        if (entry.isDir) callbacks.current.onDir(entry.path);
+        else callbacks.current.onOpenFile?.(entry);
+      }}
+      onContextMenu={event => callbacks.current.onContext(event, entry)}>
+      <span className="sftp-file-name">{entry.isDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className="sftp-link-badge">↗</span>}</span>
+      <span>{size}</span>
+      <span>{modified}</span><span>{entry.mode}</span>
+    </button>
+  );
+});
+
 function FilePanel(p: PanelProps) {
   const visible = useMemo(() => p.showHidden ? p.entries : p.entries.filter(e => !e.name.startsWith(".")), [p.entries,p.showHidden]);
   const [draft,setDraft] = useState(p.directory);
@@ -62,24 +95,13 @@ function FilePanel(p: PanelProps) {
     modified: new Date(entry.modified).toLocaleDateString(locale),
   })), [visible, locale]);
   const deleting = Boolean(p.deleting?.running);
-  // Keep unchanged file rows stable when transfer progress or unrelated panel state updates.
-  // Handlers read the latest panel props so memoized rows never capture stale callbacks.
+  // Build only lightweight row elements when selection changes. Memoized
+  // rows skip their render work unless their own selection or metadata changes.
+  // Callbacks stay current through a stable ref.
   const fileRows = useMemo(() => displayEntries.map(({ entry, size, modified }) => (
-    <button type="button" role="listitem" key={entry.path}
-      className={`sftp-file-row ${selectedPaths.has(entry.path) ? "selected" : ""}`}
-      draggable={!entry.isSymlink && !deleting}
-      onDragStart={event => event.dataTransfer.setData("application/x-openshell-entry",JSON.stringify({side:p.side,path:entry.path}))}
-      onClick={event => callbacks.current.onSelect(entry,event.shiftKey ? "range" : event.ctrlKey||event.metaKey ? "toggle" : "single")}
-      onDoubleClick={() => {
-        if (entry.isSymlink) return;
-        if (entry.isDir) callbacks.current.onDir(entry.path);
-        else callbacks.current.onOpenFile?.(entry);
-      }}
-      onContextMenu={event => callbacks.current.onContext(event,entry)}>
-      <span className="sftp-file-name">{entry.isDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className="sftp-link-badge">↗</span>}</span>
-      <span>{size}</span>
-      <span>{modified}</span><span>{entry.mode}</span>
-    </button>
+    <FileRow key={entry.path} entry={entry} size={size} modified={modified}
+      selected={selectedPaths.has(entry.path)} deleting={deleting}
+      side={p.side} callbacks={callbacks} />
   )), [displayEntries, selectedPaths, p.side, deleting]);
   return (
     <section className={`sftp-panel sftp-${p.side}`} onDragOver={event=>{
@@ -267,13 +289,17 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     setDeleting(s=>({...s,[side]:null}));
   };
   const choose = (side:Side,item:SFTPEntry,mode:SelectionMode) => {
-    const entries = (side==="local" ? localFiles : remoteFiles).filter(file => hidden[side] || !file.name.startsWith("."));
-    const anchorIndex = entries.findIndex(file => file.path === selectionAnchor.current[side]);
-    const targetIndex = entries.findIndex(file => file.path === item.path);
+    // Only Shift-range selection needs to scan the directory. Ordinary
+    // clicks and Ctrl-clicks should not iterate thousands of entries.
+    const entries = mode==="range"
+      ? (side==="local" ? localFiles : remoteFiles).filter(file => hidden[side] || !file.name.startsWith("."))
+      : null;
+    const anchorIndex = entries?.findIndex(file => file.path === selectionAnchor.current[side]) ?? -1;
+    const targetIndex = entries?.findIndex(file => file.path === item.path) ?? -1;
     if (mode !== "range") selectionAnchor.current[side] = item.path;
     setSelection(s=>{
       const previous=s[side];
-      if (mode==="range" && anchorIndex>=0 && targetIndex>=0) {
+      if (entries && anchorIndex>=0 && targetIndex>=0) {
         const start=Math.min(anchorIndex,targetIndex), end=Math.max(anchorIndex,targetIndex);
         return {...s,[side]:entries.slice(start,end+1).map(file=>file.path)};
       }
