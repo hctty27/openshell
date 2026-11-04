@@ -142,5 +142,18 @@
   "aiModelIDs": "模型 ID（每行一个）",
   "aiModelIDsHelp": "每行一个模型 ID，可在后面添加“| Token 上限”（例如 gpt-model | 262144）。未填写时默认 32768，最大 262144。",
   "aiProviderSaved": "API 配置已保存",
-  "aiModelWindowInvalid": "模型 ID 或 Token 上限无效（范围 4096–262144）"
+  "aiModelWindowInvalid": "模型 ID 或 Token 上限无效（范围 4096–262144）",
+  "aiRuntimeTitle": "AI 上下文与执行",
+  "aiRuntimeDescription": "调整自动压缩与单次任务限制，仅影响之后启动的任务。",
+  "aiAutoCompact": "自动压缩上下文",
+  "aiCompactThreshold": "自动压缩阈值",
+  "aiMaxSteps": "单次最大循环次数",
+  "aiTaskTimeout": "单次任务超时",
+  "aiMinutes": "分钟",
+  "aiTurns": "轮",
+  "aiAdvancedSettings": "高级设置",
+  "aiKeepRecentTurns": "保留最近完整对话",
+  "aiRuntimeSafetyNote": "关闭自动压缩后仍可手动压缩；超出模型容量时将停止请求，不会自动丢弃历史。完整聊天记录始终保留。",
+  "aiRuntimeSaved": "AI 执行设置已保存",
+  "saveAIBehavior": "保存 AI 设置"
 }
