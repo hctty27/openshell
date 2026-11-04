@@ -108,7 +108,7 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
         <ChevronDown size={13} aria-hidden="true" />
       </button>
       <AIDropdownSurface open={open} anchorRef={triggerRef} onDismiss={() => setOpen(false)}
-        matchAnchorWidth maxHeight={250} className="ai-model-picker__popup">
+        matchAnchorWidth maxHeight={260} className="ai-model-picker__popup">
           <div id={listID} role="listbox" aria-label={t("ai:availableModels")} className="ai-model-picker__options">
             {options.map((option, index) => {
               const isSelected = index === selectedIndex;
