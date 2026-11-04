@@ -74,3 +74,25 @@ func TestAIPromptTextUsesCurrentLanguage(t *testing.T) {
 		t.Fatalf("Chinese prompt: %q", got)
 	}
 }
+
+func TestAIConversationScopeLegacyAndExplicit(t *testing.T) {
+	cases := []struct {
+		name string
+		conversation store.AIConversation
+		wantScope string
+		wantID string
+	}{
+		{"legacy-global", store.AIConversation{Execution:"independent"}, "global", ""},
+		{"legacy-terminal", store.AIConversation{Execution:"terminal", TargetSessionIDs:[]string{"session-a"}}, "terminal", "session-a"},
+		{"explicit-global", store.AIConversation{Scope:"global", Execution:"terminal"}, "global", ""},
+		{"explicit-terminal", store.AIConversation{Scope:"terminal", ScopeID:"session-a:tab-b"}, "terminal", "session-a:tab-b"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			scope, id := aiConversationScope(tc.conversation)
+			if scope != tc.wantScope || id != tc.wantID {
+				t.Fatalf("scope=%q id=%q, want scope=%q id=%q", scope, id, tc.wantScope, tc.wantID)
+			}
+		})
+	}
+}
