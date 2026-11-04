@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { AIConversation } from "../../types";
+import type { AIConversation, Session } from "../../types";
 import { belongsToConversationScope } from "./conversationScope";
 import { assignTerminalHistoryScopes } from "./terminalScope";
 
@@ -24,7 +24,7 @@ test("legacy independent histories stay global; legacy terminal histories remain
 });
 
 test("reconnects retain scope while duplicated tabs remain isolated", () => {
-  const session = { id: "server-1" } as any;
+  const session = { id: "server-1" } as Session;
   const first = assignTerminalHistoryScopes([{ id: "a", session }], {});
   const second = assignTerminalHistoryScopes([{ id: "a", session }, { id: "b", session }], first);
   expect(second.a).toBe("server-1");
