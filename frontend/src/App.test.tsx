@@ -133,6 +133,14 @@ test("global AI pin survives SFTP and terminal AI panel switching", async () => 
   fireEvent.click(screen.getByTitle("打开 SFTP 文件管理"));
   expect(screen.getByTestId("sftp-panel-stub")).toBeTruthy();
   expect(pinned()).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "自动隐藏 AI 栏" }));
+  expect(pinned()).toBe(false);
+  expect(screen.getByTestId("sftp-panel-stub")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "展开 AI 助手" }));
+  expect(dock.classList.contains("is-open")).toBe(true);
+  expect(screen.getByTestId("sftp-panel-stub")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "固定 AI 栏" }));
+  expect(pinned()).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "终端 AI" }));
   expect(screen.queryByTestId("sftp-panel-stub")).toBeNull();
   expect(screen.getByRole("complementary", { name: "终端 AI" })).toBeTruthy();
