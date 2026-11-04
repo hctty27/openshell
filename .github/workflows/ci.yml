@@ -5,6 +5,14 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+      ref_sha:
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -51,6 +59,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref_sha || github.sha }}
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -70,6 +80,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref_sha || github.sha }}
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -115,7 +127,7 @@ jobs:
         working-directory: frontend
         run: npx playwright test --grep "terminal grid stays centered|compact sidebar removes detail actions|AI header aligns with SSH title bar|floating global AI overlays without moving or hiding terminal AI and SFTP|bilingual|dragging a connected tab splits|four sessions support nested splits"
       - name: Upload frontend bundle for Windows release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.publish
         uses: actions/upload-artifact@v7
         with:
           name: openshell-frontend-dist
@@ -126,7 +138,7 @@ jobs:
   release:
     name: Windows release after CI
     needs: [changes, go-tests, frontend-tests]
-    if: github.event_name == 'push' && needs.changes.outputs.release == 'true'
+    if: always() && needs.go-tests.result == 'success' && needs.frontend-tests.result == 'success' && (inputs.publish || (github.event_name == 'push' && needs.changes.outputs.release == 'true'))
     permissions:
       contents: write
       actions: read
@@ -135,3 +147,4 @@ jobs:
     with:
       publish: true
       use_frontend_artifact: true
+      ref_sha: ${{ inputs.ref_sha || github.sha }}
