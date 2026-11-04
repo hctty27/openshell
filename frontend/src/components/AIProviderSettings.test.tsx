@@ -15,6 +15,11 @@ vi.mock("../bridge", () => ({
       ...request.provider, id: "new-provider", hasKey: true,
     })),
     AIDeleteProvider: vi.fn(async () => {}),
+    AIRuntimeSettings: vi.fn(async () => ({
+      autoCompact: true, compactThreshold: 90, maxSteps: 12,
+      taskTimeoutMinutes: 10, keepRecentTurns: 6,
+    })),
+    AISaveRuntimeSettings: vi.fn(async () => {}),
   },
   errorText: (value: unknown) => String(value),
 }));
@@ -85,4 +90,17 @@ test("validates duplicate model IDs before saving a provider", async () => {
   fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
   expect(screen.getByRole("alert").textContent).toContain("模型 ID 不能重复");
   expect(api.AISaveProvider).not.toHaveBeenCalled();
+});
+
+test("discarding context edits on tab switch resets the runtime form", async () => {
+  render(<AIProviderSettings />);
+  fireEvent.click(screen.getByRole("tab", { name: "上下文" }));
+  const compact = await screen.findByLabelText("自动压缩上下文") as HTMLInputElement;
+  await waitFor(() => expect(compact.checked).toBe(true));
+  fireEvent.click(compact);
+  fireEvent.click(screen.getByRole("tab", { name: "执行行为" }));
+  await screen.findByLabelText("单次最大循环次数");
+  expect(confirm).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("tab", { name: "上下文" }));
+  await waitFor(() => expect((screen.getByLabelText("自动压缩上下文") as HTMLInputElement).checked).toBe(true));
 });
