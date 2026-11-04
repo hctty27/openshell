@@ -71,7 +71,7 @@ test("search stays focused while filtering; delete does not select a conversatio
   fireEvent.change(search, { target: { value: "Docker" } });
   expect(document.activeElement).toBe(search);
   expect(screen.queryByRole("button", { name: /查看现在有哪些进程/ })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: /删除对话: 较早的 Docker 检查/ }));
+  fireEvent.click(screen.getByRole("button", { name: "删除对话" }));
   expect(onDelete).toHaveBeenCalledWith("older");
   expect(onSelect).not.toHaveBeenCalled();
   fireEvent.mouseDown(document.body);
