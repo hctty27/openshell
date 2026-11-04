@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Info, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, Save, ArrowLeftRight } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Info, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, ArrowLeftRight } from "lucide-react";
 import { api, listen, errorText } from "../bridge";
 import type { Ref, SFTPEntry, SFTPTask, SFTPDocument } from "../types";
 import { mergeTransferHistory, sameTransferRef } from "../features/transfers/transferHistory";
@@ -9,6 +9,7 @@ import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMe
 import { i18n, t } from "../i18n";
 import { Clipboard } from "@wailsio/runtime";
 import { BASH_CWD_REPORT_COMMAND } from "../terminalCwd";
+const SFTPFileEditor = lazy(() => import("./editor/SFTPFileEditor"));
 
 type Side = "local" | "remote";
 const directoryCacheKey = (ref: Ref, directory: string) =>
@@ -144,6 +145,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   const [editor,setEditor] = useState<SFTPDocument|null>(null);
   const [draftText,setDraftText] = useState("");
   const [editorSaving,setEditorSaving] = useState(false);
+  const editorSaveInProgress = useRef(false);
   const [syncBusy,setSyncBusy] = useState(false);
   const [menu,setMenu] = useState<{x:number;y:number;anchor:HTMLElement;items:ContextMenuAction[]}|null>(null);
 
@@ -378,20 +380,24 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     }catch(error){onNotice(error);}
   };
   const closeEditor = async () => {
+    if(editorSaveInProgress.current)return;
     if(editor && draftText!==editor.content){
       const ok=await dialogs.confirm({title:t("sftp:discardEditorTitle"),description:t("sftp:discardEditorDescription"),tone:"warning",confirmLabel:t("sftp:discard")});
       if(!ok)return;
     }
     setEditor(null);
   };
-  const saveEditor = async () => {
-    if(!editor||editorSaving)return;
+  const saveEditor = async (content:string) => {
+    if(!editor || editorSaveInProgress.current || content===editor.content)return;
+    editorSaveInProgress.current=true;
     setEditorSaving(true);
     try {
-      const next=await api.SFTPSaveRemoteText(refID,editor.path,editor.revision,draftText);
-      setEditor(next);setDraftText(next.content);refresh("remote");
+      const next=await api.SFTPSaveRemoteText(refID,editor.path,editor.revision,content);
+      setEditor(next);
+      setDraftText(current=>current===content?next.content:current);
+      refresh("remote");
     }catch(error){onNotice(error);}
-    finally{setEditorSaving(false);}
+    finally{editorSaveInProgress.current=false;setEditorSaving(false);}
   };
   const sync = async (direction:"upload"|"download") => {
     if(syncBusy || !localDir || !remoteDir)return;
@@ -472,15 +478,18 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
         </div>}
       </div>}
       {editor && (
-        <div className="sftp-editor-backdrop">
-          <section className="sftp-editor" role="dialog" aria-modal="true" aria-label={t("sftp:editText")}>
-            <header><strong><FileText size={15}/>{editor.path}</strong><button title={t("common:close")} onClick={()=>void closeEditor()}><X size={17}/></button></header>
-            <textarea aria-label={t("sftp:editText")} value={draftText} spellCheck={false} onChange={event=>setDraftText(event.target.value)}/>
-            <footer><small>{t("sftp:utf8EditorLimit")}</small><button onClick={()=>void closeEditor()}>{t("common:cancel")}</button>
-              <button disabled={editorSaving||draftText===editor.content} className="sftp-editor-save" onClick={()=>void saveEditor()}><Save size={14}/>{t("sftp:saveFile")}</button>
-            </footer>
-          </section>
-        </div>
+        <Suspense fallback={<div className="sftp-editor-backdrop"><div className="sftp-editor-loading">{t("sftp:loading")}</div></div>}>
+          <SFTPFileEditor
+            key={refID.tabId + ":" + refID.generation + ":" + editor.path}
+            path={editor.path}
+            initialContent={editor.content}
+            dirty={draftText!==editor.content}
+            saving={editorSaving}
+            onChange={setDraftText}
+            onSave={content=>void saveEditor(content)}
+            onClose={()=>void closeEditor()}
+          />
+        </Suspense>
       )}
       {menu && <FloatingContextMenu {...menu} onClose={()=>setMenu(null)}/>}
     </div>
