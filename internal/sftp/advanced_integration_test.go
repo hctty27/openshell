@@ -122,3 +122,27 @@ func TestBatchChmodSelected(t *testing.T){
     }
     if _,err:=m.BatchChmod(ref,"local",[]string{"/"},"0755");err==nil{t.Fatal("volume root allowed")}
 }
+
+
+func TestRemoteDeleteDoesNotFollowSymlinks(t *testing.T) {
+    m,ref:=advancedManager(t)
+    root:=t.TempDir()
+    preserved:=filepath.Join(root,"preserved")
+    if err:=os.Mkdir(preserved,0755);err!=nil {t.Fatal(err)}
+    keep:=filepath.Join(preserved,"keep.txt")
+    if err:=os.WriteFile(keep,[]byte("safe"),0600);err!=nil {t.Fatal(err)}
+
+    link:=filepath.Join(root,"top-link")
+    if err:=os.Symlink(preserved,link);err!=nil {t.Fatal(err)}
+    if err:=m.Operate(ref,"remote","delete",filepath.ToSlash(link),"");err!=nil {t.Fatal(err)}
+    if _,err:=os.Lstat(link);!errors.Is(err,os.ErrNotExist) {t.Fatalf("link still exists: %v",err)}
+    if _,err:=os.Stat(keep);err!=nil {t.Fatalf("link target was removed: %v",err)}
+
+    folder:=filepath.Join(root,"remove-me")
+    if err:=os.Mkdir(folder,0755);err!=nil {t.Fatal(err)}
+    if err:=os.WriteFile(filepath.Join(folder,"normal.txt"),[]byte("ok"),0600);err!=nil {t.Fatal(err)}
+    if err:=os.Symlink(preserved,filepath.Join(folder,"nested-link"));err!=nil {t.Fatal(err)}
+    if err:=m.Operate(ref,"remote","delete",filepath.ToSlash(folder),"");err!=nil {t.Fatal(err)}
+    if _,err:=os.Lstat(folder);!errors.Is(err,os.ErrNotExist) {t.Fatalf("folder still exists: %v",err)}
+    if _,err:=os.Stat(keep);err!=nil {t.Fatalf("nested link target was removed: %v",err)}
+}
