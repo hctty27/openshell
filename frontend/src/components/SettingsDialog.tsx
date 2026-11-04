@@ -1,4 +1,3 @@
-import packageManifest from "../../package.json";
 import { renderMessage, type DisplayText } from "../i18n/message";
 import { useTranslation } from "react-i18next";
 import { message } from "../i18n/message";
@@ -26,6 +25,7 @@ import GeneralSettingsPanel from "./GeneralSettingsPanel";
 import ConnectionSettingsPanel from "./ConnectionSettingsPanel";
 import TerminalSettingsPanel from "./TerminalSettingsPanel";
 import AIProviderSettings from "./AIProviderSettings";
+import AboutSettingsPanel from "./AboutSettingsPanel";
 import type {
   Session,
   LocalForward,
@@ -71,7 +71,6 @@ interface Props {
   onRefresh(): Promise<void>;
   onFont(n: number): void;
 }
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || packageManifest.version;
 const emptySession: Session = {
   id: "",
   groupId: "",
@@ -441,20 +440,7 @@ export default function SettingsDialog(p: Props) {
             />
           )}
           {tab === "ai" && <AIProviderSettings />}
-          {tab === "about" && (
-            <section className="settings-panel" aria-labelledby="settings-about-title">
-              <div className="settings-panel-heading">
-                <h3 id="settings-about-title">{t("settings:about")}</h3>
-              </div>
-              <div className="settings-about-product">
-                <img src="/app-icon.svg" alt="" aria-hidden="true" />
-                <div>
-                  <strong>OpenShell</strong>
-                  <p>{t("settings:version")} v{APP_VERSION}</p>
-                </div>
-              </div>
-            </section>
-          )}
+          {tab === "about" && <AboutSettingsPanel />}
           {tab === "connection" && (
             <ConnectionSettingsPanel
               keepAliveSeconds={keepAliveSeconds}
