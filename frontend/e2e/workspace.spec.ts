@@ -950,7 +950,7 @@ test("AI header aligns with SSH title bar", async ({ page }) => {
 });
 
 
-test("AI floating dock does not overlap session tools across window sizes", async ({ page }) => {
+test("floating global AI overlays without moving or hiding terminal AI and SFTP", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 760 });
   await page.goto("/");
   await page.getByTitle("新建会话", { exact: true }).first().click();
@@ -964,68 +964,72 @@ test("AI floating dock does not overlap session tools across window sizes", asyn
   await expect(page.locator(".terminal-toolbar")).toBeVisible();
 
   const globalAI = page.locator("#global-ai-panel");
-  const checkSideBySide = async (panelSelector: string) => {
-    const geometry = await page.evaluate(selector => {
-      const session = document.querySelector(selector)!.getBoundingClientRect();
-      const global = document.querySelector("#global-ai-panel")!.getBoundingClientRect();
-      return {
-        sessionWidth: session.width,
-        globalWidth: global.width,
-        overlap: Math.min(session.right, global.right) - Math.max(session.left, global.left),
-      };
-    }, panelSelector);
-    expect(geometry.sessionWidth).toBeGreaterThan(180);
-    expect(geometry.globalWidth).toBeGreaterThan(280);
-    expect(geometry.overlap).toBeLessThanOrEqual(1);
+  const dock = page.locator(".ai-dock");
+
+  const measure = async (selector: string) => page.evaluate(target => {
+    const area = document.querySelector(".workspace-workarea")!.getBoundingClientRect();
+    const tool = document.querySelector(target)!.getBoundingClientRect();
+    return {
+      areaX: area.x, areaWidth: area.width,
+      toolX: tool.x, toolRight: tool.right, toolWidth: tool.width,
+    };
+  }, selector);
+
+  const checkUnchanged = (before: Awaited<ReturnType<typeof measure>>,
+                          after: Awaited<ReturnType<typeof measure>>) => {
+    for (const key of ["areaX", "areaWidth", "toolX", "toolRight", "toolWidth"] as const) {
+      expect(Math.abs(after[key] - before[key]), key).toBeLessThanOrEqual(1);
+    }
+  };
+
+  const verifyFloatingBehavior = async (selector: string) => {
+    const tool = page.locator(selector);
+    for (const width of [900, 1200, 1440, 1559, 1560, 1920]) {
+      await page.setViewportSize({ width, height: 760 });
+      await page.locator(".terminal-toolbar").click({ position: { x: 30, y: 15 } });
+      await expect(dock).not.toHaveClass(/is-open/);
+      await expect(tool).toBeVisible();
+      const before = await measure(selector);
+
+      await page.locator(".ai-rail").click();
+      await expect(dock).toHaveClass(/is-open/);
+      await expect(globalAI).toBeVisible();
+      await expect(tool).toBeVisible();
+      const opened = await measure(selector);
+      checkUnchanged(before, opened);
+
+      // Overlapping the underlying tool is intentional; the floating AI must be on top.
+      // Wait for the 180ms slide animation and check stacking even if a toast is on top.
+      await expect.poll(async () => page.evaluate(target => {
+        const tool = document.querySelector(target)!.getBoundingClientRect();
+        const global = document.querySelector("#global-ai-panel")!.getBoundingClientRect();
+        const overlapLeft = Math.max(tool.left, global.left);
+        const overlapRight = Math.min(tool.right, global.right);
+        if (overlapRight <= overlapLeft + 8) return false;
+        const elements = document.elementsFromPoint(
+          (overlapLeft + overlapRight) / 2,
+          Math.max(tool.top, global.top) + 60,
+        );
+        const globalIndex = elements.findIndex(element => element.closest("#global-ai-panel"));
+        const toolIndex = elements.findIndex(element => element.closest(target));
+        return globalIndex >= 0 && (toolIndex === -1 || globalIndex < toolIndex);
+      }, selector)).toBe(true);
+
+      await page.locator(".terminal-toolbar").click({ position: { x: 30, y: 15 } });
+      await expect(dock).not.toHaveClass(/is-open/);
+      await expect(tool).toBeVisible();
+      checkUnchanged(before, await measure(selector));
+    }
   };
 
   await page.getByRole("button", { name: "终端 AI" }).click();
   const terminalAI = page.locator(".workspace-terminal-ai-panel");
   await expect(terminalAI).toBeVisible();
-  await page.locator(".ai-rail").click();
-  for (const width of [900, 1200, 1440, 1559, 1560, 1920]) {
-    await page.setViewportSize({ width, height: 760 });
-    if (!(await page.locator(".ai-dock").evaluate(element => element.classList.contains("is-open")))) {
-      await page.locator(".ai-rail").click();
-    }
-    await expect(globalAI).toBeVisible();
-    await expect(terminalAI).toBeVisible();
-    await expect.poll(async () => {
-      const g = await page.evaluate(() => {
-        const session = document.querySelector(".workspace-terminal-ai-panel")!.getBoundingClientRect();
-        const global = document.querySelector("#global-ai-panel")!.getBoundingClientRect();
-        return Math.min(session.right, global.right) - Math.max(session.left, global.left);
-      });
-      return g;
-    }).toBeLessThanOrEqual(1);
-    await checkSideBySide(".workspace-terminal-ai-panel");
-  }
-
-  await page.setViewportSize({ width: 1200, height: 760 });
-  await page.locator(".terminal-toolbar").click({ position: { x: 30, y: 15 } });
-  await expect(page.locator(".ai-dock")).not.toHaveClass(/is-open/);
-  await expect(terminalAI).toBeVisible();
+  await verifyFloatingBehavior(".workspace-terminal-ai-panel");
 
   await page.getByTitle("打开 SFTP 文件管理").click();
   const sftp = page.locator(".workspace-file-panel:not(.workspace-terminal-ai-panel)");
   await expect(sftp).toBeVisible();
   await expect(terminalAI).toBeHidden();
-  await page.locator(".ai-rail").click();
-  for (const width of [900, 1200, 1440, 1920]) {
-    await page.setViewportSize({ width, height: 760 });
-    if (!(await page.locator(".ai-dock").evaluate(element => element.classList.contains("is-open")))) {
-      await page.locator(".ai-rail").click();
-    }
-    await expect(globalAI).toBeVisible();
-    await expect(sftp).toBeVisible();
-    await expect.poll(async () => {
-      const g = await page.evaluate(() => {
-        const session = document.querySelector(".workspace-file-panel:not(.workspace-terminal-ai-panel)")!.getBoundingClientRect();
-        const global = document.querySelector("#global-ai-panel")!.getBoundingClientRect();
-        return Math.min(session.right, global.right) - Math.max(session.left, global.left);
-      });
-      return g;
-    }).toBeLessThanOrEqual(1);
-    await checkSideBySide(".workspace-file-panel:not(.workspace-terminal-ai-panel)");
-  }
+  await verifyFloatingBehavior(".workspace-file-panel:not(.workspace-terminal-ai-panel)");
 });
