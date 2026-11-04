@@ -78,6 +78,9 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+      - name: Set frontend build version
+        shell: bash
+        run: echo "VITE_APP_VERSION=$(node -p 'require(\"./frontend/package.json\").version')" >> "$GITHUB_ENV"
       - name: Build frontend
         working-directory: frontend
         run: npm run build
@@ -111,6 +114,14 @@ jobs:
       - name: Verify terminal background and compact layout in Chrome
         working-directory: frontend
         run: npx playwright test --grep "terminal grid stays centered|compact sidebar removes detail actions|AI header aligns with SSH title bar|floating global AI overlays without moving or hiding terminal AI and SFTP|bilingual|dragging a connected tab splits|four sessions support nested splits"
+      - name: Upload frontend bundle for Windows release
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: openshell-frontend-dist
+          path: frontend/dist/
+          if-no-files-found: error
+          retention-days: 1
 
   release:
     name: Windows release after CI
@@ -123,3 +134,4 @@ jobs:
     secrets: inherit
     with:
       publish: true
+      use_frontend_artifact: true
