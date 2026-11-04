@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { Sun, Moon, FolderOpen } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 import { api } from "../bridge";
 import { t } from "../i18n";
 import { languages, type Language } from "../i18n/languages";
-import type { Theme } from "../types";
 
 interface Props {
   language?: Language;
@@ -12,8 +11,6 @@ interface Props {
   onLanguageError(error: unknown): void;
   onExportSessionBackup?(): Promise<void>;
   onImportSessionBackup?(): Promise<void>;
-  theme: Theme;
-  onTheme(theme: Theme): void;
 }
 
 export default function GeneralSettingsPanel(p: Props) {
@@ -109,37 +106,7 @@ export default function GeneralSettingsPanel(p: Props) {
                   </button>
                 </div>
               </div>
-              <div className="settings-theme-group">
-                <h4>{t("settings:theme")}</h4>
-                <p>{t("settings:themeDescription")}</p>
-                <div className="settings-theme-options" role="group" aria-label={t("settings:theme")}>
-                  {(["light", "dark"] as const).map((theme) => {
-                    const Icon = theme === "light" ? Sun : Moon;
-                    return (
-                      <button
-                        key={theme}
-                        type="button"
-                        className={`settings-theme-option ${p.theme === theme ? "selected" : ""}`}
-                        aria-pressed={p.theme === theme}
-                        onClick={() => p.onTheme(theme)}
-                      >
-                        <span className={`settings-theme-preview settings-theme-preview--${theme}`} aria-hidden="true">
-                          <span className="settings-theme-preview-sidebar" />
-                          <span className="settings-theme-preview-main">
-                            <span />
-                            <span />
-                            <span />
-                          </span>
-                        </span>
-                        <span className="settings-theme-option-label">
-                          <Icon size={14} aria-hidden="true" />
-                          {t(`settings:${theme}`)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+
             </section>
   );
 }

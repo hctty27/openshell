@@ -2,17 +2,17 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { initializeI18n } from "../i18n";
 import GeneralSettingsPanel from "./GeneralSettingsPanel";
+import AppearanceSettingsPanel from "./AppearanceSettingsPanel";
 import ConnectionSettingsPanel from "./ConnectionSettingsPanel";
 import TerminalSettingsPanel from "./TerminalSettingsPanel";
 
 beforeEach(() => initializeI18n("zh-CN"));
 afterEach(cleanup);
 
-test("general settings delegate language, backup and theme actions", () => {
+test("general settings delegate language and session backup actions", () => {
   const onLanguage = vi.fn(async () => {});
   const onExportSessionBackup = vi.fn(async () => {});
   const onImportSessionBackup = vi.fn(async () => {});
-  const onTheme = vi.fn();
   const onLanguageError = vi.fn();
 
   render(
@@ -22,21 +22,39 @@ test("general settings delegate language, backup and theme actions", () => {
       onLanguageError={onLanguageError}
       onExportSessionBackup={onExportSessionBackup}
       onImportSessionBackup={onImportSessionBackup}
-      theme="dark"
-      onTheme={onTheme}
     />,
   );
 
   fireEvent.change(screen.getByLabelText("界面语言"), { target: { value: "en" } });
-  fireEvent.click(screen.getByRole("button", { name: "浅色" }));
   fireEvent.click(screen.getByRole("button", { name: "导出备份" }));
   fireEvent.click(screen.getByRole("button", { name: "恢复备份" }));
 
   expect(onLanguage).toHaveBeenCalledWith("en");
-  expect(onTheme).toHaveBeenCalledWith("light");
   expect(onExportSessionBackup).toHaveBeenCalledOnce();
   expect(onImportSessionBackup).toHaveBeenCalledOnce();
   expect(onLanguageError).toHaveBeenCalledWith("");
+});
+
+test("appearance settings delegate theme, palette and font controls", () => {
+  const onTheme = vi.fn();
+  const onTerminalTheme = vi.fn();
+  const onFont = vi.fn();
+  render(
+    <AppearanceSettingsPanel
+      theme="dark"
+      onTheme={onTheme}
+      terminalTheme="follow"
+      onTerminalTheme={onTerminalTheme}
+      fontSize={14}
+      onFont={onFont}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "浅色" }));
+  fireEvent.change(screen.getByLabelText("终端配色方案"), { target: { value: "classic" } });
+  fireEvent.change(screen.getByLabelText("字体大小"), { target: { value: "17" } });
+  expect(onTheme).toHaveBeenCalledWith("light");
+  expect(onTerminalTheme).toHaveBeenCalledWith("classic");
+  expect(onFont).toHaveBeenCalledWith(17);
 });
 
 test("connection settings keep the local shell conditional on disconnect behavior", () => {
@@ -72,11 +90,6 @@ test("connection settings keep the local shell conditional on disconnect behavio
 
 test("terminal settings display multiline paste confirmation only when right-click paste is enabled", () => {
   const props = {
-    theme: "dark" as const,
-    terminalTheme: "follow" as const,
-    onTerminalTheme: vi.fn(),
-    fontSize: 14,
-    onFont: vi.fn(),
     logHighlights: false,
     onLogHighlights: vi.fn(),
     autoCopySelection: true,

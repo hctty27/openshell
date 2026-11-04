@@ -19,8 +19,14 @@ const steps = [6, 12, 20, 30, 50];
 const minutes = [5, 10, 20, 30, 60];
 const turns = [2, 4, 6, 10, 20];
 
-export default function AIBehaviorSettings() {
+interface Props {
+  section: "context" | "execution";
+  onDirtyChange?(dirty: boolean): void;
+}
+
+export default function AIBehaviorSettings(p: Props) {
   const [settings, setSettings] = useState<AIRuntimeSettings>(defaultAIRuntimeSettings);
+  const [baseline, setBaseline] = useState<AIRuntimeSettings>(defaultAIRuntimeSettings);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -34,11 +40,14 @@ export default function AIBehaviorSettings() {
       return () => { active = false; };
     }
     void api.AIRuntimeSettings()
-      .then(value => { if (active) setSettings(value); })
+      .then(value => { if (active) { setSettings(value); setBaseline(value); } })
       .catch(err => { if (active) setError(errorText(err)); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
+
+  const dirty = JSON.stringify(settings) !== JSON.stringify(baseline);
+  useEffect(() => { p.onDirtyChange?.(dirty); }, [dirty, p.onDirtyChange]);
 
   const change = (value: Partial<AIRuntimeSettings>) => {
     setSettings(previous => ({ ...previous, ...value }));
@@ -53,6 +62,7 @@ export default function AIBehaviorSettings() {
     setSaved(false);
     try {
       await api.AISaveRuntimeSettings(settings);
+      setBaseline(settings);
       setSaved(true);
       window.dispatchEvent(new Event(AI_RUNTIME_SETTINGS_CHANGED));
     } catch (err) {
@@ -63,9 +73,11 @@ export default function AIBehaviorSettings() {
   };
 
   return <section className="settings-ai-runtime" aria-labelledby="settings-ai-runtime-title">
-    <h4 id="settings-ai-runtime-title">{t("settings:aiRuntimeTitle")}</h4>
+    <h4 id="settings-ai-runtime-title">{t(p.section === "context" ? "settings:aiContextTab" : "settings:aiExecutionTab")}</h4>
     <p className="muted small">{t("settings:aiRuntimeDescription")}</p>
     <form onSubmit={save}>
+      {p.section === "context" ? (
+        <>
       <div className="settings-ai-runtime-row">
         <label htmlFor="ai-auto-compact">{t("settings:aiAutoCompact")}</label>
         <input id="ai-auto-compact" type="checkbox" className="settings-switch" checked={settings.autoCompact}
@@ -79,6 +91,19 @@ export default function AIBehaviorSettings() {
           {thresholds.map(value => <option key={value} value={value}>{value}%</option>)}
         </select>
       </div>
+      <details className="settings-ai-runtime-advanced">
+        <summary>{t("settings:aiAdvancedSettings")}</summary>
+        <div className="settings-ai-runtime-row">
+          <label htmlFor="ai-keep-turns">{t("settings:aiKeepRecentTurns")}</label>
+          <select id="ai-keep-turns" value={settings.keepRecentTurns} disabled={loading || busy}
+            onChange={e => change({ keepRecentTurns: Number(e.target.value) })}>
+            {turns.map(value => <option key={value} value={value}>{value} {t("settings:aiTurns")}</option>)}
+          </select>
+        </div>
+      </details>
+        </>
+      ) : (
+        <>
       <div className="settings-ai-runtime-row">
         <label htmlFor="ai-max-steps">{t("settings:aiMaxSteps")}</label>
         <select id="ai-max-steps" value={settings.maxSteps} disabled={loading || busy}
@@ -93,16 +118,8 @@ export default function AIBehaviorSettings() {
           {minutes.map(value => <option key={value} value={value}>{value} {t("settings:aiMinutes")}</option>)}
         </select>
       </div>
-      <details className="settings-ai-runtime-advanced">
-        <summary>{t("settings:aiAdvancedSettings")}</summary>
-        <div className="settings-ai-runtime-row">
-          <label htmlFor="ai-keep-turns">{t("settings:aiKeepRecentTurns")}</label>
-          <select id="ai-keep-turns" value={settings.keepRecentTurns} disabled={loading || busy}
-            onChange={e => change({ keepRecentTurns: Number(e.target.value) })}>
-            {turns.map(value => <option key={value} value={value}>{value} {t("settings:aiTurns")}</option>)}
-          </select>
-        </div>
-      </details>
+        </>
+      )}
       <p className="muted small">{t("settings:aiRuntimeSafetyNote")}</p>
       {error && <p className="form-error" role="alert">{error}</p>}
       {saved && <p className="form-success"><Check size={14} />{t("settings:aiRuntimeSaved")}</p>}

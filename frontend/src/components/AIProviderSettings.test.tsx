@@ -15,6 +15,11 @@ vi.mock("../bridge", () => ({
       ...request.provider, id: "new-provider", hasKey: true,
     })),
     AIDeleteProvider: vi.fn(async () => {}),
+    AIRuntimeSettings: vi.fn(async () => ({
+      autoCompact: true, compactThreshold: 90, maxSteps: 12,
+      taskTimeoutMinutes: 10, keepRecentTurns: 6,
+    })),
+    AISaveRuntimeSettings: vi.fn(async () => {}),
   },
   errorText: (value: unknown) => String(value),
 }));
@@ -31,19 +36,21 @@ test("adds multiple models for one provider and notifies the open sidebar", asyn
   window.addEventListener(AI_PROVIDERS_CHANGED, notify);
   render(<AIProviderSettings />);
   await screen.findByRole("button", { name: "添加 API" });
-  fireEvent.change(screen.getByPlaceholderText("My API"), { target: { value: "cpa" } });
+  fireEvent.change(screen.getByPlaceholderText("请输入配置名称"), { target: { value: "cpa" } });
   fireEvent.change(screen.getByPlaceholderText("https://api.example.com/v1"), {
     target: { value: "https://example.test/v1" },
   });
   fireEvent.change(screen.getByPlaceholderText("sk-..."), { target: { value: "sk-sample" } });
-  fireEvent.change(screen.getByLabelText("模型 ID（每行一个）"), {
-    target: { value: "grok-4.7\ngpt-6" },
-  });
+  fireEvent.click(screen.getByRole("button", { name: "添加模型" }));
+  fireEvent.click(screen.getByRole("button", { name: "添加模型" }));
+  const modelIDs = screen.getAllByLabelText("模型 ID");
+  fireEvent.change(modelIDs[0], { target: { value: "grok-4.7" } });
+  fireEvent.change(modelIDs[1], { target: { value: "gpt-6" } });
   fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
   await waitFor(() => expect(api.AISaveProvider).toHaveBeenCalledWith(expect.objectContaining({
     provider: expect.objectContaining({
       name: "cpa",
-      models: [{ id: "grok-4.7", name: "grok-4.7" }, { id: "gpt-6", name: "gpt-6" }],
+      models: [expect.objectContaining({ id: "grok-4.7", name: "grok-4.7" }), expect.objectContaining({ id: "gpt-6", name: "gpt-6" })],
     }),
     apiKey: "sk-sample",
   })));
@@ -65,4 +72,35 @@ test("editing an existing provider leaves saved key untouched when blank", async
   await waitFor(() => expect(api.AISaveProvider).toHaveBeenCalledWith(expect.objectContaining({
     provider: expect.objectContaining({ id: "p1" }), apiKey: "",
   })));
+});
+
+test("validates duplicate model IDs before saving a provider", async () => {
+  render(<AIProviderSettings />);
+  await screen.findByRole("button", { name: "添加 API" });
+  fireEvent.change(screen.getByPlaceholderText("请输入配置名称"), { target: { value: "sample" } });
+  fireEvent.change(screen.getByPlaceholderText("https://api.example.com/v1"), {
+    target: { value: "https://example.test/v1" },
+  });
+  fireEvent.change(screen.getByPlaceholderText("sk-..."), { target: { value: "sk-sample" } });
+  fireEvent.click(screen.getByRole("button", { name: "添加模型" }));
+  fireEvent.click(screen.getByRole("button", { name: "添加模型" }));
+  const ids = screen.getAllByLabelText("模型 ID");
+  fireEvent.change(ids[0], { target: { value: "same-model" } });
+  fireEvent.change(ids[1], { target: { value: "same-model" } });
+  fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+  expect(screen.getByRole("alert").textContent).toContain("模型 ID 不能重复");
+  expect(api.AISaveProvider).not.toHaveBeenCalled();
+});
+
+test("discarding context edits on tab switch resets the runtime form", async () => {
+  render(<AIProviderSettings />);
+  fireEvent.click(screen.getByRole("tab", { name: "上下文" }));
+  const compact = await screen.findByLabelText("自动压缩上下文") as HTMLInputElement;
+  await waitFor(() => expect(compact.checked).toBe(true));
+  fireEvent.click(compact);
+  fireEvent.click(screen.getByRole("tab", { name: "执行行为" }));
+  await screen.findByLabelText("单次最大循环次数");
+  expect(confirm).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("tab", { name: "上下文" }));
+  await waitFor(() => expect((screen.getByLabelText("自动压缩上下文") as HTMLInputElement).checked).toBe(true));
 });
