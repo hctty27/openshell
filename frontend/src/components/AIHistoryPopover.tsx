@@ -104,8 +104,8 @@ export default function AIHistoryPopover({
                   </span>
                   <small>{displayDate(item.updatedAt, group.key === "earlier")}{selected ? " · " + t("ai:currentConversation") : ""}</small>
                 </button>
-                <button type="button" className="ai-history-delete" title={t("ai:deleteConversation")}
-                  aria-label={t("ai:deleteConversation") + ": " + item.title} onClick={() => onDelete(item.id)}>
+                <button type="button" className="ai-history-delete" title={t("ai:deleteConversation") + ": " + item.title}
+                  aria-label={t("ai:deleteConversation")} onClick={() => onDelete(item.id)}>
                   <Trash2 size={13} aria-hidden="true" />
                 </button>
               </div>;
