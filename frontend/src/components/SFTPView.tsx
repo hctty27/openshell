@@ -289,13 +289,17 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     setDeleting(s=>({...s,[side]:null}));
   };
   const choose = (side:Side,item:SFTPEntry,mode:SelectionMode) => {
-    const entries = (side==="local" ? localFiles : remoteFiles).filter(file => hidden[side] || !file.name.startsWith("."));
-    const anchorIndex = entries.findIndex(file => file.path === selectionAnchor.current[side]);
-    const targetIndex = entries.findIndex(file => file.path === item.path);
+    // Only Shift-range selection needs to scan the directory. Ordinary
+    // clicks and Ctrl-clicks should not iterate thousands of entries.
+    const entries = mode==="range"
+      ? (side==="local" ? localFiles : remoteFiles).filter(file => hidden[side] || !file.name.startsWith("."))
+      : null;
+    const anchorIndex = entries?.findIndex(file => file.path === selectionAnchor.current[side]) ?? -1;
+    const targetIndex = entries?.findIndex(file => file.path === item.path) ?? -1;
     if (mode !== "range") selectionAnchor.current[side] = item.path;
     setSelection(s=>{
       const previous=s[side];
-      if (mode==="range" && anchorIndex>=0 && targetIndex>=0) {
+      if (entries && anchorIndex>=0 && targetIndex>=0) {
         const start=Math.min(anchorIndex,targetIndex), end=Math.max(anchorIndex,targetIndex);
         return {...s,[side]:entries.slice(start,end+1).map(file=>file.path)};
       }
