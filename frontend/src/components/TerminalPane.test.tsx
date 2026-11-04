@@ -556,6 +556,36 @@ test("full-screen TUI colors cover remainder pixels and reset after exit", () =>
   expect(surface.style.getPropertyValue("--terminal-edge-background")).toBe("");
 });
 
+test("hidden terminals defer edge color updates until they become visible", () => {
+  const { container, rerender } = renderTerminal({ active: false, visible: false });
+  const term = refs.terms[0];
+  const surface = container.querySelector(".terminal-surface") as HTMLElement;
+  const cell = {
+    isBgDefault: () => false,
+    isBgRGB: () => false,
+    isBgPalette: () => true,
+    getBgColorMode: () => 1,
+    getBgColor: () => 4,
+  };
+  term.buffer.active.getLine.mockImplementation(() => ({ getCell: () => cell }));
+  const receive = events.listeners.get("ssh:output")!;
+
+  act(() => {
+    receive({ ref: tab.ref, sequence: 1, data: btoa("hidden output") });
+    term.write.mock.lastCall?.[1]?.();
+  });
+  expect(surface.style.getPropertyValue("--terminal-edge-background")).toBe("");
+
+  rerender(
+    <DialogProvider>
+      <TestTerminalPane tab={tab} active visible fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste
+        onNotice={vi.fn()} onError={vi.fn()} onSelection={vi.fn()} />
+    </DialogProvider>,
+  );
+  expect(surface.style.getPropertyValue("--terminal-edge-background")).toBe(terminalThemes.dark.blue);
+});
+
 test("right click in terminal search does not paste into shell", async () => {
   renderTerminal();
   const keyEvent = {
