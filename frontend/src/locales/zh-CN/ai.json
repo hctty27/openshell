@@ -76,5 +76,14 @@
   "takeControl": "接管终端",
   "stopAiAndTakeControl": "停止 AI 并重新接管终端",
   "expandAiAssistant": "展开 AI 助手",
-  "resizeAiSidebar": "调整 AI 侧栏宽度"
+  "resizeAiSidebar": "调整 AI 侧栏宽度",
+  "contextUsage": "上下文使用情况",
+  "contextEstimated": "Token 占用为估算值",
+  "lastPromptTokens": "上次请求实际输入 Token",
+  "autoCompact": "自动压缩",
+  "atNinety": "达到 90%",
+  "compactCount": "压缩次数",
+  "compactNow": "手动压缩上下文",
+  "compacting": "正在压缩…",
+  "contextNoHistory": "没有可压缩的历史记录"
 }
