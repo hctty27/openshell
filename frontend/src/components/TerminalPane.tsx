@@ -4,7 +4,6 @@ import { message } from "../i18n/message";
 import { t } from "../i18n";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -17,6 +16,9 @@ import { buildRemoteCdCommand, decideCloneDirectoryAction, parseOsc7Directory, p
 import { useDialogs } from "./DialogProvider";
 import { attachImeFocusRecovery } from "../features/terminal/imeFocusRecovery";
 import { getTerminalEdgeBackground } from "../features/terminal/edgeBackground";
+import { calculateTerminalGeometry } from "../features/terminal/terminalGeometry";
+const TERMINAL_SCROLLBAR_WIDTH = 8;
+
 interface Props {
   tab: Tab;
   disconnectBehavior?: DisconnectBehavior;
@@ -54,7 +56,7 @@ export default function TerminalPane(p: Props) {
   dialogsRef.current = dialogs;
   const container = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
-  const fit = useRef<FitAddon | null>(null);
+  const refit = useRef<(() => void) | null>(null);
   const imePositionRecovery = useRef<ReturnType<typeof attachImeFocusRecovery> | null>(null);
   const searchAddon = useRef<SearchAddon | null>(null);
   const logAddons = useRef<SearchAddon[]>([]);
@@ -107,7 +109,7 @@ export default function TerminalPane(p: Props) {
         callbacks.current.terminalTheme,
         callbacks.current.tab.session.terminalTheme,
       ),
-      scrollbar: { width: 8 },
+      scrollbar: { width: TERMINAL_SCROLLBAR_WIDTH },
       minimumContrastRatio: 4.5,
       cursorBlink: true,
       // Prefer text selection in mouse-aware TUIs; Alt forwards mouse actions.
@@ -115,8 +117,6 @@ export default function TerminalPane(p: Props) {
       scrollback: 10000,
       allowProposedApi: false,
     });
-    const addon = new FitAddon();
-    term.loadAddon(addon);
     const search = new SearchAddon();
     term.loadAddon(search);
     searchAddon.current = search;
@@ -126,8 +126,27 @@ export default function TerminalPane(p: Props) {
       }
     }));
     terminal.current = term;
-    fit.current = addon;
     term.open(container.current);
+    const applyGeometry = () => {
+      const surface = container.current;
+      const xterm = term.element;
+      const cell = term.dimensions?.css.cell;
+      if (disposed || !surface || !xterm || !cell) return;
+      const layout = calculateTerminalGeometry({
+        width: surface.clientWidth,
+        height: surface.clientHeight,
+        cellWidth: cell.width,
+        cellHeight: cell.height,
+        scrollbarWidth: TERMINAL_SCROLLBAR_WIDTH,
+      });
+      if (!layout) return;
+      xterm.style.paddingLeft = `${layout.left}px`;
+      xterm.style.paddingTop = `${layout.top}px`;
+      if (term.cols !== layout.cols || term.rows !== layout.rows) {
+        term.resize(layout.cols, layout.rows);
+      }
+    };
+    refit.current = applyGeometry;
     const syncEdgeBackground = () => {
       const surface = container.current;
       if (!surface || disposed) return;
@@ -419,7 +438,7 @@ export default function TerminalPane(p: Props) {
             (clientWidth === measuredWidth && clientHeight === measuredHeight)) return;
         measuredWidth = clientWidth;
         measuredHeight = clientHeight;
-        addon.fit();
+        applyGeometry();
         syncEdgeBackground();
         if (callbacks.current.active) imeRecovery.schedule();
       });
@@ -427,12 +446,13 @@ export default function TerminalPane(p: Props) {
     const observer = new ResizeObserver(resize);
     observer.observe(container.current);
     const onWindowResize = () => {
+      if (callbacks.current.visible ?? callbacks.current.active) applyGeometry();
       if (callbacks.current.active) imeRecovery.schedule();
     };
     window.addEventListener("resize", onWindowResize);
     requestAnimationFrame(() => {
       if (disposed) return;
-      addon.fit();
+      applyGeometry();
       syncEdgeBackground();
       measuredWidth = container.current?.clientWidth ?? 0;
       measuredHeight = container.current?.clientHeight ?? 0;
@@ -511,7 +531,7 @@ export default function TerminalPane(p: Props) {
       webglFailed.current = false;
       searchAddon.current = null;
       terminal.current = null;
-      fit.current = null;
+      if (refit.current === applyGeometry) refit.current = null;
     };
   }, [p.tab.ref?.generation, p.tab.id, terminalMode, p.localShell]);
   useEffect(() => {
@@ -580,7 +600,7 @@ export default function TerminalPane(p: Props) {
   useEffect(() => {
     if (terminal.current) {
       terminal.current.options.fontSize = p.fontSize;
-      fit.current?.fit();
+      refit.current?.();
       if (p.active) imePositionRecovery.current?.schedule();
     }
   }, [p.fontSize]);
@@ -597,7 +617,7 @@ export default function TerminalPane(p: Props) {
   useEffect(() => {
     if (p.visible ?? p.active) {
       requestAnimationFrame(() => {
-        if (callbacks.current.visible ?? callbacks.current.active) fit.current?.fit();
+        if (callbacks.current.visible ?? callbacks.current.active) refit.current?.();
       });
     }
   }, [p.visible ?? p.active]);
