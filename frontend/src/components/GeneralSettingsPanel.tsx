@@ -1,4 +1,6 @@
-import { Sun, Moon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Sun, Moon, FolderOpen } from "lucide-react";
+import { api } from "../bridge";
 import { t } from "../i18n";
 import { languages, type Language } from "../i18n/languages";
 import type { Theme } from "../types";
@@ -15,6 +17,27 @@ interface Props {
 }
 
 export default function GeneralSettingsPanel(p: Props) {
+  const [transferDirectory, setTransferDirectory] = useState("");
+  const [savingTransferDirectory, setSavingTransferDirectory] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void api.GetTransferDefaultLocalDir()
+      .then(directory => { if (active) setTransferDirectory(directory); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+  const updateTransferDirectory = async (directory: string) => {
+    setSavingTransferDirectory(true);
+    p.onLanguageError("");
+    try {
+      await api.SetTransferDefaultLocalDir(directory);
+      setTransferDirectory(await api.GetTransferDefaultLocalDir());
+    } catch (error) {
+      p.onLanguageError(error);
+    } finally {
+      setSavingTransferDirectory(false);
+    }
+  };
   return (
             <section className="settings-panel" aria-labelledby="settings-general-title">
               <div className="settings-panel-heading">
@@ -53,6 +76,37 @@ export default function GeneralSettingsPanel(p: Props) {
                 <div style={{ display:"flex", gap: 8 }}>
                   <button type="button" onClick={() => p.onExportSessionBackup?.()}>{t("sessions:exportSessionBackup")}</button>
                   <button type="button" onClick={() => p.onImportSessionBackup?.()}>{t("sessions:restoreSessionBackup")}</button>
+                </div>
+              </div>
+              <div className="settings-control-row">
+                <div className="settings-control-copy">
+                  <label htmlFor="settings-transfer-directory">{t("settings:defaultTransferDirectory")}</label>
+                  <p>{t("settings:defaultTransferDirectoryDescription")}</p>
+                </div>
+                <div className="settings-directory-picker">
+                  <input
+                    id="settings-transfer-directory"
+                    value={transferDirectory}
+                    readOnly
+                    title={transferDirectory}
+                  />
+                  <button
+                    type="button"
+                    aria-label={t("settings:chooseTransferDirectory")}
+                    disabled={savingTransferDirectory}
+                    onClick={() => void api.SFTPChooseDirectory()
+                      .then(directory => { if (directory) return updateTransferDirectory(directory); })
+                      .catch(p.onLanguageError)}
+                  >
+                    <FolderOpen size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingTransferDirectory}
+                    onClick={() => void updateTransferDirectory("")}
+                  >
+                    {t("settings:resetTransferDirectory")}
+                  </button>
                 </div>
               </div>
               <div className="settings-theme-group">

@@ -9,6 +9,8 @@ const events = vi.hoisted(() => ({ callbacks: new Map<string, (payload: any) => 
 vi.mock("../bridge", () => ({
   api: {
     ZmodemLocalPlaces: vi.fn(async () => ({ home: "/home/user", roots: ["/"] })),
+    GetTransferLocalDir: vi.fn(async () => "/home/user"),
+    SaveTransferLocalDir: vi.fn(async () => {}),
     SFTPList: vi.fn(async () => [
       { name: "folder", path: "/home/user/folder", isDir: true, isSymlink: false, size: 0, modified: 0, mode: "0755" },
       { name: "hello.txt", path: "/home/user/hello.txt", isDir: false, isSymlink: false, size: 512, modified: 0, mode: "0644" },
@@ -130,4 +132,20 @@ test("a delayed acknowledgement cannot close the next picker request", async () 
   expect(await screen.findByText("hello.txt")).toBeTruthy();
   await act(async () => { acknowledge(); });
   expect(screen.getByRole("dialog")).toBeTruthy();
+});
+
+test("rz/sz picker opens the saved directory for its SSH session", async () => {
+  vi.mocked(api.GetTransferLocalDir).mockResolvedValueOnce("/home/user/folder");
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:zmodem-pick", { ref, id: 100, direction: "download" });
+  await waitFor(() => expect(api.SFTPList).toHaveBeenCalledWith(ref, "local", "/home/user/folder"));
+  expect(api.SaveTransferLocalDir).not.toHaveBeenCalled();
+});
+
+test("rz/sz picker remembers a successfully opened folder", async () => {
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:zmodem-pick", { ref, id: 101, direction: "upload" });
+  fireEvent.doubleClick((await screen.findByText("folder")).closest('[role="listitem"]')!);
+  await waitFor(() => expect(api.SaveTransferLocalDir)
+    .toHaveBeenCalledWith(ref.sessionId, "/home/user/folder"));
 });

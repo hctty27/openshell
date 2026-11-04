@@ -29,6 +29,10 @@ type Backend = {
   AIStop(taskID: string): Promise<void>;
   AIApprove(approvalID: string, approved: boolean): Promise<void>;
   SFTPHome(ref: Ref): Promise<SFTPPaths>;
+  GetTransferLocalDir(sessionID: string): Promise<string>;
+  SaveTransferLocalDir(sessionID: string, path: string): Promise<void>;
+  GetTransferDefaultLocalDir(): Promise<string>;
+  SetTransferDefaultLocalDir(path: string): Promise<void>;
   SFTPChooseDirectory(): Promise<string>;
   SFTPList(ref: Ref, side: string, directory: string): Promise<SFTPEntry[]>;
   SFTPOperate(ref: Ref, side: string, operation: string, source: string, argument: string): Promise<void>;

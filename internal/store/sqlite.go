@@ -88,8 +88,12 @@ func (s *Store) SaveSession(ctx context.Context, v domain.Session) error {
 	return s.save(ctx, "INSERT INTO sessions(id,data)VALUES(?,?) ON CONFLICT(id)DO UPDATE SET data=excluded.data", v.ID, v)
 }
 func (s *Store) DeleteSession(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE id=?", id)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil { return err }
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, "DELETE FROM sessions WHERE id=?", id); err != nil { return err }
+	if _, err = tx.ExecContext(ctx, "DELETE FROM preferences WHERE key=?", "transfer.localDir."+id); err != nil { return err }
+	return tx.Commit()
 }
 func (s *Store) ListGroups(ctx context.Context) ([]domain.Group, error) {
 	return list[domain.Group](ctx, s.db, "SELECT data FROM groups ORDER BY id")
@@ -133,6 +137,10 @@ func (s *Store) GetPreference(ctx context.Context, key string) (string, error) {
 func (s *Store) SetPreference(ctx context.Context, key, value string) error {
 	_, e := s.db.ExecContext(ctx, "INSERT INTO preferences(key,value)VALUES(?,?) ON CONFLICT(key)DO UPDATE SET value=excluded.value", key, value)
 	return e
+}
+func (s *Store) DeletePreference(ctx context.Context, key string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM preferences WHERE key=?", key)
+	return err
 }
 func (s *Store) Lookup(address string) ([]byte, error) {
 	var key []byte

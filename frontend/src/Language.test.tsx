@@ -14,7 +14,8 @@ vi.mock("./components/TerminalPane", () => ({ default: () => null }));
 vi.mock("./bridge", () => ({
   desktop: true,
   nativeDesktop: false,
-  api: { State: vi.fn(), SavePreference: vi.fn(), SetCloseGuardReady: vi.fn(async () => {}) },
+  api: { State: vi.fn(), SavePreference: vi.fn(), SetCloseGuardReady: vi.fn(async () => {}),
+    GetTransferDefaultLocalDir: vi.fn(async () => "/home/user") },
   listen: () => () => {},
   errorText: (e: unknown) =>
     typeof e === "object" && e && "key" in e
