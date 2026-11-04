@@ -28,7 +28,12 @@ export default function AIBehaviorSettings() {
 
   useEffect(() => {
     let active = true;
-    api.AIRuntimeSettings()
+    // Older browser fixtures do not implement the optional runtime settings API.
+    if (typeof api.AIRuntimeSettings !== "function") {
+      setLoading(false);
+      return () => { active = false; };
+    }
+    void api.AIRuntimeSettings()
       .then(value => { if (active) setSettings(value); })
       .catch(err => { if (active) setError(errorText(err)); })
       .finally(() => { if (active) setLoading(false); });
