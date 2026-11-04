@@ -35,7 +35,7 @@
   "interactiveProgram": "当前终端正在运行全屏交互程序，请先退出后再使用 AI 接管。",
   "terminalOnlyOne": "当前终端模式只能选择当前激活的一个 SSH 会话；多会话任务请使用独立执行。",
   "terminalIdleHelp": "自动检测 Shell 是否空闲；检测不到时不会输入命令。执行期间可随时点击“接管终端”停止。",
-  "legacyWarningBefore": "此历史对话没有可验证的目标服务器信息。请检查上方选择的会话，",
+  "legacyWarningBefore": "此历史对话没有可验证的目标服务器信息。请检查输入框内选择的会话，",
   "legacyUseSelected": "使用当前所选会话",
   "legacyWarningAfter": "后才能继续执行。",
   "unavailableHistoryBefore": "历史对话有 {{count}} 个目标未连接，或服务器地址、账号已改变。请先恢复原连接，或",
