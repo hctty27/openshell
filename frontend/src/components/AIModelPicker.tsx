@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import AIDropdownSurface from "./AIDropdownSurface";
 import { Check, ChevronDown, Cpu } from "lucide-react";
 import type { AIProvider } from "../types";
 import { t } from "../i18n";
@@ -23,7 +24,6 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
   useTranslation("ai");
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
-  const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listID = useId();
 
@@ -44,15 +44,6 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
   useEffect(() => {
     if (open) setHighlighted(Math.max(0, selectedIndex));
   }, [open, selectedIndex]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
 
   useEffect(() => {
     if (!open || !options.length) return;
@@ -100,7 +91,7 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
   };
 
   return (
-    <div className="ai-model-picker" ref={rootRef}>
+    <div className="ai-model-picker">
       <button ref={triggerRef} type="button"
         className="ai-model-picker__trigger"
         role="combobox" aria-label={t("ai:chooseModel")}
@@ -116,8 +107,8 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
           missing ? t("ai:modelUnavailable") : t("ai:selectModel")}</span>
         <ChevronDown size={13} aria-hidden="true" />
       </button>
-      {open && (
-        <div className="ai-model-picker__popup">
+      <AIDropdownSurface open={open} anchorRef={triggerRef} onDismiss={() => setOpen(false)}
+        minWidth={260} maxHeight={250} className="ai-model-picker__popup">
           <div id={listID} role="listbox" aria-label={t("ai:availableModels")} className="ai-model-picker__options">
             {options.map((option, index) => {
               const isSelected = index === selectedIndex;
@@ -138,8 +129,7 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
             })}
             {!options.length && <p className="ai-muted">{t("ai:addModelFirst")}</p>}
           </div>
-        </div>
-      )}
+      </AIDropdownSurface>
     </div>
   );
 }
