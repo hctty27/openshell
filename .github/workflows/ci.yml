@@ -110,7 +110,7 @@ jobs:
           echo "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$chrome" >> "$GITHUB_ENV"
       - name: Verify terminal background and compact layout in Chrome
         working-directory: frontend
-        run: npx playwright test --grep "terminal grid stays centered|compact sidebar removes detail actions|AI header aligns with SSH title bar|floating global AI overlays without moving or hiding terminal AI and SFTP|bilingual|dragging a connected tab splits|four sessions support nested splits"
+        run: npx playwright test --fully-parallel --workers=2 --grep "terminal grid stays centered|compact sidebar removes detail actions|AI header aligns with SSH title bar|floating global AI overlays without moving or hiding terminal AI and SFTP|bilingual|dragging a connected tab splits|four sessions support nested splits"
 
   release:
     name: Windows release after CI
