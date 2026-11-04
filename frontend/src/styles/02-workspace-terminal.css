@@ -337,6 +337,11 @@
   height: 25px;
   padding: 4px;
 }
+.terminal-toolbar .workspace-panel-toggle[aria-pressed="true"],
+.terminal-toolbar .workspace-panel-toggle[aria-pressed="true"]:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
 .terminal-container {
   position: relative;
   background: var(--terminal-background, var(--terminal-workspace));
