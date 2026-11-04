@@ -569,7 +569,10 @@ test("terminal backdrop fills its pane across mixed application and terminal pal
       textInsetTop: glyphs.top - inner.top,
       scrollbarRightInset: inner.right - scroll.right,
       screenRight: glyphs.right,
+      screenBottom: glyphs.bottom,
       paneRight: inner.right,
+      paneBottom: inner.bottom,
+      scrollbarWidth: scroll.width,
     };
   });
 
@@ -579,11 +582,13 @@ test("terminal backdrop fills its pane across mixed application and terminal pal
   for (const gap of [dark.leftGap, dark.topGap, dark.rightGap, dark.bottomGap]) {
     expect(Math.abs(gap)).toBeLessThan(1);
   }
-  expect(dark.textInsetLeft).toBeGreaterThanOrEqual(10);
-  expect(dark.textInsetTop).toBeGreaterThanOrEqual(8);
+  expect(Math.abs(dark.textInsetLeft)).toBeLessThan(1);
+  expect(Math.abs(dark.textInsetTop)).toBeLessThan(1);
   expect(dark.scrollbarRightInset).toBeGreaterThanOrEqual(0);
   expect(dark.scrollbarRightInset).toBeLessThanOrEqual(10);
   expect(dark.screenRight).toBeLessThanOrEqual(dark.paneRight + 1);
+  expect(dark.screenBottom).toBeLessThanOrEqual(dark.paneBottom + 1);
+  expect(dark.scrollbarWidth).toBe(8);
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "终端", exact: true }).click();
