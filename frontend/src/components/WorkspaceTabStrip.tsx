@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { Plus, Server, X } from "lucide-react";
+import { Copy, Layers, PanelRightClose, Plus, RefreshCw, Server, Unplug, X } from "lucide-react";
 import { t } from "../i18n";
 import type { DisconnectBehavior, Tab } from "../types";
 import ConnectionStatusIcon from "./ConnectionStatusIcon";
@@ -17,6 +17,9 @@ interface Props {
   onActivate(tabID: string): void;
   onDuplicate(tab: Tab): void;
   onClose(tab: Tab): void;
+  onCloseTabs?(tabs: Tab[]): void;
+  onReconnect?(tab: Tab): void;
+  onDisconnect?(tab: Tab): void;
   onNewTab(): void;
   onReorder(sourceID: string, targetID: string, placement: Placement): void;
   onTabDragStart?(tabID: string): void;
@@ -29,6 +32,7 @@ interface Props {
 export default function WorkspaceTabStrip(p: Props) {
   const stripRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<DragPreview | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ tabID: string; x: number; y: number } | null>(null);
   const point = useRef({ x: 0, y: 0 });
   const dragging = useRef("");
   const frame = useRef<number | null>(null);
@@ -79,6 +83,49 @@ export default function WorkspaceTabStrip(p: Props) {
     cleanup.current?.();
     if (frame.current !== null) cancelAnimationFrame(frame.current);
   }, []);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const dismiss = (event: PointerEvent) => {
+      if (!(event.target as Element | null)?.closest(".tab-context-menu")) setContextMenu(null);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        setContextMenu(null);
+      }
+    };
+    const onBlur = () => setContextMenu(null);
+    window.addEventListener("pointerdown", dismiss, true);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("pointerdown", dismiss, true);
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [contextMenu]);
+
+  const openContextMenu = (tabID: string, event: ReactMouseEvent) => {
+    if (dragging.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const width = 226;
+    const height = 260;
+    setContextMenu({
+      tabID,
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8)),
+    });
+  };
+  const menuTab = p.tabs.find(tab => tab.id === contextMenu?.tabID);
+  const menuIndex = menuTab ? p.tabs.findIndex(tab => tab.id === menuTab.id) : -1;
+  const closeOthers = menuTab ? p.tabs.filter(tab => tab.id !== menuTab.id) : [];
+  const closeRight = menuIndex >= 0 ? p.tabs.slice(menuIndex + 1) : [];
+  const menuAction = (action: () => void) => {
+    setContextMenu(null);
+    action();
+  };
 
   const moveWithKeyboard = (tabID: string, index: number, event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (!event.altKey || !event.shiftKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
@@ -215,6 +262,7 @@ export default function WorkspaceTabStrip(p: Props) {
           const hasActivity = p.activeID !== tab.id && p.unreadTabIDs?.has(tab.id);
           return (
             <div key={tab.id} data-tab-id={tab.id}
+              onContextMenu={event => openContextMenu(tab.id, event)}
               className={`terminal-tab ${p.activeID === tab.id ? "active" : ""} ${drag?.id === tab.id ? "dragging" : ""}`}
               style={{ transform: shift ? `translateX(${shift}px)` : undefined }}>
               <button title={t("common:doubleClickToDuplicateSession")}
@@ -255,6 +303,41 @@ export default function WorkspaceTabStrip(p: Props) {
         }} aria-hidden="true">
           <Server size={14} />
           <span>{draggedTab.session.name}</span>
+        </div>,
+        document.body,
+      )}
+      {contextMenu && menuTab && createPortal(
+        <div className="tab-context-menu" role="menu" aria-label={t("common:sessionActions")}
+          style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button type="button" role="menuitem" onClick={() => menuAction(() => p.onDuplicate(menuTab))}>
+            <Copy size={15} />{t("common:duplicateCurrentTab")}
+          </button>
+          <button type="button" role="menuitem"
+            disabled={!p.onReconnect || !["disconnected", "error"].includes(menuTab.status)}
+            onClick={() => menuAction(() => p.onReconnect?.(menuTab))}>
+            <RefreshCw size={15} />{t("common:reconnect")}
+          </button>
+          <button type="button" role="menuitem"
+            disabled={!p.onDisconnect || !["connected", "connecting", "reconnecting"].includes(menuTab.status)}
+            onClick={() => menuAction(() => p.onDisconnect?.(menuTab))}>
+            <Unplug size={15} />{t("common:disconnect")}
+          </button>
+          <div className="tab-context-menu-divider" role="separator" />
+          <button type="button" role="menuitem" onClick={() => menuAction(() => p.onClose(menuTab))}>
+            <X size={15} />{t("common:closeCurrentTab")}
+          </button>
+          <button type="button" role="menuitem" disabled={!p.onCloseTabs || !closeOthers.length}
+            onClick={() => menuAction(() => p.onCloseTabs?.(closeOthers))}>
+            <Layers size={15} />{t("common:closeOtherTabs")}
+          </button>
+          <button type="button" role="menuitem" disabled={!p.onCloseTabs || !closeRight.length}
+            onClick={() => menuAction(() => p.onCloseTabs?.(closeRight))}>
+            <PanelRightClose size={15} />{t("common:closeTabsToRight")}
+          </button>
+          <button type="button" role="menuitem" disabled={!p.onCloseTabs || !p.tabs.length}
+            onClick={() => menuAction(() => p.onCloseTabs?.(p.tabs))}>
+            <X size={15} />{t("common:closeAllTabs")}
+          </button>
         </div>,
         document.body,
       )}
