@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Info, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, ArrowLeftRight } from "lucide-react";
 import { api, listen, errorText } from "../bridge";
@@ -9,7 +9,7 @@ import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMe
 import { i18n, t } from "../i18n";
 import { Clipboard } from "@wailsio/runtime";
 import { BASH_CWD_REPORT_COMMAND } from "../terminalCwd";
-import SFTPFileEditor from "./editor/SFTPFileEditor";
+const SFTPFileEditor = lazy(() => import("./editor/SFTPFileEditor"));
 
 type Side = "local" | "remote";
 const directoryCacheKey = (ref: Ref, directory: string) =>
@@ -373,6 +373,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
         </div>}
       </div>}
       {editor && (
+        <Suspense fallback={<div className="sftp-editor-backdrop"><div className="sftp-editor-loading">{t("sftp:loading")}</div></div>}>
         <SFTPFileEditor
           key={refID.tabId + ":" + refID.generation + ":" + editor.path}
           path={editor.path}
@@ -383,6 +384,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
           onSave={content=>void saveEditor(content)}
           onClose={()=>void closeEditor()}
         />
+        </Suspense>
       )}
       {menu && <FloatingContextMenu {...menu} onClose={()=>setMenu(null)}/>}
     </div>
