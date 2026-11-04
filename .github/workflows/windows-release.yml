@@ -55,14 +55,23 @@ jobs:
           $info.fixed.file_version = $version
           $info.info.'0000'.ProductVersion = $version
           $info | ConvertTo-Json -Depth 20 | Set-Content "build/windows/info.json" -Encoding utf8
-      # Combined module + compiler cache was faster than module-only in
-      # Windows Wails A/B tests. The cache is keyed by go.sum and Go version.
+      # Avoid extracting the large compiled Go build cache on Windows runners.
       - uses: actions/setup-go@v7
         id: setup-go
         with:
           go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
+          cache: false
+      # Windows cache restoration was dominated by extracting ~630 MB of Go
+      # build outputs. Cache module sources only and let Go compile locally.
+      - name: Locate Go module cache
+        shell: pwsh
+        run: |
+          "GO_MODULE_CACHE=$(go env GOMODCACHE)" >> $env:GITHUB_ENV
+      - name: Cache Windows Go modules
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.GO_MODULE_CACHE }}
+          key: windows-go-mod-v1-${{ runner.arch }}-go${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}
       - name: Locate Wails CLI binary
         id: wails-path
         shell: pwsh
