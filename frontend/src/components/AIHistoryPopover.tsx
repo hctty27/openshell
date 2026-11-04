@@ -14,6 +14,7 @@ interface Props {
   triggerRef: RefObject<HTMLButtonElement | null>;
   title: string;
   searchPlaceholder: string;
+  terminal?: boolean;
 }
 
 function groupDate(value: string, today: string, yesterday: string): "today" | "yesterday" | "earlier" {
@@ -31,7 +32,7 @@ function displayDate(value: string, older: boolean): string {
 }
 
 export default function AIHistoryPopover({
-  items, selectedID, query, onQueryChange, onSelect, onDelete, onClose, triggerRef, title, searchPlaceholder,
+  items, selectedID, query, onQueryChange, onSelect, onDelete, onClose, triggerRef, title, searchPlaceholder, terminal = false,
 }: Props) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
@@ -81,7 +82,7 @@ export default function AIHistoryPopover({
   ] as const;
 
   return (
-    <div className="ai-history" ref={popoverRef} role="dialog" aria-label={title} onKeyDown={onKeyDown}>
+    <div className={"ai-history" + (terminal ? " ai-history--terminal" : "")} ref={popoverRef} role="dialog" aria-label={title} onKeyDown={onKeyDown}>
       <label className="ai-history-search">
         <Search size={14} aria-hidden="true" />
         <input ref={searchRef} type="search" value={query} onChange={event => onQueryChange(event.target.value)}
