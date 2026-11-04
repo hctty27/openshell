@@ -171,7 +171,7 @@ export default function SFTPFileEditor({
         <footer>
           <small>{t("sftp:utf8EditorLimit")}</small>
           <button type="button" disabled={saving} onClick={onClose}>{t("common:cancel")}</button>
-          <button type="button" disabled={saving || !dirty} className="sftp-editor-save" onClick={() => onSave(editorValue)}><Save size={14} />{t("sftp:saveFile")}</button>
+          <button type="button" disabled={saving || !dirty} className="sftp-editor-save" onClick={() => onSave(viewRef.current?.state.doc.toString() ?? initialRef.current)}><Save size={14} />{t("sftp:saveFile")}</button>
         </footer>
       </section>
     </div>
