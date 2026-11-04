@@ -1,0 +1,89 @@
+name: Publish OpenShell (one click)
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Release version increment
+        required: true
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: read
+
+# Never cancel a running production release just because someone clicked twice.
+concurrency:
+  group: openshell-one-click-publish
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare and commit release version
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      release_sha: ${{ steps.version.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Verify latest main and prior release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          remote_head="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [[ "$remote_head" != "$GITHUB_SHA" ]]; then
+            echo "::error::main has changed since this workflow started. Start a new release on the latest main."
+            exit 1
+          fi
+          previous="$(tr -d '\r\n' < .github/release-version.txt)"
+          if gh release view "$previous" --repo "$GITHUB_REPOSITORY" --json tagName >/dev/null 2>&1; then
+            echo "NEEDS_BUMP=true" >> "$GITHUB_ENV"
+          else
+            echo "Resuming prepared, unpublished release $previous (no additional version bump)."
+            echo "NEEDS_BUMP=false" >> "$GITHUB_ENV"
+          fi
+      - name: Bump version, lockfile, Windows metadata and changelog
+        shell: bash
+        env:
+          BUMP: ${{ inputs.bump }}
+        if: env.NEEDS_BUMP == 'true'
+        run: python3 scripts/bump_release_version.py --bump "$BUMP"
+      - name: Commit release metadata
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$NEEDS_BUMP" != "true" ]]; then
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/release-version.txt frontend/package.json frontend/package-lock.json build/windows/info.json CHANGELOG.md
+          git diff --cached --check
+          git commit -m "chore(release): prepare $(cat .github/release-version.txt)"
+          git push origin HEAD:refs/heads/main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  verify-and-publish:
+    name: Verify and publish pinned release
+    needs: prepare
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      publish: true
+      ref_sha: ${{ needs.prepare.outputs.release_sha }}
+    secrets: inherit

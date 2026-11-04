@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      ref_sha:
+        description: Immutable commit SHA used by the calling verification workflow
+        required: false
+        default: ''
+        type: string
   workflow_dispatch:
   # Exercise the real installer + portable packaging code on workflow changes.
   # Pull requests never publish a Release, regardless of the publish input.
@@ -37,6 +42,7 @@ jobs:
       contents: write
       actions: read
     env:
+      RELEASE_REF_SHA: ${{ inputs.ref_sha || github.sha }}
       # SignPath Foundation code signing. When SIGNPATH_API_TOKEN is not set,
       # the workflow still builds and publishes unsigned binaries.
       SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
@@ -46,6 +52,8 @@ jobs:
       SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG || 'initial' }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref_sha || github.sha }}
       - name: Validate and set build version
         shell: pwsh
         run: |
@@ -338,7 +346,7 @@ jobs:
             "--generate-notes",
             "--notes", $notes
           )
-          $releaseArgs += @("--target", $env:GITHUB_SHA)
+          $releaseArgs += @("--target", $env:RELEASE_REF_SHA)
           & gh @releaseArgs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
