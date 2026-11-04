@@ -983,19 +983,21 @@ test("floating global AI overlays without moving or hiding terminal AI and SFTP"
       checkUnchanged(before, opened);
 
       // Overlapping the underlying tool is intentional; the floating AI must be on top.
-      const overlayOnTop = await page.evaluate(target => {
+      // Wait for the 180ms slide animation and check stacking even if a toast is on top.
+      await expect.poll(async () => page.evaluate(target => {
         const tool = document.querySelector(target)!.getBoundingClientRect();
         const global = document.querySelector("#global-ai-panel")!.getBoundingClientRect();
         const overlapLeft = Math.max(tool.left, global.left);
         const overlapRight = Math.min(tool.right, global.right);
         if (overlapRight <= overlapLeft + 8) return false;
-        const element = document.elementFromPoint(
+        const elements = document.elementsFromPoint(
           (overlapLeft + overlapRight) / 2,
           Math.max(tool.top, global.top) + 60,
         );
-        return Boolean(element?.closest("#global-ai-panel"));
-      }, selector);
-      expect(overlayOnTop).toBe(true);
+        const globalIndex = elements.findIndex(element => element.closest("#global-ai-panel"));
+        const toolIndex = elements.findIndex(element => element.closest(target));
+        return globalIndex >= 0 && (toolIndex === -1 || globalIndex < toolIndex);
+      }, selector)).toBe(true);
 
       await page.locator(".terminal-toolbar").click({ position: { x: 30, y: 15 } });
       await expect(dock).not.toHaveClass(/is-open/);
