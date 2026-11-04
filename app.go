@@ -169,6 +169,7 @@ func (a *App) shutdown(context.Context) {
 	a.closeAllLocalTerminals()
 	a.ssh.Close()
 	a.store.Close()
+	closeDiagnostics()
 }
 func (a *App) State() (AppState, error) {
 	language, err := a.language()
