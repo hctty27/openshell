@@ -4,7 +4,11 @@ import type { AIConversation } from "../../types";
 export function belongsToConversationScope(conversation: AIConversation, terminalScopeId?: string): boolean {
   if (conversation.scope === "global") return terminalScopeId === undefined;
   if (conversation.scope === "terminal") {
-    return terminalScopeId !== undefined && conversation.scopeId === terminalScopeId;
+    // Older duplicate tabs used "sessionId:tabId". Keep those histories visible
+    // under the session without allowing them to cross into other sessions.
+    return terminalScopeId !== undefined &&
+      (conversation.scopeId === terminalScopeId ||
+        conversation.scopeId?.startsWith(`${terminalScopeId}:`) === true);
   }
   if (conversation.execution === "terminal") {
     return terminalScopeId !== undefined &&
