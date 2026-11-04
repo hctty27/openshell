@@ -84,7 +84,7 @@ export default function AIContextIndicator({
       title={t("ai:contextUsage") + ": " + used.toLocaleString() + "/" + limit.toLocaleString()}
       aria-haspopup="dialog" aria-expanded={open}
       onClick={() => { if (!open) onOpen?.(); setOpen(value => !value); }}>
-      <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
         <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" opacity=".16" strokeWidth="2.2" />
         <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2.2"
           strokeLinecap="round" transform="rotate(-90 10 10)"
