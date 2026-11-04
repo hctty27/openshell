@@ -347,11 +347,12 @@ test("Escape closes auto-hidden sidebar and focuses the edge trigger", async () 
   expect(panel.getAttribute("aria-hidden")).toBe("true");
   expect(document.activeElement).toBe(rail);
 });
-test("theme previews immediately and is saved in general settings", async () => {
+test("theme previews immediately and is saved in appearance settings", async () => {
   await act(async () => {
     render(<App />);
   });
   fireEvent.click(screen.getByTitle("设置"));
+  fireEvent.click(screen.getByRole("button", { name: "外观" }));
   fireEvent.click(screen.getByRole("button", { name: "浅色" }));
   expect(document.documentElement.dataset.theme).toBe("light");
   fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
@@ -369,12 +370,15 @@ test("settings navigation includes an About section", async () => {
   expect(screen.getByRole("navigation", { name: "设置分类" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "通用" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "终端" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "外观" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "AI 设置" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "关于" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "AI 配置" })).toBeNull();
   expect(screen.queryByRole("button", { name: "自动执行" })).toBeNull();
   expect(screen.queryByText("OpenShell · 中文终端预览")).toBeNull();
   expect(screen.queryByText(/systemctl status redis/)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "终端" }));
+  expect(screen.queryByLabelText("字体大小")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "外观" }));
   expect(screen.getByLabelText("字体大小")).toBeTruthy();
   expect(screen.queryByLabelText("快速命令栏布局")).toBeNull();
   expect(screen.queryByText("界面语言")).toBeNull();
