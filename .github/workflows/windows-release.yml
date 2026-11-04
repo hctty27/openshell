@@ -287,9 +287,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "v$env:APP_VERSION"
-          $releases = @(gh release list --repo $env:GITHUB_REPOSITORY --json tagName --limit 100 | ConvertFrom-Json)
-          if (@($releases | Where-Object { $_.tagName -eq $tag }).Count -gt 0) {
-            Write-Host "Release $tag already exists; not replacing published binaries."
+          $releases = @(gh release list --repo $env:GITHUB_REPOSITORY --json tagName,isDraft --limit 100 | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $existing = @($releases | Where-Object { $_.tagName -eq $tag } | Select-Object -First 1)
+          if ($existing.Count -gt 0) {
+            if ($existing[0].isDraft) {
+              Write-Host "Recovering existing draft Release $tag without replacing its uploaded binaries."
+              for ($attempt = 1; $attempt -le 3; $attempt++) {
+                gh release edit $tag --repo $env:GITHUB_REPOSITORY --draft=false
+                if ($LASTEXITCODE -eq 0) { break }
+                if ($attempt -eq 3) { exit $LASTEXITCODE }
+                Start-Sleep -Seconds (3 * $attempt)
+              }
+            } else {
+              Write-Host "Release $tag already exists; not replacing published binaries."
+            }
             exit 0
           }
           $notes = if ($env:SIGNPATH_ENABLED -eq 'true') { "Windows x64 安装版与便携版；已通过 SignPath 进行代码签名（Free code signing provided by SignPath.io, certificate by SignPath Foundation）。" } else { "Windows x64 安装版与便携版；未经代码签名。" }
