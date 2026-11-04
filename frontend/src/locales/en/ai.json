@@ -76,5 +76,14 @@
   "takeControl": "Take control",
   "stopAiAndTakeControl": "Stop AI and take control of the terminal",
   "expandAiAssistant": "Expand AI assistant",
-  "resizeAiSidebar": "Resize AI panel"
+  "resizeAiSidebar": "Resize AI panel",
+  "contextUsage": "Context usage",
+  "contextEstimated": "Estimated token usage",
+  "lastPromptTokens": "Last actual prompt tokens",
+  "autoCompact": "Auto-compaction",
+  "atNinety": "At 90%",
+  "compactCount": "Compressions",
+  "compactNow": "Compress context",
+  "compacting": "Compressing…",
+  "contextNoHistory": "No older history to compress"
 }
