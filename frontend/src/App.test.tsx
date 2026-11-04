@@ -87,6 +87,64 @@ test("opens right AI dock from the edge rail without a titlebar icon", async () 
   expect(aiDock.classList.contains("is-open")).toBe(true);
   expect(screen.getByRole("complementary", { name: "AI 助手" })).toBeTruthy();
 });
+test("right AI dock mirrors session sidebar hover, pin and Escape behavior", async () => {
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [], groups: [], fontSize: "14", version: "test",
+    language: "zh-CN", aiSidebarMode: "pinned",
+  });
+  await act(async () => { render(<App />); });
+  const dock = document.querySelector(".ai-dock") as HTMLElement;
+  const panel = document.getElementById("global-ai-panel") as HTMLElement;
+  const pin = screen.getByRole("button", { name: "自动隐藏 AI 栏" });
+  expect(pin.getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(pin);
+  expect(dock.classList.contains("ai-dock--auto")).toBe(true);
+  expect(dock.classList.contains("is-open")).toBe(true);
+  expect(screen.getByRole("button", { name: "固定 AI 栏" }).getAttribute("aria-pressed")).toBe("false");
+  await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("aiSidebarMode", "auto-hide"));
+  fireEvent.mouseLeave(dock);
+  await waitFor(() => expect(panel.getAttribute("aria-hidden")).toBe("true"), { timeout: 1200 });
+  fireEvent.mouseEnter(dock);
+  await waitFor(() => expect(panel.getAttribute("aria-hidden")).toBe("false"), { timeout: 1200 });
+  const rail = screen.getByRole("button", { name: "展开 AI 助手" });
+  expect(rail.getAttribute("aria-controls")).toBe("global-ai-panel");
+  fireEvent.keyDown(dock, { key: "Escape" });
+  expect(panel.getAttribute("aria-hidden")).toBe("true");
+  expect(document.activeElement).toBe(rail);
+  fireEvent.click(rail);
+  fireEvent.click(screen.getByRole("button", { name: "固定 AI 栏" }));
+  expect(dock.classList.contains("ai-dock--auto")).toBe(false);
+  expect(screen.getByRole("button", { name: "自动隐藏 AI 栏" }).getAttribute("aria-pressed")).toBe("true");
+});
+
+test("global AI pin survives SFTP and terminal AI panel switching", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{ id: "server-a", groupId: "", name: "server-a", host: "example.test",
+      port: 22, username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved" }],
+    groups: [], fontSize: "14", language: "zh-CN", version: "test", aiSidebarMode: "pinned",
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选中会话 server-a" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  const dock = document.querySelector(".ai-dock") as HTMLElement;
+  const pinned = () => !dock.classList.contains("ai-dock--auto");
+  expect(pinned()).toBe(true);
+  fireEvent.click(screen.getByTitle("打开 SFTP 文件管理"));
+  expect(screen.getByTestId("sftp-panel-stub")).toBeTruthy();
+  expect(pinned()).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "终端 AI" }));
+  expect(screen.queryByTestId("sftp-panel-stub")).toBeNull();
+  expect(screen.getByRole("complementary", { name: "终端 AI" })).toBeTruthy();
+  expect(pinned()).toBe(true);
+  fireEvent.click(screen.getByTitle("打开 SFTP 文件管理"));
+  expect(screen.getByTestId("sftp-panel-stub")).toBeTruthy();
+  expect(pinned()).toBe(true);
+  fireEvent.click(screen.getByTitle("关闭 SFTP 文件管理"));
+  expect(screen.queryByTestId("sftp-panel-stub")).toBeNull();
+  expect(pinned()).toBe(true);
+});
+
 test("session sidebar can auto-hide, hover open and pin without remounting the tree", async () => {
   vi.mocked(api.SavePreference).mockClear();
   await act(async () => { render(<App />); });
