@@ -284,8 +284,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   return (
     <aside id={isTerminal ? undefined : "global-ai-panel"} className="ai-panel"
       aria-label={t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")} aria-hidden={!isOpen}>
-      <header className="ai-header panel-header">
-        <strong className="panel-header-title" title={isTerminal ? `${active?.session.name ?? ""} · ${active?.session.username ?? ""}@${active?.session.host ?? ""}` : undefined}><Sparkles size={15} /><span>{t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")}</span></strong>
+      <header className={`ai-header panel-header${isTerminal ? " workspace-panel-header" : ""}`}>
+        <strong className="panel-header-title" title={isTerminal ? `${active?.session.name ?? ""} · ${active?.session.username ?? ""}@${active?.session.host ?? ""}` : undefined}>{isTerminal ? <span className="workspace-panel-dot" aria-hidden="true" /> : <Sparkles size={15} />}<span>{t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")}</span></strong>
         <div className="ai-header-actions panel-header-actions">
           <button title={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")} aria-label={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")} onClick={() => setShowHistory(!showHistory)}><History size={15} /></button>
           <button type="button" title={t("ai:newConversation")} aria-label={t("ai:newConversation")} onClick={newConversation} disabled={!!running}><Plus size={15} /></button>
