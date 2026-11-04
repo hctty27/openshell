@@ -9,7 +9,6 @@ import {
   Terminal,
   Plus,
   X,
-  PanelRightOpen,
   RefreshCw,
   Unplug,
   ArrowRight,
@@ -1171,6 +1170,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   <Search size={14} />
                 </button>
                 <button
+                  className="workspace-panel-toggle"
                   title={tr("ai:terminalAIButton")}
                   aria-label={tr("ai:terminalAIButton")}
                   aria-pressed={showTerminalAI}
@@ -1187,7 +1187,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   <Sparkles size={14} />
                 </button>
                 <button
+                  className="workspace-panel-toggle"
                   title={tr(showSFTP ? "sftp:closeFilePanel" : "sftp:openFileManager")}
+                  aria-label={tr("sftp:fileManager")}
+                  aria-pressed={showSFTP}
                   disabled={active?.status !== "connected"}
                   onClick={() => {
                     if (!active) return;
@@ -1197,7 +1200,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                     }));
                   }}
                 >
-                  {showSFTP ? <PanelRightOpen size={14} /> : <FolderOpen size={14} />}
+                  <FolderOpen size={14} />
                 </button>
                 <button
                   title={tr(connectionActionLabel(active?.status))}
