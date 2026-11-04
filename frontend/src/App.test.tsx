@@ -140,7 +140,7 @@ test("global AI pin survives SFTP and terminal AI panel switching", async () => 
   fireEvent.click(screen.getByTitle("打开 SFTP 文件管理"));
   expect(screen.getByTestId("sftp-panel-stub")).toBeTruthy();
   expect(pinned()).toBe(true);
-  fireEvent.click(screen.getByTitle("关闭 SFTP 文件管理"));
+  fireEvent.click(screen.getByTitle("关闭文件侧栏"));
   expect(screen.queryByTestId("sftp-panel-stub")).toBeNull();
   expect(pinned()).toBe(true);
 });
