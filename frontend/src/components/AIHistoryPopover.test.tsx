@@ -48,6 +48,9 @@ test("history popup groups items and highlights only the selected conversation",
   expect(active.getAttribute("aria-current")).toBe("true");
   expect(inactive.getAttribute("aria-current")).toBeNull();
   expect(document.querySelectorAll(".ai-history-entry")).toHaveLength(2);
+  expect(active.querySelector(".ai-history-entry-title")?.textContent).toBe("查看现在有哪些进程");
+  expect(active.querySelector(".ai-history-entry-meta")?.textContent).toMatch(/\d{2}:\d{2}/);
+  expect(active.querySelector(".ai-history-entry-heading")).toBeNull();
 });
 
 test("keyboard arrows navigate entries; Escape closes and restores trigger focus", () => {
