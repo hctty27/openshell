@@ -259,14 +259,17 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   };
 
   return (
-    <aside className="ai-panel" aria-label={t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")} aria-hidden={!isOpen}>
+    <aside id={isTerminal ? undefined : "global-ai-panel"} className="ai-panel"
+      aria-label={t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")} aria-hidden={!isOpen}>
       <header className="ai-header">
         <strong><Sparkles size={15} /> {t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")}</strong>
         <div className="ai-header-actions">
           <button title={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")} aria-label={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")} onClick={() => setShowHistory(!showHistory)}><History size={15} /></button>
           <button type="button" title={t("ai:newConversation")} aria-label={t("ai:newConversation")} onClick={newConversation} disabled={!!running}><Plus size={15} /></button>
           {!isTerminal && (
-            <button title={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")} aria-label={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")} onClick={onTogglePin}>
+            <button type="button" className="sidebar-pin-toggle" aria-pressed={pinned}
+              title={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")}
+              aria-label={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")} onClick={onTogglePin}>
               {pinned ? <Pin size={15} /> : <PinOff size={15} />}
             </button>
           )}
