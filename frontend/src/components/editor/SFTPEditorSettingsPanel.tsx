@@ -43,7 +43,7 @@ export default function SFTPEditorSettingsPanel() {
         <div className="settings-control-row" key={name}>
           <label className="checkbox">
             <input type="checkbox" checked={preferences[name]} onChange={event => update({ [name]: event.target.checked })} />
-            {t("sftp:" + label)}
+            {t(("sftp:" + label) as "sftp:editorLineNumbers")}
           </label>
         </div>
       ))}
