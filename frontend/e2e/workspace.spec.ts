@@ -524,7 +524,7 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
   await page.screenshot({ path: "../tmp/theme-dark.png" });
 });
 
-test("terminal viewport aligns its scrollbar and avoids bottom gutter across themes", async ({
+test("terminal grid stays centered inside scrollbar left edge across sizes and themes", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1200, height: 720 });
@@ -581,8 +581,12 @@ test("terminal viewport aligns its scrollbar and avoids bottom gutter across the
         xtermStyle.paddingTop, xtermStyle.paddingRight,
         xtermStyle.paddingBottom, xtermStyle.paddingLeft,
       ],
-      textInsetLeft: glyphs.left - content.left,
-      textInsetTop: glyphs.top - content.top,
+      gridGaps: [
+        glyphs.left - content.left,
+        scroll.left - glyphs.right,
+        glyphs.top - content.top,
+        content.bottom - glyphs.bottom,
+      ],
       scrollbarRightInset: content.right - scroll.right,
       screenRight: glyphs.right,
       screenBottom: glyphs.bottom,
@@ -604,29 +608,26 @@ test("terminal viewport aligns its scrollbar and avoids bottom gutter across the
     expect(Math.abs(gutter)).toBeLessThan(1);
   }
   expect(dark.contentPadding).toBe("0px");
-  expect(dark.xtermPadding).toEqual(["8px", "0px", "0px", "8px"]);
+  const aligned = (gaps: number[]) => gaps[0] >= 7 && gaps[2] >= 7 &&
+    Math.abs(gaps[0] - gaps[1]) <= 1.5 && Math.abs(gaps[2] - gaps[3]) <= 1.5;
+  expect(dark.xtermPadding[1]).toBe("0px");
+  expect(dark.xtermPadding[2]).toBe("0px");
   expect(dark.contentWidth).toBeGreaterThan(0);
   expect(dark.contentHeight).toBeGreaterThan(0);
-  expect(Math.abs(dark.textInsetLeft - 8)).toBeLessThan(1);
-  expect(Math.abs(dark.textInsetTop - 8)).toBeLessThan(1);
   expect(Math.abs(dark.scrollbarRightInset)).toBeLessThan(1);
+  expect(aligned(dark.gridGaps)).toBe(true);
   expect(dark.screenRight).toBeLessThanOrEqual(dark.contentRight + 1);
   expect(dark.screenBottom).toBeLessThanOrEqual(dark.contentBottom + 1);
-  // WebGL does not render measurable .xterm-rows DOM cells; bound leftover pixels directly.
-  expect(dark.contentBottom - dark.screenBottom).toBeLessThan(24);
   expect(dark.scrollbarWidth).toBe(8);
 
   await page.setViewportSize({ width: 1040, height: 630 });
-  await expect.poll(async () => (await snapshot()).gutters.every(gap => Math.abs(gap) < 1))
-    .toBe(true);
   await expect.poll(async () => {
     const geometry = await snapshot();
-    return geometry.screenRight <= geometry.contentRight + 1 &&
+    return geometry.gutters.every(gap => Math.abs(gap) < 1) &&
+      aligned(geometry.gridGaps) &&
+      geometry.screenRight <= geometry.contentRight + 1 &&
       geometry.screenBottom <= geometry.contentBottom + 1;
   }).toBe(true);
-  const resized = await snapshot();
-  expect(resized.xtermPadding).toEqual(["8px", "0px", "0px", "8px"]);
-  expect(resized.contentBottom - resized.screenBottom).toBeLessThan(24);
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "终端", exact: true }).click();
