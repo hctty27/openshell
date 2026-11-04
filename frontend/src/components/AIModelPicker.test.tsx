@@ -126,3 +126,40 @@ test("model popup width follows the trigger width and updates on resize", () => 
   fireEvent.resize(window);
   expect(popup.style.width).toBe("130px");
 });
+
+test("single-model popup does not scroll on hover; overflow enables scrolling only when needed", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+  let contentHeight = 36;
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get() {
+      return (this as HTMLElement).classList?.contains("ai-dropdown-popover") ? contentHeight : 0;
+    },
+  });
+  const style = document.createElement("style");
+  style.textContent = ".ai-dropdown-popover { border-top: 1px solid; border-bottom: 1px solid; }";
+  document.head.appendChild(style);
+
+  try {
+    render(<AIModelPicker providers={[{ ...providers[0], models: [providers[0].models[0]] }]}
+      providerID="p1" modelID="grok-4.7" onChange={vi.fn()} />);
+    const trigger = screen.getByRole("combobox", { name: "选择 AI 模型" });
+    fireEvent.click(trigger);
+    let popup = screen.getByRole("listbox").closest(".ai-dropdown-popover") as HTMLElement;
+    expect(popup.style.maxHeight).toBe("39px");
+    expect(popup.style.overflowY).toBe("hidden");
+    fireEvent.mouseOver(popup);
+    expect(popup.style.overflowY).toBe("hidden");
+
+    fireEvent.click(trigger);
+    contentHeight = 400;
+    fireEvent.click(trigger);
+    popup = screen.getByRole("listbox").closest(".ai-dropdown-popover") as HTMLElement;
+    expect(popup.style.maxHeight).toBe("260px");
+    expect(popup.style.overflowY).toBe("auto");
+  } finally {
+    style.remove();
+    if (descriptor) Object.defineProperty(HTMLElement.prototype, "scrollHeight", descriptor);
+    else Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
+  }
+});
