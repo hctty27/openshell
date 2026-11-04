@@ -666,7 +666,7 @@
 }
 .terminal-surface .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical > .xterm-slider {
   box-sizing: border-box;
-  border-left: 3px solid transparent;
+  border-inline: 1px solid transparent;
   border-radius: 9px;
   background-clip: padding-box;
   background-color: var(--terminal-scroll-thumb) !important;
