@@ -17,7 +17,6 @@
   "noMatchingConversations": "没有匹配的对话",
   "sessionsLabel": "会话：",
   "noConnectedSessions": "无已连接会话",
-  "currentRequired": "（当前，必选）",
   "connectSshFirst": "请先连接 SSH 会话",
   "executionMode": "执行模式",
   "reviewMode": "自动审查",
@@ -91,5 +90,8 @@
   "historyToday": "今天",
   "historyYesterday": "昨天",
   "historyEarlier": "更早",
-  "currentConversation": "当前对话"
+  "currentConversation": "当前对话",
+  "contextEstimateShort": "估算",
+  "compactAction": "压缩上下文",
+  "contextCompactBusy": "任务进行中不可压缩"
 }

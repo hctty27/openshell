@@ -17,7 +17,6 @@
   "noMatchingConversations": "No matching conversations",
   "sessionsLabel": "Sessions:",
   "noConnectedSessions": "No connected sessions",
-  "currentRequired": " (current, required)",
   "connectSshFirst": "Connect to an SSH session first",
   "executionMode": "Execution mode",
   "reviewMode": "Review before execution",
@@ -91,5 +90,8 @@
   "historyToday": "Today",
   "historyYesterday": "Yesterday",
   "historyEarlier": "Earlier",
-  "currentConversation": "Current conversation"
+  "currentConversation": "Current conversation",
+  "contextEstimateShort": "Estimate",
+  "compactAction": "Compress context",
+  "contextCompactBusy": "Cannot compress while a task is running"
 }

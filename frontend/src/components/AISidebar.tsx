@@ -370,6 +370,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
           <AIContextIndicator
             stats={contextInfo ?? (model ? { window: model.contextWindow || 32768, estimatedTokens: 0, lastPromptTokens: 0, compactionCount: 0, isEstimate: true } : null)}
             compacting={compacting} disabled={!conversationID || !!running || submitting}
+             disabledReason={!conversationID ? t("ai:contextNoHistory") : t("ai:contextCompactBusy")}
             autoCompact={runtimeSettings.autoCompact} compactThreshold={runtimeSettings.compactThreshold}
             historyOpen={showHistory} onOpen={() => setShowHistory(false)}
             onCompact={() => void compactHistory()} />
@@ -453,7 +454,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                 placeholder={t("ai:messagePlaceholder")}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}/>
               <div className="ai-compose-actions">
-                <div className="ai-compose-config">
+                <div className={"ai-compose-config" + (!isTerminal ? " ai-compose-config--with-target" : "")}>
                   <AIModelPicker providers={providers}
                     providerID={provider?.id ?? providerID} modelID={model?.id ?? modelID}
                     onChange={chooseModel} disabled={submitting || !!running} />
@@ -483,7 +484,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                   {connected.map(tab => (
                     <label key={tab.id}>
                       <input type="checkbox" checked={targetSet.has(tab.id)} disabled={tab.id === requiredID} onChange={() => toggleTarget(tab.id)} />
-                      <span title={tab.session.name}>{tab.session.name}{tab.id === requiredID ? t("ai:currentRequired") : ""}</span>
+                      <span title={tab.session.name}>{tab.session.name}</span>
                     </label>
                   ))}
                   {!connected.length && <p className="ai-muted">{t("ai:connectSshFirst")}</p>}

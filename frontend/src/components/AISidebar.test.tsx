@@ -234,6 +234,7 @@ test("global sessions are in the composer while terminal AI has no target toolba
   const global = screen.getByRole("complementary", { name: "AI 助手" });
   const selector = screen.getByRole("button", { name: /会话：hk/ });
   expect(selector.closest(".ai-compose")).toBeTruthy();
+  expect(global.querySelector(".ai-compose-config--with-target")).toBeTruthy();
   expect(global.querySelector(".ai-controls")).toBeNull();
   view.rerender(<AISidebar tabs={[connectedTab]} active={connectedTab} pinned isOpen
     terminalScopeId="hk-server" onTogglePin={vi.fn()} />);
@@ -275,6 +276,8 @@ test("multi-session summary stays compact and selection retains exact targets", 
   const choices = screen.getAllByRole("checkbox");
   expect(choices).toHaveLength(3);
   expect((choices[0] as HTMLInputElement).disabled).toBe(true);
+  expect(choices[0].closest("label")?.textContent).toBe("hk");
+  expect(screen.getByRole("checkbox", { name: "hk" })).toBeTruthy();
 
   fireEvent.click(choices[1]);
   expect(selector.textContent).toContain("hk +1");
@@ -333,7 +336,7 @@ test("context meter is local to the selected conversation and permits manual com
   await waitFor(() => expect(api.AIContext).toHaveBeenCalledWith("history-1", "provider-1", "model-1"));
   fireEvent.click(screen.getByRole("button", { name: "上下文使用情况" }));
   expect(screen.getByRole("dialog", { name: "上下文使用情况" }).textContent).toContain("131,072 / 262,144");
-  fireEvent.click(screen.getByRole("button", { name: "手动压缩上下文" }));
+  fireEvent.click(screen.getByRole("button", { name: "压缩上下文" }));
   await waitFor(() => expect(api.AICompactConversation).toHaveBeenCalledWith("history-1"));
 });
 
