@@ -336,3 +336,20 @@ test("context meter is local to the selected conversation and permits manual com
   fireEvent.click(screen.getByRole("button", { name: "手动压缩上下文" }));
   await waitFor(() => expect(api.AICompactConversation).toHaveBeenCalledWith("history-1"));
 });
+
+
+test("context meter is in header and dropdowns dismiss each other", async () => {
+  vi.mocked(api.AIConversations).mockResolvedValueOnce([oldConversation()]);
+  await act(async () => render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+    terminalScopeId="hk-server" pinned isOpen onTogglePin={vi.fn()} />));
+  const panel = screen.getByRole("complementary", { name: "终端 AI" });
+  expect(panel.querySelector(".ai-header .ai-context-control")).toBeTruthy();
+  expect(panel.querySelector(".ai-compose .ai-context-control")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "上下文使用情况" }));
+  expect(screen.getByRole("dialog", { name: "上下文使用情况" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "当前会话记录" }));
+  expect(screen.queryByRole("dialog", { name: "上下文使用情况" })).toBeNull();
+  expect(screen.getByRole("dialog", { name: "当前会话记录" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "上下文使用情况" }));
+  expect(screen.queryByRole("dialog", { name: "当前会话记录" })).toBeNull();
+});
