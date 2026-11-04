@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { ChevronDown, History, LoaderCircle, MoreHorizontal, Pin, PinOff, Plus, Search, Send, Sparkles, Square, Trash2 } from "lucide-react";
+import { ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Send, Sparkles, Square, Trash2 } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, AITargetBinding, Tab } from "../types";
 import AIModelPicker from "./AIModelPicker";
 import AITranscript from "./AITranscript";
+import { belongsToConversationScope } from "../features/ai/conversationScope";
 import { AI_PROVIDERS_CHANGED } from "../features/ai/providerEvents";
 import { readLastModel, saveLastModel } from "../features/ai/modelSelection";
 import { t } from "../i18n";
@@ -16,6 +17,7 @@ interface Props {
   pinned: boolean;
   isOpen: boolean;
   terminalAlternate?: boolean;
+  terminalScopeId?: string;
   onTogglePin(): void;
 }
 
@@ -27,8 +29,10 @@ interface Approval {
   tabId: string;
 }
 
-export default function AISidebar({ tabs, active, pinned, isOpen, terminalAlternate = false, onTogglePin }: Props) {
+export default function AISidebar({ tabs, active, pinned, isOpen, terminalAlternate = false, terminalScopeId, onTogglePin }: Props) {
   useTranslation("ai");
+  const isTerminal = terminalScopeId !== undefined;
+  const execution = isTerminal ? "terminal" : "independent";
   const lastModelRef = useRef(readLastModel());
   const [providers, setProviders] = useState<AIProvider[]>([]);
   const [conversations, setConversations] = useState<AIConversation[]>([]);
@@ -36,7 +40,6 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [providerID, setProviderID] = useState(lastModelRef.current.providerId);
   const [modelID, setModelID] = useState(lastModelRef.current.modelId);
   const [mode, setMode] = useState<"review" | "auto">("review");
-  const [execution, setExecution] = useState<"auto" | "independent" | "terminal">("auto");
   const [targetIDs, setTargetIDs] = useState<string[]>([]);
   const [historySessionIDs, setHistorySessionIDs] = useState<string[]>([]);
   const [historyBindings, setHistoryBindings] = useState<AITargetBinding[]>([]);
@@ -45,8 +48,6 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [search, setSearch] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [showTargets, setShowTargets] = useState(false);
-  const [showOptions, setShowOptions] = useState(false);
-  const optionsRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [running, setRunning] = useState<AIStartResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -55,6 +56,9 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const finishedTasks = useRef(new Set<string>());
+  const activeTaskRef = useRef("");
+  const currentConversationRef = useRef("");
+  currentConversationRef.current = conversationID;
   const messagesRef = useRef<HTMLDivElement>(null);
   const followOutputRef = useRef(true);
   const onMessagesScroll = () => {
@@ -64,22 +68,6 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     followOutputRef.current =
       node.scrollHeight - node.scrollTop - node.clientHeight <= 72;
   };
-
-  useEffect(() => {
-    if (!showOptions) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!optionsRef.current?.contains(event.target as Node)) setShowOptions(false);
-    };
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setShowOptions(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onEscape);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onEscape);
-    };
-  }, [showOptions]);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -96,7 +84,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
       .then(([p, c]) => {
         if (!valid) return;
         setProviders(p ?? []);
-        setConversations(c ?? []);
+        setConversations((c ?? []).filter(item => belongsToConversationScope(item, terminalScopeId)));
       })
       .catch(e => { if (valid) setError(errorText(e)); });
     const refreshProviders = () => {
@@ -109,33 +97,38 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
       valid = false;
       window.removeEventListener(AI_PROVIDERS_CHANGED, refreshProviders);
     };
-  }, []);
+  }, [terminalScopeId]);
 
   useEffect(() => {
     const offConversation = listen("ai:conversation", (next: AIConversation) => {
+      if (!belongsToConversationScope(next, terminalScopeId)) return;
       setConversations(old => [next, ...old.filter(item => item.id !== next.id)]
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
-      setStream("");
+      if (next.id === currentConversationRef.current) setStream("");
     });
     const offDelta = listen("ai:delta", (event: { taskId: string; text: string }) => {
-      setStream(old => old + event.text);
+      if (event.taskId === activeTaskRef.current) setStream(old => old + event.text);
     });
     const offState = listen("ai:state", (event: { taskId: string; status: string; detail: string }) => {
+      if (event.taskId !== activeTaskRef.current) return;
       setStatus(event.status === "completed" ? "" :
         event.status === "running" ? "running" :
         event.detail || (event.status === "cancelled" ? t("ai:taskCancelled") : t("ai:executionFailed")));
       if (event.status !== "running") {
         finishedTasks.current.add(event.taskId);
+        activeTaskRef.current = "";
         setRunning(old => old?.taskId === event.taskId ? null : old);
         setStream("");
         setApproval(null);
-          }
+      }
     });
-    const offApproval = listen("ai:approval", (event: Approval) => setApproval(event));
+    const offApproval = listen("ai:approval", (event: Approval) => {
+      if (event.taskId === activeTaskRef.current) setApproval(event);
+    });
     return () => { offConversation(); offDelta(); offState(); offApproval(); };
-  }, []);
+  }, [terminalScopeId]);
 
-  const connected = tabs.filter(tab => tab.status === "connected" && tab.ref);
+  const connected = tabs.filter(tab => tab.status === "connected" && tab.ref && (!isTerminal || tab.id === active?.id));
   const requiredID = active?.status === "connected" ? active.id : "";
   // Restore logical session selections against live tabs, never stale connection references.
   const matchesHistoryTarget = (tab: Tab, sessionID: string) => {
@@ -170,13 +163,13 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const terminalAvailable = terminalSingleTarget && !terminalAlternate;
   const provider = providerID ? providers.find(item => item.id === providerID) : providers[0];
   const model = modelID ? provider?.models.find(item => item.id === modelID) : provider?.models[0];
-  const current = conversations.find(item => item.id === conversationID);
+  const current = conversations.find(item => item.id === conversationID && belongsToConversationScope(item, terminalScopeId));
   useLayoutEffect(() => {
     const node = messagesRef.current;
     if (!isOpen || !node || !followOutputRef.current) return;
     node.scrollTop = node.scrollHeight;
   }, [isOpen, conversationID, current?.messages, stream, status, error, approval]);
-  const filteredHistory = conversations.filter(item =>
+  const filteredHistory = conversations.filter(item => belongsToConversationScope(item, terminalScopeId)).filter(item =>
     [item.title, ...item.targetNames, ...item.messages.map(m => m.content)].join(" ").toLowerCase().includes(search.toLowerCase())
   );
   const toggleTarget = (id: string) => {
@@ -199,13 +192,12 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setHistoryBindings(bindings);
     setHistorySessionIDs(bindings.length ? bindings.map(saved => saved.sessionId) : (item.targetSessionIds ?? []));
     setLegacyHistoryNeedsRebind(item.targetNames.length > 0 && bindings.length === 0);
+    activeTaskRef.current = "";
     setConversationID(item.id);
     setProviderID(item.providerId);
     setModelID(item.modelId);
     setMode(item.mode);
-    setExecution("auto");
     setShowHistory(false);
-    setShowOptions(false);
     setStream("");
     setStatus("");
     setError("");
@@ -217,8 +209,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setHistorySessionIDs([]);
     setHistoryBindings([]);
     setLegacyHistoryNeedsRebind(false);
+    activeTaskRef.current = "";
     setConversationID("");
-    setExecution("auto");
     setProviderID(lastModelRef.current.providerId);
     setModelID(lastModelRef.current.modelId);
     setMessage("");
@@ -226,7 +218,6 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setStatus("");
     setError("");
     setShowHistory(false);
-    setShowOptions(false);
   };
   const chooseModel = (nextProviderID: string, nextModelID: string) => {
     setProviderID(nextProviderID);
@@ -247,7 +238,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     const text = message.trim();
     if (!text || !provider || !model || !targets.length || unavailableSessionIDs.length ||
       legacyHistoryNeedsRebind || submitting || running ||
-      (execution === "terminal" && !terminalAvailable)) return;
+      (isTerminal && !terminalAvailable)) return;
     followOutputRef.current = true;
     setError("");
     setStatus("running");
@@ -256,8 +247,10 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     try {
       const started = await api.AIStart({
         conversationId: conversationID, providerId: provider.id, modelId: model.id,
-        mode, execution, text, targets: targets.map(tab => tab.ref!),
+        mode, execution, scopeId: terminalScopeId ?? "", text, targets: targets.map(tab => tab.ref!),
       });
+      activeTaskRef.current = started.taskId;
+      currentConversationRef.current = started.conversationId;
       if (!finishedTasks.current.has(started.taskId)) setRunning(started);
       setConversationID(started.conversationId);
       setMessage("");
@@ -266,47 +259,24 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   };
 
   return (
-    <aside className="ai-panel" aria-label={t("ai:assistant")} aria-hidden={!isOpen}>
+    <aside className="ai-panel" aria-label={t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")} aria-hidden={!isOpen}>
       <header className="ai-header">
-        <strong><Sparkles size={15} /> {t("ai:assistant")}</strong>
+        <strong><Sparkles size={15} /> {t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")}</strong>
         <div className="ai-header-actions">
-          <button title={t("ai:allConversations")} aria-label={t("ai:allConversations")} onClick={() => setShowHistory(!showHistory)}><History size={15} /></button>
+          <button title={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")} aria-label={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")} onClick={() => setShowHistory(!showHistory)}><History size={15} /></button>
           <button type="button" title={t("ai:newConversation")} aria-label={t("ai:newConversation")} onClick={newConversation} disabled={!!running}><Plus size={15} /></button>
-          <div className="ai-header-options" ref={optionsRef}>
-            <button type="button" title={t("ai:moreOptions")} aria-label={t("ai:executionStrategy")}
-              aria-expanded={showOptions} aria-controls="ai-execution-options"
-              onClick={() => { setShowOptions(value => !value); setShowHistory(false); }}>
-              <MoreHorizontal size={16} />
+          {!isTerminal && (
+            <button title={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")} aria-label={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")} onClick={onTogglePin}>
+              {pinned ? <Pin size={15} /> : <PinOff size={15} />}
             </button>
-            {showOptions && (
-              <div id="ai-execution-options" className="ai-options-menu">
-                <label htmlFor="ai-execution-choice">{t("ai:operationMethod")}</label>
-                <select id="ai-execution-choice" title={t("ai:executionStrategy")}
-                  value={execution} disabled={submitting || !!running}
-                  onChange={e => setExecution(e.target.value as "auto" | "independent" | "terminal")}>
-                  <option value="auto">{t("ai:autoRecommended")}</option>
-                  <option value="independent">{t("ai:independent")}</option>
-                  <option value="terminal">{t("ai:currentTerminal")}</option>
-                </select>
-                <p className="ai-options-hint">
-                  {execution === "auto" ? t("ai:autoCapabilityHelp") :
-                    execution === "terminal" ? terminalAlternate ? t("ai:interactiveProgram") :
-                      !terminalSingleTarget ? t("ai:terminalOnlyOne") : t("ai:terminalIdleHelp") :
-                      t("ai:independentHelp")}
-                </p>
-              </div>
-            )}
-          </div>
-          <button title={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")} aria-label={t(pinned ? "ai:autoHideSidebar" : "ai:pinSidebar")} onClick={onTogglePin}>
-            {pinned ? <Pin size={15} /> : <PinOff size={15} />}
-          </button>
+          )}
         </div>
       </header>
 
       <>
           {showHistory && (
             <div className="ai-history">
-              <label className="ai-search"><Search size={14} /><input placeholder={t("ai:searchConversations")} value={search} onChange={e => setSearch(e.target.value)} /></label>
+              <label className="ai-search"><Search size={14} /><input placeholder={t(isTerminal ? "ai:searchTerminalConversations" : "ai:searchConversations")} value={search} onChange={e => setSearch(e.target.value)} /></label>
               <div className="ai-history-results">
                 {filteredHistory.map(item => (
                   <div key={item.id} className="ai-history-entry">
@@ -321,7 +291,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
             </div>
           )}
           <div className="ai-controls">
-            <div className="ai-selector">
+            {isTerminal ? <span className="ai-current-target" title={active?.session.name}>{active?.session.name}</span> : <div className="ai-selector">
               <button type="button" className="ai-selector-button" onClick={() => setShowTargets(!showTargets)}
                 aria-expanded={showTargets}
                 title={selectedTargetTitle} aria-label={selectedTargetTitle}>
@@ -339,7 +309,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                   {!connected.length && <p className="ai-muted">{t("ai:connectSshFirst")}</p>}
                 </div>
               )}
-            </div>
+            </div>}
             <select value={mode} disabled={submitting || !!running}
               onChange={e => setMode(e.target.value as "review" | "auto")}
               aria-label={t("ai:executionMode")} title={mode === "review" ? t("ai:reviewMode") : t("ai:automaticMode")}>
@@ -347,7 +317,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
               <option value="auto">{t("ai:automaticModeShort")}</option>
             </select>
           </div>
-          {execution === "terminal" && (terminalAlternate || !terminalSingleTarget) && (
+          {isTerminal && (terminalAlternate || !terminalSingleTarget) && (
             <div className="ai-session-warning ai-execution-warning" role="status">
               {terminalAlternate ? t("ai:interactiveProgram") : t("ai:terminalOnlyOne")}
             </div>
@@ -406,7 +376,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                   <button type="submit" title={t("ai:send")} aria-label={t("ai:send")} className="ai-primary"
                     disabled={submitting || !provider || !model || !targets.length || legacyHistoryNeedsRebind ||
                       unavailableSessionIDs.length > 0 || !message.trim() ||
-                      (execution === "terminal" && !terminalAvailable)}>
+                      (isTerminal && !terminalAvailable)}>
                     <Send size={15} />
                   </button>}
               </div>
