@@ -27,7 +27,7 @@ test("context control shows the percentage beside the ring and detailed progress
   expect(dialog.textContent).toContain("3,013 / 32,768 Tokens");
   expect(dialog.textContent).toContain("3,266");
   expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("9");
-  fireEvent.click(screen.getByRole("button", { name: "手动压缩" }));
+  fireEvent.click(screen.getByRole("button", { name: "手动压缩上下文" }));
   expect(onCompact).toHaveBeenCalledOnce();
 });
 
@@ -44,7 +44,7 @@ test("context popup closes when history opens and never compacts without a conve
   const onCompact = vi.fn();
   const view = render(<AIContextIndicator stats={stats} compacting={false} disabled onCompact={onCompact} />);
   fireEvent.click(screen.getByRole("button", { name: /上下文使用情况: 9%/ }));
-  expect(screen.getByRole("button", { name: "手动压缩" }).hasAttribute("disabled")).toBe(true);
+  expect(screen.getByRole("button", { name: "手动压缩上下文" }).hasAttribute("disabled")).toBe(true);
   view.rerender(<AIContextIndicator stats={stats} compacting={false} disabled onCompact={onCompact} historyOpen />);
   expect(screen.queryByRole("dialog", { name: "上下文使用情况" })).toBeNull();
   expect(onCompact).not.toHaveBeenCalled();
