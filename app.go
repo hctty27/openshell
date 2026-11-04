@@ -389,7 +389,16 @@ func (a *App) DuplicateSession(id string) (domain.Session, error) {
 			return domain.Session{}, apperror.New("couldNotReadLoginCredentialsEnterThemAgain", nil)
 		}
 	}
-	return a.store.SaveSessionWithSecret(a.ctx, copy, credential, source.CredentialRef != "", a.secrets)
+	duplicated, err := a.store.SaveSessionWithSecret(a.ctx, copy, credential, source.CredentialRef != "", a.secrets)
+	if err != nil { return duplicated, err }
+	savedDirectory, err := a.store.GetPreference(a.ctx, transferSessionLocalDirPrefix+source.ID)
+	if err != nil { return duplicated, err }
+	if savedDirectory != "" {
+		if err = a.store.SetPreference(a.ctx, transferSessionLocalDirPrefix+duplicated.ID, savedDirectory); err != nil {
+			return duplicated, err
+		}
+	}
+	return duplicated, nil
 }
 
 func (a *App) DeleteSession(id string) error {
@@ -703,7 +712,10 @@ func (a *App) ChoosePrivateKey() (string, error) {
 }
 
 func (a *App) SFTPHome(ref domain.ConnectionRef) (files.Paths, error) {
- return a.sftp.Homes(ref)
+	paths, err := a.sftp.Homes(ref)
+	if err != nil { return paths, err }
+	paths.Local, err = a.GetTransferLocalDir(ref.SessionID)
+	return paths, err
 }
 func (a *App) SFTPList(ref domain.ConnectionRef, side, directory string) ([]files.Entry, error) {
  return a.sftp.List(ref, side, directory)
