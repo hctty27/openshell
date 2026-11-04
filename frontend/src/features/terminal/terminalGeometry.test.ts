@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateTerminalGeometry } from "./terminalGeometry";
+import { calculateTerminalGeometry, calculateGridCenteringCorrection } from "./terminalGeometry";
 
 describe("calculateTerminalGeometry", () => {
   it("centers the grid between the left edge and the scrollbar's left edge", () => {
@@ -48,5 +48,37 @@ describe("calculateTerminalGeometry", () => {
     expect(result.rows).toBe(1);
     expect(result.left).toBe(0);
     expect(result.top).toBe(2);
+  });
+});
+
+describe("calculateGridCenteringCorrection", () => {
+  it("balances horizontal spacing to the real scrollbar track, not the thumb or outer edge", () => {
+    const delta = calculateGridCenteringCorrection({
+      surfaceLeft: 0, surfaceTop: 0, surfaceBottom: 600,
+      gridLeft: 9, gridRight: 988, gridTop: 10, gridBottom: 586,
+      scrollbarLeft: 1000,
+    });
+    expect(delta).toEqual({ x: 1.5, y: 2 });
+  });
+
+  it("does not modify an already centered grid", () => {
+    expect(calculateGridCenteringCorrection({
+      surfaceLeft: 10, surfaceTop: 20, surfaceBottom: 620,
+      gridLeft: 20, gridRight: 990, gridTop: 32, gridBottom: 608,
+      scrollbarLeft: 1000,
+    })).toEqual({ x: 0, y: 0 });
+  });
+
+  it("rejects transient invalid/oversized screen geometry", () => {
+    expect(calculateGridCenteringCorrection({
+      surfaceLeft: 0, surfaceTop: 0, surfaceBottom: 600,
+      gridLeft: 8, gridRight: 1100, gridTop: 8, gridBottom: 580,
+      scrollbarLeft: 1000,
+    })).toBeNull();
+    expect(calculateGridCenteringCorrection({
+      surfaceLeft: 0, surfaceTop: 0, surfaceBottom: 600,
+      gridLeft: 8, gridRight: 980, gridTop: 8, gridBottom: 580,
+      scrollbarLeft: Number.NaN,
+    })).toBeNull();
   });
 });
