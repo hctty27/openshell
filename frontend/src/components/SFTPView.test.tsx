@@ -49,6 +49,14 @@ test("local and remote SFTP headers share the compact workspace layout", () => {
   }
 });
 
+test("SFTP sync actions use compact labels while keeping full accessible names", () => {
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  const controls = document.querySelector<HTMLElement>(".sftp-sync-controls")!;
+  expect(controls.querySelector(".sftp-sync-label")?.textContent).toBe("目录");
+  expect(within(controls).getByRole("button", { name: "同步本地 → 远程" }).textContent).toBe("本地 → 远程");
+  expect(within(controls).getByRole("button", { name: "同步远程 → 本地" }).textContent).toBe("远程 → 本地");
+});
+
 test("Bash cwd helper reports rejected clipboard writes", async () => {
   vi.mocked(Clipboard.SetText).mockRejectedValueOnce(new Error("clipboard unavailable"));
   const onNotice = vi.fn();
