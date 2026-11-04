@@ -32,10 +32,12 @@
 .ai-rail {
   position: absolute;
   inset: 0 0 0 auto;
-  height: 100%;
   width: 12px;
+  height: 100%;
+  padding: 0;
   background: transparent;
   border: 0;
+  cursor: pointer;
 }
 .ai-rail::after {
   content: "";
@@ -49,8 +51,13 @@
   opacity: .55;
   transform: translateY(-50%);
 }
+.ai-rail:hover,
+.ai-rail:focus-visible { background: transparent; }
 .ai-rail:hover::after,
 .ai-rail:focus-visible::after { background: var(--accent-fill); opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .ai-dock--auto .ai-panel { transition: none; }
+}
 .ai-dock-splitter {
   position: absolute;
   inset: 0 auto 0 -4px;
@@ -106,6 +113,16 @@
 }
 .ai-header strong svg { flex: 0 0 auto; color: var(--accent-fill); }
 .ai-header-actions { gap: 0; flex: 0 0 auto; }
+.ai-header-actions .sidebar-pin-toggle { position: relative; margin-left: 4px; }
+.ai-header-actions .sidebar-pin-toggle[aria-pressed="true"] {
+  color: var(--accent-fill);
+  background: var(--accent-soft);
+}
+.ai-header-actions .sidebar-pin-toggle:hover,
+.ai-header-actions .sidebar-pin-toggle:focus-visible {
+  color: var(--accent-fill);
+  background: var(--accent-soft);
+}
 .ai-header-actions button {
   display: grid;
   place-items: center;
