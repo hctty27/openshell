@@ -524,7 +524,7 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
   await page.screenshot({ path: "../tmp/theme-dark.png" });
 });
 
-test("terminal backdrop fills its pane across mixed application and terminal palettes", async ({
+test("terminal viewport has balanced 8px gutters without clipping across themes", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1200, height: 720 });
@@ -549,12 +549,14 @@ test("terminal backdrop fills its pane across mixed application and terminal pal
   const snapshot = () => page.evaluate(() => {
     const container = document.querySelector(".terminal-container")!;
     const pane = container.querySelector(".terminal-pane.active")!;
+    const surface = pane.querySelector(".terminal-surface")!;
     const xterm = pane.querySelector(".xterm")!;
     const viewport = pane.querySelector(".xterm-viewport")!;
     const screen = pane.querySelector(".xterm-screen")!;
     const scrollbar = pane.querySelector(".xterm-scrollbar.xterm-vertical")!;
     const outer = container.getBoundingClientRect();
     const inner = pane.getBoundingClientRect();
+    const content = surface.getBoundingClientRect();
     const glyphs = screen.getBoundingClientRect();
     const scroll = scrollbar.getBoundingClientRect();
     return {
@@ -565,13 +567,24 @@ test("terminal backdrop fills its pane across mixed application and terminal pal
       topGap: inner.top - outer.top,
       rightGap: outer.right - inner.right,
       bottomGap: outer.bottom - inner.bottom,
-      textInsetLeft: glyphs.left - inner.left,
-      textInsetTop: glyphs.top - inner.top,
-      scrollbarRightInset: inner.right - scroll.right,
+      gutters: [
+        content.left - inner.left,
+        content.top - inner.top,
+        inner.right - content.right,
+        inner.bottom - content.bottom,
+      ],
+      contentWidth: content.width,
+      contentHeight: content.height,
+      contentPadding: getComputedStyle(surface).padding,
+      textInsetLeft: glyphs.left - content.left,
+      textInsetTop: glyphs.top - content.top,
+      scrollbarRightInset: content.right - scroll.right,
       screenRight: glyphs.right,
       screenBottom: glyphs.bottom,
       paneRight: inner.right,
       paneBottom: inner.bottom,
+      contentRight: content.right,
+      contentBottom: content.bottom,
       scrollbarWidth: scroll.width,
     };
   });
@@ -582,13 +595,26 @@ test("terminal backdrop fills its pane across mixed application and terminal pal
   for (const gap of [dark.leftGap, dark.topGap, dark.rightGap, dark.bottomGap]) {
     expect(Math.abs(gap)).toBeLessThan(1);
   }
+  for (const gutter of dark.gutters) {
+    expect(Math.abs(gutter - 8)).toBeLessThan(1);
+  }
+  expect(dark.contentPadding).toBe("0px");
+  expect(dark.contentWidth).toBeGreaterThan(0);
+  expect(dark.contentHeight).toBeGreaterThan(0);
   expect(Math.abs(dark.textInsetLeft)).toBeLessThan(1);
   expect(Math.abs(dark.textInsetTop)).toBeLessThan(1);
   expect(dark.scrollbarRightInset).toBeGreaterThanOrEqual(0);
   expect(dark.scrollbarRightInset).toBeLessThanOrEqual(10);
-  expect(dark.screenRight).toBeLessThanOrEqual(dark.paneRight + 1);
-  expect(dark.screenBottom).toBeLessThanOrEqual(dark.paneBottom + 1);
+  expect(dark.screenRight).toBeLessThanOrEqual(dark.contentRight + 1);
+  expect(dark.screenBottom).toBeLessThanOrEqual(dark.contentBottom + 1);
   expect(dark.scrollbarWidth).toBe(8);
+
+  await page.setViewportSize({ width: 1040, height: 630 });
+  await expect.poll(async () => (await snapshot()).gutters.every(gap => Math.abs(gap - 8) < 1))
+    .toBe(true);
+  const resized = await snapshot();
+  expect(resized.screenRight).toBeLessThanOrEqual(resized.contentRight + 1);
+  expect(resized.screenBottom).toBeLessThanOrEqual(resized.contentBottom + 1);
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "终端", exact: true }).click();
