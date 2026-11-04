@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown, Send } from "lucide-react";
+import AIDropdownSurface from "./AIDropdownSurface";
 import type { AIExecutionMode } from "../features/ai/executionModePreference";
 import { t } from "../i18n";
 import { useTranslation } from "react-i18next";
@@ -16,19 +17,13 @@ const modes: AIExecutionMode[] = ["review", "auto"];
 export default function AISendControl({ mode, disabled, modeDisabled = false, onModeChange }: Props) {
   useTranslation("ai");
   const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuID = useId();
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
     menuRef.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
-    return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
   const close = () => {
@@ -60,7 +55,7 @@ export default function AISendControl({ mode, disabled, modeDisabled = false, on
   const modeLabel = t(mode === "auto" ? "ai:automaticMode" : "ai:reviewMode");
 
   return (
-    <div className="ai-send-split" ref={rootRef} data-mode={mode}>
+    <div className="ai-send-split" data-mode={mode}>
       <button className="ai-send-submit" type="submit"
         title={`${t("ai:send")} · ${modeLabel}`}
         aria-label={t("ai:send")} disabled={disabled}>
@@ -84,7 +79,8 @@ export default function AISendControl({ mode, disabled, modeDisabled = false, on
         }}>
         <ChevronDown size={12} aria-hidden="true" />
       </button>
-      {open && (
+      <AIDropdownSurface open={open} anchorRef={triggerRef} onDismiss={() => setOpen(false)}
+        align="end" minWidth={162} maxHeight={180}>
         <div className="ai-send-mode-menu" role="menu" id={menuID}
           ref={menuRef} aria-label={t("ai:executionMode")} onKeyDown={onMenuKeyDown}>
           {modes.map(value => (
@@ -95,7 +91,7 @@ export default function AISendControl({ mode, disabled, modeDisabled = false, on
             </button>
           ))}
         </div>
-      )}
+      </AIDropdownSurface>
     </div>
   );
 }
