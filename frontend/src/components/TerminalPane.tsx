@@ -39,6 +39,7 @@ interface Props {
   confirmMultilinePaste: boolean;
   onNotice(text: unknown): void;
   onRemoteOutput?(ref: Ref, bytes: Uint8Array): void;
+  onUserInput?(ref: Ref): void;
   commandFocusVersion?: number;
   searchOpen: boolean;
   onSearchOpenChange(open: boolean): void;
@@ -322,6 +323,7 @@ export default function TerminalPane(p: Props) {
     };
     const input = term.onData((data) => {
       if (terminalMode === "offline" || (terminalMode === "ssh" && callbacks.current.aiControlled)) return;
+      if (terminalMode === "ssh" && ref && data.length > 0) callbacks.current.onUserInput?.(ref);
       // Never inject an automatic cd after the user has started interacting.
       if (terminalMode === "ssh" && callbacks.current.tab.cloneCwd) cloneCwdSent.current = true;
       inputQueue.push(data);
