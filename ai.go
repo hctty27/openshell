@@ -208,6 +208,8 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	c.TargetBindings = bindings
 	c.Messages = append(c.Messages, store.AIMessage{Role: "user", Content: req.Text})
 	c.Context = aiContextState(c, provider, req.ModelID, 0)
+	settings, settingsErr := a.AIRuntimeSettings()
+	if settingsErr != nil { return AITaskStart{}, settingsErr }
 	a.aiMu.Lock()
 	if a.aiTasks == nil { a.aiTasks = make(map[string]*aiRunningTask) }
 	for _, running := range a.aiTasks {
@@ -218,8 +220,6 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	}
 	if err := a.store.SaveAIConversation(ctx, c); err != nil { a.aiMu.Unlock(); return AITaskStart{}, err }
 	taskID := domain.NewID()
-	settings, settingsErr := a.AIRuntimeSettings()
-	if settingsErr != nil { a.aiMu.Unlock(); return AITaskStart{}, settingsErr }
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(settings.TaskTimeoutMinutes)*time.Minute)
 	a.aiTasks[taskID] = &aiRunningTask{cancel: cancel, conversationID: c.ID}
 	a.aiMu.Unlock()
