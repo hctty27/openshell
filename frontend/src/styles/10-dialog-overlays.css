@@ -10,6 +10,10 @@
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
 }
+/* Compact dialogs own their content padding; full-layout dialogs use internal sections. */
+.modal-surface.compact-dialog {
+  padding: 24px;
+}
 .modal-surface:not([open]) { display: none !important; }
 .modal-surface::backdrop {
   background: var(--overlay);

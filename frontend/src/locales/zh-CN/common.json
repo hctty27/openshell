@@ -67,6 +67,8 @@
   "connectionBlockedVerifyWhyTheServerKeyChanged": "连接已阻止。请核验服务器重装或密钥变化原因，第一版不直接覆盖已信任指纹。",
   "verifyTheFingerprintWithYourServerAdministratorOr": "请与服务器管理员或已知记录核对指纹，确认后保存并继续连接。",
   "trustAndConnect": "信任并连接",
+  "copyFingerprint": "复制指纹",
+  "fingerprintCopied": "指纹已复制",
   "sendTerminalTextToAi": "发送终端文本给 AI",
   "closePreview": "关闭预览",
   "onlyTheTextBelowWillBeSentCommon": "仅发送下方文本。常见敏感字段已尝试遮盖，请检查内容。",

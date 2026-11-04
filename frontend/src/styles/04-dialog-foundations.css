@@ -169,7 +169,10 @@
   color: var(--accent);
 }
 .compact-dialog h2 {
-  margin-top: 15px;
+  margin-top: 12px;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
 }
 .compact-dialog > p {
   font-size: 12px;
@@ -193,6 +196,34 @@
   color: var(--accent);
   font-size: 11px;
   line-height: 1.8;
+}
+.host-fingerprint-dialog .fingerprint-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 10px 10px 12px;
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.host-fingerprint-dialog .fingerprint-field .fingerprint {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+  font: 11px/1.75 "Cascadia Mono", Consolas, monospace;
+}
+.host-fingerprint-dialog .fingerprint-copy {
+  flex: none;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 6px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--raised);
 }
 .context-dialog {
   width: 650px;

@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Server,
   ShieldCheck,
+  Copy,
   LoaderCircle,
   AlertCircle,
   Check,
@@ -1598,7 +1599,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       )}
       {challenge && (
         <ModalSurface
-          className="compact-dialog"
+          className="compact-dialog host-fingerprint-dialog"
           aria-label={challenge.host.changed ? tr("common:serverFingerprintChanged") : tr("common:verifyServerFingerprint")}
           onDismiss={() => setChallenge(null)}
           closeOnBackdrop={false}
@@ -1610,7 +1611,25 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 : tr("common:verifyServerFingerprint")}
             </h2>
             <p className="muted">{challenge.host.address}</p>
-            <code className="fingerprint">{challenge.host.fingerprint}</code>
+            <div className="fingerprint-field">
+              <code className="fingerprint">{challenge.host.fingerprint}</code>
+              <button
+                type="button"
+                className="fingerprint-copy"
+                title={tr("common:copyFingerprint")}
+                aria-label={tr("common:copyFingerprint")}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(challenge.host.fingerprint);
+                    setNotice(message("common:fingerprintCopied"));
+                  } catch (error) {
+                    notify(error);
+                  }
+                }}
+              >
+                <Copy size={15} />
+              </button>
+            </div>
             <p>
               {challenge.host.changed
                 ? tr("common:connectionBlockedVerifyWhyTheServerKeyChanged")
