@@ -251,6 +251,31 @@ test("large directory metadata is cached across transfers and selection changes"
   }
 });
 
+test("large-directory rows keep live selection handlers after memoized updates", async () => {
+  const entries = Array.from({ length: 240 }, (_, index) =>
+    file(`log-${index}.txt`, `/root/log-${index}.txt`));
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
+    side === "remote" ? entries : []);
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+  await screen.findByText("log-239.txt");
+
+  fireEvent.click(row("remote", "log-1.txt"));
+  fireEvent.click(row("remote", "log-3.txt"), { ctrlKey: true });
+  expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(2);
+
+  // Previously unchanged rows are memoized, but their handlers must read
+  // the latest selection anchor instead of capturing the initial props.
+  fireEvent.click(row("remote", "log-6.txt"), { shiftKey: true });
+  expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(6);
+  expect(row("remote", "log-1.txt").classList.contains("selected")).toBe(true);
+  expect(row("remote", "log-6.txt").classList.contains("selected")).toBe(true);
+
+  fireEvent.keyDown(within(pane("remote")).getByRole("list"), { key: "Escape" });
+  expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(0);
+  fireEvent.click(row("remote", "log-239.txt"));
+  expect(row("remote", "log-239.txt").classList.contains("selected")).toBe(true);
+});
+
 test("right-clicking a selected SFTP item keeps the multi-selection and deletes both after one confirmation", async () => {
   setupBatchFiles();
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
