@@ -1,11 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Server, Sparkles, Square, Trash2 } from "lucide-react";
+import { ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Server, Sparkles, Square } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, AIContextStats, AITargetBinding, Tab } from "../types";
 import AIModelPicker from "./AIModelPicker";
 import AIDropdownSurface from "./AIDropdownSurface";
 import AISendControl from "./AISendControl";
 import AIContextIndicator from "./AIContextIndicator";
+import AIHistoryPopover from "./AIHistoryPopover";
+import { AI_RUNTIME_SETTINGS_CHANGED, defaultAIRuntimeSettings } from "./AIBehaviorSettings";
+import type { AIRuntimeSettings } from "../types";
 import { readAIExecutionMode, saveAIExecutionMode, type AIExecutionMode } from "../features/ai/executionModePreference";
 import AITranscript from "./AITranscript";
 import { belongsToConversationScope } from "../features/ai/conversationScope";
@@ -52,6 +55,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [search, setSearch] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [showTargets, setShowTargets] = useState(false);
+  const historyTriggerRef = useRef<HTMLButtonElement>(null);
   const targetTriggerRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [running, setRunning] = useState<AIStartResponse | null>(null);
@@ -62,6 +66,22 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [status, setStatus] = useState("");
   const [contextInfo, setContextInfo] = useState<AIContextStats | null>(null);
   const [compacting, setCompacting] = useState(false);
+  const [runtimeSettings, setRuntimeSettings] = useState<AIRuntimeSettings>(defaultAIRuntimeSettings);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      if (typeof api.AIRuntimeSettings !== "function") return;
+      void api.AIRuntimeSettings()
+        .then(next => { if (active) setRuntimeSettings(next); })
+        .catch(() => {});
+    };
+    refresh();
+    window.addEventListener(AI_RUNTIME_SETTINGS_CHANGED, refresh);
+    return () => {
+      active = false;
+      window.removeEventListener(AI_RUNTIME_SETTINGS_CHANGED, refresh);
+    };
+  }, []);
   const finishedTasks = useRef(new Set<string>());
   const activeTaskRef = useRef("");
   const currentConversationRef = useRef("");
@@ -74,7 +94,10 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   };
 
   useEffect(() => {
-    if (!isOpen) setShowTargets(false);
+    if (!isOpen) {
+      setShowTargets(false);
+      setShowHistory(false);
+    }
   }, [isOpen]);
 
   const onMessagesScroll = () => {
@@ -344,7 +367,22 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
       <header className={`ai-header panel-header${isTerminal ? " workspace-panel-header" : ""}`}>
         <strong className="panel-header-title" title={isTerminal ? `${active?.session.name ?? ""} · ${active?.session.username ?? ""}@${active?.session.host ?? ""}` : undefined}>{isTerminal ? <span className="workspace-panel-dot" aria-hidden="true" /> : <Sparkles size={15} />}<span>{t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")}</span></strong>
         <div className="ai-header-actions panel-header-actions">
-          <button title={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")} aria-label={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")} onClick={() => setShowHistory(!showHistory)}><History size={15} /></button>
+          <AIContextIndicator
+            stats={contextInfo ?? (model ? { window: model.contextWindow || 32768, estimatedTokens: 0, lastPromptTokens: 0, compactionCount: 0, isEstimate: true } : null)}
+            compacting={compacting} disabled={!conversationID || !!running || submitting}
+            autoCompact={runtimeSettings.autoCompact} compactThreshold={runtimeSettings.compactThreshold}
+            historyOpen={showHistory} onOpen={() => setShowHistory(false)}
+            onCompact={() => void compactHistory()} />
+          <button type="button" ref={historyTriggerRef}
+            title={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")}
+            aria-label={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")}
+            aria-haspopup="dialog" aria-expanded={showHistory}
+            onClick={() => {
+              if (!showHistory) setSearch("");
+              setShowHistory(!showHistory);
+            }}>
+            <History size={15} />
+          </button>
           <button type="button" title={t("ai:newConversation")} aria-label={t("ai:newConversation")} onClick={newConversation} disabled={!!running}><Plus size={15} /></button>
           {!isTerminal && (
             <button type="button" className="sidebar-pin-toggle" aria-pressed={pinned}
@@ -357,22 +395,13 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
       </header>
 
       <>
-          {showHistory && (
-            <div className="ai-history">
-              <label className="ai-search"><Search size={14} /><input placeholder={t(isTerminal ? "ai:searchTerminalConversations" : "ai:searchConversations")} value={search} onChange={e => setSearch(e.target.value)} /></label>
-              <div className="ai-history-results">
-                {filteredHistory.map(item => (
-                  <div key={item.id} className="ai-history-entry">
-                    <button title={item.title} onClick={() => selectConversation(item)}>
-                      <span>{item.title}</span><small>{new Date(item.updatedAt).toLocaleString()}</small>
-                    </button>
-                    <button title={t("ai:deleteConversation")} onClick={() => void removeHistory(item.id)}><Trash2 size={13} /></button>
-                  </div>
-                ))}
-                {filteredHistory.length === 0 && <p className="ai-muted">{t("ai:noMatchingConversations")}</p>}
-              </div>
-            </div>
-          )}
+          {showHistory && <AIHistoryPopover
+            items={filteredHistory} selectedID={conversationID} query={search} onQueryChange={setSearch}
+            title={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")}
+            searchPlaceholder={t(isTerminal ? "ai:searchTerminalConversations" : "ai:searchConversations")}
+            terminal={isTerminal} triggerRef={historyTriggerRef}
+            onSelect={selectConversation} onDelete={id => void removeHistory(id)}
+            onClose={() => setShowHistory(false)} />}
           {isTerminal && (terminalAlternate || !terminalSingleTarget) && (
             <div className="ai-session-warning ai-execution-warning" role="status">
               {terminalAlternate ? t("ai:interactiveProgram") : t("ai:terminalOnlyOne")}
@@ -463,10 +492,6 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
             </div>
                   )}
                 </div>
-                <AIContextIndicator
-                  stats={contextInfo ?? (model ? { window: model.contextWindow || 32768, estimatedTokens: 0, lastPromptTokens: 0, compactionCount: 0, isEstimate: true } : null)}
-                  compacting={compacting} disabled={!conversationID || !!running || submitting}
-                  onCompact={() => void compactHistory()} />
                 {running ? <button type="button" title={t("ai:stopTask")} aria-label={t("ai:stopTask")}
                     className="ai-stop-button" onClick={() => void api.AIStop(running.taskId)}><Square size={15} /></button> :
                   <AISendControl mode={mode} onModeChange={changeMode} modeDisabled={submitting}

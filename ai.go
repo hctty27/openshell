@@ -208,6 +208,8 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	c.TargetBindings = bindings
 	c.Messages = append(c.Messages, store.AIMessage{Role: "user", Content: req.Text})
 	c.Context = aiContextState(c, provider, req.ModelID, 0)
+	settings, settingsErr := a.AIRuntimeSettings()
+	if settingsErr != nil { return AITaskStart{}, settingsErr }
 	a.aiMu.Lock()
 	if a.aiTasks == nil { a.aiTasks = make(map[string]*aiRunningTask) }
 	for _, running := range a.aiTasks {
@@ -218,14 +220,14 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	}
 	if err := a.store.SaveAIConversation(ctx, c); err != nil { a.aiMu.Unlock(); return AITaskStart{}, err }
 	taskID := domain.NewID()
-	runCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	runCtx, cancel := context.WithTimeout(ctx, time.Duration(settings.TaskTimeoutMinutes)*time.Minute)
 	a.aiTasks[taskID] = &aiRunningTask{cancel: cancel, conversationID: c.ID}
 	a.aiMu.Unlock()
 	a.emit("ai:conversation", c)
 	if terminalLease != nil { a.emit("ai:terminal-control",map[string]any{"taskId":taskID,"ref":terminalLease.Ref(),"active":true}) }
 	accepted = true
 	language, _ := a.language()
-	go a.runAI(runCtx, cancel, taskID, c, provider, allowed, terminalLease, language)
+	go a.runAI(runCtx, cancel, taskID, c, provider, allowed, terminalLease, language, settings)
 	return AITaskStart{TaskID:taskID, ConversationID:c.ID}, nil
 }
 
@@ -249,7 +251,7 @@ func (a *App) stopAllAI() {
 	a.aiMu.Unlock()
 }
 
-func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID string, c store.AIConversation, provider store.AIProvider, allowed map[string]domain.ConnectionRef, terminalLease *sshclient.AITerminalLease, language string) {
+func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID string, c store.AIConversation, provider store.AIProvider, allowed map[string]domain.ConnectionRef, terminalLease *sshclient.AITerminalLease, language string, settings AIRuntimeSettings) {
 	if terminalLease != nil {
 		defer func(){
 			terminalLease.Release()
@@ -327,7 +329,7 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 	historyEnd := len(c.Messages) - 1
 	if historyEnd < 0 { historyEnd = 0 }
 	end("running", "")
-	for step:=0; step<12; step++ {
+	for step:=0; step<settings.MaxSteps; step++ {
 		if err := ctx.Err(); err != nil { end("cancelled", err.Error()); return }
 		chatMessages := aiPreparedMessages(c, system, historyEnd, false)
 		estimated := aiEstimateRequest(chatMessages, toolSpec)
@@ -340,11 +342,11 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 		if window/8 < reserve { reserve = window/8 }
 		for attempt := 0; attempt < 2; attempt++ {
 			projected := estimated + reserve
-			if (attempt == 0 && projected*100 < window*90) ||
+			if !settings.AutoCompact || (attempt == 0 && projected*100 < window*settings.CompactThreshold) ||
 				(attempt > 0 && projected*100 <= window*60) ||
-				aiCompactBoundary(c, historyEnd) <= c.CompactedThrough { break }
+				aiCompactBoundary(c, historyEnd, settings.KeepRecentTurns) <= c.CompactedThrough { break }
 			a.emit("ai:context", map[string]any{"conversationId":c.ID, "status":"compacting"})
-			_, compactErr := a.aiCompact(ctx, &c, provider, key, historyEnd)
+			_, compactErr := a.aiCompact(ctx, &c, provider, key, historyEnd, settings.KeepRecentTurns)
 			if compactErr != nil { end("failed", "自动压缩上下文失败: "+compactErr.Error()); return }
 			chatMessages = aiPreparedMessages(c, system, historyEnd, true)
 			estimated = aiEstimateRequest(chatMessages, toolSpec)
@@ -376,7 +378,7 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 			if ctx.Err() != nil { end("cancelled",ctx.Err().Error()); return }
 		}
 	}
-	end("failed", aiPromptText(language, "The task reached the maximum number of steps (12).", "已到达单次任务最大执行步数（12）"))
+	end("failed", fmt.Sprintf(aiPromptText(language, "The task reached the maximum number of steps (%d).", "已到达单次任务最大执行步数（%d）"), settings.MaxSteps))
 }
 
 func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToolCall, allowed map[string]domain.ConnectionRef, mode string, terminalLease *sshclient.AITerminalLease) string {

@@ -17,6 +17,8 @@ import type {
 } from "./types";
 type Backend = {
   AIProviders(): Promise<import("./types").AIProvider[]>;
+  AIRuntimeSettings(): Promise<import("./types").AIRuntimeSettings>;
+  AISaveRuntimeSettings(settings: import("./types").AIRuntimeSettings): Promise<void>;
   AISaveProvider(req: {provider: import("./types").AIProvider; apiKey: string}): Promise<import("./types").AIProvider>;
   AIDeleteProvider(id: string): Promise<void>;
   AIConversations(): Promise<import("./types").AIConversation[]>;

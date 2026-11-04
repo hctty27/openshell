@@ -142,5 +142,18 @@
   "aiModelIDs": "Model IDs (one per line)",
   "aiModelIDsHelp": "Enter one model ID per line, optionally followed by '| token limit' (for example: gpt-model | 262144). Default: 32768; maximum: 262144.",
   "aiProviderSaved": "API provider saved",
-  "aiModelWindowInvalid": "Invalid model ID or context window (4096–262144)."
+  "aiModelWindowInvalid": "Invalid model ID or context window (4096–262144).",
+  "aiRuntimeTitle": "AI context and execution",
+  "aiRuntimeDescription": "Customize automatic compaction and per-task limits. Changes apply to new tasks.",
+  "aiAutoCompact": "Automatically compact context",
+  "aiCompactThreshold": "Compaction threshold",
+  "aiMaxSteps": "Maximum model rounds per task",
+  "aiTaskTimeout": "Task timeout",
+  "aiMinutes": "min",
+  "aiTurns": "turns",
+  "aiAdvancedSettings": "Advanced settings",
+  "aiKeepRecentTurns": "Keep recent full turns",
+  "aiRuntimeSafetyNote": "When automatic compaction is off, manual compaction remains available. Requests over the model budget stop without deleting history. Full chat history is always preserved.",
+  "aiRuntimeSaved": "AI runtime settings saved",
+  "saveAIBehavior": "Save AI settings"
 }

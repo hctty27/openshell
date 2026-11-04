@@ -85,5 +85,11 @@
   "compactCount": "压缩次数",
   "compactNow": "手动压缩上下文",
   "compacting": "正在压缩…",
-  "contextNoHistory": "没有可压缩的历史记录"
+  "contextNoHistory": "没有可压缩的历史记录",
+  "atThreshold": "达到 {{threshold}}%",
+  "autoCompactOff": "已关闭",
+  "historyToday": "今天",
+  "historyYesterday": "昨天",
+  "historyEarlier": "更早",
+  "currentConversation": "当前对话"
 }
