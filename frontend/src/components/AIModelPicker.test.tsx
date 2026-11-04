@@ -89,3 +89,22 @@ test("model picker labels follow the current language", async () => {
   expect(screen.getByRole("combobox", { name: "Choose AI model" })).toBeTruthy();
   expect(screen.getByText("Model unavailable. Select another model.")).toBeTruthy();
 });
+
+test("model popup uses a body portal and dismisses on outside pointer down", () => {
+  render(<div className="ai-compose">
+    <AIModelPicker providers={providers} providerID="p1" modelID="gpt-6" onChange={vi.fn()} />
+  </div>);
+  fireEvent.click(screen.getByRole("combobox", { name: "选择 AI 模型" }));
+  expect(screen.getByRole("listbox").closest(".ai-dropdown-popover")?.parentElement).toBe(document.body);
+  fireEvent.pointerDown(document.body);
+  expect(screen.queryByRole("listbox")).toBeNull();
+});
+
+test("Escape dismisses the model popup and restores trigger focus", () => {
+  render(<AIModelPicker providers={providers} providerID="p1" modelID="gpt-6" onChange={vi.fn()} />);
+  const trigger = screen.getByRole("combobox", { name: "选择 AI 模型" });
+  fireEvent.click(trigger);
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("listbox")).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
