@@ -560,7 +560,6 @@ test("terminal viewport aligns its scrollbar and avoids bottom gutter across the
     const glyphs = screen.getBoundingClientRect();
     const scroll = scrollbar.getBoundingClientRect();
     const xtermStyle = getComputedStyle(xterm);
-    const rowHeight = pane.querySelector(".xterm-rows > div")?.getBoundingClientRect().height ?? 0;
     return {
       backgrounds: [container, pane, xterm, viewport].map((el) =>
         getComputedStyle(el).backgroundColor
@@ -591,7 +590,6 @@ test("terminal viewport aligns its scrollbar and avoids bottom gutter across the
       paneBottom: inner.bottom,
       contentRight: content.right,
       contentBottom: content.bottom,
-      rowHeight,
       scrollbarWidth: scroll.width,
     };
   });
@@ -614,8 +612,8 @@ test("terminal viewport aligns its scrollbar and avoids bottom gutter across the
   expect(Math.abs(dark.scrollbarRightInset)).toBeLessThan(1);
   expect(dark.screenRight).toBeLessThanOrEqual(dark.contentRight + 1);
   expect(dark.screenBottom).toBeLessThanOrEqual(dark.contentBottom + 1);
-  expect(dark.rowHeight).toBeGreaterThan(0);
-  expect(dark.contentBottom - dark.screenBottom).toBeLessThan(dark.rowHeight + 1);
+  // WebGL does not render measurable .xterm-rows DOM cells; bound leftover pixels directly.
+  expect(dark.contentBottom - dark.screenBottom).toBeLessThan(24);
   expect(dark.scrollbarWidth).toBe(8);
 
   await page.setViewportSize({ width: 1040, height: 630 });
@@ -625,7 +623,7 @@ test("terminal viewport aligns its scrollbar and avoids bottom gutter across the
   expect(resized.xtermPadding).toEqual(["8px", "0px", "0px", "8px"]);
   expect(resized.screenRight).toBeLessThanOrEqual(resized.contentRight + 1);
   expect(resized.screenBottom).toBeLessThanOrEqual(resized.contentBottom + 1);
-  expect(resized.contentBottom - resized.screenBottom).toBeLessThan(resized.rowHeight + 1);
+  expect(resized.contentBottom - resized.screenBottom).toBeLessThan(24);
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "终端", exact: true }).click();
