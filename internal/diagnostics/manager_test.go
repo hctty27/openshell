@@ -1,0 +1,102 @@
+package diagnostics
+
+import (
+    "archive/zip"
+    "encoding/json"
+    "os"
+    "path/filepath"
+    "strings"
+    "testing"
+    "time"
+)
+
+func TestNormalizeRejectsFreeformIdentifiers(t *testing.T) {
+    input := Event{
+        Module: "ssh /root/.ssh/id_rsa",
+        Operation: "Connect?token=sk-secret",
+        Status: "error", Code: "bad\nsecret", DurationMS: -12,
+    }
+    event := normalize(input)
+    if strings.ContainsAny(event.Module+event.Operation+event.Code, " /?=\n") {
+        t.Fatalf("unsafe identifier: %#v", event)
+    }
+    if event.Level != "ERROR" || event.DurationMS != 0 {
+        t.Fatalf("unexpected normalization: %#v", event)
+    }
+}
+
+func TestRecordsAndExportsOnlyCategoricalData(t *testing.T) {
+    dir := t.TempDir()
+    manager, err := Open(dir)
+    if err != nil { t.Fatal(err) }
+    defer manager.Close()
+    manager.RecordBatch([]Event{
+        {Module: "ssh", Operation: "Connect", Status: "ok", DurationMS: 23},
+        {Module: "sftp", Operation: "SFTPList", Status: "slow", DurationMS: 1200},
+        {Module: "frontend", Operation: "uncaught_error", Status: "error", Code: "uncaught_error"},
+    })
+    manager.flush()
+    snap := manager.Snapshot()
+    if snap.Recorded != 3 || len(snap.Events) != 3 {
+        t.Fatalf("snapshot: %#v", snap)
+    }
+    if !snap.DiskEnabled || len(snap.Operations) != 3 { t.Fatalf("missing stats: %#v", snap) }
+    path, err := manager.Export()
+    if err != nil { t.Fatal(err) }
+    if !strings.HasPrefix(path, filepath.Join(dir, "reports")) { t.Fatalf("unsafe output path: %s", path) }
+    info, err := os.Stat(path)
+    if err != nil { t.Fatal(err) }
+    if info.Mode().Perm()&0077 != 0 { t.Fatalf("export permissions: %v", info.Mode()) }
+    archive, err := zip.OpenReader(path)
+    if err != nil { t.Fatal(err) }
+    defer archive.Close()
+    found := make(map[string]bool)
+    for _, file := range archive.File {
+        found[file.Name] = true
+        if file.Name == "summary.json" {
+            reader, err := file.Open()
+            if err != nil { t.Fatal(err) }
+            var summary Snapshot
+            err = json.NewDecoder(reader).Decode(&summary)
+            _ = reader.Close()
+            if err != nil || summary.Recorded != 3 { t.Fatalf("summary: %#v, %v", summary, err) }
+        }
+    }
+    if !found["manifest.json"] || !found["summary.json"] || !found["logs/app.jsonl"] {
+        t.Fatalf("unexpected archive files: %#v", found)
+    }
+}
+
+func TestRotatesLogsWithoutOversizedHistory(t *testing.T) {
+    dir := t.TempDir()
+    if err := os.WriteFile(filepath.Join(dir, "app.jsonl"), make([]byte, maxLogBytes-10), 0600); err != nil {
+        t.Fatal(err)
+    }
+    manager, err := Open(dir)
+    if err != nil { t.Fatal(err) }
+    manager.Record(Event{Module: "ssh", Operation: "Connect", Status: "ok"})
+    manager.flush()
+    manager.Close()
+    if _, err := os.Stat(filepath.Join(dir, "app.1.jsonl")); err != nil { t.Fatal(err) }
+    info, err := os.Stat(filepath.Join(dir, "app.jsonl"))
+    if err != nil { t.Fatal(err) }
+    if info.Size() <= 0 || info.Size() > maxLogBytes { t.Fatalf("rotated size: %d", info.Size()) }
+}
+
+func TestConcurrentCloseAndRecord(t *testing.T) {
+    manager, err := Open(t.TempDir())
+    if err != nil { t.Fatal(err) }
+    done := make(chan struct{})
+    go func() {
+        defer close(done)
+        for i := 0; i < 1000; i++ {
+            manager.Record(Event{Module: "terminal", Operation: "xterm_write_batch", Status: "ok"})
+        }
+    }()
+    manager.Close()
+    select {
+    case <-done:
+    case <-time.After(2 * time.Second): t.Fatal("record blocked on shutdown")
+    }
+    manager.Close()
+}
