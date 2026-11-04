@@ -270,7 +270,7 @@ export default function AIProviderSettings({ onDirtyChange }: Props) {
           </form>
         </div>
       ) : (
-        <AIBehaviorSettings section={section} onDirtyChange={setRuntimeDirty} />
+        <AIBehaviorSettings key={section} section={section} onDirtyChange={setRuntimeDirty} />
       )}
     </section>
   );
