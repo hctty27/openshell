@@ -52,6 +52,10 @@ function enqueue(event: DiagnosticEvent): void {
   if (!flushTimer) flushTimer = setTimeout(flush, 1000);
 }
 
+export function isTrackedBackendOperation(method: string): boolean {
+  return Object.prototype.hasOwnProperty.call(operations, method);
+}
+
 export function recordBackendOperation(method: string, durationMs: number, failed: boolean): void {
   const kind = operations[method];
   if (!kind) return;
