@@ -70,15 +70,16 @@ test("AI output follows only the active task and respects manual scrollback", as
   act(() => events.get("ai:delta")?.({ taskId: "another-task", text: "ignore" }));
   expect(node.textContent).not.toContain("ignore");
   act(() => events.get("ai:delta")?.({ taskId: "task-1", text: "first" }));
-  expect(node.scrollTop).toBe(1200);
+  await waitFor(() => expect(node.scrollTop).toBe(1200));
   node.scrollTop = 200;
   fireEvent.scroll(node);
   act(() => events.get("ai:delta")?.({ taskId: "task-1", text: "second" }));
+  await waitFor(() => expect(node.textContent).toContain("second"));
   expect(node.scrollTop).toBe(200);
   node.scrollTop = 900;
   fireEvent.scroll(node);
   act(() => events.get("ai:delta")?.({ taskId: "task-1", text: "third" }));
-  expect(node.scrollTop).toBe(1200);
+  await waitFor(() => expect(node.scrollTop).toBe(1200));
 });
 
 test("AI auto-scroll resumes after reopening while at the bottom", async () => {

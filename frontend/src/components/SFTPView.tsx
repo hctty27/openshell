@@ -4,6 +4,7 @@ import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy,
 import { api, listen, errorText } from "../bridge";
 import type { Ref, SFTPEntry, SFTPTask, SFTPDocument } from "../types";
 import { mergeTransferHistory, sameTransferRef } from "../features/transfers/transferHistory";
+import { CoalescedTaskUpdates } from "../features/performance/coalescedTaskUpdates";
 import { useDialogs } from "./DialogProvider";
 import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMenu";
 import { i18n, t } from "../i18n";
@@ -199,12 +200,15 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     return ()=>{alive=false;};
   },[refID.tabId,refID.sessionId,refID.generation,remoteDir,versions.remote]);
   useEffect(()=>{
+    const updates = new CoalescedTaskUpdates<SFTPTask>(batch =>
+      setTasks(old => mergeTransferHistory(old, batch)));
     const off=listen("sftp:transfer",(task:SFTPTask)=>{
       if(!sameTransferRef(task?.ref, refID))return;
-      setTasks(old=>mergeTransferHistory(old,[task]));
+      // Running progress is visual-only; queue and terminal states remain immediate.
+      updates.enqueue(task, task.status !== "running");
       if(task.status==="completed")refresh(task.direction==="upload"?"remote":"local");
     });
-    return ()=>off();
+    return ()=>{off();updates.dispose();};
   },[refID.tabId,refID.sessionId,refID.generation]);
 
   const transfer = async (side:Side, paths:string[], dstDir:string) => {

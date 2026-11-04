@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { BatchedTextBuffer } from "../features/performance/batchedTextBuffer";
 import { ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Server, Sparkles, Square } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, AIContextStats, AITargetBinding, Tab } from "../types";
@@ -61,6 +62,11 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [running, setRunning] = useState<AIStartResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [stream, setStream] = useState("");
+  const streamBatcher = useRef<BatchedTextBuffer | null>(null);
+  const clearStream = () => {
+    streamBatcher.current?.clear();
+    setStream("");
+  };
   const [approval, setApproval] = useState<Approval | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -139,14 +145,16 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   }, [terminalScopeId]);
 
   useEffect(() => {
+    const buffer = new BatchedTextBuffer(delta => setStream(old => old + delta));
+    streamBatcher.current = buffer;
     const offConversation = listen("ai:conversation", (next: AIConversation) => {
       if (!belongsToConversationScope(next, terminalScopeId)) return;
       setConversations(old => [next, ...old.filter(item => item.id !== next.id)]
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
-      if (next.id === currentConversationRef.current) setStream("");
+      if (next.id === currentConversationRef.current) clearStream();
     });
     const offDelta = listen("ai:delta", (event: { taskId: string; text: string }) => {
-      if (activeTaskRef.current && event.taskId === activeTaskRef.current) setStream(old => old + event.text);
+      if (activeTaskRef.current && event.taskId === activeTaskRef.current) buffer.append(event.text);
     });
     const offState = listen("ai:state", (event: { taskId: string; status: string; detail: string }) => {
       if (!activeTaskRef.current || event.taskId !== activeTaskRef.current) return;
@@ -157,7 +165,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
         finishedTasks.current.add(event.taskId);
         activeTaskRef.current = "";
         setRunning(old => old?.taskId === event.taskId ? null : old);
-        setStream("");
+        clearStream();
         setApproval(null);
       }
     });
@@ -169,7 +177,11 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     const offApproval = listen("ai:approval", (event: Approval) => {
       if (activeTaskRef.current && event.taskId === activeTaskRef.current) setApproval(event);
     });
-    return () => { offConversation(); offDelta(); offState(); offApproval(); offContext(); };
+    return () => {
+      offConversation(); offDelta(); offState(); offApproval(); offContext();
+      buffer.dispose();
+      if (streamBatcher.current === buffer) streamBatcher.current = null;
+    };
   }, [terminalScopeId]);
 
   const connected = tabs.filter(tab => tab.status === "connected" && tab.ref && (!isTerminal || tab.id === active?.id));
@@ -299,7 +311,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setMode(item.mode);
     setShowHistory(false);
     setShowTargets(false);
-    setStream("");
+    clearStream();
     setStatus("");
     setError("");
   };
@@ -316,7 +328,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setProviderID(lastModelRef.current.providerId);
     setModelID(lastModelRef.current.modelId);
     setMessage("");
-    setStream("");
+    clearStream();
     setStatus("");
     setError("");
     setShowHistory(false);
@@ -345,7 +357,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     followOutputRef.current = true;
     setError("");
     setStatus("running");
-    setStream("");
+    clearStream();
     setSubmitting(true);
     try {
       const started = await api.AIStart({
