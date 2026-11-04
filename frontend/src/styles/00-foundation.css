@@ -210,7 +210,7 @@ kbd {
   flex: 0 0 auto;
   gap: 0;
 }
-.panel-header-actions button {
+.panel-header-actions > button {
   display: grid;
   place-items: center;
   width: 26px;
@@ -248,12 +248,12 @@ kbd {
   font-weight: 600;
 }
 .workspace-panel-header .panel-header-actions { gap: 0; }
-.workspace-panel-header .panel-header-actions button {
+.workspace-panel-header .panel-header-actions > button {
   width: 24px;
   height: 24px;
   padding: 0;
 }
-.workspace-panel-header .panel-header-actions button > svg {
+.workspace-panel-header .panel-header-actions > button > svg {
   width: 14px;
   height: 14px;
 }
