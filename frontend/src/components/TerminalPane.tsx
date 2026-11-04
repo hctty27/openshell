@@ -10,6 +10,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { api, errorText } from "../bridge";
 import { terminalOutputDispatcher } from "../features/terminal/terminalOutputDispatcher";
+import { TerminalOutputAcknowledger } from "../features/terminal/terminalOutputAcknowledger";
 import { Browser, Clipboard } from "@wailsio/runtime";
 import type { Tab, Ref, Theme, TerminalTheme, DisconnectBehavior, LocalShell } from "../types";
 import { resolveTerminalTheme } from "../terminalThemes";
@@ -66,6 +67,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
   const container = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const refit = useRef<(() => void) | null>(null);
+  const refreshEdgeBackground = useRef<() => void>(() => {});
   const imePositionRecovery = useRef<ReturnType<typeof attachImeFocusRecovery> | null>(null);
   const searchAddon = useRef<SearchAddon | null>(null);
   const logAddons = useRef<SearchAddon[]>([]);
@@ -92,23 +94,13 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
     let pastePending = false;
     let disposed = false;
     let lastReceivedSequence = 0;
-    let lastProcessedSequence = 0;
-    let lastAcknowledgedSequence = 0;
-    let acknowledgementScheduled = false;
-    const acknowledge = () => {
-      if (acknowledgementScheduled || (!local && !ref)) return;
-      acknowledgementScheduled = true;
-      queueMicrotask(() => {
-        acknowledgementScheduled = false;
-        if (lastProcessedSequence <= lastAcknowledgedSequence) return;
-        lastAcknowledgedSequence = lastProcessedSequence;
-        if (local) {
-          void api.AcknowledgeLocalTerminalOutput(p.tab.id, localID, lastAcknowledgedSequence).catch(() => {});
-        } else if (ref) {
-          void api.AcknowledgeTerminalOutput(ref, lastAcknowledgedSequence).catch(() => {});
-        }
-      });
-    };
+    const acknowledger = new TerminalOutputAcknowledger(sequence => {
+      if (local) {
+        void api.AcknowledgeLocalTerminalOutput(p.tab.id, localID, sequence).catch(() => {});
+      } else if (ref) {
+        void api.AcknowledgeTerminalOutput(ref, sequence).catch(() => {});
+      }
+    });
     const term = new Terminal({
       fontFamily: 'Cascadia Mono,Consolas,"Microsoft YaHei",monospace',
       fontSize: p.fontSize,
@@ -197,18 +189,29 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       alignmentFrame = requestAnimationFrame(correctGridPosition);
     };
     refit.current = applyGeometry;
+    let edgeBackgroundFrame = 0;
+    let appliedEdgeBackground: string | null = null;
     const syncEdgeBackground = () => {
-      const surface = container.current;
-      if (!surface || disposed) return;
-      const theme = resolveTerminalTheme(
-        callbacks.current.theme,
-        callbacks.current.terminalTheme,
-        callbacks.current.tab.session.terminalTheme,
-      );
-      const color = getTerminalEdgeBackground(term, theme);
-      if (color) surface.style.setProperty("--terminal-edge-background", color);
-      else surface.style.removeProperty("--terminal-edge-background");
+      // Background terminals continue parsing and ACKing output, but need no
+      // extra CSS updates until they become visible again.
+      if (disposed || edgeBackgroundFrame || !(callbacks.current.visible ?? callbacks.current.active)) return;
+      edgeBackgroundFrame = requestAnimationFrame(() => {
+        edgeBackgroundFrame = 0;
+        const surface = container.current;
+        if (disposed || !surface || !(callbacks.current.visible ?? callbacks.current.active)) return;
+        const theme = resolveTerminalTheme(
+          callbacks.current.theme,
+          callbacks.current.terminalTheme,
+          callbacks.current.tab.session.terminalTheme,
+        );
+        const color = getTerminalEdgeBackground(term, theme);
+        if (color === appliedEdgeBackground) return;
+        if (color) surface.style.setProperty("--terminal-edge-background", color);
+        else surface.style.removeProperty("--terminal-edge-background");
+        appliedEdgeBackground = color;
+      });
     };
+    refreshEdgeBackground.current = syncEdgeBackground;
     const bufferListener = term.buffer.onBufferChange(buffer => {
       syncEdgeBackground();
       if (!disposed && ref && !local) {
@@ -284,8 +287,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       // Go pauses reading at the high watermark and resumes only when
       // xterm.js has actually parsed the acknowledged bytes.
       term.write(bytes, () => {
-        lastProcessedSequence = Math.max(lastProcessedSequence, sequence);
-        acknowledge();
+        acknowledger.processedSequence(sequence);
         syncEdgeBackground();
         restoreClonedDirectory();
       });
@@ -541,11 +543,12 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
     return () => {
       disposed = true;
       if (alignmentFrame) cancelAnimationFrame(alignmentFrame);
+      if (edgeBackgroundFrame) cancelAnimationFrame(edgeBackgroundFrame);
+      if (refreshEdgeBackground.current === syncEdgeBackground) refreshEdgeBackground.current = () => {};
       container.current?.style.removeProperty("--terminal-edge-background");
-      // Unmounting intentionally discards any remaining terminal render buffer.
-      // Release its backend credits so the SSH reader cannot remain blocked.
-      lastProcessedSequence = lastReceivedSequence;
-      acknowledge();
+      // Unmounting discards outstanding xterm output. Release the Go
+      // backpressure window immediately so the SSH reader cannot stay blocked.
+      acknowledger.release(lastReceivedSequence);
       inputQueue.length = 0;
       observer.disconnect();
       window.removeEventListener("resize", onWindowResize);
@@ -662,16 +665,15 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
     const term = terminal.current;
     if (!term) return;
     term.options.theme = resolvedTheme;
-    const surface = container.current;
-    if (!surface) return;
-    const color = getTerminalEdgeBackground(term, resolvedTheme);
-    if (color) surface.style.setProperty("--terminal-edge-background", color);
-    else surface.style.removeProperty("--terminal-edge-background");
+    refreshEdgeBackground.current();
   }, [resolvedTheme]);
   useEffect(() => {
     if (p.visible ?? p.active) {
       requestAnimationFrame(() => {
-        if (callbacks.current.visible ?? callbacks.current.active) refit.current?.();
+        if (callbacks.current.visible ?? callbacks.current.active) {
+          refit.current?.();
+          refreshEdgeBackground.current();
+        }
       });
     }
   }, [p.visible ?? p.active]);
