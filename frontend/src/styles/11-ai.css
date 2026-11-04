@@ -464,7 +464,8 @@
   position: absolute;
   z-index: 40;
   top: calc(var(--chrome-bar-height) + 4px);
-  right: 8px;
+  /* Align with History when space allows; never extend past the panel edge. */
+  right: clamp(8px, calc(100% - 348px), 70px);
   left: auto;
   width: min(340px, calc(100% - 16px));
   min-width: 0;
@@ -476,6 +477,7 @@
   color: var(--text-primary);
   box-shadow: 0 12px 28px #0005;
 }
+.ai-history--terminal { right: clamp(8px, calc(100% - 348px), 42px); }
 .ai-history-search {
   display: flex;
   align-items: center;
