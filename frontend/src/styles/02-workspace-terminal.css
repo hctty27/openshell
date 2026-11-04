@@ -650,11 +650,11 @@
 .terminal-surface .xterm {
   box-sizing: border-box;
   height: 100%;
-  padding: 10px 0 8px 12px;
-  background-color: var(--terminal-background, var(--terminal-workspace));
+  padding: 0;
+  background-color: var(--terminal-edge-background, var(--terminal-background, var(--terminal-workspace)));
 }
 .terminal-surface .xterm .xterm-viewport {
-  background-color: var(--terminal-background, var(--terminal-workspace));
+  background-color: var(--terminal-edge-background, var(--terminal-background, var(--terminal-workspace)));
 }
 .terminal-surface .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical {
   opacity: 1;
@@ -665,7 +665,7 @@
 }
 .terminal-surface .xterm .xterm-scrollable-element > .xterm-scrollbar.xterm-vertical > .xterm-slider {
   box-sizing: border-box;
-  border-left: 8px solid transparent;
+  border-left: 3px solid transparent;
   border-radius: 9px;
   background-clip: padding-box;
   background-color: var(--terminal-scroll-thumb) !important;
