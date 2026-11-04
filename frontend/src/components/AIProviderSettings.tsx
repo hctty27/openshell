@@ -39,7 +39,7 @@ export default function AIProviderSettings() {
   const edit = (provider?: AIProvider) => {
     setDraft(provider ? { ...provider } : blankProvider());
     setKey("");
-    setModelText((provider?.models ?? []).map(model => model.id).join("\n"));
+    setModelText((provider?.models ?? []).map(model => model.contextWindow ? model.id + " | " + model.contextWindow : model.id).join("\n"));
     setError("");
     setSuccess("");
   };
@@ -51,8 +51,15 @@ export default function AIProviderSettings() {
     setError("");
     setSuccess("");
     try {
-      const ids = [...new Set(modelText.split(/[\r\n,]+/).map(value => value.trim()).filter(Boolean))];
-      const models = ids.map(id => ({ id, name: id }));
+      const rows = modelText.split(/[\r\n,]+/).map(value => value.trim()).filter(Boolean);
+      const models = [...new Map(rows.map(row => {
+        const [id, rawWindow, ...extra] = row.split("|").map(value => value.trim());
+        const contextWindow = rawWindow ? Number(rawWindow) : undefined;
+        if (!id || extra.length || (rawWindow && (!Number.isInteger(contextWindow) || contextWindow! < 4096 || contextWindow! > 262144))) {
+          throw new Error(t("settings:aiModelWindowInvalid"));
+        }
+        return [id, { id, name: id, contextWindow }] as const;
+      })).values()];
       const saved = await api.AISaveProvider({
         provider: { ...draft, name: draft.name.trim(), baseUrl: draft.baseUrl.trim(), models },
         apiKey: key.trim(),
@@ -138,7 +145,7 @@ export default function AIProviderSettings() {
           {t("settings:aiModelIDs")}
           <textarea value={modelText} disabled={busy} rows={4}
             onChange={event => setModelText(event.target.value)}
-            placeholder={"model-one\nmodel-two"} required />
+            placeholder={"model-one | 262144\nmodel-two | 32768"} required />
         </label>
         <p className="muted small">{t("settings:aiModelIDsHelp")}</p>
         {error && <p className="form-error" role="alert">{error}</p>}
