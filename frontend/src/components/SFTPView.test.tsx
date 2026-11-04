@@ -17,9 +17,10 @@ vi.mock("../bridge", () => ({
     SFTPHome: vi.fn(async () => ({ local: "C:/temp", remote: "/root" })),
     SFTPTransfers: vi.fn(async () => []),
     SaveTransferLocalDir: vi.fn(async () => {}),
-    SFTPList: vi.fn(async () => []),
     SFTPReadRemoteText: vi.fn(),
     SFTPSaveRemoteText: vi.fn(),
+    SFTPList: vi.fn(async () => []),
+    SFTPOperate: vi.fn(async () => {}),
   },
   listen: (_event: string, callback: (task: unknown) => void) => {
     transferEvents.callbacks.push(callback);
@@ -181,6 +182,92 @@ test("refreshing a loaded directory keeps its previous file rows visible", async
   expect(within(pane("local")).getByText("visible.txt")).toBeTruthy();
   await act(async () => { finishRefresh([entry]); });
   expect(within(pane("local")).getByText("visible.txt")).toBeTruthy();
+});
+
+const setupBatchFiles = () => {
+  const local = [file("local.txt", "C:/temp/local.txt")];
+  const remote = [
+    file("one.txt", "/root/one.txt"),
+    file("two.txt", "/root/two.txt"),
+    file("three.txt", "/root/three.txt"),
+  ];
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) => side === "local" ? local : remote);
+  return { local, remote };
+};
+
+const row = (side: "local" | "remote", name: string) =>
+  within(pane(side)).getByText(name).closest<HTMLButtonElement>(".sftp-file-row")!;
+
+test("SFTP selection supports Shift ranges, Ctrl+A and Escape within the focused pane", async () => {
+  setupBatchFiles();
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+  await screen.findByText("three.txt");
+
+  fireEvent.click(row("remote", "one.txt"));
+  fireEvent.click(row("remote", "three.txt"), { shiftKey: true });
+  expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(3);
+
+  const table=within(pane("remote")).getByRole("list");
+  fireEvent.keyDown(table, { key: "Escape" });
+  expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(0);
+  fireEvent.keyDown(table, { key: "a", ctrlKey: true });
+  expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(3);
+  expect(pane("local").querySelectorAll(".sftp-file-row.selected")).toHaveLength(0);
+});
+
+test("right-clicking a selected SFTP item keeps the multi-selection and deletes both after one confirmation", async () => {
+  setupBatchFiles();
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+  await screen.findByText("three.txt");
+
+  fireEvent.click(row("remote", "one.txt"));
+  fireEvent.click(row("remote", "two.txt"), { ctrlKey: true });
+  fireEvent.contextMenu(row("remote", "two.txt"));
+  expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(2);
+
+  fireEvent.click(await screen.findByRole("menuitem", { name: "删除选中的 2 项" }));
+  const dialog=await screen.findByRole("alertdialog");
+  expect(within(dialog).getByText(/2 个文件和 0 个文件夹/)).toBeTruthy();
+  expect(api.SFTPOperate).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+
+  await waitFor(() => expect(api.SFTPOperate).toHaveBeenCalledTimes(2));
+  expect(api.SFTPOperate).toHaveBeenNthCalledWith(1, ref, "remote", "delete", "/root/one.txt", "");
+  expect(api.SFTPOperate).toHaveBeenNthCalledWith(2, ref, "remote", "delete", "/root/two.txt", "");
+});
+
+test("Delete shortcut deletes only the focused pane selection", async () => {
+  setupBatchFiles();
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+  await screen.findByText("three.txt");
+
+  fireEvent.click(row("local", "local.txt"));
+  fireEvent.click(row("remote", "three.txt"));
+  fireEvent.keyDown(within(pane("remote")).getByRole("list"), { key: "Delete" });
+  const dialog=await screen.findByRole("alertdialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+
+  await waitFor(() => expect(api.SFTPOperate).toHaveBeenCalledTimes(1));
+  expect(api.SFTPOperate).toHaveBeenCalledWith(ref, "remote", "delete", "/root/three.txt", "");
+});
+
+test("batch deletion continues on individual failures and retains failed items for retry", async () => {
+  setupBatchFiles();
+  vi.mocked(api.SFTPOperate).mockRejectedValueOnce(new Error("access denied"));
+  const onNotice=vi.fn();
+  render(<DialogProvider><SFTPView refID={ref} onNotice={onNotice}/></DialogProvider>);
+  await screen.findByText("three.txt");
+
+  fireEvent.click(row("remote", "one.txt"));
+  fireEvent.click(row("remote", "two.txt"), { ctrlKey: true });
+  fireEvent.click(within(pane("remote")).getByRole("button", { name: "删除" }));
+  const dialog=await screen.findByRole("alertdialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: "删除" }));
+
+  await waitFor(() => expect(api.SFTPOperate).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(onNotice).toHaveBeenCalledWith(expect.stringContaining("access denied")));
+  expect(row("remote", "one.txt").classList.contains("selected")).toBe(true);
+  expect(row("remote", "two.txt").classList.contains("selected")).toBe(false);
 });
 
 test("SFTP saves a successfully visited local folder for the saved SSH session", async () => {
