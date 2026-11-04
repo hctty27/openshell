@@ -584,7 +584,7 @@ export default function SettingsDialog(p: Props) {
                 {t("settings:saveSettings")}
               </button>
             )}
-            {(tab === "general" || tab === "terminal") && (
+            {(tab === "appearance" || tab === "terminal") && (
               <button
                 className="primary"
                 disabled={busy}
