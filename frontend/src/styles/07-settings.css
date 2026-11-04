@@ -520,3 +520,58 @@
   margin-right: auto;
   color: var(--danger);
 }
+
+/* AI runtime preferences extend the existing AI settings tab. */
+.settings-ai-runtime {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.settings-ai-runtime > h4 {
+  margin: 0 0 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.settings-ai-runtime > p {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.settings-ai-runtime-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 43px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-ai-runtime-row label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.settings-ai-runtime-row select {
+  flex: 0 0 132px;
+  width: 132px;
+  min-width: 0;
+  height: 30px;
+  font-size: 12px;
+}
+.settings-ai-runtime-row select:disabled { opacity: .5; }
+.settings-ai-runtime-advanced { margin-top: 12px; }
+.settings-ai-runtime-advanced summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.settings-ai-runtime form > .muted.small {
+  margin: 12px 0 0;
+  line-height: 1.6;
+}
+.settings-ai-runtime-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.settings-ai-runtime-actions button { padding: 8px 13px; }
