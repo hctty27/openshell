@@ -6,6 +6,7 @@ interface Props {
   stats: AIContextStats | null;
   compacting: boolean;
   disabled: boolean;
+  disabledReason?: string;
   onCompact(): void;
   autoCompact?: boolean;
   compactThreshold?: number;
@@ -16,7 +17,7 @@ interface Props {
 const RING_CIRCUMFERENCE = 2 * Math.PI * 8;
 
 export default function AIContextIndicator({
-  stats, compacting, disabled, onCompact, autoCompact = true, compactThreshold = 90, historyOpen = false, onOpen,
+  stats, compacting, disabled, disabledReason, onCompact, autoCompact = true, compactThreshold = 90, historyOpen = false, onOpen,
 }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -94,22 +95,26 @@ export default function AIContextIndicator({
       <span className="ai-context-percent">{percentage}%</span>
     </button>
     {open && <div ref={popoverRef} className="ai-context-popover" role="dialog" aria-label={t("ai:contextUsage")}>
-      <strong className="ai-context-title">{t("ai:contextUsage")}</strong>
-      <div className="ai-context-summary">
-        <strong>{percentage}%</strong>
-        <span>{t("ai:contextEstimated")}</span>
+      <div className="ai-context-heading">
+        <strong className="ai-context-title">{t("ai:contextUsage")}</strong>
+        <strong className="ai-context-value">{percentage}%</strong>
       </div>
       <div className="ai-context-progress" role="progressbar" aria-label={t("ai:contextUsage")}
         aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage}>
         <span className={"is-" + state} style={{ width: percentage + "%" }} />
       </div>
-      <div className="ai-context-tokens">{used.toLocaleString()} / {limit.toLocaleString()} Tokens</div>
-      {!!stats?.lastPromptTokens && <p className="ai-context-note">{t("ai:lastPromptTokens")}: {stats.lastPromptTokens.toLocaleString()}</p>}
+      <div className="ai-context-tokens"
+        title={stats?.lastPromptTokens ? t("ai:lastPromptTokens") + ": " + stats.lastPromptTokens.toLocaleString() : undefined}>
+        <span>{used.toLocaleString()} / {limit.toLocaleString()} Tokens</span>
+        {(stats?.isEstimate ?? true) && <span className="ai-context-estimated">{t("ai:contextEstimateShort")}</span>}
+      </div>
       <div className="ai-context-divider" />
-      <div className="ai-context-row"><span>{t("ai:autoCompact")}</span><span>{autoCompact ? t("ai:atThreshold", { threshold: compactThreshold }) : t("ai:autoCompactOff")}</span></div>
+      <div className="ai-context-row"><span>{t("ai:autoCompact")}</span><span>{autoCompact ? compactThreshold + "%" : t("ai:autoCompactOff")}</span></div>
       <div className="ai-context-row"><span>{t("ai:compactCount")}</span><span>{stats?.compactionCount || 0}</span></div>
       <button type="button" className="ai-context-compact" disabled={disabled || compacting}
-        onClick={onCompact}>{compacting ? t("ai:compacting") : t("ai:compactNow")}</button>
+        title={disabled ? disabledReason : undefined}
+        onClick={onCompact}>{compacting ? t("ai:compacting") : t("ai:compactAction")}</button>
+      {disabled && disabledReason && <p className="ai-context-disabled-note">{disabledReason}</p>}
     </div>}
   </div>;
 }
