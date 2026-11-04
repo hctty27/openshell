@@ -46,5 +46,8 @@ func (a *App) DiagnosticsExport() (string, error) {
 }
 
 func closeDiagnostics() {
-    if diagnosticManager != nil { diagnosticManager.Close() }
+    // Go's sync.Once guarantees publication of the manager even when the
+    // frontend calls DiagnosticsSnapshot during application shutdown.
+    manager, err := currentDiagnostics()
+    if err == nil { manager.Close() }
 }
