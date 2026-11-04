@@ -16,7 +16,7 @@ import { buildRemoteCdCommand, decideCloneDirectoryAction, parseOsc7Directory, p
 import { useDialogs } from "./DialogProvider";
 import { attachImeFocusRecovery } from "../features/terminal/imeFocusRecovery";
 import { getTerminalEdgeBackground } from "../features/terminal/edgeBackground";
-import { calculateTerminalGeometry } from "../features/terminal/terminalGeometry";
+import { calculateGridCenteringCorrection, calculateTerminalGeometry } from "../features/terminal/terminalGeometry";
 const TERMINAL_SCROLLBAR_WIDTH = 8;
 
 interface Props {
@@ -127,17 +127,57 @@ export default function TerminalPane(p: Props) {
     }));
     terminal.current = term;
     term.open(container.current);
+    let alignmentFrame = 0;
+    const getScrollbarTrack = () =>
+      term.element?.querySelector<HTMLElement>(".xterm-scrollbar.xterm-vertical") ?? null;
+    const correctGridPosition = () => {
+      alignmentFrame = 0;
+      const surface = container.current;
+      const xterm = term.element;
+      const screen = term.screenElement;
+      const track = getScrollbarTrack();
+      if (disposed || !surface || !xterm || !screen || !track) return;
+      const outer = surface.getBoundingClientRect();
+      const grid = screen.getBoundingClientRect();
+      const scrollbar = track.getBoundingClientRect();
+      if (grid.width <= 0 || grid.height <= 0 || scrollbar.width <= 0) return;
+      const correction = calculateGridCenteringCorrection({
+        surfaceLeft: outer.left,
+        surfaceTop: outer.top,
+        surfaceBottom: outer.bottom,
+        gridLeft: grid.left,
+        gridRight: grid.right,
+        gridTop: grid.top,
+        gridBottom: grid.bottom,
+        scrollbarLeft: scrollbar.left,
+      });
+      if (!correction) return;
+      // Adjust the root's existing padding; never transform the screen or scrollbar.
+      if (Math.abs(correction.x) > 0.25) {
+        const left = Number.parseFloat(xterm.style.paddingLeft) || 0;
+        xterm.style.paddingLeft = `${Math.max(0, left + correction.x)}px`;
+      }
+      if (Math.abs(correction.y) > 0.25) {
+        const top = Number.parseFloat(xterm.style.paddingTop) || 0;
+        xterm.style.paddingTop = `${Math.max(0, top + correction.y)}px`;
+      }
+    };
     const applyGeometry = () => {
       const surface = container.current;
       const xterm = term.element;
       const cell = term.dimensions?.css.cell;
       if (disposed || !surface || !xterm || !cell) return;
+      const outer = surface.getBoundingClientRect();
+      const track = getScrollbarTrack()?.getBoundingClientRect();
+      const reservedWidth = track && track.width > 0 && track.left >= outer.left && track.left < outer.right
+        ? outer.right - track.left
+        : TERMINAL_SCROLLBAR_WIDTH;
       const layout = calculateTerminalGeometry({
         width: surface.clientWidth,
         height: surface.clientHeight,
         cellWidth: cell.width,
         cellHeight: cell.height,
-        scrollbarWidth: TERMINAL_SCROLLBAR_WIDTH,
+        scrollbarWidth: reservedWidth,
       });
       if (!layout) return;
       xterm.style.paddingLeft = `${layout.left}px`;
@@ -145,6 +185,8 @@ export default function TerminalPane(p: Props) {
       if (term.cols !== layout.cols || term.rows !== layout.rows) {
         term.resize(layout.cols, layout.rows);
       }
+      if (alignmentFrame) cancelAnimationFrame(alignmentFrame);
+      alignmentFrame = requestAnimationFrame(correctGridPosition);
     };
     refit.current = applyGeometry;
     const syncEdgeBackground = () => {
@@ -487,6 +529,7 @@ export default function TerminalPane(p: Props) {
     });
     return () => {
       disposed = true;
+      if (alignmentFrame) cancelAnimationFrame(alignmentFrame);
       container.current?.style.removeProperty("--terminal-edge-background");
       // Unmounting intentionally discards any remaining terminal render buffer.
       // Release its backend credits so the SSH reader cannot remain blocked.
