@@ -971,7 +971,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       <WindowTitleBar tabs={tabs}
         onSettings={() => setDialog({ kind: "settings" })}
         onNotice={notify} />
-      <div className="app-body">
+      <div className={`app-body ${showWorkspaceSidePanel ? "has-session-tool" : ""} ${aiOpen && !aiPinned ? "has-floating-global-ai" : ""}`}>
       <div
             ref={sidebarDockRef}
             className={`session-sidebar-dock ${sidebarMode === "auto-hide" ? "session-sidebar-dock--auto" : ""} ${autoSidebarOpen ? "is-open" : ""}`}
