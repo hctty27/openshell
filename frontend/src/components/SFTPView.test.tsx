@@ -266,8 +266,9 @@ test("large-directory rows keep live selection handlers after memoized updates",
   // Previously unchanged rows are memoized, but their handlers must read
   // the latest selection anchor instead of capturing the initial props.
   fireEvent.click(row("remote", "log-6.txt"), { shiftKey: true });
-  expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(6);
-  expect(row("remote", "log-1.txt").classList.contains("selected")).toBe(true);
+  expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(4);
+  expect(row("remote", "log-1.txt").classList.contains("selected")).toBe(false);
+  expect(row("remote", "log-3.txt").classList.contains("selected")).toBe(true);
   expect(row("remote", "log-6.txt").classList.contains("selected")).toBe(true);
 
   fireEvent.keyDown(within(pane("remote")).getByRole("list"), { key: "Escape" });
