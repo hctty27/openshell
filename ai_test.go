@@ -85,7 +85,9 @@ func TestAIConversationScopeLegacyAndExplicit(t *testing.T) {
 		{"legacy-global", store.AIConversation{Execution:"independent"}, "global", ""},
 		{"legacy-terminal", store.AIConversation{Execution:"terminal", TargetSessionIDs:[]string{"session-a"}}, "terminal", "session-a"},
 		{"explicit-global", store.AIConversation{Scope:"global", Execution:"terminal"}, "global", ""},
-		{"explicit-terminal", store.AIConversation{Scope:"terminal", ScopeID:"session-a:tab-b"}, "terminal", "session-a:tab-b"},
+		{"old-duplicate-terminal", store.AIConversation{Scope:"terminal", ScopeID:"session-a:tab-b", TargetSessionIDs:[]string{"session-a"}}, "terminal", "session-a"},
+		{"unbound-terminal", store.AIConversation{Scope:"terminal", ScopeID:"session-a:tab-b"}, "terminal", "session-a:tab-b"},
+		{"foreign-terminal-binding", store.AIConversation{Scope:"terminal", ScopeID:"session-a:tab-b", TargetSessionIDs:[]string{"session-z"}}, "terminal", "session-a:tab-b"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

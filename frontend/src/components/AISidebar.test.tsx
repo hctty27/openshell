@@ -290,3 +290,30 @@ test("multi-session summary stays compact and selection retains exact targets", 
   expect((choices[1] as HTMLInputElement).checked).toBe(false);
   expect((choices[2] as HTMLInputElement).checked).toBe(true);
 });
+
+test("new conversation stays a draft until its first message is submitted", async () => {
+  vi.mocked(api.AIProviders).mockResolvedValueOnce([{
+    id: "provider-1", name: "provider", baseUrl: "https://example.test/v1", hasKey: true,
+    models: [{ id: "model-1", name: "model" }],
+  }]);
+  vi.mocked(api.AIConversations).mockResolvedValueOnce([oldConversation()]);
+  await act(async () => render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+    pinned isOpen onTogglePin={vi.fn()} />));
+
+  fireEvent.click(screen.getByRole("button", { name: "全局对话记录" }));
+  fireEvent.click(screen.getByRole("button", { name: /历史 Docker 检查/ }));
+  fireEvent.click(screen.getByRole("button", { name: "新对话" }));
+
+  expect(api.AIStart).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "全局对话记录" }));
+  expect(document.querySelectorAll(".ai-history-entry")).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "全局对话记录" }));
+
+  fireEvent.change(screen.getByPlaceholderText("描述需要 AI 执行的任务..."), {
+    target: { value: "检查磁盘" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() => expect(api.AIStart).toHaveBeenCalledWith(expect.objectContaining({
+    conversationId: "", text: "检查磁盘",
+  })));
+});

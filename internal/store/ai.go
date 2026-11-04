@@ -99,7 +99,14 @@ func (s *Store) DeleteAIProvider(ctx context.Context, id string) error {
 }
 
 func (s *Store) AIConversations(ctx context.Context) ([]AIConversation, error) {
-	return list[AIConversation](ctx, s.db, "SELECT data FROM ai_conversations ORDER BY json_extract(data,'$.updatedAt') DESC")
+	conversations, err := list[AIConversation](ctx, s.db, "SELECT data FROM ai_conversations ORDER BY json_extract(data,'$.updatedAt') DESC")
+	if err != nil { return nil, err }
+	// Legacy empty drafts are not visible as saved conversations.
+	visible := make([]AIConversation, 0, len(conversations))
+	for _, conversation := range conversations {
+		if len(conversation.Messages) > 0 { visible = append(visible, conversation) }
+	}
+	return visible, nil
 }
 
 func (s *Store) GetAIConversation(ctx context.Context, id string) (AIConversation, error) {
@@ -113,6 +120,7 @@ func (s *Store) GetAIConversation(ctx context.Context, id string) (AIConversatio
 }
 
 func (s *Store) SaveAIConversation(ctx context.Context, c AIConversation) error {
+	if len(c.Messages) == 0 { return errors.New("空对话不保存") }
 	c.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	c.Title = strings.TrimSpace(c.Title)
 	if c.Title == "" { c.Title = "新对话" }
