@@ -347,7 +347,34 @@ func (m *Manager) Export() (string, error) {
     if closeErr := archive.Close(); err == nil { err = closeErr }
     if closeErr := output.Close(); err == nil { err = closeErr }
     if err != nil { _ = os.Remove(path); return "", err }
+    m.pruneReports(reportDir)
     return path, nil
+}
+
+// Keep only the three newest user-created reports for at most seven days.
+// Report cleanup is best-effort and does not block normal diagnostics.
+func (m *Manager) pruneReports(reportDir string) {
+    entries, err := os.ReadDir(reportDir)
+    if err != nil { return }
+    type report struct {
+        path string
+        modified time.Time
+    }
+    reports := make([]report, 0, len(entries))
+    for _, entry := range entries {
+        name := entry.Name()
+        if entry.IsDir() || !strings.HasPrefix(name, "openshell-diagnostics-") || !strings.HasSuffix(name, ".zip") {
+            continue
+        }
+        info, statErr := entry.Info()
+        if statErr != nil { continue }
+        reports = append(reports, report{path: filepath.Join(reportDir, name), modified: info.ModTime()})
+    }
+    sort.Slice(reports, func(i, j int) bool { return reports[i].modified.After(reports[j].modified) })
+    cutoff := time.Now().Add(-7 * 24 * time.Hour)
+    for i, report := range reports {
+        if i >= 3 || report.modified.Before(cutoff) { _ = os.Remove(report.path) }
+    }
 }
 
 func (m *Manager) Close() {
