@@ -425,6 +425,166 @@
 }
 
 
+
+.settings-about .settings-about-product {
+  gap: 16px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-about .settings-about-product img {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+}
+
+.settings-about .settings-about-product p {
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.settings-about-group {
+  margin-top: 24px;
+}
+
+.settings-about-group h4 {
+  margin: 0 0 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-about-details {
+  margin: 0;
+}
+
+.settings-about-details > div {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 42px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-about-details dt,
+.settings-about-details dd {
+  margin: 0;
+  font-size: 12px;
+}
+
+.settings-about-details dt {
+  color: var(--text-muted);
+}
+
+.settings-about-details dd {
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+.settings-about-email {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-dialog--settings .settings-about-text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.settings-about-text-link svg {
+  flex-shrink: 0;
+}
+
+.settings-dialog--settings .settings-about-copy {
+  display: inline-flex;
+  flex: 0 0 27px;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.settings-dialog--settings .settings-about-copy:hover,
+.settings-dialog--settings .settings-about-links button:hover {
+  background: var(--hover);
+}
+
+.settings-about-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-dialog--settings .settings-about-links button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-about-links button span {
+  flex: 1;
+}
+
+.settings-about-links button > svg:first-child {
+  color: var(--text-secondary);
+}
+
+.settings-about-links button > svg:last-child {
+  color: var(--text-muted);
+}
+
+.settings-about-feedback {
+  margin: 12px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.settings-about-footer {
+  margin: 24px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+@media (max-width: 700px) {
+  .settings-about-details > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 10px 0;
+  }
+}
+
 /* AI provider management lives in Settings, not in the chat sidebar. */
 .settings-ai-provider-list {
   display: flex;
