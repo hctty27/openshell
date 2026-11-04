@@ -140,6 +140,7 @@
   "aiAddProvider": "添加 API",
   "aiEditProvider": "编辑 API",
   "aiModelIDs": "模型 ID（每行一个）",
-  "aiModelIDsHelp": "同一个 API 可以添加多个模型，切换时无需重复配置密钥。",
-  "aiProviderSaved": "API 配置已保存"
+  "aiModelIDsHelp": "每行一个模型 ID，可在后面添加“| Token 上限”（例如 gpt-model | 262144）。未填写时默认 32768，最大 262144。",
+  "aiProviderSaved": "API 配置已保存",
+  "aiModelWindowInvalid": "模型 ID 或 Token 上限无效（范围 4096–262144）"
 }
