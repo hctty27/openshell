@@ -14,7 +14,7 @@ interface Props {
 }
 
 const VIEWPORT_GAP = 8;
-const ANCHOR_GAP = 6;
+const ANCHOR_GAP = 4;
 
 export default function AIDropdownSurface({
   open, anchorRef, onDismiss, children, align = "start",
@@ -35,15 +35,21 @@ export default function AIDropdownSurface({
       const preferredWidth = matchAnchorWidth ? rect.width : Math.max(rect.width, minWidth);
       const width = Math.max(0, Math.min(preferredWidth, viewportWidth - VIEWPORT_GAP * 2));
       surface.style.width = `${width}px`;
+      surface.style.overflowY = "hidden";
       surface.style.maxHeight = `${Math.max(0, Math.min(maxHeight, viewportHeight - VIEWPORT_GAP * 2))}px`;
 
-      const height = Math.min(surface.scrollHeight, maxHeight, viewportHeight - VIEWPORT_GAP * 2);
+      const style = getComputedStyle(surface);
+      const borderHeight = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth) || 0;
+      // scrollHeight includes padding but excludes borders. Reserve 1px for fractional scaling.
+      const naturalHeight = surface.scrollHeight + borderHeight + 1;
+      const height = Math.min(naturalHeight, maxHeight, viewportHeight - VIEWPORT_GAP * 2);
       const below = viewportHeight - rect.bottom - ANCHOR_GAP - VIEWPORT_GAP;
       const above = rect.top - ANCHOR_GAP - VIEWPORT_GAP;
       const placeBelow = below >= height || below >= above;
       const available = Math.max(0, placeBelow ? below : above);
       const visibleHeight = Math.min(height, available);
       surface.style.maxHeight = `${visibleHeight}px`;
+      surface.style.overflowY = naturalHeight > visibleHeight + 1 ? "auto" : "hidden";
 
       const desiredLeft = align === "end" ? rect.right - width : rect.left;
       const left = Math.max(VIEWPORT_GAP, Math.min(desiredLeft, viewportWidth - width - VIEWPORT_GAP));
