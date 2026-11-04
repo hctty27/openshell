@@ -99,11 +99,11 @@ export default function AIHistoryPopover({
               return <div key={item.id} className={"ai-history-entry" + (selected ? " is-active" : "")}>
                 <button type="button" className="ai-history-choice" onClick={() => onSelect(item)}
                   title={item.title} aria-current={selected ? "true" : undefined}>
-                  <span className="ai-history-entry-heading">
-                    <span className="ai-history-entry-title">{item.title}</span>
+                  <span className="ai-history-entry-title">{item.title}</span>
+                  <span className="ai-history-entry-meta">
+                    <small>{displayDate(item.updatedAt, group.key === "earlier")}</small>
                     {selected && <Check size={13} className="ai-history-selected" aria-hidden="true" />}
                   </span>
-                  <small>{displayDate(item.updatedAt, group.key === "earlier")}{selected ? " · " + t("ai:currentConversation") : ""}</small>
                 </button>
                 <button type="button" className="ai-history-delete" title={t("ai:deleteConversation") + ": " + item.title}
                   aria-label={t("ai:deleteConversation")} onClick={() => onDelete(item.id)}>
