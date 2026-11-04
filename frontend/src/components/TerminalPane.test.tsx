@@ -21,7 +21,6 @@ const refs = vi.hoisted(() => ({
   terms: [] as any[],
   webgl: [] as any[],
   searches: [] as any[],
-  fits: [] as any[],
   links: [] as Array<(event: MouseEvent, url: string) => void>,
 }));
 const events = vi.hoisted(() => ({ listeners: new Map<string, (payload: any) => void>() }));
@@ -31,6 +30,8 @@ vi.mock("@xterm/xterm", () => ({
     modes = { mouseTrackingMode: "none" };
     cols = 80;
     rows = 24;
+    element = document.createElement("div");
+    dimensions = { css: { cell: { width: 9, height: 18 } } };
     parser = {
       handlers: new Map<number, (payload: string) => boolean>(),
       registerOscHandler: vi.fn((id: number, cb: (payload: string) => boolean) => {
@@ -56,7 +57,12 @@ vi.mock("@xterm/xterm", () => ({
       this.keyHandler = callback;
     });
     getSelection = () => this.selected;
-    open = vi.fn();
+    open = vi.fn((host: HTMLElement) => { this.element.className = "xterm"; host.appendChild(this.element); });
+    resize = vi.fn((cols: number, rows: number) => {
+      this.cols = cols;
+      this.rows = rows;
+      this.resizeHandler({ cols, rows });
+    });
     write = vi.fn();
     focus = vi.fn();
     dispose = vi.fn();
@@ -103,13 +109,6 @@ vi.mock("@xterm/addon-webgl", () => ({
     });
     dispose = vi.fn();
     constructor() { refs.webgl.push(this); }
-  },
-}));
-vi.mock("@xterm/addon-fit", () => ({
-  FitAddon: class {
-    fit = vi.fn();
-    dispose = vi.fn();
-    constructor() { refs.fits.push(this); }
   },
 }));
 vi.mock("../bridge", () => ({
@@ -188,7 +187,6 @@ beforeEach(() => {
   refs.terms.length = 0;
   refs.webgl.length = 0;
   refs.searches.length = 0;
-  refs.fits.length = 0;
   refs.links.length = 0;
   events.listeners.clear();
   vi.clearAllMocks();
@@ -607,7 +605,7 @@ test("switching focus between visible split panes keeps the renderer and termina
   const { rerender } = render(renderPane(false));
   expect(refs.webgl).toHaveLength(1);
   const originalRenderer = refs.webgl[0];
-  refs.fits[0].fit.mockClear();
+  refs.terms[0].resize.mockClear();
 
   rerender(renderPane(true));
   rerender(renderPane(false));
@@ -616,10 +614,10 @@ test("switching focus between visible split panes keeps the renderer and termina
   expect(refs.terms).toHaveLength(1);
   expect(refs.webgl).toHaveLength(1);
   expect(originalRenderer.dispose).not.toHaveBeenCalled();
-  expect(refs.fits[0].fit).not.toHaveBeenCalled();
+  expect(refs.terms[0].resize).not.toHaveBeenCalled();
 });
 
-test("resize observer fits only when a visible pane actually changes size", () => {
+test("resize observer centers and resizes only when a visible pane changes size", () => {
   let notifyResize: ResizeObserverCallback = () => {};
   vi.stubGlobal("ResizeObserver", class {
     constructor(callback: ResizeObserverCallback) { notifyResize = callback; }
@@ -630,20 +628,25 @@ test("resize observer fits only when a visible pane actually changes size", () =
   const height = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(500);
   try {
     renderTerminal({ visible: true });
-    const fitAddon = refs.fits[0];
-    fitAddon.fit.mockClear();
+    const term = refs.terms[0];
+    term.resize.mockClear();
     act(() => {
       notifyResize([], {} as ResizeObserver);
       notifyResize([], {} as ResizeObserver);
     });
-    expect(fitAddon.fit).not.toHaveBeenCalled();
+    expect(term.resize).not.toHaveBeenCalled();
 
     width.mockReturnValue(640);
     act(() => { notifyResize([], {} as ResizeObserver); });
-    expect(fitAddon.fit).toHaveBeenCalledTimes(1);
+    expect(term.resize).toHaveBeenCalledTimes(1);
+    expect(term.resize).toHaveBeenLastCalledWith(68, 26);
+    const x = parseFloat(term.element.style.paddingLeft);
+    const y = parseFloat(term.element.style.paddingTop);
+    expect(x).toBeGreaterThanOrEqual(8);
+    expect(y).toBeGreaterThanOrEqual(8);
 
     act(() => { notifyResize([], {} as ResizeObserver); });
-    expect(fitAddon.fit).toHaveBeenCalledTimes(1);
+    expect(term.resize).toHaveBeenCalledTimes(1);
   } finally {
     width.mockRestore();
     height.mockRestore();
