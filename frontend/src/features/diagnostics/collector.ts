@@ -26,7 +26,6 @@ const pending: DiagnosticEvent[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let terminalCount = 0;
 let terminalMaxMS = 0;
-let terminalTotalMS = 0;
 let terminalTimer: ReturnType<typeof setTimeout> | null = null;
 let installed = false;
 
@@ -70,7 +69,6 @@ export function recordBackendOperation(method: string, durationMs: number, faile
 export function recordTerminalWrite(durationMs: number): void {
   if (!isDesktop()) return;
   terminalCount++;
-  terminalTotalMS += durationMs;
   terminalMaxMS = Math.max(terminalMaxMS, durationMs);
   if (terminalTimer) return;
   terminalTimer = setTimeout(() => {
@@ -85,7 +83,6 @@ export function recordTerminalWrite(durationMs: number): void {
       });
     }
     terminalCount = 0;
-    terminalTotalMS = 0;
     terminalMaxMS = 0;
   }, 1000);
 }
