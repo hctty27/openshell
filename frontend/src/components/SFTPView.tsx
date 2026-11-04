@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Info, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, Save, ArrowLeftRight } from "lucide-react";
 import { api, listen, errorText } from "../bridge";
@@ -99,6 +99,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   useTranslation();
   const dialogs = useDialogs();
   const [localDir,setLocalDir] = useState("");
+  const navigatedLocalDir = useRef("");
   const [remoteDir,setRemoteDir] = useState("");
   const [localFiles,setLocalFiles] = useState<SFTPEntry[]>([]);
   const [remoteFiles,setRemoteFiles] = useState<SFTPEntry[]>([]);
@@ -123,6 +124,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   useEffect(() => {
     let alive=true;
     setTasks([]);
+    navigatedLocalDir.current = "";
     api.SFTPHome(refID).then(async paths => {
       if (!alive) return;
       setLocalDir(paths.local);
@@ -148,7 +150,14 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   useEffect(()=>{
     if(!localDir)return;
     let alive=true;setLocalBusy(true);setLocalError("");
-    api.SFTPList(refID,"local",localDir).then(items=>{if(alive){setLocalFiles(items??[]);setLocalListedKey(directoryCacheKey(refID,localDir));}})
+    api.SFTPList(refID,"local",localDir).then(items=>{if(alive){
+      setLocalFiles(items??[]);
+      setLocalListedKey(directoryCacheKey(refID,localDir));
+      if (navigatedLocalDir.current === localDir) {
+        navigatedLocalDir.current = "";
+        void api.SaveTransferLocalDir(refID.sessionId,localDir).catch(onNotice);
+      }
+    }})
       .catch(error=>{if(alive){setLocalFiles([]);setLocalError(error);}})
       .finally(()=>{if(alive)setLocalBusy(false);});
     return ()=>{alive=false;};
@@ -200,7 +209,10 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
 
   const changeDir = (side:Side, directory:string) => {
     if(!directory)return;
-    if(side==="local")setLocalDir(directory);else setRemoteDir(directory);
+    if(side==="local"){
+      navigatedLocalDir.current = directory;
+      setLocalDir(directory);
+    } else setRemoteDir(directory);
     setSelection(s=>({...s,[side]:[]}));
   };
   const choose = (side:Side,item:SFTPEntry,multi:boolean) => {
