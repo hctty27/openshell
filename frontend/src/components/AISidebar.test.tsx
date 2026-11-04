@@ -26,39 +26,51 @@ afterEach(() => {
   events.clear();
 });
 
-test("AI output follows new chunks near the bottom, but respects manual scrollback", async () => {
-  render(<AISidebar tabs={[]} pinned={false} isOpen={true} onTogglePin={vi.fn()} />);
+async function renderRunningAI(initiallyOpen = true) {
+  vi.mocked(api.AIProviders).mockResolvedValueOnce([{
+    id: "p1", name: "provider", baseUrl: "https://example.test/v1", hasKey: true,
+    models: [{ id: "test", name: "test" }],
+  }]);
+  const props = { tabs: [connectedTab], active: connectedTab, pinned: true, onTogglePin: vi.fn() };
+  const view = await act(async () => render(<AISidebar {...props} isOpen={initiallyOpen} />));
+  fireEvent.change(screen.getByPlaceholderText("描述需要 AI 执行的任务..."), { target: { value: "检查日志" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() => expect(api.AIStart).toHaveBeenCalled());
+  return { ...view, props };
+}
+
+test("AI output follows only the active task and respects manual scrollback", async () => {
+  await renderRunningAI();
   const node = screen.getByRole("complementary", { name: "AI 助手" })
     .querySelector<HTMLElement>(".ai-messages")!;
-
   Object.defineProperties(node, {
     scrollHeight: { configurable: true, value: 1200 },
     clientHeight: { configurable: true, value: 300 },
   });
-
-  act(() => events.get("ai:delta")?.({ taskId: "test", text: "first" }));
+  act(() => events.get("ai:delta")?.({ taskId: "another-task", text: "ignore" }));
+  expect(node.textContent).not.toContain("ignore");
+  act(() => events.get("ai:delta")?.({ taskId: "task-1", text: "first" }));
   expect(node.scrollTop).toBe(1200);
-
   node.scrollTop = 200;
   fireEvent.scroll(node);
-  act(() => events.get("ai:delta")?.({ taskId: "test", text: "second" }));
+  act(() => events.get("ai:delta")?.({ taskId: "task-1", text: "second" }));
   expect(node.scrollTop).toBe(200);
-
   node.scrollTop = 900;
   fireEvent.scroll(node);
-  act(() => events.get("ai:delta")?.({ taskId: "test", text: "third" }));
+  act(() => events.get("ai:delta")?.({ taskId: "task-1", text: "third" }));
   expect(node.scrollTop).toBe(1200);
 });
 
-test("AI auto-scroll resumes after reopening while remaining at the bottom", () => {
-  const props = { tabs: [], pinned: false, onTogglePin: vi.fn(), onClose: vi.fn() };
-  const { rerender } = render(<AISidebar {...props} isOpen={false} />);
+test("AI auto-scroll resumes after reopening while at the bottom", async () => {
+  const { rerender, props } = await renderRunningAI();
   const node = document.querySelector<HTMLElement>(".ai-messages")!;
   Object.defineProperties(node, {
     scrollHeight: { configurable: true, value: 1200 },
     clientHeight: { configurable: true, value: 300 },
   });
-  act(() => events.get("ai:delta")?.({ taskId: "test", text: "while hidden" }));
+  rerender(<AISidebar {...props} isOpen={false} />);
+  node.scrollTop = 0;
+  act(() => events.get("ai:delta")?.({ taskId: "task-1", text: "while hidden" }));
   expect(node.scrollTop).toBe(0);
   rerender(<AISidebar {...props} isOpen={true} />);
   expect(node.scrollTop).toBe(1200);
@@ -126,96 +138,76 @@ test("legacy conversation requires explicit target rebinding", async () => {
   expect(screen.queryByText(/没有可验证的目标服务器信息/)).toBeNull();
 });
 
-test("visible terminal mode uses automatic readiness detection without confirmation checkbox", async () => {
+test("terminal AI uses the active terminal without an execution selector", async () => {
   vi.mocked(api.AIProviders).mockResolvedValueOnce([{
     id: "p1", name: "cpa", baseUrl: "https://example.test/v1", hasKey: true,
     models: [{ id: "gpt-test", name: "gpt-test" }],
   }]);
-  await act(async () => {
-    render(<AISidebar tabs={[connectedTab]} active={connectedTab}
-      pinned isOpen onTogglePin={vi.fn()} />);
-  });
-  fireEvent.click(screen.getByRole("button", { name: "AI 操作方式" }));
-  fireEvent.change(screen.getByTitle("AI 操作方式"), { target: { value: "terminal" } });
+  await act(async () => render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+    terminalScopeId="hk-server" pinned isOpen onTogglePin={vi.fn()} />));
+  expect(screen.getByRole("complementary", { name: "终端 AI" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "AI 操作方式" })).toBeNull();
   fireEvent.change(screen.getByPlaceholderText("描述需要 AI 执行的任务..."), {
     target: { value: "检查当前目录" },
   });
-  const send = screen.getByRole("button", { name: "发送" }) as HTMLButtonElement;
-  expect(screen.getByText(/自动检测 Shell 是否空闲/)).toBeTruthy();
-  expect(screen.queryByRole("checkbox", { name: /终端已停留在空白 Shell 提示符/ })).toBeNull();
-  expect(send.disabled).toBe(false);
-  fireEvent.click(send);
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
   await waitFor(() => expect(api.AIStart).toHaveBeenCalledWith(expect.objectContaining({
-    execution: "terminal", targets: [connectedTab.ref],
+    execution: "terminal", scopeId: "hk-server", targets: [connectedTab.ref],
   })));
 });
 
-test("alternate terminal screen rejects visible-terminal execution", async () => {
-  vi.mocked(api.AIProviders).mockResolvedValueOnce([{
-    id: "p1", name: "cpa", baseUrl: "https://example.test/v1", hasKey: true,
-    models: [{ id: "gpt-test", name: "gpt-test" }],
-  }]);
-  await act(async () => {
-    render(<AISidebar tabs={[connectedTab]} active={connectedTab}
-      terminalAlternate pinned isOpen onTogglePin={vi.fn()} />);
-  });
-  fireEvent.click(screen.getByRole("button", { name: "AI 操作方式" }));
-  fireEvent.change(screen.getByTitle("AI 操作方式"), { target: { value: "terminal" } });
-  expect(screen.getAllByText(/正在运行全屏交互程序/).length).toBeGreaterThan(0);
-  expect(screen.queryByRole("checkbox", { name: /终端已停留/ })).toBeNull();
+test("terminal AI blocks sending during an alternate-screen program", async () => {
+  await act(async () => render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+    terminalScopeId="hk-server" terminalAlternate pinned isOpen onTogglePin={vi.fn()} />));
+  expect(screen.getByText(/正在运行全屏交互程序/)).toBeTruthy();
 });
 
-test("AI defaults to automatic SSH execution routing", async () => {
+test("global AI always uses independent execution", async () => {
   vi.mocked(api.AIProviders).mockResolvedValueOnce([{
     id: "p1", name: "provider", baseUrl: "https://example.test/v1", hasKey: true,
     models: [{ id: "test", name: "test" }],
   }]);
-  await act(async () => {
-    render(<AISidebar tabs={[connectedTab]} active={connectedTab}
-      pinned isOpen onTogglePin={vi.fn()} />);
-  });
-  expect(screen.queryByText(/普通 SSH 优先独立执行/)).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "AI 操作方式" }));
-  const select = screen.getByTitle("AI 操作方式") as HTMLSelectElement;
-  expect(select.value).toBe("auto");
-  expect(screen.getByText(/普通 SSH 优先独立执行/)).toBeTruthy();
+  await act(async () => render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+    pinned isOpen onTogglePin={vi.fn()} />));
+  expect(screen.queryByRole("button", { name: "AI 操作方式" })).toBeNull();
   fireEvent.change(screen.getByPlaceholderText("描述需要 AI 执行的任务..."), {
     target: { value: "检查服务器" },
   });
   fireEvent.click(screen.getByRole("button", { name: "发送" }));
   await waitFor(() => expect(api.AIStart).toHaveBeenCalledWith(expect.objectContaining({
-    execution: "auto", targets: [connectedTab.ref],
+    execution: "independent", scopeId: "", targets: [connectedTab.ref],
   })));
 });
 
-
-test("AI sidebar is usable in English without leftover Chinese controls", async () => {
+test("English controls have no obsolete execution selector", async () => {
   await initializeI18n("en");
   render(<AISidebar tabs={[]} pinned={false} isOpen={true} onTogglePin={vi.fn()} />);
   expect(screen.getByRole("complementary", { name: "AI Assistant" })).toBeTruthy();
   expect(screen.getByText("Let AI help manage your servers")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "AI execution method" }));
-  expect(screen.getByTitle("AI execution method")).toBeTruthy();
-  expect(screen.getByText(/Execution capabilities are detected automatically/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "AI execution method" })).toBeNull();
   expect(screen.getByPlaceholderText("Describe the task for AI...")).toBeTruthy();
 });
 
-test("AI sidebar keeps execution details in an accessible compact menu", () => {
+test("approval mode remains available without an execution selector", () => {
   render(<AISidebar tabs={[connectedTab]} active={connectedTab} pinned={true}
     isOpen={true} onTogglePin={vi.fn()} />);
   expect(screen.getByRole("combobox", { name: "执行模式" })).toBeTruthy();
   expect(screen.getByRole("option", { name: "自动审查" })).toBeTruthy();
-  expect(screen.queryByText(/普通 SSH 优先独立执行/)).toBeNull();
-  const options = screen.getByRole("button", { name: "AI 操作方式" });
-  expect(options.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("button", { name: "AI 操作方式" })).toBeNull();
+});
 
-  fireEvent.click(options);
-  expect(options.getAttribute("aria-expanded")).toBe("true");
-  expect(screen.getByTitle("AI 操作方式")).toBeTruthy();
-  expect(screen.getByText(/普通 SSH 优先独立执行/)).toBeTruthy();
-  fireEvent.keyDown(document, { key: "Escape" });
-  expect(options.getAttribute("aria-expanded")).toBe("false");
-  expect(screen.queryByText(/普通 SSH 优先独立执行/)).toBeNull();
+test("terminal history is filtered to the selected session", async () => {
+  vi.mocked(api.AIConversations).mockResolvedValueOnce([
+    { ...oldConversation(), id: "global", scope: "global", title: "全局历史" },
+    { ...oldConversation(), id: "terminal-hk", scope: "terminal", scopeId: "hk-server", title: "当前终端历史" },
+    { ...oldConversation(), id: "terminal-us", scope: "terminal", scopeId: "us-server", title: "其他终端历史" },
+  ]);
+  await act(async () => render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+    terminalScopeId="hk-server" pinned isOpen onTogglePin={vi.fn()} />));
+  fireEvent.click(screen.getByRole("button", { name: "当前会话记录" }));
+  expect(screen.getByText("当前终端历史")).toBeTruthy();
+  expect(screen.queryByText("全局历史")).toBeNull();
+  expect(screen.queryByText("其他终端历史")).toBeNull();
 });
 
 test("multi-session summary stays compact and selection retains exact targets", async () => {
