@@ -169,9 +169,9 @@
   visibility: hidden;
   box-sizing: border-box;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   overscroll-behavior: contain;
-  padding: 6px;
+  padding: 4px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel);
@@ -191,11 +191,11 @@
 .ai-target-menu label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   width: 100%;
-  min-height: 32px;
-  padding: 6px 8px;
-  border-radius: 6px;
+  min-height: 28px;
+  padding: 4px 7px;
+  border-radius: 5px;
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 11px;
@@ -392,11 +392,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  min-height: 32px;
-  padding: 6px 9px;
-  border-radius: 6px;
+  min-height: 28px;
+  padding: 4px 7px;
+  border-radius: 5px;
   color: var(--text-secondary);
   font-size: 11px;
   text-align: left;
