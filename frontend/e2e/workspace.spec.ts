@@ -938,33 +938,78 @@ test("AI floating dock does not overlap session tools across window sizes", asyn
   await page.setViewportSize({ width: 1200, height: 760 });
   await page.goto("/");
   await page.getByTitle("新建会话", { exact: true }).first().click();
-  await page.getByLabel("会话名称", { exact: true }).fill("重叠检查");
+  await page.getByLabel("会话名称", { exact: true }).fill("悬浮布局检查");
   await page.getByLabel("主机地址").fill("127.0.0.1");
   await page.getByLabel("登录密码").fill("fixture-password");
   await page.getByText("保存到 Windows 凭据管理器").click();
   await page.getByRole("button", { name: "保存会话", exact: true }).click();
-  await page.getByRole("button", { name: "选中会话 重叠检查" }).dblclick();
+  await page.getByRole("button", { name: "选中会话 悬浮布局检查" }).dblclick();
   await page.getByRole("button", { name: "信任并连接" }).click();
   await expect(page.locator(".terminal-toolbar")).toBeVisible();
+
+  const globalAI = page.locator("#global-ai-panel");
+  const checkSideBySide = async (panelSelector: string) => {
+    const geometry = await page.evaluate(selector => {
+      const session = document.querySelector(selector)!.getBoundingClientRect();
+      const global = document.querySelector("#global-ai-panel")!.getBoundingClientRect();
+      return {
+        sessionWidth: session.width,
+        globalWidth: global.width,
+        overlap: Math.min(session.right, global.right) - Math.max(session.left, global.left),
+      };
+    }, panelSelector);
+    expect(geometry.sessionWidth).toBeGreaterThan(180);
+    expect(geometry.globalWidth).toBeGreaterThan(280);
+    expect(geometry.overlap).toBeLessThanOrEqual(1);
+  };
+
   await page.getByRole("button", { name: "终端 AI" }).click();
   const terminalAI = page.locator(".workspace-terminal-ai-panel");
   await expect(terminalAI).toBeVisible();
   await page.locator(".ai-rail").click();
-  await expect(page.locator(".ai-dock")).toHaveClass(/is-open/);
-  await expect(terminalAI).toBeHidden();
-  await expect(page.locator("#global-ai-panel")).toBeVisible();
+  for (const width of [900, 1200, 1440, 1559, 1560, 1920]) {
+    await page.setViewportSize({ width, height: 760 });
+    if (!(await page.locator(".ai-dock").evaluate(element => element.classList.contains("is-open")))) {
+      await page.locator(".ai-rail").click();
+    }
+    await expect(globalAI).toBeVisible();
+    await expect(terminalAI).toBeVisible();
+    await expect.poll(async () => {
+      const g = await page.evaluate(() => {
+        const session = document.querySelector(".workspace-terminal-ai-panel")!.getBoundingClientRect();
+        const global = document.querySelector("#global-ai-panel")!.getBoundingClientRect();
+        return Math.min(session.right, global.right) - Math.max(session.left, global.left);
+      });
+      return g;
+    }).toBeLessThanOrEqual(1);
+    await checkSideBySide(".workspace-terminal-ai-panel");
+  }
 
+  await page.setViewportSize({ width: 1200, height: 760 });
   await page.locator(".terminal-toolbar").click({ position: { x: 30, y: 15 } });
   await expect(page.locator(".ai-dock")).not.toHaveClass(/is-open/);
   await expect(terminalAI).toBeVisible();
 
-  await page.setViewportSize({ width: 1700, height: 800 });
+  await page.getByTitle("打开 SFTP 文件管理").click();
+  const sftp = page.locator(".workspace-file-panel:not(.workspace-terminal-ai-panel)");
+  await expect(sftp).toBeVisible();
+  await expect(terminalAI).toBeHidden();
   await page.locator(".ai-rail").click();
-  await expect(terminalAI).toBeVisible();
-  await expect(page.locator("#global-ai-panel")).toBeVisible();
-  await expect.poll(async () => page.evaluate(() => {
-    const session = document.querySelector(".workspace-terminal-ai-panel")!.getBoundingClientRect();
-    const global = document.querySelector("#global-ai-panel")!.getBoundingClientRect();
-    return global.left >= session.right - 1;
-  })).toBe(true);
+  for (const width of [900, 1200, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 760 });
+    if (!(await page.locator(".ai-dock").evaluate(element => element.classList.contains("is-open")))) {
+      await page.locator(".ai-rail").click();
+    }
+    await expect(globalAI).toBeVisible();
+    await expect(sftp).toBeVisible();
+    await expect.poll(async () => {
+      const g = await page.evaluate(() => {
+        const session = document.querySelector(".workspace-file-panel:not(.workspace-terminal-ai-panel)")!.getBoundingClientRect();
+        const global = document.querySelector("#global-ai-panel")!.getBoundingClientRect();
+        return Math.min(session.right, global.right) - Math.max(session.left, global.left);
+      });
+      return g;
+    }).toBeLessThanOrEqual(1);
+    await checkSideBySide(".workspace-file-panel:not(.workspace-terminal-ai-panel)");
+  }
 });

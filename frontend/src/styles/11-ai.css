@@ -630,7 +630,7 @@
   overflow-wrap: anywhere;
 }
 
-/* The global AI dock and the session tool panel must never expose overlapping composers. */
+/* Keep the two independent AI surfaces visible when the global dock floats open. */
 @media (min-width: 1560px) {
   .app-body.has-session-tool.has-floating-global-ai .ai-dock--auto {
     flex: 0 0 var(--ai-width);
@@ -644,7 +644,20 @@
   }
 }
 @media (max-width: 1559px) {
+  .app-body.has-session-tool.has-floating-global-ai {
+    --floating-ai-visible-width: min(var(--ai-width), max(320px, 35vw));
+  }
+  .app-body.has-session-tool.has-floating-global-ai .ai-dock--auto .ai-panel {
+    width: var(--floating-ai-visible-width);
+  }
   .app-body.has-session-tool.has-floating-global-ai .workspace-file-panel {
-    display: none !important;
+    /* The global dock keeps a 12px rail; its panel extends to the app's right edge. */
+    position: absolute;
+    inset: 0 calc(var(--floating-ai-visible-width) - 12px) 0 auto;
+    flex: none;
+    width: min(430px, max(220px, 43%), calc(100% - var(--floating-ai-visible-width) + 12px));
+    min-width: 0;
+    background: var(--surface);
+    box-shadow: -8px 0 24px #0003;
   }
 }
