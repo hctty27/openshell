@@ -21,6 +21,8 @@ type Backend = {
   AIDeleteProvider(id: string): Promise<void>;
   AIConversations(): Promise<import("./types").AIConversation[]>;
   AIDeleteConversation(id: string): Promise<void>;
+  AIContext(conversationID: string, providerID: string, modelID: string): Promise<import("./types").AIContextStats>;
+  AICompactConversation(conversationID: string): Promise<import("./types").AIConversation>;
   AIStart(req: {conversationId: string; providerId: string; modelId: string; mode: "review" | "auto"; execution: "independent" | "terminal"; scopeId: string; text: string; targets: Ref[]}): Promise<import("./types").AIStartResponse>;
   AIStop(taskID: string): Promise<void>;
   AIApprove(approvalID: string, approved: boolean): Promise<void>;

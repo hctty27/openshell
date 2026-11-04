@@ -616,3 +616,23 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.ai-context-control { position: relative; flex: 0 0 30px; height: 30px; }
+.ai-context-ring { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--connected); }
+.ai-context-ring:hover, .ai-context-ring[aria-expanded="true"] { background: var(--hover); }
+.ai-context-ring.is-warning { color: var(--warning); }
+.ai-context-ring.is-critical { color: var(--danger); }
+.ai-context-popover {
+  position: absolute; right: 0; bottom: calc(100% + 10px); z-index: 10000;
+  box-sizing: border-box; width: 250px; max-width: calc(100vw - 28px);
+  padding: 13px; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--raised); color: var(--text-primary); box-shadow: 0 10px 24px #0005;
+  font-size: 11px;
+}
+.ai-context-popover > strong { display: block; font-size: 12px; margin-bottom: 8px; }
+.ai-context-popover p { margin: 5px 0; }
+.ai-context-note { color: var(--text-muted); }
+.ai-context-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; color: var(--text-secondary); }
+.ai-context-compact { width: 100%; min-height: 30px; margin-top: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--hover); color: var(--text-primary); }
+.ai-context-compact:hover:not(:disabled) { border-color: var(--accent-border); }
+.ai-context-compact:disabled { opacity: .5; cursor: default; }

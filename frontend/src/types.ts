@@ -74,6 +74,7 @@ export interface QuickCommand {
 export interface AIModel {
   id: string;
   name: string;
+  contextWindow?: number;
 }
 export interface AIProvider {
   id: string;
@@ -100,6 +101,13 @@ export interface AITargetBinding {
   port: number;
   username: string;
 }
+export interface AIContextStats {
+  window: number;
+  estimatedTokens: number;
+  lastPromptTokens: number;
+  compactionCount: number;
+  isEstimate: boolean;
+}
 export interface AIConversation {
   id: string;
   title: string;
@@ -113,6 +121,10 @@ export interface AIConversation {
   targetSessionIds?: string[];
   targetBindings?: AITargetBinding[];
   messages: AIMessage[];
+  summary?: string;
+  compactedThrough?: number;
+  compactionCount?: number;
+  context?: AIContextStats;
   updatedAt: string;
 }
 export interface AIStartResponse {

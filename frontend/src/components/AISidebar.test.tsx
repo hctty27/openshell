@@ -12,6 +12,8 @@ vi.mock("../bridge", () => ({
     AIProviders: vi.fn(async () => []),
     AIConversations: vi.fn(async () => []),
     AIStart: vi.fn(async () => ({ taskId: "task-1", conversationId: "conversation-1" })),
+    AIContext: vi.fn(async () => ({ window: 262144, estimatedTokens: 131072, lastPromptTokens: 128000, compactionCount: 1, isEstimate: true })),
+    AICompactConversation: vi.fn(async () => oldConversation()),
   },
   errorText: (value: unknown) => String(value),
   listen: (name: string, callback: (data: any) => void) => {
@@ -316,4 +318,21 @@ test("new conversation stays a draft until its first message is submitted", asyn
   await waitFor(() => expect(api.AIStart).toHaveBeenCalledWith(expect.objectContaining({
     conversationId: "", text: "检查磁盘",
   })));
+});
+
+test("context meter is local to the selected conversation and permits manual compaction", async () => {
+  vi.mocked(api.AIProviders).mockResolvedValueOnce([{
+    id: "provider-1", name: "provider", baseUrl: "https://example.test/v1", hasKey: true,
+    models: [{ id: "model-1", name: "model", contextWindow: 262144 }],
+  }]);
+  vi.mocked(api.AIConversations).mockResolvedValueOnce([oldConversation()]);
+  await act(async () => render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+    pinned={true} isOpen={true} onTogglePin={vi.fn()} />));
+  fireEvent.click(screen.getByRole("button", { name: "全局对话记录" }));
+  fireEvent.click(screen.getByRole("button", { name: /历史 Docker 检查/ }));
+  await waitFor(() => expect(api.AIContext).toHaveBeenCalledWith("history-1", "provider-1", "model-1"));
+  fireEvent.click(screen.getByRole("button", { name: "上下文使用情况" }));
+  expect(screen.getByRole("dialog", { name: "上下文使用情况" }).textContent).toContain("131,072 / 262,144");
+  fireEvent.click(screen.getByRole("button", { name: "手动压缩上下文" }));
+  await waitFor(() => expect(api.AICompactConversation).toHaveBeenCalledWith("history-1"));
 });
