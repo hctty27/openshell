@@ -210,6 +210,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     [login, setLogin] = useState<{ tab: Tab; secret: string } | null>(null);
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
   const [terminalAIViews, setTerminalAIViews] = useState<Record<string, boolean>>({});
+  const [terminalAIMounted, setTerminalAIMounted] = useState<Record<string, boolean>>({});
   const terminalHistoryScopes = useRef<Record<string, string>>({});
   const [aiTerminalControls, setAITerminalControls] = useState<Record<string, {taskId: string; generation: number}>>({});
   const [alternateTerminals, setAlternateTerminals] = useState<Record<string, {generation: number; active: boolean}>>({});
@@ -1139,6 +1140,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   onClick={() => {
                     if (!active) return;
                     setTerminalAIViews(old => ({ ...old, [active.id]: !old[active.id] }));
+                    setTerminalAIMounted(old => ({ ...old, [active.id]: true }));
                     setFileViews(old => ({ ...old, [active.id]: false }));
                   }}
                 >
@@ -1311,7 +1313,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </aside>
               );
             })}
-            {tabs.filter(tab => terminalAIViews[tab.id] && tab.ref && tab.status === "connected").map(tab => {
+            {tabs.filter(tab => terminalAIMounted[tab.id] && tab.ref && tab.status === "connected").map(tab => {
               const visible = showTerminalAI && tab.id === activeID;
               return (
                 <div key={tab.id} className="workspace-file-panel workspace-terminal-ai-panel"
