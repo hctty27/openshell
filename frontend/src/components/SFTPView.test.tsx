@@ -215,6 +215,42 @@ test("SFTP selection supports Shift ranges, Ctrl+A and Escape within the focused
   expect(pane("local").querySelectorAll(".sftp-file-row.selected")).toHaveLength(0);
 });
 
+test("large directory metadata is cached across transfers and selection changes", async () => {
+  const entries = Array.from({ length: 180 }, (_, index) =>
+    file(`log-${index}.txt`, `/root/log-${index}.txt`));
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
+    side === "remote" ? entries : []);
+  const format = vi.spyOn(Date.prototype, "toLocaleDateString");
+  try {
+    render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+    await screen.findByText("log-179.txt");
+    expect(pane("remote").querySelectorAll(".sftp-file-row")).toHaveLength(180);
+    format.mockClear();
+
+    fireEvent.click(row("remote", "log-0.txt"));
+    expect(row("remote", "log-0.txt").classList.contains("selected")).toBe(true);
+    const table = within(pane("remote")).getByRole("list");
+    fireEvent.keyDown(table, { key: "a", ctrlKey: true });
+    expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(180);
+
+    const task: SFTPTask = {
+      id: "progress-1", ref, direction: "upload",
+      source: "C:/temp/log-0.txt", destination: "/root/log-0.txt",
+      name: "log-0.txt", bytes: 0, total: 100,
+      status: "queued", overwrite: false, resume: false, error: "", created: 1,
+    };
+    act(() => {
+      for (const callback of transferEvents.callbacks) callback(task);
+    });
+
+    expect(format).not.toHaveBeenCalled();
+    expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(180);
+    expect(row("remote", "log-0.txt").classList.contains("selected")).toBe(true);
+  } finally {
+    format.mockRestore();
+  }
+});
+
 test("right-clicking a selected SFTP item keeps the multi-selection and deletes both after one confirmation", async () => {
   setupBatchFiles();
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
