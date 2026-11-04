@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Server, Sparkles, Square, Trash2 } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
-import type { AIConversation, AIProvider, AIStartResponse, AITargetBinding, Tab } from "../types";
+import type { AIConversation, AIProvider, AIStartResponse, AIContextStats, AITargetBinding, Tab } from "../types";
 import AIModelPicker from "./AIModelPicker";
 import AIDropdownSurface from "./AIDropdownSurface";
 import AISendControl from "./AISendControl";
+import AIContextIndicator from "./AIContextIndicator";
 import { readAIExecutionMode, saveAIExecutionMode, type AIExecutionMode } from "../features/ai/executionModePreference";
 import AITranscript from "./AITranscript";
 import { belongsToConversationScope } from "../features/ai/conversationScope";
@@ -59,6 +60,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [approval, setApproval] = useState<Approval | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [contextInfo, setContextInfo] = useState<AIContextStats | null>(null);
+  const [compacting, setCompacting] = useState(false);
   const finishedTasks = useRef(new Set<string>());
   const activeTaskRef = useRef("");
   const currentConversationRef = useRef("");
@@ -135,10 +138,15 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
         setApproval(null);
       }
     });
+    const offContext = listen("ai:context", (event: {conversationId: string; status: string; context?: AIContextStats}) => {
+      if (event.conversationId !== currentConversationRef.current) return;
+      setCompacting(event.status === "compacting");
+      if (event.context) setContextInfo(event.context);
+    });
     const offApproval = listen("ai:approval", (event: Approval) => {
       if (activeTaskRef.current && event.taskId === activeTaskRef.current) setApproval(event);
     });
-    return () => { offConversation(); offDelta(); offState(); offApproval(); };
+    return () => { offConversation(); offDelta(); offState(); offApproval(); offContext(); };
   }, [terminalScopeId]);
 
   const connected = tabs.filter(tab => tab.status === "connected" && tab.ref && (!isTerminal || tab.id === active?.id));
@@ -177,6 +185,30 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const provider = providerID ? providers.find(item => item.id === providerID) : providers[0];
   const model = modelID ? provider?.models.find(item => item.id === modelID) : provider?.models[0];
   const current = conversations.find(item => item.id === conversationID && belongsToConversationScope(item, terminalScopeId));
+  useEffect(() => {
+    if (!provider?.id || !model?.id || typeof api.AIContext !== "function") {
+      setContextInfo(null);
+      return;
+    }
+    let active = true;
+    void api.AIContext(conversationID, provider.id, model.id)
+      .then(result => { if (active) setContextInfo(result); })
+      .catch(() => { if (active) setContextInfo(null); });
+    return () => { active = false; };
+  }, [conversationID, provider?.id, model?.id, current?.messages.length, current?.compactionCount]);
+  const compactHistory = async () => {
+    if (!conversationID || running || submitting || compacting) return;
+    setError("");
+    setCompacting(true);
+    try {
+      await api.AICompactConversation(conversationID);
+      if (provider && model) setContextInfo(await api.AIContext(conversationID, provider.id, model.id));
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setCompacting(false);
+    }
+  };
   useLayoutEffect(() => {
     const node = messagesRef.current;
     if (!isOpen || !node || !followOutputRef.current) return;
@@ -237,6 +269,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setHistorySessionIDs(bindings.length ? bindings.map(saved => saved.sessionId) : (item.targetSessionIds ?? []));
     setLegacyHistoryNeedsRebind(item.targetNames.length > 0 && bindings.length === 0);
     activeTaskRef.current = "";
+    setContextInfo(null);
     setConversationID(item.id);
     setProviderID(item.providerId);
     setModelID(item.modelId);
@@ -255,6 +288,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setHistoryBindings([]);
     setLegacyHistoryNeedsRebind(false);
     activeTaskRef.current = "";
+    setContextInfo(null);
     setConversationID("");
     setProviderID(lastModelRef.current.providerId);
     setModelID(lastModelRef.current.modelId);
@@ -429,6 +463,10 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
             </div>
                   )}
                 </div>
+                <AIContextIndicator
+                  stats={contextInfo ?? (model ? { window: model.contextWindow || 32768, estimatedTokens: 0, lastPromptTokens: 0, compactionCount: 0, isEstimate: true } : null)}
+                  compacting={compacting} disabled={!conversationID || !!running || submitting}
+                  onCompact={() => void compactHistory()} />
                 {running ? <button type="button" title={t("ai:stopTask")} aria-label={t("ai:stopTask")}
                     className="ai-stop-button" onClick={() => void api.AIStop(running.taskId)}><Square size={15} /></button> :
                   <AISendControl mode={mode} onModeChange={changeMode} modeDisabled={submitting}
