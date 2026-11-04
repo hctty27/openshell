@@ -173,13 +173,13 @@ export default function AIProviderSettings({ onDirtyChange }: Props) {
       </div>
       <div className="settings-ai-tabs" role="tablist" aria-label={t("settings:aiSettings")}>
         {([
-          ["providers", "aiProvidersTab"],
-          ["context", "aiContextTab"],
-          ["execution", "aiExecutionTab"],
+          ["providers", t("settings:aiProvidersTab")],
+          ["context", t("settings:aiContextTab")],
+          ["execution", t("settings:aiExecutionTab")],
         ] as const).map(([value, label]) => (
           <button key={value} type="button" role="tab" aria-selected={section === value}
             className={section === value ? "active" : ""}
-            onClick={() => void selectSection(value)}>{t("settings:" + label)}</button>
+            onClick={() => void selectSection(value)}>{label}</button>
         ))}
       </div>
       {section === "providers" ? (
