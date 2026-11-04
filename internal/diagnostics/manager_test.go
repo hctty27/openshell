@@ -4,6 +4,7 @@ import (
     "archive/zip"
     "encoding/json"
     "os"
+    "runtime"
     "path/filepath"
     "strings"
     "testing"
@@ -47,7 +48,11 @@ func TestRecordsAndExportsOnlyCategoricalData(t *testing.T) {
     if !strings.HasPrefix(path, filepath.Join(dir, "reports")) { t.Fatalf("unsafe output path: %s", path) }
     info, err := os.Stat(path)
     if err != nil { t.Fatal(err) }
-    if info.Mode().Perm()&0077 != 0 { t.Fatalf("export permissions: %v", info.Mode()) }
+    // Windows FileMode reports synthetic 0666 permission bits; ACLs are inherited
+    // from the containing user directory and cannot be validated with ModePerm.
+    if runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
+        t.Fatalf("export permissions: %v", info.Mode())
+    }
     archive, err := zip.OpenReader(path)
     if err != nil { t.Fatal(err) }
     defer archive.Close()
