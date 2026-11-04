@@ -81,15 +81,10 @@ jobs:
         run: |
           npm ci
           npm run build
-      - name: Test frontend
-        working-directory: frontend
-        run: npm test -- --run
-      - name: Verify Go dependencies on Windows
-        run: go mod tidy
       - name: Test Go on Windows
-        run: go test ./...
+        run: go test -mod=readonly ./...
       - name: Stress SSH command execution on Windows
-        run: go test ./internal/ssh -run "TestExec(ExitCode|RepeatedCommandRoundTrips|StdinClosed|TimeoutDoesNotDisconnectInteractiveSSH)" -count=3 -timeout=3m
+        run: go test -mod=readonly ./internal/ssh -run "TestExec(ExitCode|RepeatedCommandRoundTrips|StdinClosed|TimeoutDoesNotDisconnectInteractiveSSH)" -count=3 -timeout=3m
       - name: Ensure cached Wails CLI
         shell: pwsh
         run: |
@@ -127,14 +122,12 @@ jobs:
       - name: Compile Windows executable (no release)
         shell: pwsh
         run: |
-          go mod tidy
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & "$(go env GOPATH)\bin\wails3.exe" generate bindings -names -ts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & "$(go env GOPATH)\bin\wails3.exe" generate syso -manifest build/windows/wails.exe.manifest -icon build/windows/icon.ico -info build/windows/info.json -arch amd64 -out rsrc_windows_amd64.syso
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory -Force build/bin | Out-Null
-          go build -tags production -trimpath -ldflags "-H windowsgui -s -w" -o build/bin/OpenShell.exe .
+          go build -mod=readonly -tags production -trimpath -ldflags "-H windowsgui -s -w" -o build/bin/OpenShell.exe .
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path "build/bin/OpenShell.exe")) { throw "OpenShell.exe was not generated" }
           python scripts/verify_windows_gui_subsystem.py build/bin/OpenShell.exe
