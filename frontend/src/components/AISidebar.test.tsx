@@ -32,7 +32,8 @@ async function renderRunningAI(initiallyOpen = true) {
     models: [{ id: "test", name: "test" }],
   }]);
   const props = { tabs: [connectedTab], active: connectedTab, pinned: true, onTogglePin: vi.fn() };
-  const view = await act(async () => render(<AISidebar {...props} isOpen={initiallyOpen} />));
+  let view!: ReturnType<typeof render>;
+  await act(async () => { view = render(<AISidebar {...props} isOpen={initiallyOpen} />); });
   fireEvent.change(screen.getByPlaceholderText("描述需要 AI 执行的任务..."), { target: { value: "检查日志" } });
   fireEvent.click(screen.getByRole("button", { name: "发送" }));
   await waitFor(() => expect(api.AIStart).toHaveBeenCalled());
