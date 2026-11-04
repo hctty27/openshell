@@ -152,6 +152,17 @@ function Workspace({ initialState }: { initialState: AppState }) {
   };
   const dialogs = useDialogs();
   const { tabs, setTabs, tabsRef, activeID, setActiveID, activeIDRef, update } = useWorkspaceTabs();
+  const executedActionMarked = useRef(new Set<string>());
+  const markExecutedAction = (ref: Ref) => {
+    if (executedActionMarked.current.has(ref.tabId)) return;
+    const current = tabsRef.current.find(tab => tab.id === ref.tabId);
+    if (!current?.ref || current.ref.generation !== ref.generation ||
+      current.ref.sessionId !== ref.sessionId) return;
+    executedActionMarked.current.add(ref.tabId);
+    update(ref.tabId, tab => tab.ref?.generation === ref.generation &&
+      tab.ref.sessionId === ref.sessionId
+        ? { ...tab, hasExecutedAction: true } : tab);
+  };
   const { hasActiveTransfers } = useTransferActivity();
   const [transferFocusRequest, setTransferFocusRequest] = useState<{ ref: Ref } | null>(null);
   useEffect(() => {
@@ -160,8 +171,12 @@ function Workspace({ initialState }: { initialState: AppState }) {
     });
     const offState = listen("ssh:transfer-state", (event: { ref: Ref; active: boolean }) => {
       if (event?.ref && event.active === false) setTransferFocusRequest({ ref: event.ref });
+      if (event?.ref && event.active) markExecutedAction(event.ref);
     });
-    return () => { offFinished(); offState(); };
+    const offSFTP = listen("sftp:transfer", (event: { ref: Ref; status: string }) => {
+      if (event?.ref && ["queued", "running"].includes(event.status)) markExecutedAction(event.ref);
+    });
+    return () => { offFinished(); offState(); offSFTP(); };
   }, []);
   const [state, setState] = useState(initialState),
     [sidebarMode, setSidebarMode] = useState<"pinned" | "auto-hide">(
@@ -224,6 +239,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       taskId: string; ref: Ref; active: boolean;
     }) => {
       if (event.active) {
+        markExecutedAction(event.ref);
         setAITerminalControls(previous => ({
           ...previous,
           [event.ref.tabId]: { taskId: event.taskId, generation: event.ref.generation },
@@ -562,9 +578,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       let binary = "";
       for (const byte of bytes) binary += String.fromCharCode(byte);
       await api.WriteTerminal(tab.ref, btoa(binary));
-      update(tab.id, current => current.ref?.generation === tab.ref?.generation &&
-        current.ref?.sessionId === tab.ref?.sessionId
-          ? { ...current, hasExecutedAction: true } : current);
+      markExecutedAction(tab.ref);
       setQuickCommandFocus((n) => n + 1);
     } catch (e) {
       notify(e);
@@ -795,7 +809,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
           for (const tabID of closed) next = setTerminalSearchState(next, tabID, false);
           return next;
         });
-        for (const tabID of closed) userInputMarked.current.delete(tabID);
+        for (const tabID of closed) {
+          userInputMarked.current.delete(tabID);
+          executedActionMarked.current.delete(tabID);
+        }
       }
       if (errors.length) notify(errors[0]);
     } finally {
