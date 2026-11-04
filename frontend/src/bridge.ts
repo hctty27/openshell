@@ -17,6 +17,9 @@ import type {
   SFTPSyncPreview,
 } from "./types";
 type Backend = {
+  DiagnosticsSnapshot(): Promise<import("./features/diagnostics/types").DiagnosticsSnapshot>;
+  DiagnosticsExport(): Promise<string>;
+  DiagnosticsRecordBatch(events: import("./features/diagnostics/types").DiagnosticEvent[]): Promise<void>;
   AIProviders(): Promise<import("./types").AIProvider[]>;
   AIRuntimeSettings(): Promise<import("./types").AIRuntimeSettings>;
   AISaveRuntimeSettings(settings: import("./types").AIRuntimeSettings): Promise<void>;
