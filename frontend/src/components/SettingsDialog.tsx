@@ -27,6 +27,7 @@ import AppearanceSettingsPanel from "./AppearanceSettingsPanel";
 import ConnectionSettingsPanel from "./ConnectionSettingsPanel";
 import TerminalSettingsPanel from "./TerminalSettingsPanel";
 import AIProviderSettings from "./AIProviderSettings";
+import SFTPEditorSettingsPanel from "./editor/SFTPEditorSettingsPanel";
 import AboutSettingsPanel from "./AboutSettingsPanel";
 import type {
   Session,
@@ -222,6 +223,7 @@ export default function SettingsDialog(p: Props) {
                 { id: "general", label: t("settings:general"), icon: Settings2 },
                 { id: "appearance", label: t("settings:appearance"), icon: Palette },
                 { id: "terminal", label: t("settings:terminal"), icon: Terminal },
+                { id: "sftp", label: "SFTP", icon: FolderOpen },
                 { id: "connection", label: t("settings:connection"), icon: Network },
                 { id: "ai", label: t("settings:aiSettings"), icon: Sparkles },
                 { id: "about", label: t("settings:about"), icon: Info },
@@ -477,6 +479,7 @@ export default function SettingsDialog(p: Props) {
             />
           )}
           {tab === "ai" && <AIProviderSettings onDirtyChange={setAiDirty} />}
+          {tab === "sftp" && <SFTPEditorSettingsPanel />}
           {tab === "about" && <AboutSettingsPanel />}
           {tab === "connection" && (
             <ConnectionSettingsPanel
