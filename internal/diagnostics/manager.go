@@ -70,6 +70,7 @@ type queueItem struct {
 
 type Manager struct {
     mu sync.Mutex
+    exportMu sync.Mutex
     dir string
     file *os.File
     bytes int64
@@ -99,6 +100,7 @@ func Open(dir string) (*Manager, error) {
         stop: make(chan struct{}), finished: make(chan struct{}),
     }
     m.prune()
+    m.pruneReports(filepath.Join(dir, "reports"), "")
     go m.run()
     return m, nil
 }
@@ -313,6 +315,9 @@ func (m *Manager) flush() {
 
 func (m *Manager) Export() (string, error) {
     if m == nil { return "", errors.New("diagnostics unavailable") }
+    m.exportMu.Lock()
+    defer m.exportMu.Unlock()
+    if m.stopped.Load() { return "", errors.New("diagnostics already closed") }
     m.flush()
     reportDir := filepath.Join(m.dir, "reports")
     if err := os.MkdirAll(reportDir, 0700); err != nil { return "", err }
@@ -347,13 +352,13 @@ func (m *Manager) Export() (string, error) {
     if closeErr := archive.Close(); err == nil { err = closeErr }
     if closeErr := output.Close(); err == nil { err = closeErr }
     if err != nil { _ = os.Remove(path); return "", err }
-    m.pruneReports(reportDir)
+    m.pruneReports(reportDir, path)
     return path, nil
 }
 
 // Keep only the three newest user-created reports for at most seven days.
 // Report cleanup is best-effort and does not block normal diagnostics.
-func (m *Manager) pruneReports(reportDir string) {
+func (m *Manager) pruneReports(reportDir, newestReport string) {
     entries, err := os.ReadDir(reportDir)
     if err != nil { return }
     type report struct {
@@ -370,9 +375,15 @@ func (m *Manager) pruneReports(reportDir string) {
         if statErr != nil { continue }
         reports = append(reports, report{path: filepath.Join(reportDir, name), modified: info.ModTime()})
     }
-    sort.Slice(reports, func(i, j int) bool { return reports[i].modified.After(reports[j].modified) })
+    sort.Slice(reports, func(i, j int) bool {
+        if reports[i].path == newestReport { return true }
+        if reports[j].path == newestReport { return false }
+        if reports[i].modified.Equal(reports[j].modified) { return reports[i].path > reports[j].path }
+        return reports[i].modified.After(reports[j].modified)
+    })
     cutoff := time.Now().Add(-7 * 24 * time.Hour)
     for i, report := range reports {
+        if report.path == newestReport { continue }
         if i >= 3 || report.modified.Before(cutoff) { _ = os.Remove(report.path) }
     }
 }
