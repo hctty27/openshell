@@ -42,3 +42,29 @@ export function calculateTerminalGeometry({
     top: Math.max(0, (height - rows * cellHeight) / 2),
   };
 }
+
+export interface TerminalGridBounds {
+  surfaceLeft: number;
+  surfaceTop: number;
+  surfaceBottom: number;
+  gridLeft: number;
+  gridRight: number;
+  gridTop: number;
+  gridBottom: number;
+  scrollbarLeft: number;
+}
+
+/** Correct the CSS-grid rounding remainder using the actual scrollbar track edge. */
+export function calculateGridCenteringCorrection(bounds: TerminalGridBounds): { x: number; y: number } | null {
+  if (!Object.values(bounds).every(Number.isFinite) ||
+      bounds.scrollbarLeft <= bounds.surfaceLeft ||
+      bounds.gridRight <= bounds.gridLeft ||
+      bounds.gridBottom <= bounds.gridTop) return null;
+
+  const left = bounds.gridLeft - bounds.surfaceLeft;
+  const right = bounds.scrollbarLeft - bounds.gridRight;
+  const top = bounds.gridTop - bounds.surfaceTop;
+  const bottom = bounds.surfaceBottom - bounds.gridBottom;
+  if (Math.min(left, right, top, bottom) < -1) return null;
+  return { x: (right - left) / 2, y: (bottom - top) / 2 };
+}
