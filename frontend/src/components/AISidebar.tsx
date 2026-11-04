@@ -371,6 +371,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
             stats={contextInfo ?? (model ? { window: model.contextWindow || 32768, estimatedTokens: 0, lastPromptTokens: 0, compactionCount: 0, isEstimate: true } : null)}
             compacting={compacting} disabled={!conversationID || !!running || submitting}
             autoCompact={runtimeSettings.autoCompact} compactThreshold={runtimeSettings.compactThreshold}
+            historyOpen={showHistory} onOpen={() => setShowHistory(false)}
             onCompact={() => void compactHistory()} />
           <button type="button" ref={historyTriggerRef}
             title={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")}
