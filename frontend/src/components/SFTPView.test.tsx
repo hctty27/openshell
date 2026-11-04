@@ -16,6 +16,7 @@ vi.mock("../bridge", () => ({
   api: {
     SFTPHome: vi.fn(async () => ({ local: "C:/temp", remote: "/root" })),
     SFTPTransfers: vi.fn(async () => []),
+    SaveTransferLocalDir: vi.fn(async () => {}),
     SFTPList: vi.fn(async () => []),
     SFTPReadRemoteText: vi.fn(),
     SFTPSaveRemoteText: vi.fn(),
@@ -31,7 +32,6 @@ vi.mock("../bridge", () => ({
 vi.mock("@wailsio/runtime", () => ({
   Clipboard: { SetText: vi.fn(async () => {}) },
 }));
-
 
 vi.mock("./editor/SFTPFileEditor", () => ({
   default: ({initialContent,dirty,onChange,onSave}: {
@@ -183,6 +183,32 @@ test("refreshing a loaded directory keeps its previous file rows visible", async
   expect(within(pane("local")).getByText("visible.txt")).toBeTruthy();
 });
 
+test("SFTP saves a successfully visited local folder for the saved SSH session", async () => {
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side, directory) =>
+    side === "local" && directory === "C:/temp"
+      ? [{...file("projects", "C:/temp/projects"), isDir: true}]
+      : []);
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  const folder = await screen.findByText("projects");
+  expect(api.SaveTransferLocalDir).not.toHaveBeenCalled();
+  fireEvent.doubleClick(folder.closest('[role="listitem"]')!);
+  await waitFor(() => expect(api.SaveTransferLocalDir)
+    .toHaveBeenCalledWith(ref.sessionId, "C:/temp/projects"));
+});
+
+test("SFTP does not persist a local folder that fails to load", async () => {
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side, directory) => {
+    if (side === "local" && directory === "C:/temp") {
+      return [{...file("missing", "C:/temp/missing"), isDir: true}];
+    }
+    if (side === "local" && directory === "C:/temp/missing") throw new Error("missing");
+    return [];
+  });
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  fireEvent.doubleClick((await screen.findByText("missing")).closest('[role="listitem"]')!);
+  expect(await screen.findByText("Error: missing")).toBeTruthy();
+  expect(api.SaveTransferLocalDir).not.toHaveBeenCalled();
+});
 
 test("saving a remote file does not discard edits made during the upload", async () => {
   const original: SFTPDocument = {
