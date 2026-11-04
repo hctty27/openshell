@@ -25,7 +25,7 @@ export default function AIContextIndicator({ stats, compacting, disabled, onComp
     const outside = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
-    const escape = (event: globalThis.KeyboardEvent) => {
+    const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.stopPropagation();
       setOpen(false);
