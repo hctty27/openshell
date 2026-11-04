@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ChevronDown, History, LoaderCircle, Pin, PinOff, Plus, Search, Server, Sparkles, Square, Trash2 } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import type { AIConversation, AIProvider, AIStartResponse, AITargetBinding, Tab } from "../types";
 import AIModelPicker from "./AIModelPicker";
+import AIDropdownSurface from "./AIDropdownSurface";
 import AISendControl from "./AISendControl";
 import { readAIExecutionMode, saveAIExecutionMode, type AIExecutionMode } from "../features/ai/executionModePreference";
 import AITranscript from "./AITranscript";
@@ -50,7 +51,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [search, setSearch] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [showTargets, setShowTargets] = useState(false);
-  const targetSelectorRef = useRef<HTMLDivElement>(null);
+  const targetTriggerRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [running, setRunning] = useState<AIStartResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -68,15 +69,6 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setMode(next);
     saveAIExecutionMode(isTerminal, next);
   };
-
-  useEffect(() => {
-    if (!showTargets || isTerminal || !isOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!targetSelectorRef.current?.contains(event.target as Node)) setShowTargets(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [showTargets, isTerminal, isOpen]);
 
   useEffect(() => {
     if (!isOpen) setShowTargets(false);
@@ -193,6 +185,37 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const filteredHistory = conversations.filter(item => belongsToConversationScope(item, terminalScopeId)).filter(item =>
     [item.title, ...item.targetNames, ...item.messages.map(m => m.content)].join(" ").toLowerCase().includes(search.toLowerCase())
   );
+  useEffect(() => {
+    if (!showTargets) return;
+    const firstAvailable = document.querySelector<HTMLInputElement>(".ai-target-menu input[type=checkbox]:not(:disabled)");
+    firstAvailable?.focus();
+  }, [showTargets]);
+
+  const onTargetsKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setShowTargets(false);
+      targetTriggerRef.current?.focus();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End", "Enter"].includes(event.key)) return;
+    const inputs = Array.from(event.currentTarget.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:not(:disabled)'));
+    if (!inputs.length) return;
+    const current = inputs.indexOf(document.activeElement as HTMLInputElement);
+    if (event.key === "Enter") {
+      if (current >= 0) {
+        event.preventDefault();
+        inputs[current].click();
+      }
+      return;
+    }
+    event.preventDefault();
+    const next = event.key === "Home" ? 0 : event.key === "End" ? inputs.length - 1 :
+      (current + (event.key === "ArrowDown" ? 1 : -1) + inputs.length) % inputs.length;
+    inputs[next]?.focus();
+  };
+
   const toggleTarget = (id: string) => {
     if (id === requiredID) return;
     const sessionID = connected.find(tab => tab.id === id)?.session.id;
@@ -372,13 +395,16 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                     providerID={provider?.id ?? providerID} modelID={model?.id ?? modelID}
                     onChange={chooseModel} disabled={submitting || !!running} />
                   {!isTerminal && (
-                    <div className="ai-selector ai-compose-target" ref={targetSelectorRef}>
-              <button type="button" className="ai-selector-button" onClick={() => setShowTargets(!showTargets)}
+                    <div className="ai-selector ai-compose-target">
+              <button ref={targetTriggerRef} type="button" className="ai-selector-button" onClick={() => setShowTargets(!showTargets)}
                   onKeyDown={event => {
                     if (event.key === "Escape" && showTargets) {
                       event.preventDefault();
                       event.stopPropagation();
                       setShowTargets(false);
+                    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                      event.preventDefault();
+                      setShowTargets(true);
                     }
                   }}
                 aria-expanded={showTargets}
@@ -387,8 +413,10 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                 <span className="ai-selector-label">{selectedTargetLabel}</span>
                 <ChevronDown size={13} aria-hidden="true" />
               </button>
-              {showTargets && (
-                <div className="ai-target-menu">
+              <AIDropdownSurface open={showTargets} anchorRef={targetTriggerRef}
+                onDismiss={() => setShowTargets(false)} align="end" minWidth={240} maxHeight={250}>
+                <div className="ai-target-menu" role="group" aria-label={t("ai:sessionsLabel")}
+                  onKeyDown={onTargetsKeyDown}>
                   {connected.map(tab => (
                     <label key={tab.id}>
                       <input type="checkbox" checked={targetSet.has(tab.id)} disabled={tab.id === requiredID} onChange={() => toggleTarget(tab.id)} />
@@ -397,7 +425,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                   ))}
                   {!connected.length && <p className="ai-muted">{t("ai:connectSshFirst")}</p>}
                 </div>
-              )}
+              </AIDropdownSurface>
             </div>
                   )}
                 </div>
