@@ -164,7 +164,11 @@ func (m *Manager) Operate(ref domain.ConnectionRef, side, operation, source, arg
     case "rename":
         if err := checkNotExists(c.Lstat, argument); err != nil { return err }
         return c.Rename(source, argument)
-    case "delete": return c.RemoveAll(source)
+    case "delete":
+        info, err := c.Lstat(source)
+        if err != nil { return err }
+        if info.Mode()&os.ModeSymlink != 0 { return c.Remove(source) }
+        return c.RemoveAll(source)
     case "chmod": return c.Chmod(source, perms)
     default: return apperror.New("sftpFileUnsupportedFileOperation",nil)
     }
