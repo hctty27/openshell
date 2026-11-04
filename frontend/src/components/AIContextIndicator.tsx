@@ -80,7 +80,8 @@ export default function AIContextIndicator({
 
   return <div className="ai-context-control" ref={rootRef}>
     <button ref={triggerRef} type="button" className={"ai-context-ring is-" + state}
-      aria-label={t("ai:contextUsage") + ": " + percentage + "%"}
+      aria-label={t("ai:contextUsage")}
+      aria-description={percentage + "%"}
       title={t("ai:contextUsage") + ": " + used.toLocaleString() + "/" + limit.toLocaleString()}
       aria-haspopup="dialog" aria-expanded={open}
       onClick={() => { if (!open) onOpen?.(); setOpen(value => !value); }}>
