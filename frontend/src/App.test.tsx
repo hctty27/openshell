@@ -156,6 +156,46 @@ test("global AI pin survives SFTP and terminal AI panel switching", async () => 
   expect(pinned()).toBe(true);
 });
 
+test("workspace panel buttons keep their icons while highlighting the open panel", async () => {
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{ id: "server-a", groupId: "", name: "server-a", host: "example.test",
+      port: 22, username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved" }],
+    groups: [], fontSize: "14", language: "zh-CN", version: "test",
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选中会话 server-a" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+
+  const [terminalAI, sftp] = Array.from(
+    document.querySelectorAll<HTMLButtonElement>(".terminal-toolbar .workspace-panel-toggle")
+  );
+  expect(terminalAI).toBeDefined();
+  expect(sftp).toBeDefined();
+  const aiIcon = terminalAI.querySelector("svg")?.outerHTML;
+  const sftpIcon = sftp.querySelector("svg")?.outerHTML;
+  expect(terminalAI.getAttribute("aria-pressed")).toBe("false");
+  expect(sftp.getAttribute("aria-pressed")).toBe("false");
+
+  fireEvent.click(sftp);
+  expect(sftp.getAttribute("aria-pressed")).toBe("true");
+  expect(terminalAI.getAttribute("aria-pressed")).toBe("false");
+  expect(sftp.querySelector("svg")?.outerHTML).toBe(sftpIcon);
+
+  fireEvent.click(terminalAI);
+  expect(terminalAI.getAttribute("aria-pressed")).toBe("true");
+  expect(sftp.getAttribute("aria-pressed")).toBe("false");
+  expect(terminalAI.querySelector("svg")?.outerHTML).toBe(aiIcon);
+  expect(sftp.querySelector("svg")?.outerHTML).toBe(sftpIcon);
+
+  fireEvent.click(terminalAI);
+  expect(terminalAI.getAttribute("aria-pressed")).toBe("false");
+  fireEvent.click(sftp);
+  expect(sftp.getAttribute("aria-pressed")).toBe("true");
+  fireEvent.click(sftp);
+  expect(sftp.getAttribute("aria-pressed")).toBe("false");
+  expect(sftp.querySelector("svg")?.outerHTML).toBe(sftpIcon);
+});
+
 test("session sidebar can auto-hide, hover open and pin without remounting the tree", async () => {
   vi.mocked(api.SavePreference).mockClear();
   await act(async () => { render(<App />); });
