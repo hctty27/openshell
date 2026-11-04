@@ -107,6 +107,8 @@ export interface AIConversation {
   modelId: string;
   mode: "review" | "auto";
   execution?: "independent" | "terminal";
+  scope?: "global" | "terminal";
+  scopeId?: string;
   targetNames: string[];
   targetSessionIds?: string[];
   targetBindings?: AITargetBinding[];

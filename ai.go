@@ -33,6 +33,7 @@ type AIStartRequest struct {
 	ModelID string `json:"modelId"`
 	Mode string `json:"mode"`
 	Execution string `json:"execution"`
+	ScopeID string `json:"scopeId"`
 	Text string `json:"text"`
 	Targets []domain.ConnectionRef `json:"targets"`
 }
@@ -128,10 +129,18 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	req.Text = strings.TrimSpace(req.Text)
 	if len(req.Text) == 0 || len(req.Text) > 12000 { return AITaskStart{}, apperror.New("aiInvalidMessageLength", nil) }
 	if req.Mode != "review" && req.Mode != "auto" { return AITaskStart{}, apperror.New("aiInvalidMode", nil) }
-	if req.Execution == "" { req.Execution = "auto" }
-	if req.Execution != "auto" && req.Execution != "independent" && req.Execution != "terminal" { return AITaskStart{}, apperror.New("aiInvalidExecution", nil) }
+	if req.Execution == "" { req.Execution = "independent" }
+	if req.Execution != "independent" && req.Execution != "terminal" { return AITaskStart{}, apperror.New("aiInvalidExecution", nil) }
 	if req.Execution == "terminal" && len(req.Targets) != 1 {
-		return AITaskStart{},apperror.New("aiTerminalSingleTarget", nil)
+		return AITaskStart{}, apperror.New("aiTerminalSingleTarget", nil)
+	}
+	if req.Execution == "terminal" {
+		ref := req.Targets[0]
+		if req.ScopeID != ref.SessionID && req.ScopeID != ref.SessionID+":"+ref.TabID {
+			return AITaskStart{}, apperror.New("aiConversationScopeMismatch", nil)
+		}
+	} else if req.ScopeID != "" {
+		return AITaskStart{}, apperror.New("aiConversationScopeMismatch", nil)
 	}
 	provider, err := a.store.GetAIProvider(a.ctx, req.ProviderID)
 	if err != nil { return AITaskStart{}, err }
@@ -161,19 +170,12 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	ctx := a.ctx
 	if ctx == nil { ctx = context.Background() }
 	selectedExecution := req.Execution
-	if req.Execution == "auto" || req.Execution == "independent" {
-		selectedExecution = "independent"
+	if selectedExecution == "independent" {
 		for _, ref := range req.Targets {
 			capability, err := a.ssh.AIExecutionMode(ctx, ref)
 			if err != nil { return AITaskStart{}, apperror.Wrap("aiExecutionProbeFailed", err, nil) }
-			if capability == "terminal" {
-				if req.Execution == "independent" {
-					return AITaskStart{}, apperror.New("aiIndependentUnsupported", nil)
-				}
-				if len(req.Targets) != 1 {
-					return AITaskStart{}, apperror.New("aiMultiTargetTerminalUnsupported", nil)
-				}
-				selectedExecution = "terminal"
+			if capability != "independent" {
+				return AITaskStart{}, apperror.New("aiIndependentUnsupported", nil)
 			}
 		}
 	}
@@ -187,12 +189,19 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	accepted := false
 	defer func() { if !accepted && terminalLease != nil { terminalLease.Release() } }()
 	c := store.AIConversation{ ID: domain.NewID(), Title: truncateAIRunes(req.Text, 40), Messages: []store.AIMessage{} }
+	scope := "global"
+	if selectedExecution == "terminal" { scope = "terminal" }
 	if req.ConversationID != "" {
 		existing, err := a.store.GetAIConversation(ctx, req.ConversationID)
 		if err != nil { return AITaskStart{}, err }
+		existingScope, existingScopeID := aiConversationScope(existing)
+		if existingScope != scope || (scope == "terminal" && existingScopeID != req.ScopeID) {
+			return AITaskStart{}, apperror.New("aiConversationScopeMismatch", nil)
+		}
 		c = existing
 	}
 	c.ProviderID, c.ModelID, c.Mode, c.TargetNames = req.ProviderID, req.ModelID, req.Mode, names
+	c.Scope, c.ScopeID = scope, req.ScopeID
 	c.Execution = selectedExecution
 	c.TargetSessionIDs = sessionIDs
 	c.TargetBindings = bindings
@@ -558,4 +567,15 @@ func truncateAIRunes(s string, max int)string{
 func aiPromptText(language, english, chinese string) string {
 	if NormalizeLanguage(language) == "zh-CN" { return chinese }
 	return english
+}
+
+
+// aiConversationScope keeps pre-split histories available without migrating or deleting them.
+func aiConversationScope(c store.AIConversation) (string, string) {
+	if c.Scope == "terminal" { return "terminal", c.ScopeID }
+	if c.Scope == "global" { return "global", "" }
+	if c.Execution == "terminal" && len(c.TargetSessionIDs) == 1 {
+		return "terminal", c.TargetSessionIDs[0]
+	}
+	return "global", ""
 }

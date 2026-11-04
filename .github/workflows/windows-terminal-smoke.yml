@@ -81,6 +81,9 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test -- --run
       - name: Verify Go dependencies on Windows
         run: go mod tidy
       - name: Test Go on Windows
