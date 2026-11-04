@@ -572,7 +572,17 @@ func aiPromptText(language, english, chinese string) string {
 
 // aiConversationScope keeps pre-split histories available without migrating or deleting them.
 func aiConversationScope(c store.AIConversation) (string, string) {
-	if c.Scope == "terminal" { return "terminal", c.ScopeID }
+	if c.Scope == "terminal" {
+		// Older duplicate tabs persisted "sessionId:tabId". Accept their history
+		// in the parent session and re-save it with the canonical scope on use.
+		if len(c.TargetSessionIDs) == 1 {
+			sessionID := c.TargetSessionIDs[0]
+			if c.ScopeID == sessionID || strings.HasPrefix(c.ScopeID, sessionID+":") {
+				return "terminal", sessionID
+			}
+		}
+		return "terminal", c.ScopeID
+	}
 	if c.Scope == "global" { return "global", "" }
 	if c.Execution == "terminal" && len(c.TargetSessionIDs) == 1 {
 		return "terminal", c.TargetSessionIDs[0]
