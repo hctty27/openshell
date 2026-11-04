@@ -26,6 +26,7 @@ import GeneralSettingsPanel from "./GeneralSettingsPanel";
 import ConnectionSettingsPanel from "./ConnectionSettingsPanel";
 import TerminalSettingsPanel from "./TerminalSettingsPanel";
 import AIProviderSettings from "./AIProviderSettings";
+import SFTPEditorSettingsPanel from "./editor/SFTPEditorSettingsPanel";
 import type {
   Session,
   LocalForward,
@@ -190,6 +191,7 @@ export default function SettingsDialog(p: Props) {
               {[
                 { id: "general", label: t("settings:general"), icon: Settings2 },
                 { id: "terminal", label: t("settings:terminal"), icon: Terminal },
+                { id: "sftp", label: "SFTP", icon: FolderOpen },
                 { id: "connection", label: t("settings:connection"), icon: Network },
                 { id: "ai", label: t("settings:aiModels"), icon: Sparkles },
                 { id: "about", label: t("settings:about"), icon: Info },
@@ -441,6 +443,7 @@ export default function SettingsDialog(p: Props) {
             />
           )}
           {tab === "ai" && <AIProviderSettings />}
+          {tab === "sftp" && <SFTPEditorSettingsPanel />}
           {tab === "about" && (
             <section className="settings-panel" aria-labelledby="settings-about-title">
               <div className="settings-panel-heading">
