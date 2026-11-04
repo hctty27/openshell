@@ -24,6 +24,9 @@ beforeEach(async () => { await initializeI18n("zh-CN"); });
 afterEach(() => {
   cleanup();
   events.clear();
+  window.localStorage.removeItem("openshell.ai.execution-mode.global");
+  window.localStorage.removeItem("openshell.ai.execution-mode.terminal");
+  vi.mocked(api.AIStart).mockClear();
 });
 
 async function renderRunningAI(initiallyOpen = true) {
@@ -189,12 +192,39 @@ test("English controls have no obsolete execution selector", async () => {
   expect(screen.getByPlaceholderText("Describe the task for AI...")).toBeTruthy();
 });
 
-test("approval mode remains available without an execution selector", () => {
-  render(<AISidebar tabs={[connectedTab]} active={connectedTab} pinned={true}
-    isOpen={true} onTogglePin={vi.fn()} />);
-  expect(screen.getByRole("combobox", { name: "执行模式" })).toBeTruthy();
-  expect(screen.getByRole("option", { name: "自动审查" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "AI 操作方式" })).toBeNull();
+test("execution mode is selected from the split send button, without sending", () => {
+  render(<AISidebar tabs={[connectedTab]} active={connectedTab} pinned isOpen
+    onTogglePin={vi.fn()} />);
+  expect(document.querySelector(".ai-controls")).toBeNull();
+  expect(screen.queryByRole("combobox", { name: "执行模式" })).toBeNull();
+  const trigger = screen.getByRole("button", { name: "执行模式：自动审查" });
+  fireEvent.click(trigger);
+  const automatic = screen.getByRole("menuitemradio", { name: "完全自动" });
+  expect(automatic.getAttribute("aria-checked")).toBe("false");
+  fireEvent.click(automatic);
+  expect(screen.getByRole("button", { name: "执行模式：完全自动" })).toBeTruthy();
+  expect(window.localStorage.getItem("openshell.ai.execution-mode.global")).toBe("auto");
+  expect(api.AIStart).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "执行模式：完全自动" }));
+  const menu = screen.getByRole("menu", { name: "执行模式" });
+  fireEvent.keyDown(menu, { key: "Escape" });
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "执行模式：完全自动" }));
+});
+
+test("global sessions are in the composer while terminal AI has no target toolbar", () => {
+  const view = render(<AISidebar tabs={[connectedTab]} active={connectedTab} pinned isOpen
+    onTogglePin={vi.fn()} />);
+  const global = screen.getByRole("complementary", { name: "AI 助手" });
+  const selector = screen.getByRole("button", { name: /会话：hk/ });
+  expect(selector.closest(".ai-compose")).toBeTruthy();
+  expect(global.querySelector(".ai-controls")).toBeNull();
+  view.rerender(<AISidebar tabs={[connectedTab]} active={connectedTab} pinned isOpen
+    terminalScopeId="hk-server" onTogglePin={vi.fn()} />);
+  expect(screen.queryByRole("button", { name: /会话：/ })).toBeNull();
+  expect(document.querySelector(".ai-controls")).toBeNull();
+  expect(screen.getByRole("complementary", { name: "终端 AI" }).querySelector(".ai-compose")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "执行模式：自动审查" })).toBeTruthy();
 });
 
 test("terminal history is filtered to the selected session", async () => {
