@@ -87,5 +87,9 @@
   "compacting": "Compressing…",
   "contextNoHistory": "No older history to compress",
   "atThreshold": "At {{threshold}}%",
-  "autoCompactOff": "Disabled"
+  "autoCompactOff": "Disabled",
+  "historyToday": "Today",
+  "historyYesterday": "Yesterday",
+  "historyEarlier": "Earlier",
+  "currentConversation": "Current conversation"
 }
