@@ -335,9 +335,13 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
           onFileDrop={event=>drop("remote",event)}/>
       </div>
       <div className="sftp-sync-controls">
-        <span><ArrowLeftRight size={13}/>{t("sftp:syncFolders")}</span>
-        <button disabled={syncBusy} onClick={()=>void sync("upload")}><ArrowUpFromLine size={13}/>{t("sftp:syncUpload")}</button>
-        <button disabled={syncBusy} onClick={()=>void sync("download")}><ArrowDownToLine size={13}/>{t("sftp:syncDownload")}</button>
+        <span title={t("sftp:syncFolders")}><ArrowLeftRight size={13}/><span className="sftp-sync-label">{t("sftp:path")}</span></span>
+        <button type="button" title={t("sftp:syncUpload")} aria-label={t("sftp:syncUpload")} disabled={syncBusy} onClick={()=>void sync("upload")}>
+          <ArrowUpFromLine size={13}/><span className="sftp-sync-label">{t("sftp:syncUploadShort")}</span>
+        </button>
+        <button type="button" title={t("sftp:syncDownload")} aria-label={t("sftp:syncDownload")} disabled={syncBusy} onClick={()=>void sync("download")}>
+          <ArrowDownToLine size={13}/><span className="sftp-sync-label">{t("sftp:syncDownloadShort")}</span>
+        </button>
       </div>
       {!hideTaskQueue && <div className={`sftp-queue ${queueOpen?"expanded":""}`}>
         <button className="sftp-queue-heading" onClick={()=>setQueueOpen(v=>!v)}>
