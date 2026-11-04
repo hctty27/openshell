@@ -111,10 +111,31 @@ func TestReportRetention(t *testing.T) {
     manager, err := Open(t.TempDir())
     if err != nil { t.Fatal(err) }
     defer manager.Close()
+    var lastExport string
     for i := 0; i < 5; i++ {
-        if _, err := manager.Export(); err != nil { t.Fatal(err) }
+        lastExport, err = manager.Export()
+        if err != nil { t.Fatal(err) }
     }
+    // On Windows multiple exports may have identical modification times.
+    // A retention cleanup must never delete the freshly exported path.
+    if _, err := os.Stat(lastExport); err != nil { t.Fatalf("newest report was pruned: %v", err) }
     reports, err := os.ReadDir(filepath.Join(manager.dir, "reports"))
     if err != nil { t.Fatal(err) }
     if len(reports) != 3 { t.Fatalf("expected three retained diagnostic reports, got %d", len(reports)) }
+}
+
+func TestPruneExpiredReportsAtOpen(t *testing.T) {
+    dir := t.TempDir()
+    reportDir := filepath.Join(dir, "reports")
+    if err := os.MkdirAll(reportDir, 0700); err != nil { t.Fatal(err) }
+    filename := filepath.Join(reportDir, "openshell-diagnostics-expired.zip")
+    if err := os.WriteFile(filename, []byte("expired"), 0600); err != nil { t.Fatal(err) }
+    old := time.Now().Add(-8 * 24 * time.Hour)
+    if err := os.Chtimes(filename, old, old); err != nil { t.Fatal(err) }
+    manager, err := Open(dir)
+    if err != nil { t.Fatal(err) }
+    defer manager.Close()
+    if _, err := os.Stat(filename); !os.IsNotExist(err) {
+        t.Fatalf("expired report was retained: %v", err)
+    }
 }
