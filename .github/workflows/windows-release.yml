@@ -93,7 +93,7 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: |
-          npm ci
+          npm ci --prefer-offline --no-audit --no-fund
           npm run build
 
       - name: Ensure cached Wails CLI
