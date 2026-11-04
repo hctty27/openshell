@@ -7,6 +7,11 @@ on:
         description: Publish a GitHub Release after CI succeeds
         required: true
         type: boolean
+      use_frontend_artifact:
+        description: Reuse the frontend bundle built and tested in the caller workflow
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
   # Exercise the real installer + portable packaging code on workflow changes.
   # Pull requests never publish a Release, regardless of the publish input.
@@ -20,7 +25,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: openshell-windows-release-${{ github.event.pull_request.number || 'main' }}
+  group: openshell-windows-release-${{ github.workflow }}-${{ github.event.pull_request.number || 'main' }}
   # Supersede outdated PR dry runs, but never cancel a production release.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -84,17 +89,29 @@ jobs:
         with:
           path: ${{ steps.wails-path.outputs.binary }}
           key: windows-wails-cli-v3.1.0-go${{ steps.setup-go.outputs.go-version }}-${{ runner.arch }}
+      - name: Download tested frontend bundle
+        if: inputs.use_frontend_artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: openshell-frontend-dist
+          path: frontend/dist
       - uses: actions/setup-node@v7
+        if: ${{ !inputs.use_frontend_artifact }}
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Build frontend
+        if: ${{ !inputs.use_frontend_artifact }}
         working-directory: frontend
         run: |
           npm ci
           npm run build
+      - name: Verify frontend bundle
+        shell: pwsh
+        run: |
+          if (!(Test-Path "frontend/dist/index.html")) { throw "Missing frontend/dist/index.html" }
 
       - name: Ensure cached Wails CLI
         shell: pwsh
