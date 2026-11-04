@@ -6,6 +6,8 @@ import AIModelPicker from "./AIModelPicker";
 import AIDropdownSurface from "./AIDropdownSurface";
 import AISendControl from "./AISendControl";
 import AIContextIndicator from "./AIContextIndicator";
+import { AI_RUNTIME_SETTINGS_CHANGED, defaultAIRuntimeSettings } from "./AIBehaviorSettings";
+import type { AIRuntimeSettings } from "../types";
 import { readAIExecutionMode, saveAIExecutionMode, type AIExecutionMode } from "../features/ai/executionModePreference";
 import AITranscript from "./AITranscript";
 import { belongsToConversationScope } from "../features/ai/conversationScope";
@@ -62,6 +64,22 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [status, setStatus] = useState("");
   const [contextInfo, setContextInfo] = useState<AIContextStats | null>(null);
   const [compacting, setCompacting] = useState(false);
+  const [runtimeSettings, setRuntimeSettings] = useState<AIRuntimeSettings>(defaultAIRuntimeSettings);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      if (typeof api.AIRuntimeSettings !== "function") return;
+      void api.AIRuntimeSettings()
+        .then(next => { if (active) setRuntimeSettings(next); })
+        .catch(() => {});
+    };
+    refresh();
+    window.addEventListener(AI_RUNTIME_SETTINGS_CHANGED, refresh);
+    return () => {
+      active = false;
+      window.removeEventListener(AI_RUNTIME_SETTINGS_CHANGED, refresh);
+    };
+  }, []);
   const finishedTasks = useRef(new Set<string>());
   const activeTaskRef = useRef("");
   const currentConversationRef = useRef("");
@@ -466,6 +484,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                 <AIContextIndicator
                   stats={contextInfo ?? (model ? { window: model.contextWindow || 32768, estimatedTokens: 0, lastPromptTokens: 0, compactionCount: 0, isEstimate: true } : null)}
                   compacting={compacting} disabled={!conversationID || !!running || submitting}
+                  autoCompact={runtimeSettings.autoCompact} compactThreshold={runtimeSettings.compactThreshold}
                   onCompact={() => void compactHistory()} />
                 {running ? <button type="button" title={t("ai:stopTask")} aria-label={t("ai:stopTask")}
                     className="ai-stop-button" onClick={() => void api.AIStop(running.taskId)}><Square size={15} /></button> :
