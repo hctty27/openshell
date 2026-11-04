@@ -6,7 +6,7 @@ import { initializeI18n } from "../i18n";
 import { Clipboard } from "@wailsio/runtime";
 import { BASH_CWD_REPORT_COMMAND } from "../terminalCwd";
 import { api } from "../bridge";
-import type { Ref, SFTPEntry, SFTPTask } from "../types";
+import type { Ref, SFTPEntry, SFTPTask, SFTPDocument } from "../types";
 
 const transferEvents = vi.hoisted(() => ({
   callbacks: [] as Array<(task: unknown) => void>,
@@ -17,6 +17,8 @@ vi.mock("../bridge", () => ({
     SFTPHome: vi.fn(async () => ({ local: "C:/temp", remote: "/root" })),
     SFTPTransfers: vi.fn(async () => []),
     SaveTransferLocalDir: vi.fn(async () => {}),
+    SFTPReadRemoteText: vi.fn(),
+    SFTPSaveRemoteText: vi.fn(),
     SFTPList: vi.fn(async () => []),
     SFTPOperate: vi.fn(async () => {}),
   },
@@ -30,6 +32,21 @@ vi.mock("../bridge", () => ({
 }));
 vi.mock("@wailsio/runtime", () => ({
   Clipboard: { SetText: vi.fn(async () => {}) },
+}));
+
+vi.mock("./editor/SFTPFileEditor", () => ({
+  default: ({initialContent,dirty,onChange,onSave}: {
+    initialContent: string;
+    dirty: boolean;
+    onChange(content: string): void;
+    onSave(content: string): void;
+  }) => (
+    <div>
+      <textarea data-testid="sftp-edit-draft" defaultValue={initialContent} onChange={event=>onChange(event.target.value)}/>
+      <span data-testid="sftp-edit-dirty">{dirty ? "dirty" : "clean"}</span>
+      <button type="button" onClick={()=>onSave(document.querySelector<HTMLTextAreaElement>('[data-testid="sftp-edit-draft"]')?.value ?? "")}>save mock</button>
+    </div>
+  ),
 }));
 
 const ref: Ref = { tabId: "tab-1", sessionId: "server-1", generation: 1 };
@@ -278,4 +295,27 @@ test("SFTP does not persist a local folder that fails to load", async () => {
   fireEvent.doubleClick((await screen.findByText("missing")).closest('[role="listitem"]')!);
   expect(await screen.findByText("Error: missing")).toBeTruthy();
   expect(api.SaveTransferLocalDir).not.toHaveBeenCalled();
+});
+
+test("saving a remote file does not discard edits made during the upload", async () => {
+  const original: SFTPDocument = {
+    path: "/root/config.yaml", content: "original", revision: "initial", size: 8,
+  };
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
+    side === "remote" ? [file("config.yaml", original.path)] : []);
+  vi.mocked(api.SFTPReadRemoteText).mockResolvedValue(original);
+  let finishSave: (document: SFTPDocument) => void = () => {};
+  vi.mocked(api.SFTPSaveRemoteText).mockImplementation(() =>
+    new Promise(resolve => { finishSave = resolve; }));
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+  const row = (await screen.findByText("config.yaml")).closest('[role="listitem"]')!;
+  fireEvent.doubleClick(row);
+  const draft = await screen.findByTestId("sftp-edit-draft") as HTMLTextAreaElement;
+  fireEvent.change(draft, { target: { value: "first change" } });
+  fireEvent.click(screen.getByRole("button", { name: "save mock" }));
+  await waitFor(() => expect(api.SFTPSaveRemoteText).toHaveBeenCalledWith(ref, original.path, original.revision, "first change"));
+  fireEvent.change(draft, { target: { value: "second change" } });
+  await act(async () => finishSave({ ...original, content: "first change", revision: "next", size: 12 }));
+  expect(draft.value).toBe("second change");
+  expect(screen.getByTestId("sftp-edit-dirty").textContent).toBe("dirty");
 });
