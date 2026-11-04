@@ -860,5 +860,5 @@
   text-align: center;
 }
 .ai-context-compact:hover:not(:disabled) { border-color: var(--accent-border); }
-.ai-context-compact:disabled { opacity: .5; cursor: default; }
+.ai-context-compact:disabled { opacity: 1; color: var(--text-muted); background: var(--field-bg); cursor: default; }
 
