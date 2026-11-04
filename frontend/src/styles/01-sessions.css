@@ -91,39 +91,10 @@
 .splitter:hover {
   background: var(--accent-fill);
 }
-.sidebar-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  padding: 18px 10px 10px 12px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  letter-spacing: 0.7px;
-}
-.sidebar-heading > span {
-  white-space: nowrap;
-}
-.sidebar-heading-actions,
 .sidebar-heading-tools {
   display: flex;
   align-items: center;
-}
-.sidebar-heading-actions {
-  flex-shrink: 0;
-  gap: 4px;
-}
-.sidebar-heading-tools {
   gap: 1px;
-}
-.sidebar-heading button {
-  width: 24px;
-  height: 24px;
-  color: var(--text-muted);
-}
-.sidebar-heading .sidebar-pin-toggle {
-  position: relative;
-  margin-left: 4px;
 }
 .sidebar-pin-toggle::before {
   content: "";
@@ -132,15 +103,6 @@
   top: 4px;
   height: 16px;
   border-left: 1px solid var(--border);
-}
-.sidebar-heading .sidebar-pin-toggle.is-pinned {
-  color: var(--accent-fill);
-  background: var(--accent-soft);
-}
-.sidebar-heading .sidebar-pin-toggle:hover,
-.sidebar-heading .sidebar-pin-toggle:focus-visible {
-  color: var(--accent-fill);
-  background: var(--accent-soft);
 }
 .search {
   margin: 0 11px 9px;
