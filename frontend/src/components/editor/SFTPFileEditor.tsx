@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { FileText, Save, Search, X, WrapText } from "lucide-react";
-import { EditorState, Compartment } from "@codemirror/state";
+import { EditorState, Compartment, Prec } from "@codemirror/state";
 import { EditorView, basicSetup } from "codemirror";
 import { keymap } from "@codemirror/view";
 import { indentWithTab, toggleComment } from "@codemirror/commands";
 import { indentUnit, LanguageDescription } from "@codemirror/language";
 import { openSearchPanel, search, gotoLine } from "@codemirror/search";
 import { sftpLanguages } from "./sftpLanguages";
-import { t } from "../../i18n";
+import { i18n, t } from "../../i18n";
 import {
   detectIndentation,
   readSFTPEditorPreferences,
@@ -68,13 +68,19 @@ export default function SFTPFileEditor({
         extensions: [
           basicSetup,
           search({ top: true }),
-          keymap.of([
+          ...(i18n.language === "zh-CN" ? [EditorState.phrases.of({
+            "Find": "查找", "Replace": "替换", "next": "下一个", "previous": "上一个",
+            "all": "全部", "match case": "区分大小写", "regexp": "正则表达式",
+            "by word": "全词匹配", "replace": "替换", "replace all": "全部替换",
+            "close": "关闭", "Go to line": "跳转行号", "Go": "跳转",
+          })] : []),
+          Prec.high(keymap.of([
             { key: "Mod-s", run: onSaveKey },
             { key: "Mod-h", run: openSearchPanel },
             { key: "Mod-g", run: gotoLine },
             { key: "Mod-/", run: toggleComment },
             indentWithTab,
-          ]),
+          ])),
           EditorState.lineSeparator.of(initialRef.current.includes("\r\n") ? "\r\n" : "\n"),
           indentCompartment.current.of(indentUnit.of(resolved.mode === "tabs" ? "\t" : " ".repeat(resolved.size))),
           tabCompartment.current.of(EditorState.tabSize.of(resolved.size)),
