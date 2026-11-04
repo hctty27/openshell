@@ -15,6 +15,7 @@ import { DialogProvider } from "./DialogProvider";
 import { api } from "../bridge";
 import { Browser, Clipboard } from "@wailsio/runtime";
 import type { Tab } from "../types";
+import { terminalThemes } from "../terminalThemes";
 
 const refs = vi.hoisted(() => ({
   terms: [] as any[],
@@ -39,7 +40,7 @@ vi.mock("@xterm/xterm", () => ({
     };
     bufferChangeHandler = (_buffer: {type: "normal" | "alternate"}) => {};
     buffer = {
-      active: { viewportY: 4, type: "normal" as "normal" | "alternate" },
+      active: { viewportY: 4, type: "normal" as "normal" | "alternate", getLine: vi.fn(() => undefined) },
       onBufferChange: vi.fn((callback: (buffer: {type: "normal" | "alternate"}) => void) => {
         this.bufferChangeHandler = callback;
         return { dispose: vi.fn() };
@@ -328,7 +329,7 @@ test("xterm 6.1 selects and copies in TUIs by default, Alt enables app mouse con
   const pane = container.querySelector(".terminal-pane")!;
   const term = refs.terms[0];
   expect(term.options.mouseEventsRequireAlt).toBe(true);
-  expect(term.options.scrollbar).toEqual({ width: 14 });
+  expect(term.options.scrollbar).toEqual({ width: 8 });
   term.modes.mouseTrackingMode = "vt200";
   term.selected = "selected TUI output";
 
@@ -512,6 +513,33 @@ test("terminal output is never dropped and acknowledged only after parsing", asy
   await waitFor(() =>
     expect(api.AcknowledgeTerminalOutput).toHaveBeenCalledWith(tab.ref, 70),
   );
+});
+
+test("full-screen TUI colors cover remainder pixels and reset after exit", () => {
+  const { container } = renderTerminal();
+  const term = refs.terms[0];
+  const surface = container.querySelector(".terminal-surface") as HTMLElement;
+  const cell = {
+    isBgDefault: () => false,
+    isBgRGB: () => false,
+    isBgPalette: () => true,
+    getBgColorMode: () => 1,
+    getBgColor: () => 4,
+  };
+  term.buffer.active.getLine.mockImplementation(() => ({ getCell: () => cell }));
+  const receive = events.listeners.get("ssh:output")!;
+  act(() => {
+    receive({ ref: tab.ref, sequence: 1, data: btoa("dialog") });
+    term.write.mock.lastCall?.[1]?.();
+  });
+  expect(surface.style.getPropertyValue("--terminal-edge-background")).toBe(terminalThemes.dark.blue);
+
+  term.buffer.active.getLine.mockReturnValue(undefined);
+  act(() => {
+    receive({ ref: tab.ref, sequence: 2, data: btoa("shell") });
+    term.write.mock.lastCall?.[1]?.();
+  });
+  expect(surface.style.getPropertyValue("--terminal-edge-background")).toBe("");
 });
 
 test("right click in terminal search does not paste into shell", async () => {
