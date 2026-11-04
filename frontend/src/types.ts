@@ -101,6 +101,13 @@ export interface AITargetBinding {
   port: number;
   username: string;
 }
+export interface AIRuntimeSettings {
+  autoCompact: boolean;
+  compactThreshold: number;
+  maxSteps: number;
+  taskTimeoutMinutes: number;
+  keepRecentTurns: number;
+}
 export interface AIContextStats {
   window: number;
   estimatedTokens: number;
