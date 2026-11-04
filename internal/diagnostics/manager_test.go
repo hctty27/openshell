@@ -106,3 +106,15 @@ func TestConcurrentCloseAndRecord(t *testing.T) {
     }
     manager.Close()
 }
+
+func TestReportRetention(t *testing.T) {
+    manager, err := Open(t.TempDir())
+    if err != nil { t.Fatal(err) }
+    defer manager.Close()
+    for i := 0; i < 5; i++ {
+        if _, err := manager.Export(); err != nil { t.Fatal(err) }
+    }
+    reports, err := os.ReadDir(filepath.Join(manager.dir, "reports"))
+    if err != nil { t.Fatal(err) }
+    if len(reports) != 3 { t.Fatalf("expected three retained diagnostic reports, got %d", len(reports)) }
+}
