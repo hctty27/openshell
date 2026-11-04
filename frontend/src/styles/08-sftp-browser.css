@@ -1,5 +1,6 @@
 /* SFTP: native two-pane file browser sharing the active SSH session. */
 .sftp-view {
+  container-type: inline-size;
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -74,10 +75,11 @@
 .sftp-placeholder { display: flex; padding: 20px; align-items: center; gap: 10px; color: var(--text-muted); overflow-wrap: anywhere; }
 .sftp-error { color: var(--info); }
 .sftp-panel-footer {
-  justify-content: space-between; flex-shrink: 0; height: 35px;
+  justify-content: space-between; flex: 0 0 30px; height: 30px; min-width: 0;
   padding: 0 10px; border-top: 1px solid var(--border); color: var(--text-muted);
 }
-.sftp-primary { padding: 5px 9px; font-size: 11px; color: var(--accent); }
+.sftp-panel-footer > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sftp-primary { flex: 0 0 auto; padding: 4px 7px; font-size: 11px; color: var(--accent); }
 .sftp-primary:disabled { opacity: .4; cursor: default; }
 .sftp-queue { flex-shrink: 0; border-top: 1px solid var(--border); }
 .sftp-queue-heading {
