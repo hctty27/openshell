@@ -107,10 +107,10 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
       if (next.id === currentConversationRef.current) setStream("");
     });
     const offDelta = listen("ai:delta", (event: { taskId: string; text: string }) => {
-      if (event.taskId === activeTaskRef.current) setStream(old => old + event.text);
+      if (activeTaskRef.current && event.taskId === activeTaskRef.current) setStream(old => old + event.text);
     });
     const offState = listen("ai:state", (event: { taskId: string; status: string; detail: string }) => {
-      if (event.taskId !== activeTaskRef.current) return;
+      if (!activeTaskRef.current || event.taskId !== activeTaskRef.current) return;
       setStatus(event.status === "completed" ? "" :
         event.status === "running" ? "running" :
         event.detail || (event.status === "cancelled" ? t("ai:taskCancelled") : t("ai:executionFailed")));
@@ -123,7 +123,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
       }
     });
     const offApproval = listen("ai:approval", (event: Approval) => {
-      if (event.taskId === activeTaskRef.current) setApproval(event);
+      if (activeTaskRef.current && event.taskId === activeTaskRef.current) setApproval(event);
     });
     return () => { offConversation(); offDelta(); offState(); offApproval(); };
   }, [terminalScopeId]);
