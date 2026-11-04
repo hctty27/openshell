@@ -190,7 +190,9 @@ Backend tests use controlled SSH servers and mock APIs. Browser tests use a mock
 - [Windows terminal smoke](.github/workflows/windows-terminal-smoke.yml) covers relevant terminal, SSH, SFTP, and ConPTY pull requests.
 - [Windows release](.github/workflows/windows-release.yml) publishes only after the release marker changes on `main` and CI passes. It retains three Releases, keeps older Git tags, and retains final build artifacts for seven days. Manual runs create artifacts without publishing a Release.
 
-For a release, update `.github/release-version.txt`, `frontend/package.json`, `frontend/package-lock.json`, and `CHANGELOG.md` together. Push to `main`; the workflow creates the tag after successful validation and packaging.
+**Recommended:** Open [Publish OpenShell (one click)](.github/workflows/publish.yml) in GitHub Actions, select `main`, choose `patch` (default), `minor`, or `major`, and click **Run workflow**. It synchronizes the version marker, npm metadata, Windows version info and changelog; commits the release metadata; runs Go/frontend verification on that exact commit; reuses the tested frontend bundle for the Windows build; then publishes the installer and portable ZIP. If packaging fails after version preparation, rerun the workflow to resume the unpublished version without incrementing it twice. Use only one release workflow at a time.
+
+**Legacy/manual:** You may still update `.github/release-version.txt`, `frontend/package.json`, `frontend/package-lock.json`, and `CHANGELOG.md` together, then merge to `main`; the existing release-marker CI path remains supported.
 
 </details>
 
