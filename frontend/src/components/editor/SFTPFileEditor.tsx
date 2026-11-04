@@ -6,7 +6,7 @@ import { keymap } from "@codemirror/view";
 import { indentWithTab, toggleComment } from "@codemirror/commands";
 import { indentUnit, LanguageDescription } from "@codemirror/language";
 import { openSearchPanel, search, gotoLine } from "@codemirror/search";
-import { languages } from "@codemirror/language-data";
+import { sftpLanguages } from "./sftpLanguages";
 import { t } from "../../i18n";
 import {
   detectIndentation,
@@ -95,7 +95,7 @@ export default function SFTPFileEditor({
     viewRef.current = view;
     view.focus();
     let active = true;
-    const description = LanguageDescription.matchFilename(languages, path);
+    const description = LanguageDescription.matchFilename(sftpLanguages, path);
     if (description) {
       setLanguageName(description.name);
       void description.load().then(support => {
@@ -141,7 +141,6 @@ export default function SFTPFileEditor({
   };
   const indentValue = preferences.indentMode === "auto" ? "auto" : preferences.indentMode + ":" + preferences.indentSize;
   const newline = initialRef.current.includes("\r\n") ? "CRLF" : "LF";
-  const editorValue = viewRef.current?.state.doc.toString() ?? initialRef.current;
 
   return (
     <div className="sftp-editor-backdrop">
@@ -150,7 +149,7 @@ export default function SFTPFileEditor({
           <strong title={path}><FileText size={15} /><span>{path}</span>{dirty && <span className="sftp-editor-dirty" title={t("sftp:editorUnsaved")}>●</span>}</strong>
           <div className="sftp-editor-tools">
             <button type="button" title={t("sftp:editorSearchReplace")} onClick={() => { const view = viewRef.current; if (view) openSearchPanel(view); }}><Search size={16} /></button>
-            <button type="button" title={t("sftp:saveFile")} disabled={saving || !dirty} onClick={() => onSave(editorValue)}><Save size={16} /></button>
+            <button type="button" title={t("sftp:saveFile")} disabled={saving || !dirty} onClick={() => onSave(viewRef.current?.state.doc.toString() ?? initialRef.current)}><Save size={16} /></button>
             <button type="button" title={t("common:close")} disabled={saving} onClick={onClose}><X size={17} /></button>
           </div>
         </header>
