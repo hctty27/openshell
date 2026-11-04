@@ -11,6 +11,7 @@ import {
   Plus,
   FolderPlus,
   Folder,
+  FolderTree,
   Server,
   Pencil,
   Copy,
@@ -292,13 +293,13 @@ export default function SessionTree(p: Props) {
   };
   return (
     <aside id="session-sidebar-panel" className="session-sidebar" aria-hidden={p.hidden || undefined} inert={p.hidden}>
-      <div className="sidebar-heading">
-        <span>{t("common:sessions")}</span>
-        <div className="sidebar-heading-actions">
+      <header className="sidebar-heading panel-header">
+        <strong className="panel-header-title"><FolderTree size={15} aria-hidden="true" /><span>{t("common:sessions")}</span></strong>
+        <div className="sidebar-heading-actions panel-header-actions">
           <div className="sidebar-heading-tools">
             <button type="button" title={t("common:newSession")} aria-label={t("common:newSession")}
               onClick={() => p.onEdit()}>
-              <Plus size={18} />
+              <Plus size={15} />
             </button>
             <button type="button" title={t("common:moreActions")} aria-label={t("common:moreActions")}
               aria-haspopup="menu"
@@ -306,7 +307,7 @@ export default function SessionTree(p: Props) {
                 const rect = event.currentTarget.getBoundingClientRect();
                 showContextMenu("toolbar", "", event.currentTarget, rect.right - 160, rect.bottom);
               }}>
-              <Ellipsis size={16} />
+              <Ellipsis size={15} />
             </button>
           </div>
           {p.onTogglePin && (
@@ -318,11 +319,11 @@ export default function SessionTree(p: Props) {
               aria-pressed={p.pinned === true}
               onClick={p.onTogglePin}
             >
-              {p.pinned ? <Pin size={15} fill="currentColor" aria-hidden="true" /> : <PinOff size={15} aria-hidden="true" />}
+              {p.pinned ? <Pin size={15} aria-hidden="true" /> : <PinOff size={15} aria-hidden="true" />}
             </button>
           )}
         </div>
-      </div>
+      </header>
       <div className="search">
         <Search size={15} />
         <input
