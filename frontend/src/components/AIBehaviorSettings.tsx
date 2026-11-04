@@ -63,7 +63,7 @@ export default function AIBehaviorSettings() {
     <form onSubmit={save}>
       <div className="settings-ai-runtime-row">
         <label htmlFor="ai-auto-compact">{t("settings:aiAutoCompact")}</label>
-        <input id="ai-auto-compact" type="checkbox" checked={settings.autoCompact}
+        <input id="ai-auto-compact" type="checkbox" className="settings-switch" checked={settings.autoCompact}
           disabled={loading || busy} onChange={e => change({ autoCompact: e.target.checked })} />
       </div>
       <div className="settings-ai-runtime-row">
