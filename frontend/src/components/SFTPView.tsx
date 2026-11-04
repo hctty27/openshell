@@ -50,9 +50,9 @@ function FilePanel(p: PanelProps) {
     <section className={`sftp-panel sftp-${p.side}`} onDragOver={event=>{
       if (event.dataTransfer.types.includes("application/x-openshell-entry")) event.preventDefault();
     }} onDrop={p.onFileDrop}>
-      <div className="sftp-panel-header">
-        <strong><span className="sftp-panel-dot" />{t(remote ? "sftp:remote" : "sftp:local")}</strong>
-        <div className="sftp-actions">
+      <div className="sftp-panel-header workspace-panel-header">
+        <strong className="panel-header-title"><span className="workspace-panel-dot" aria-hidden="true" />{t(remote ? "sftp:remote" : "sftp:local")}</strong>
+        <div className="sftp-actions panel-header-actions">
           {p.onChooseDirectory && <button title={t("sftp:chooseFolder")} onClick={p.onChooseDirectory}><FolderOpen size={14}/></button>}
           {p.onCwdHelp && <button type="button" aria-label={t("sftp:enableCwdReporting")} title={t("sftp:cwdNotReportedHelp")} onClick={p.onCwdHelp}><Info size={14}/></button>}
           <button title={t("sftp:chmod")} disabled={p.selected.length===0} onClick={()=>p.onOperate("chmod")}><Shield size={14}/></button>

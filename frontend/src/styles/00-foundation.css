@@ -228,3 +228,39 @@ kbd {
   color: var(--accent-fill);
   background: var(--accent-soft);
 }
+
+/* Compact title bars shared by terminal AI and the SFTP file panes. */
+.workspace-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 var(--chrome-bar-height);
+  height: var(--chrome-bar-height);
+  min-width: 0;
+  padding: 0 10px;
+  gap: 6px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.workspace-panel-header .panel-header-title {
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.workspace-panel-header .panel-header-actions { gap: 0; }
+.workspace-panel-header .panel-header-actions button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+.workspace-panel-header .panel-header-actions button > svg {
+  width: 14px;
+  height: 14px;
+}
+.workspace-panel-dot {
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-fill);
+}

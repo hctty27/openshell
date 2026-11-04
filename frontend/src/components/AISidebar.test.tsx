@@ -29,6 +29,20 @@ afterEach(() => {
   vi.mocked(api.AIStart).mockClear();
 });
 
+test("only terminal AI adopts the compact workspace header", async () => {
+  const props = { tabs: [connectedTab], active: connectedTab, pinned: true, isOpen: true, onTogglePin: vi.fn() };
+  const globalView = render(<AISidebar {...props} />);
+  const globalHeader = screen.getByRole("complementary", { name: "AI 助手" }).querySelector(".ai-header");
+  expect(globalHeader?.classList.contains("workspace-panel-header")).toBe(false);
+  expect(globalHeader?.querySelector("svg")).toBeTruthy();
+  globalView.unmount();
+
+  await act(async () => render(<AISidebar {...props} terminalScopeId="hk-server" />));
+  const terminalHeader = screen.getByRole("complementary", { name: "终端 AI" }).querySelector(".ai-header");
+  expect(terminalHeader?.classList.contains("workspace-panel-header")).toBe(true);
+  expect(terminalHeader?.querySelector(".workspace-panel-dot")).toBeTruthy();
+});
+
 async function renderRunningAI(initiallyOpen = true) {
   vi.mocked(api.AIProviders).mockResolvedValueOnce([{
     id: "p1", name: "provider", baseUrl: "https://example.test/v1", hasKey: true,

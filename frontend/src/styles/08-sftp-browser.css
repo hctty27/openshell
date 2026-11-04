@@ -25,21 +25,11 @@
 }
 .sftp-panel + .sftp-panel { border-left: 1px solid var(--border); }
 .sftp-remote { --wails-drop-target: drop; }
-.sftp-panel-header {
-  height: 34px;
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-  background: var(--panel);
-}
 .sftp-panel-header strong, .sftp-actions, .sftp-file-name, .sftp-panel-footer, .sftp-primary, .sftp-queue-heading > span {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.sftp-panel-dot { height: 6px; width: 6px; border-radius: 50%; background: var(--accent); }
 .sftp-actions button { width: 24px; height: 24px; padding: 4px; color: var(--text-muted); }
 .sftp-actions button:hover, .sftp-breadcrumb button:hover { color: var(--text-primary); }
 .sftp-breadcrumb {
