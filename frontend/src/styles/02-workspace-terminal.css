@@ -4,6 +4,8 @@
   display: flex;
   flex-direction: column;
   background: var(--surface);
+  /* Keep terminal AI controls below the global floating AI dock. */
+  isolation: isolate;
 }
 /* 自定义窗口标题栏：拖动区域与可交互按钮严格分开。 */
 .window-titlebar {
