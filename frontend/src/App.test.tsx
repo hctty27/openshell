@@ -24,6 +24,7 @@ vi.mock("./components/TerminalPane", () => ({
     onDirectoryChange?: (ref: { tabId: string; sessionId: string; generation: number }, directory: string) => void;
     visible?: boolean;
     onActivate?: () => void;
+    onUserInput?: (ref: { tabId: string; sessionId: string; generation: number }) => void;
   }) => (
     <div
       data-testid="terminal-pane-stub"
@@ -34,6 +35,7 @@ vi.mock("./components/TerminalPane", () => ({
       data-search-open={String(props.searchOpen)}
       data-visible={props.visible}
       onMouseDown={props.onActivate}
+      onKeyDown={() => { if (props.tab.ref) props.onUserInput?.(props.tab.ref); }}
       onDoubleClick={() => { if (props.tab.ref) props.onDirectoryChange?.(props.tab.ref, "/data/my project"); }}
     />
   ),
@@ -766,7 +768,23 @@ test("SFTP opens beside the existing terminal and can close without reconnecting
   await waitFor(() => expect(api.CancelZmodem).toHaveBeenCalledWith(ref));
 });
 
-test("closing a connected tab requires confirmation and cancelling preserves it", async () => {
+test("closing an untouched connected tab does not prompt", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.CloseTab).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{ id: "untouched-id", groupId: "", name: "Untouched", host: "example.test",
+      port: 22, username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved" }],
+    groups: [], fontSize: "14", language: "zh-CN", version: "test",
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选中会话 Untouched" }));
+  await waitFor(() => expect(document.querySelector(".connection-state-connected")).not.toBeNull());
+  fireEvent.click(screen.getByTitle("关闭 Untouched"));
+  await waitFor(() => expect(api.CloseTab).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText("关闭 SSH 会话？")).toBeNull();
+});
+
+test("closing a connected tab with user input requires confirmation and cancellation preserves it", async () => {
   vi.mocked(api.Connect).mockClear();
   vi.mocked(api.CloseTab).mockClear();
   vi.mocked(api.State).mockResolvedValueOnce({
@@ -779,6 +797,7 @@ test("closing a connected tab requires confirmation and cancelling preserves it"
   fireEvent.doubleClick(screen.getByRole("button", {name:"选中会话 Live Server"}));
   await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(document.querySelector(".connection-state-connected")).not.toBeNull());
+  fireEvent.keyDown(screen.getByTestId("terminal-pane-stub"), { key: "a" });
 
   fireEvent.click(screen.getByTitle("关闭 Live Server"));
   expect(screen.getByText("关闭 SSH 会话？")).toBeTruthy();
@@ -792,6 +811,39 @@ test("closing a connected tab requires confirmation and cancelling preserves it"
   fireEvent.click(screen.getByRole("button", {name:"断开并关闭"}));
   await waitFor(() => expect(api.CloseTab).toHaveBeenCalledTimes(1));
   expect(screen.queryByTitle("关闭 Live Server")).toBeNull();
+});
+
+test("batch closing other tabs asks once and preserves the target", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.CloseTab).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: ["A", "B", "C"].map(id => ({
+      id, groupId: "", name: id, host: "example.test", port: 22,
+      username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved",
+    })),
+    groups: [], fontSize: "14", language: "zh-CN", version: "test",
+  });
+  await act(async () => { render(<App />); });
+  for (const name of ["A", "B", "C"])
+    fireEvent.doubleClick(screen.getByRole("button", { name: "选中会话 " + name }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(3));
+  await waitFor(() => expect(document.querySelectorAll(".connection-state-connected")).toHaveLength(3));
+  fireEvent.keyDown(screen.getAllByTestId("terminal-pane-stub")[0], { key: "a" });
+
+  const openOtherClose = () => {
+    fireEvent.contextMenu(document.querySelectorAll(".terminal-tab")[1]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "关闭其他会话" }));
+  };
+  openOtherClose();
+  expect(screen.getAllByText("关闭所选会话？")).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  expect(api.CloseTab).not.toHaveBeenCalled();
+  openOtherClose();
+  fireEvent.click(screen.getByRole("button", { name: "断开并关闭" }));
+  await waitFor(() => expect(api.CloseTab).toHaveBeenCalledTimes(2));
+  expect(screen.getByTitle("关闭 B")).toBeTruthy();
+  expect(screen.queryByTitle("关闭 A")).toBeNull();
+  expect(screen.queryByTitle("关闭 C")).toBeNull();
 });
 
 test("closing an already disconnected tab needs no SSH confirmation", async () => {
