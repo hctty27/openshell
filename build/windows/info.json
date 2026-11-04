@@ -1,10 +1,10 @@
 {
   "fixed": {
-    "file_version": "0.1.96"
+    "file_version": "0.1.97"
   },
   "info": {
     "0000": {
-      "ProductVersion": "0.1.96",
+      "ProductVersion": "0.1.97",
       "CompanyName": "Cheng",
       "FileDescription": "OpenShell SSH/SFTP client",
       "LegalCopyright": "Copyright 2026 Cheng",
