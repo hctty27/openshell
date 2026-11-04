@@ -52,6 +52,35 @@ function FilePanel(p: PanelProps) {
   const [draft,setDraft] = useState(p.directory);
   useEffect(() => setDraft(p.directory),[p.directory]);
   const remote = p.side === "remote";
+  const callbacks = useRef(p);
+  callbacks.current = p;
+  const selectedPaths = useMemo(() => new Set(p.selected), [p.selected]);
+  const locale = i18n.language === "zh-CN" ? "zh-CN" : "en-US";
+  const displayEntries = useMemo(() => visible.map(entry => ({
+    entry,
+    size: entry.isDir ? "—" : niceSize(entry.size),
+    modified: new Date(entry.modified).toLocaleDateString(locale),
+  })), [visible, locale]);
+  const deleting = Boolean(p.deleting?.running);
+  // Keep unchanged file rows stable when transfer progress or unrelated panel state updates.
+  // Handlers read the latest panel props so memoized rows never capture stale callbacks.
+  const fileRows = useMemo(() => displayEntries.map(({ entry, size, modified }) => (
+    <button type="button" role="listitem" key={entry.path}
+      className={`sftp-file-row ${selectedPaths.has(entry.path) ? "selected" : ""}`}
+      draggable={!entry.isSymlink && !deleting}
+      onDragStart={event => event.dataTransfer.setData("application/x-openshell-entry",JSON.stringify({side:p.side,path:entry.path}))}
+      onClick={event => callbacks.current.onSelect(entry,event.shiftKey ? "range" : event.ctrlKey||event.metaKey ? "toggle" : "single")}
+      onDoubleClick={() => {
+        if (entry.isSymlink) return;
+        if (entry.isDir) callbacks.current.onDir(entry.path);
+        else callbacks.current.onOpenFile?.(entry);
+      }}
+      onContextMenu={event => callbacks.current.onContext(event,entry)}>
+      <span className="sftp-file-name">{entry.isDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className="sftp-link-badge">↗</span>}</span>
+      <span>{size}</span>
+      <span>{modified}</span><span>{entry.mode}</span>
+    </button>
+  )), [displayEntries, selectedPaths, p.side, deleting]);
   return (
     <section className={`sftp-panel sftp-${p.side}`} onDragOver={event=>{
       if (event.dataTransfer.types.includes("application/x-openshell-entry")) event.preventDefault();
@@ -91,19 +120,7 @@ function FilePanel(p: PanelProps) {
         {p.loading && p.entries.length === 0 ? <div className="sftp-placeholder"><LoaderCircle className="spin" size={17}/>{t("sftp:loading")}</div>
         : p.error ? <div className="sftp-placeholder sftp-error">{errorText(p.error)}</div>
         : visible.length === 0 ? <div className="sftp-placeholder">{t("sftp:emptyFolder")}</div>
-        : visible.map(entry => (
-          <button type="button" role="listitem" key={entry.path}
-            className={`sftp-file-row ${p.selected.includes(entry.path) ? "selected" : ""}`}
-            draggable={!entry.isSymlink && !p.deleting?.running}
-            onDragStart={event => event.dataTransfer.setData("application/x-openshell-entry",JSON.stringify({side:p.side,path:entry.path}))}
-            onClick={event=>p.onSelect(entry,event.shiftKey ? "range" : event.ctrlKey||event.metaKey ? "toggle" : "single")}
-            onDoubleClick={()=>{if(entry.isSymlink)return;if(entry.isDir)p.onDir(entry.path);else p.onOpenFile?.(entry);}}
-            onContextMenu={event=>p.onContext(event,entry)}>
-            <span className="sftp-file-name">{entry.isDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className="sftp-link-badge">↗</span>}</span>
-            <span>{entry.isDir ? "—" : niceSize(entry.size)}</span>
-            <span>{new Date(entry.modified).toLocaleDateString(i18n.language === "zh-CN" ? "zh-CN" : "en-US")}</span><span>{entry.mode}</span>
-          </button>
-        ))}
+        : fileRows}
       </div>
       <div className="sftp-panel-footer">
         <span title={p.deleting ? t(p.deleting.cancelled ? "sftp:deleteCancelled" : p.deleting.running ? "sftp:deleteProgress" : "sftp:deleteComplete", { completed: p.deleting.completed, total: p.deleting.total, success: p.deleting.completed - p.deleting.failed, failed: p.deleting.failed }) : undefined}>
