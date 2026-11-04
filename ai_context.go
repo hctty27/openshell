@@ -112,7 +112,7 @@ func aiPreparedMessages(c store.AIConversation, system string, historyEnd int, c
 	return append(result, live...)
 }
 
-func aiCompactBoundary(c store.AIConversation, historyEnd int) int {
+func aiCompactBoundary(c store.AIConversation, historyEnd int, keepRecentTurns ...int) int {
 	start := c.CompactedThrough
 	if start < 0 {
 		start = 0
@@ -126,9 +126,12 @@ func aiCompactBoundary(c store.AIConversation, historyEnd int) int {
 			users = append(users, i)
 		}
 	}
-	// Preserve six turns where possible, or two turns for shorter histories.
+	// The configured count is a strict minimum of complete recent turns.
+	// The legacy two-turn fallback is retained only for older call sites.
 	keep := 6
-	if len(users) <= keep {
+	if len(keepRecentTurns) > 0 {
+		keep = keepRecentTurns[0]
+	} else if len(users) <= keep {
 		keep = 2
 	}
 	if len(users) <= keep {
@@ -189,8 +192,8 @@ func aiSummarizeHistory(ctx context.Context, provider store.AIProvider, key, mod
 	return summary, nil
 }
 
-func (a *App) aiCompact(ctx context.Context, c *store.AIConversation, provider store.AIProvider, key string, historyEnd int) (bool, error) {
-	cutoff := aiCompactBoundary(*c, historyEnd)
+func (a *App) aiCompact(ctx context.Context, c *store.AIConversation, provider store.AIProvider, key string, historyEnd, keepRecentTurns int) (bool, error) {
+	cutoff := aiCompactBoundary(*c, historyEnd, keepRecentTurns)
 	if cutoff <= c.CompactedThrough {
 		return false, nil
 	}
@@ -276,7 +279,11 @@ func (a *App) AICompactConversation(conversationID string) (store.AIConversation
 	if err != nil {
 		return store.AIConversation{}, err
 	}
-	changed, err := a.aiCompact(ctx, &c, provider, key, len(c.Messages))
+	settings, err := a.AIRuntimeSettings()
+	if err != nil {
+		return store.AIConversation{}, err
+	}
+	changed, err := a.aiCompact(ctx, &c, provider, key, len(c.Messages), settings.KeepRecentTurns)
 	if err != nil {
 		return store.AIConversation{}, fmt.Errorf("压缩上下文失败: %w", err)
 	}
