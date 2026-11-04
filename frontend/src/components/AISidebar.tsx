@@ -397,6 +397,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
           {showHistory && <AIHistoryPopover
             items={filteredHistory} selectedID={conversationID} query={search} onQueryChange={setSearch}
             title={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")}
+            searchPlaceholder={t(isTerminal ? "ai:searchTerminalConversations" : "ai:searchConversations")}
             triggerRef={historyTriggerRef}
             onSelect={selectConversation} onDelete={id => void removeHistory(id)}
             onClose={() => setShowHistory(false)} />}
