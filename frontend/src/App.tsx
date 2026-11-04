@@ -55,6 +55,7 @@ import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
 import { useTabActivity } from "./features/sessions/useTabActivity";
 import { useAutoReconnect } from "./features/sessions/useAutoReconnect";
 import { useSplitWorkspace } from "./features/terminal/useSplitWorkspace";
+import { setTerminalSearchState, toggleTerminalSearchOpen } from "./features/terminal/searchState";
 import { useTabSplitDrop } from "./features/terminal/useTabSplitDrop";
 import { useTransferActivity } from "./features/transfers/useTransferActivity";
 import QuickCommandBar from "./components/QuickCommandBar";
@@ -190,7 +191,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     ),
     [showQuickCommandManager, setShowQuickCommandManager] = useState(false),
     [quickCommandFocus, setQuickCommandFocus] = useState(0),
-    [terminalSearchFocus, setTerminalSearchFocus] = useState(0),
+    [terminalSearchOpen, setTerminalSearchOpen] = useState<Record<string, boolean>>({}),
     [logHighlights, setLogHighlights] = useState(initialState.logHighlights === true),
     [dialog, setDialog] = useState<{
       kind: "session" | "settings";
@@ -738,6 +739,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       stopRetryTimer(tab.id);
       await api.CloseTab(tab.id);
       setTabs((old) => old.filter((t) => t.id !== tab.id));
+      setTerminalSearchOpen(current => setTerminalSearchState(current, tab.id, false));
       if (activeIDRef.current === tab.id) {
         const rest = tabsRef.current.filter((t) => t.id !== tab.id);
         setActiveID(rest.at(-1)?.id ?? "");
@@ -1164,9 +1166,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   </>
                 )}
                 <button
+                  className="workspace-panel-toggle"
                   title={tr("terminal:findInTerminal")}
+                  aria-label={tr("terminal:findInTerminal")}
+                  aria-pressed={Boolean(active && terminalSearchOpen[active.id])}
                   disabled={active?.status !== "connected"}
-                  onClick={() => setTerminalSearchFocus((value) => value + 1)}
+                  onClick={() => {
+                    if (!active) return;
+                    setTerminalSearchOpen(current => toggleTerminalSearchOpen(current, active.id));
+                  }}
                 >
                   <Search size={14} />
                 </button>
@@ -1276,7 +1284,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   confirmMultilinePaste={confirmMultilinePaste}
                   onNotice={notify}
                   commandFocusVersion={quickCommandFocus}
-                  searchFocusVersion={terminalSearchFocus}
+                  searchOpen={Boolean(terminalSearchOpen[tab.id])}
+                  onSearchOpenChange={open =>
+                    setTerminalSearchOpen(current => setTerminalSearchState(current, tab.id, open))
+                  }
                   transferFocusRequest={transferFocusRequest ?? undefined}
                   onError={(text) => {
                     update(tab.id, (t) => ({
