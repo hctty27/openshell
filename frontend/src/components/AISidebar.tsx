@@ -399,7 +399,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
             items={filteredHistory} selectedID={conversationID} query={search} onQueryChange={setSearch}
             title={t(isTerminal ? "ai:terminalConversations" : "ai:allConversations")}
             searchPlaceholder={t(isTerminal ? "ai:searchTerminalConversations" : "ai:searchConversations")}
-            triggerRef={historyTriggerRef}
+            terminal={isTerminal} triggerRef={historyTriggerRef}
             onSelect={selectConversation} onDelete={id => void removeHistory(id)}
             onClose={() => setShowHistory(false)} />}
           {isTerminal && (terminalAlternate || !terminalSingleTarget) && (
