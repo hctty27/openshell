@@ -22,6 +22,7 @@ import {
   Search,
   Columns2,
   Rows2,
+  Sparkles,
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
 import { normalizeTerminalTheme, resolveTerminalTheme } from "./terminalThemes";
@@ -47,6 +48,7 @@ import SettingsDialog from "./components/SettingsDialog";
 import TerminalPane from "./components/TerminalPane";
 import SFTPView from "./components/SFTPView";
 import AISidebar from "./components/AISidebar";
+import { assignTerminalHistoryScopes } from "./features/ai/terminalScope";
 import WindowTitleBar from "./components/WindowTitleBar";
 import ZmodemFilePicker from "./components/ZmodemFilePicker";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
@@ -207,6 +209,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
     } | null>(null),
     [login, setLogin] = useState<{ tab: Tab; secret: string } | null>(null);
   const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
+  const [terminalAIViews, setTerminalAIViews] = useState<Record<string, boolean>>({});
+  const terminalHistoryScopes = useRef<Record<string, string>>({});
   const [aiTerminalControls, setAITerminalControls] = useState<Record<string, {taskId: string; generation: number}>>({});
   const [alternateTerminals, setAlternateTerminals] = useState<Record<string, {generation: number; active: boolean}>>({});
   useEffect(() => {
@@ -287,9 +291,12 @@ function Workspace({ initialState }: { initialState: AppState }) {
     return () => window.clearTimeout(timer);
   }, [notice]);
   const active = tabs.find((t) => t.id === activeID);
+  terminalHistoryScopes.current = assignTerminalHistoryScopes(tabs, terminalHistoryScopes.current);
   const activeTerminalBackground = resolveTerminalTheme(theme, terminalTheme, active?.session.terminalTheme).background;
   const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
-  const aiPinned = aiSidebarMode === "pinned" && !showSFTP;
+  const showTerminalAI = Boolean(active?.ref && active.status === "connected" && terminalAIViews[activeID]);
+  const showWorkspaceSidePanel = showSFTP || showTerminalAI;
+  const aiPinned = aiSidebarMode === "pinned" && !showWorkspaceSidePanel;
   const aiOpen = aiPinned || aiHoverOpen || aiFocusOpen;
   const notify = (error: unknown) => setToast(error);
   const quitPromptInProgress = useRef(false);
@@ -337,11 +344,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
     applyDrop, undockPane, closeSplit, rotateActiveSplit,
     setSplitRatio, resizeNodeAndSave, startSplitResize,
   } = useSplitWorkspace({
-    tabs, activeID, showSFTP, initialRatio: initialState.splitRatio, onError: notify,
+    tabs, activeID, showSFTP: showWorkspaceSidePanel, initialRatio: initialState.splitRatio, onError: notify,
   });
   const { unreadTabIDs, onRemoteOutput } = useTabActivity({ tabs, visibleTabIDs, hasActiveTransfers });
   const { splitDropPreview, onTabPointerMove, onTabPointerDrop, clearDropPreview } = useTabSplitDrop({
-    tabs, layout, splitContainerRef, showSFTP, applyDrop, setActiveID, onError: notify,
+    tabs, layout, splitContainerRef, showSFTP: showWorkspaceSidePanel, applyDrop, setActiveID, onError: notify,
   });
 
   const dropDialogs = useRef(dialogs);
@@ -1125,11 +1132,25 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   <Search size={14} />
                 </button>
                 <button
+                  title={tr("ai:terminalAIButton")}
+                  aria-label={tr("ai:terminalAIButton")}
+                  aria-pressed={showTerminalAI}
+                  disabled={active?.status !== "connected"}
+                  onClick={() => {
+                    if (!active) return;
+                    setTerminalAIViews(old => ({ ...old, [active.id]: !old[active.id] }));
+                    setFileViews(old => ({ ...old, [active.id]: false }));
+                  }}
+                >
+                  <Sparkles size={14} />
+                </button>
+                <button
                   title={tr(showSFTP ? "sftp:closeFilePanel" : "sftp:openFileManager")}
                   disabled={active?.status !== "connected"}
                   onClick={() => {
                     if (!active) return;
                     setFileViews(old => ({ ...old, [active.id]: !old[active.id] }));
+                    setTerminalAIViews(old => ({ ...old, [active.id]: false }));
                   }}
                 >
                   {showSFTP ? <PanelRightOpen size={14} /> : <FolderOpen size={14} />}
@@ -1153,7 +1174,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </button>
               </div>
             </div>
-            <div className={`workspace-workarea ${showSFTP ? "with-sftp" : ""}`}>
+            <div className={`workspace-workarea ${showWorkspaceSidePanel ? "with-sftp" : ""}`}>
             <div ref={splitContainerRef}
               className={`terminal-container ${splitReady ? `terminal-split terminal-split-${splitDirection}` : ""}`}
               style={{ "--terminal-background": activeTerminalBackground } as CSSProperties}>
@@ -1290,6 +1311,19 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </aside>
               );
             })}
+            {tabs.filter(tab => terminalAIViews[tab.id] && tab.ref && tab.status === "connected").map(tab => {
+              const visible = showTerminalAI && tab.id === activeID;
+              return (
+                <div key={tab.id} className="workspace-file-panel workspace-terminal-ai-panel"
+                  aria-hidden={!visible}
+                  style={visible ? undefined : { display: "none" }}>
+                  <AISidebar tabs={[tab]} active={tab} pinned isOpen={visible}
+                    terminalScopeId={terminalHistoryScopes.current[tab.id]}
+                    terminalAlternate={Boolean(tab.ref && alternateTerminals[tab.id]?.generation === tab.ref.generation && alternateTerminals[tab.id]?.active)}
+                    onTogglePin={() => {}} />
+                </div>
+              );
+            })}
             </div>
             {(
               <QuickCommandBar
@@ -1330,7 +1364,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
           )}
           {aiPinned && <div className="ai-dock-splitter" onPointerDown={startAIResize} role="separator" aria-label={tr("ai:resizeAiSidebar")} />}
           <AISidebar tabs={tabs} active={active} pinned={aiSidebarMode === "pinned"} isOpen={aiOpen}
-            terminalAlternate={Boolean(active?.ref && alternateTerminals[activeID]?.generation === active.ref.generation && alternateTerminals[activeID]?.active)}
             onTogglePin={toggleAIPin} />
         </div>
       </div>
