@@ -619,10 +619,13 @@ test("terminal viewport aligns its scrollbar and avoids bottom gutter across the
   await page.setViewportSize({ width: 1040, height: 630 });
   await expect.poll(async () => (await snapshot()).gutters.every(gap => Math.abs(gap) < 1))
     .toBe(true);
+  await expect.poll(async () => {
+    const geometry = await snapshot();
+    return geometry.screenRight <= geometry.contentRight + 1 &&
+      geometry.screenBottom <= geometry.contentBottom + 1;
+  }).toBe(true);
   const resized = await snapshot();
   expect(resized.xtermPadding).toEqual(["8px", "0px", "0px", "8px"]);
-  expect(resized.screenRight).toBeLessThanOrEqual(resized.contentRight + 1);
-  expect(resized.screenBottom).toBeLessThanOrEqual(resized.contentBottom + 1);
   expect(resized.contentBottom - resized.screenBottom).toBeLessThan(24);
 
   await page.getByTitle("设置", { exact: true }).click();
