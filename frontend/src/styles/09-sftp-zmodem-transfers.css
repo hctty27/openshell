@@ -192,3 +192,39 @@
 .transfer-center-empty { padding: 26px 14px; text-align: center; font-size: 12px; color: var(--text-muted); }
 @keyframes transfer-center-progress { from { transform: translateX(-100%); } to { transform: translateX(295%); } }
 @media (prefers-reduced-motion: reduce) { .transfer-center-bar.indeterminate > div { animation: none; width: 100%; opacity: .5; } }
+
+
+/* Compact remote text editor, including CodeMirror's own search/replace panel. */
+.sftp-editor {width:min(1200px,85vw);height:min(780px,80vh)}
+.sftp-editor header strong {flex:1}
+.sftp-editor header strong > span:first-of-type {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sftp-editor-dirty {color:var(--accent);font-size:12px}
+.sftp-editor-tools {display:flex;align-items:center;gap:4px}
+.sftp-editor-tools button {display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:5px;color:var(--text-muted)}
+.sftp-editor-tools button:hover:not(:disabled) {background:var(--hover-bg);color:var(--text-primary)}
+.sftp-editor-tools button:disabled {opacity:.4}
+.sftp-cm-host {flex:1;min-height:0;min-width:0;background:var(--surface);overflow:hidden}
+.sftp-cm-host .cm-editor {height:100%;background:var(--surface);color:var(--text-primary);font:12px/1.6 'Cascadia Mono',Consolas,monospace}
+.sftp-cm-host .cm-scroller {overflow:auto;font-family:inherit}
+.sftp-cm-host .cm-content {padding:9px 0;caret-color:var(--text-primary)}
+.sftp-cm-host .cm-line {padding:0 10px}
+.sftp-cm-host .cm-gutters {border-right:1px solid var(--border);background:var(--panel);color:var(--text-muted)}
+.sftp-cm-host.sftp-cm-no-lines .cm-gutters {display:none}
+.sftp-cm-host .cm-activeLine,.sftp-cm-host .cm-activeLineGutter {background:var(--hover-bg)}
+.sftp-cm-host .cm-selectionBackground {background:rgba(70,140,220,.23)}
+.sftp-cm-host .cm-focused .cm-selectionBackground {background:rgba(70,140,220,.3)}
+.sftp-cm-host .cm-panels {background:var(--panel);color:var(--text-primary);border-color:var(--border)}
+.sftp-cm-host .cm-search {display:flex;flex-wrap:wrap;gap:5px 7px;align-items:center;padding:8px 10px}
+.sftp-cm-host .cm-search input {background:var(--surface);color:var(--text-primary);border:1px solid var(--border);border-radius:5px;padding:5px 7px;font:inherit;min-width:80px}
+.sftp-cm-host .cm-search button {background:var(--surface);color:var(--text-primary);border:1px solid var(--border);border-radius:5px;padding:4px 7px}
+.sftp-cm-host .cm-search label {font-size:11px}
+.sftp-editor-status {display:flex;align-items:center;gap:13px;min-height:30px;padding:0 12px;border-top:1px solid var(--border);color:var(--text-muted);font-size:11px;white-space:nowrap;overflow:hidden}
+.sftp-editor-status select,.sftp-editor-status button {background:transparent;border:0;color:inherit;font:inherit;padding:3px 2px}
+.sftp-editor-status button {display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+.sftp-editor-status button[aria-pressed="true"] {color:var(--accent)}
+.sftp-editor-status select {max-width:160px;cursor:pointer}
+.sftp-editor-status > span:last-child {margin-left:auto;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:700px) {
+  .sftp-editor {width:100%;height:95vh}
+  .sftp-editor-status {gap:7px;padding:0 7px}
+}
