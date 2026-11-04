@@ -190,7 +190,9 @@ npx playwright test
 - [Windows terminal smoke](.github/workflows/windows-terminal-smoke.yml)：对终端、SSH、SFTP、ConPTY 相关 PR 执行 Windows 冒烟验证。
 - [Windows release](.github/workflows/windows-release.yml)：只有 `main` 的版本标记变化且 CI 通过后才正式发布。保留最近 3 个 Release 和旧 Git Tag，最终构建产物保留 7 天。手动运行仅生成 Artifacts，不发布 Release。
 
-发布时同步更新 `.github/release-version.txt`、`frontend/package.json`、`frontend/package-lock.json`、`CHANGELOG.md`。推送到 `main` 后，工作流在验证与打包通过后自动创建 Tag。
+**推荐一键发布：** 打开 GitHub Actions 中的 [Publish OpenShell (one click)](.github/workflows/publish.yml)，选择 `main` 分支，默认 `patch`（也可选 `minor` / `major`），点击 **Run workflow**。工作流自动同步版本标记、npm 版本文件、Windows 版本信息和更新日志，提交版本变更，并在固定提交上执行 Go / 前端验证；Windows 构建复用已验证的前端产物，最后发布安装包和便携 ZIP。若版本已准备好但打包失败，再次运行将继续发布该版本，不会重复升级版本号。请勿同时运行多个发布流程。
+
+**兼容原有方式：** 仍可手动同步 `.github/release-version.txt`、`frontend/package.json`、`frontend/package-lock.json`、`CHANGELOG.md`，合并到 `main` 后沿用版本标记触发的 CI 发布。
 
 </details>
 
