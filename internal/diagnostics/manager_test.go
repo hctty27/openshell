@@ -20,6 +20,7 @@ func TestNormalizeRejectsFreeformIdentifiers(t *testing.T) {
     if strings.ContainsAny(event.Module+event.Operation+event.Code, " /?=\n") {
         t.Fatalf("unsafe identifier: %#v", event)
     }
+    if event.Module != "unknown" || event.Operation != "unknown" || event.Code != "other" { t.Fatalf("freeform data was retained: %#v", event) }
     if event.Level != "ERROR" || event.DurationMS != 0 {
         t.Fatalf("unexpected normalization: %#v", event)
     }
