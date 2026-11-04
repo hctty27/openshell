@@ -778,6 +778,7 @@ test("closing an untouched connected tab does not prompt", async () => {
   });
   await act(async () => { render(<App />); });
   fireEvent.doubleClick(screen.getByRole("button", { name: "选中会话 Untouched" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(document.querySelector(".connection-state-connected")).not.toBeNull());
   fireEvent.click(screen.getByTitle("关闭 Untouched"));
   await waitFor(() => expect(api.CloseTab).toHaveBeenCalledTimes(1));
@@ -838,6 +839,7 @@ test("batch closing other tabs asks once and preserves the target", async () => 
   expect(screen.getAllByText("关闭所选会话？")).toHaveLength(1);
   fireEvent.click(screen.getByRole("button", { name: "取消" }));
   expect(api.CloseTab).not.toHaveBeenCalled();
+  await act(async () => { await Promise.resolve(); });
   openOtherClose();
   fireEvent.click(screen.getByRole("button", { name: "断开并关闭" }));
   await waitFor(() => expect(api.CloseTab).toHaveBeenCalledTimes(2));
