@@ -33,6 +33,10 @@
 }
 .sftp-actions button { width: 24px; height: 24px; padding: 4px; color: var(--text-muted); }
 .sftp-actions button:hover, .sftp-breadcrumb button:hover { color: var(--text-primary); }
+.sftp-actions button:disabled { opacity: .4; cursor: default; }
+.sftp-cancel-delete { display: inline-flex; flex: 0 0 auto; align-items: center; color: var(--text-muted); padding: 4px; }
+.sftp-cancel-delete:hover { color: var(--text-primary); }
+.sftp-file-table:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .sftp-breadcrumb {
   display: flex;
   align-items: center;
