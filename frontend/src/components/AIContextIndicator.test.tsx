@@ -25,9 +25,11 @@ test("context control shows the percentage beside the ring and detailed progress
 
   const dialog = screen.getByRole("dialog", { name: "上下文使用情况" });
   expect(dialog.textContent).toContain("3,013 / 32,768 Tokens");
-  expect(dialog.textContent).toContain("3,266");
+  expect(dialog.querySelector(".ai-context-tokens")?.getAttribute("title")).toContain("3,266");
+  expect(dialog.textContent).toContain("估算");
+  expect(dialog.textContent).toContain("90%");
   expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("9");
-  fireEvent.click(screen.getByRole("button", { name: "手动压缩上下文" }));
+  fireEvent.click(screen.getByRole("button", { name: "压缩上下文" }));
   expect(onCompact).toHaveBeenCalledOnce();
 });
 
@@ -44,8 +46,21 @@ test("context popup closes when history opens and never compacts without a conve
   const onCompact = vi.fn();
   const view = render(<AIContextIndicator stats={stats} compacting={false} disabled onCompact={onCompact} />);
   fireEvent.click(screen.getByRole("button", { name: "上下文使用情况" }));
-  expect(screen.getByRole("button", { name: "手动压缩上下文" }).hasAttribute("disabled")).toBe(true);
+  expect(screen.getByRole("button", { name: "压缩上下文" }).hasAttribute("disabled")).toBe(true);
   view.rerender(<AIContextIndicator stats={stats} compacting={false} disabled onCompact={onCompact} historyOpen />);
   expect(screen.queryByRole("dialog", { name: "上下文使用情况" })).toBeNull();
+  expect(onCompact).not.toHaveBeenCalled();
+});
+
+test("disabled compact action shows a readable reason without changing usage data", () => {
+  const onCompact = vi.fn();
+  render(<AIContextIndicator stats={stats} compacting={false} disabled
+    disabledReason="没有可压缩的历史记录" onCompact={onCompact} />);
+  fireEvent.click(screen.getByRole("button", { name: "上下文使用情况" }));
+  const action = screen.getByRole("button", { name: "压缩上下文" });
+  expect(action.hasAttribute("disabled")).toBe(true);
+  expect(action.getAttribute("title")).toBe("没有可压缩的历史记录");
+  expect(screen.getByText("没有可压缩的历史记录")).toBeTruthy();
+  fireEvent.click(action);
   expect(onCompact).not.toHaveBeenCalled();
 });
