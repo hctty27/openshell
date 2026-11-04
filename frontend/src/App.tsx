@@ -208,8 +208,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       secret: string;
     } | null>(null),
     [login, setLogin] = useState<{ tab: Tab; secret: string } | null>(null);
-  const [fileViews, setFileViews] = useState<Record<string, boolean>>({});
-  const [terminalAIViews, setTerminalAIViews] = useState<Record<string, boolean>>({});
+  const [sessionPanels, setSessionPanels] = useState<Record<string, "sftp" | "terminalAI" | null>>({});
   const [terminalAIMounted, setTerminalAIMounted] = useState<Record<string, boolean>>({});
   const terminalHistoryScopes = useRef<Record<string, string>>({});
   const [aiTerminalControls, setAITerminalControls] = useState<Record<string, {taskId: string; generation: number}>>({});
@@ -241,15 +240,48 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const [aiSidebarWidth, setAISidebarWidth] = useState(
     Math.max(320, Math.min(480, initialState.aiSidebarWidth ?? 360)),
   );
-  const [aiHoverOpen, setAIHoverOpen] = useState(false);
-  const [aiFocusOpen, setAIFocusOpen] = useState(false);
+  const [aiAutoOpen, setAIAutoOpen] = useState(false);
+  const aiDockRef = useRef<HTMLDivElement>(null);
+  const aiHovered = useRef(false);
+  const aiKeyboardFocused = useRef(false);
+  const aiPointerFocused = useRef(false);
   const aiHoverTimer = useRef<number | null>(null);
   const aiCloseTimer = useRef<number | null>(null);
-  const toggleAIPin = () => {
-    const next = aiSidebarMode === "pinned" ? "auto-hide" : "pinned";
-    setAISidebarMode(next);
-    void api.SavePreference("aiSidebarMode", next).catch(notify);
+  const clearAITimer = (timer: React.MutableRefObject<number | null>) => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
   };
+  const scheduleAIClose = () => {
+    clearAITimer(aiHoverTimer);
+    clearAITimer(aiCloseTimer);
+    if (aiSidebarMode !== "auto-hide") return;
+    aiCloseTimer.current = window.setTimeout(() => {
+      aiCloseTimer.current = null;
+      if (aiHovered.current) return;
+      if (aiKeyboardFocused.current && aiDockRef.current?.contains(document.activeElement)) return;
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && aiDockRef.current?.contains(focused) &&
+          !focused.classList.contains("ai-rail")) {
+        focused.blur();
+      }
+      setAIAutoOpen(false);
+    }, 300);
+  };
+  const toggleAIPin = () => {
+    const previous = aiSidebarMode;
+    const next = previous === "pinned" ? "auto-hide" : "pinned";
+    clearAITimer(aiHoverTimer);
+    clearAITimer(aiCloseTimer);
+    setAIAutoOpen(next === "auto-hide");
+    setAISidebarMode(next);
+    void api.SavePreference("aiSidebarMode", next).catch(error => {
+      setAISidebarMode(current => current === next ? previous : current);
+      notify(error);
+    });
+  };
+  useEffect(() => {
+    if (aiSidebarMode === "pinned") setAIAutoOpen(false);
+  }, [aiSidebarMode]);
   useEffect(() => () => {
     if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
     if (aiCloseTimer.current !== null) window.clearTimeout(aiCloseTimer.current);
@@ -294,11 +326,12 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const active = tabs.find((t) => t.id === activeID);
   terminalHistoryScopes.current = assignTerminalHistoryScopes(tabs, terminalHistoryScopes.current);
   const activeTerminalBackground = resolveTerminalTheme(theme, terminalTheme, active?.session.terminalTheme).background;
-  const showSFTP = Boolean(active?.ref && active.status === "connected" && fileViews[activeID]);
-  const showTerminalAI = Boolean(active?.ref && active.status === "connected" && terminalAIViews[activeID]);
-  const showWorkspaceSidePanel = showSFTP || showTerminalAI;
-  const aiPinned = aiSidebarMode === "pinned" && !showWorkspaceSidePanel;
-  const aiOpen = aiPinned || aiHoverOpen || aiFocusOpen;
+  const activeSessionPanel = active?.ref && active.status === "connected" ? sessionPanels[activeID] : null;
+  const showSFTP = activeSessionPanel === "sftp";
+  const showTerminalAI = activeSessionPanel === "terminalAI";
+  const showWorkspaceSidePanel = Boolean(activeSessionPanel);
+  const aiPinned = aiSidebarMode === "pinned";
+  const aiOpen = aiPinned || aiAutoOpen;
   const notify = (error: unknown) => setToast(error);
   const quitPromptInProgress = useRef(false);
   const onQuitRequested = useRef<() => void>(() => {});
@@ -1049,6 +1082,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
           clearSidebarTimer(sidebarCloseTimer);
           setAutoSidebarOpen(false);
         }
+        if (aiSidebarMode === "auto-hide" && aiAutoOpen) {
+          clearAITimer(aiCloseTimer);
+          aiKeyboardFocused.current = false;
+          setAIAutoOpen(false);
+        }
       }}>
         <WorkspaceTabStrip tabs={tabs} activeID={activeID} unreadTabIDs={unreadTabIDs}
           disconnectBehavior={state.disconnectBehavior ?? "local"}
@@ -1139,9 +1177,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   disabled={active?.status !== "connected"}
                   onClick={() => {
                     if (!active) return;
-                    setTerminalAIViews(old => ({ ...old, [active.id]: !old[active.id] }));
+                    setSessionPanels(old => ({
+                      ...old,
+                      [active.id]: old[active.id] === "terminalAI" ? null : "terminalAI",
+                    }));
                     setTerminalAIMounted(old => ({ ...old, [active.id]: true }));
-                    setFileViews(old => ({ ...old, [active.id]: false }));
                   }}
                 >
                   <Sparkles size={14} />
@@ -1151,8 +1191,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   disabled={active?.status !== "connected"}
                   onClick={() => {
                     if (!active) return;
-                    setFileViews(old => ({ ...old, [active.id]: !old[active.id] }));
-                    setTerminalAIViews(old => ({ ...old, [active.id]: false }));
+                    setSessionPanels(old => ({
+                      ...old,
+                      [active.id]: old[active.id] === "sftp" ? null : "sftp",
+                    }));
                   }}
                 >
                   {showSFTP ? <PanelRightOpen size={14} /> : <FolderOpen size={14} />}
@@ -1338,36 +1380,80 @@ function Workspace({ initialState }: { initialState: AppState }) {
           </>
         )}
       </main>
-      <div className={`ai-dock ${!aiPinned ? "ai-dock--auto" : ""} ${aiOpen ? "is-open" : ""}`}
-          onMouseEnter={() => {
-            if (aiCloseTimer.current !== null) window.clearTimeout(aiCloseTimer.current);
-            if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
-            aiHoverTimer.current = window.setTimeout(() => setAIHoverOpen(true), 150);
-          }}
-          onMouseLeave={() => {
-            if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
-            aiCloseTimer.current = window.setTimeout(() => setAIHoverOpen(false), 250);
-          }}
-          onFocusCapture={() => setAIFocusOpen(true)}
-          onBlurCapture={event => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setAIFocusOpen(false);
-          }}
-          onKeyDown={event => {
-            if (event.key === "Escape" && !aiPinned) {
-              setAIHoverOpen(false);
-              setAIFocusOpen(false);
-              (event.currentTarget.querySelector(".ai-rail") as HTMLButtonElement | null)?.focus();
-            }
-          }}
-        >
-          {!aiPinned && (
-            <button className="ai-rail" title={tr("ai:expandAiAssistant")} aria-label={tr("ai:expandAiAssistant")}
-              aria-expanded={aiOpen} onClick={() => setAIHoverOpen(true)} />
-          )}
-          {aiPinned && <div className="ai-dock-splitter" onPointerDown={startAIResize} role="separator" aria-label={tr("ai:resizeAiSidebar")} />}
-          <AISidebar tabs={tabs} active={active} pinned={aiSidebarMode === "pinned"} isOpen={aiOpen}
-            onTogglePin={toggleAIPin} />
-        </div>
+      <div ref={aiDockRef}
+        className={`ai-dock ${!aiPinned ? "ai-dock--auto" : ""} ${aiOpen ? "is-open" : ""}`}
+        onPointerDownCapture={() => {
+          aiPointerFocused.current = true;
+          aiKeyboardFocused.current = false;
+        }}
+        onMouseEnter={() => {
+          aiHovered.current = true;
+          clearAITimer(aiCloseTimer);
+          if (aiSidebarMode === "auto-hide") {
+            clearAITimer(aiHoverTimer);
+            aiHoverTimer.current = window.setTimeout(() => {
+              aiHoverTimer.current = null;
+              setAIAutoOpen(true);
+            }, 150);
+          }
+        }}
+        onMouseLeave={() => {
+          aiHovered.current = false;
+          scheduleAIClose();
+        }}
+        onFocusCapture={event => {
+          if (!aiPointerFocused.current) aiKeyboardFocused.current = true;
+          if (aiSidebarMode === "auto-hide" &&
+              !(event.target as HTMLElement).classList.contains("ai-rail")) {
+            clearAITimer(aiHoverTimer);
+            clearAITimer(aiCloseTimer);
+            setAIAutoOpen(true);
+          }
+        }}
+        onBlurCapture={event => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            aiKeyboardFocused.current = false;
+            aiPointerFocused.current = false;
+            scheduleAIClose();
+          }
+        }}
+        onKeyDownCapture={event => {
+          if (event.key === "Tab" || event.key.startsWith("Arrow")) {
+            aiPointerFocused.current = false;
+            aiKeyboardFocused.current = true;
+          }
+        }}
+        onKeyDown={event => {
+          if (event.key === "Escape" && aiSidebarMode === "auto-hide") {
+            event.preventDefault();
+            event.stopPropagation();
+            clearAITimer(aiHoverTimer);
+            clearAITimer(aiCloseTimer);
+            aiKeyboardFocused.current = false;
+            aiPointerFocused.current = false;
+            setAIAutoOpen(false);
+            aiDockRef.current?.querySelector<HTMLButtonElement>(".ai-rail")?.focus();
+          }
+        }}
+      >
+        {!aiPinned && (
+          <button type="button" className="ai-rail"
+            title={tr("ai:expandAiAssistant")} aria-label={tr("ai:expandAiAssistant")}
+            aria-controls="global-ai-panel"
+            aria-expanded={aiOpen}
+            onClick={() => {
+              clearAITimer(aiHoverTimer);
+              clearAITimer(aiCloseTimer);
+              setAIAutoOpen(true);
+            }} />
+        )}
+        {aiPinned && (
+          <div className="ai-dock-splitter" onPointerDown={startAIResize}
+            role="separator" aria-label={tr("ai:resizeAiSidebar")} />
+        )}
+        <AISidebar tabs={tabs} active={active} pinned={aiPinned} isOpen={aiOpen}
+          onTogglePin={toggleAIPin} />
+      </div>
       </div>
       {showSessionPicker && (
         <SessionPicker
