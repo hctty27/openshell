@@ -5,6 +5,7 @@ import { t } from "../i18n";
 import type { AIProvider } from "../types";
 import { notifyAIProvidersChanged } from "../features/ai/providerEvents";
 import { useDialogs } from "./DialogProvider";
+import AIBehaviorSettings from "./AIBehaviorSettings";
 
 const blankProvider = (): AIProvider => ({
   id: "", name: "", baseUrl: "", hasKey: false, models: [],
@@ -162,6 +163,7 @@ export default function AIProviderSettings() {
           </button>
         </div>
       </form>
+      <AIBehaviorSettings />
     </section>
   );
 }
