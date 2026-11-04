@@ -137,10 +137,11 @@
   gap: 6px;
   width: 100%;
   min-width: 0;
-  height: 28px;
-  padding: 4px 6px;
-  border-radius: 7px;
-  background: transparent;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--field-bg);
   color: var(--text-secondary);
   font-size: 11px;
   text-align: left;
@@ -150,6 +151,7 @@
 .ai-selector-button[aria-expanded="true"],
 .ai-model-picker__trigger:hover,
 .ai-model-picker__trigger[aria-expanded="true"] {
+  border-color: var(--accent-border);
   background: var(--hover);
   color: var(--text-primary);
 }
@@ -199,6 +201,7 @@
   color: var(--text-primary);
 }
 .ai-target-menu label span {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -339,8 +342,9 @@
   min-width: 0;
 }
 .ai-compose-target {
-  flex: 0 1 115px;
-  min-width: 64px;
+  flex: 0 1 110px;
+  width: 110px;
+  min-width: 44px;
 }
 .ai-compose-actions .ai-stop-button {
   flex: 0 0 30px;
@@ -350,8 +354,9 @@
 }
 .ai-model-picker {
   position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 0 1 170px;
+  width: 170px;
+  min-width: 60px;
 }
 .ai-model-picker__trigger { justify-content: flex-start; }
 .ai-model-picker__trigger[aria-invalid="true"] { color: var(--danger); }

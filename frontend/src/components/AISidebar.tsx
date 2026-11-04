@@ -414,13 +414,13 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                 <ChevronDown size={13} aria-hidden="true" />
               </button>
               <AIDropdownSurface open={showTargets} anchorRef={targetTriggerRef}
-                onDismiss={() => setShowTargets(false)} align="end" minWidth={240} maxHeight={250}>
+                onDismiss={() => setShowTargets(false)} align="end" minWidth={180} maxHeight={250}>
                 <div className="ai-target-menu" role="group" aria-label={t("ai:sessionsLabel")}
                   onKeyDown={onTargetsKeyDown}>
                   {connected.map(tab => (
                     <label key={tab.id}>
                       <input type="checkbox" checked={targetSet.has(tab.id)} disabled={tab.id === requiredID} onChange={() => toggleTarget(tab.id)} />
-                      <span>{tab.session.name}{tab.id === requiredID ? t("ai:currentRequired") : ""}</span>
+                      <span title={tab.session.name}>{tab.session.name}{tab.id === requiredID ? t("ai:currentRequired") : ""}</span>
                     </label>
                   ))}
                   {!connected.length && <p className="ai-muted">{t("ai:connectSshFirst")}</p>}

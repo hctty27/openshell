@@ -104,8 +104,8 @@
   height: 16px;
   border-left: 1px solid var(--border);
 }
-.search {
-  margin: 0 11px 9px;
+.session-sidebar > .search {
+  margin: 8px 11px 9px;
   display: flex;
   align-items: center;
   gap: 7px;
