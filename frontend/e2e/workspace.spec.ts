@@ -922,7 +922,7 @@ test("AI header aligns with SSH title bar", async ({ page }) => {
   });
   const before = await geometry();
   await page.locator(".ai-selector-button").click();
-  await page.locator(".ai-target-menu input[type=checkbox]").last().check();
+  await page.locator(".ai-target-menu input[type=checkbox]:not(:checked)").first().check();
   const after = await geometry();
   expect(after.selectorX).toBe(before.selectorX);
   expect(after.selectorWidth).toBe(before.selectorWidth);
