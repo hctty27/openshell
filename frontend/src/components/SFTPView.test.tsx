@@ -39,6 +39,16 @@ beforeEach(async () => {
 });
 afterEach(cleanup);
 
+test("local and remote SFTP headers share the compact workspace layout", () => {
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  for (const side of ["local", "remote"]) {
+    const header = document.querySelector(`.sftp-${side} .sftp-panel-header`);
+    expect(header?.classList.contains("workspace-panel-header")).toBe(true);
+    expect(header?.querySelector(".panel-header-title .workspace-panel-dot")).toBeTruthy();
+    expect(header?.querySelector(".panel-header-actions")).toBeTruthy();
+  }
+});
+
 test("Bash cwd helper reports rejected clipboard writes", async () => {
   vi.mocked(Clipboard.SetText).mockRejectedValueOnce(new Error("clipboard unavailable"));
   const onNotice = vi.fn();
