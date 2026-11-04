@@ -13,6 +13,7 @@ interface Props {
   onClose(): void;
   triggerRef: RefObject<HTMLButtonElement | null>;
   title: string;
+  searchPlaceholder: string;
 }
 
 function groupDate(value: string, today: string, yesterday: string): "today" | "yesterday" | "earlier" {
@@ -30,20 +31,22 @@ function displayDate(value: string, older: boolean): string {
 }
 
 export default function AIHistoryPopover({
-  items, selectedID, query, onQueryChange, onSelect, onDelete, onClose, triggerRef, title,
+  items, selectedID, query, onQueryChange, onSelect, onDelete, onClose, triggerRef, title, searchPlaceholder,
 }: Props) {
   const popoverRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     searchRef.current?.focus();
     const outside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (!popoverRef.current?.contains(target) && !triggerRef.current?.contains(target)) onClose();
+      if (!popoverRef.current?.contains(target) && !triggerRef.current?.contains(target)) closeRef.current();
     };
     document.addEventListener("mousedown", outside);
     return () => document.removeEventListener("mousedown", outside);
-  }, [onClose, triggerRef]);
+  }, [triggerRef]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
@@ -53,6 +56,7 @@ export default function AIHistoryPopover({
       triggerRef.current?.focus();
       return;
     }
+    if (event.target === searchRef.current && (event.key === "Home" || event.key === "End")) return;
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     const buttons = Array.from(popoverRef.current?.querySelectorAll<HTMLButtonElement>(".ai-history-choice") ?? []);
     if (!buttons.length) return;
@@ -60,6 +64,7 @@ export default function AIHistoryPopover({
     const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
     const next = event.key === "Home" ? 0 :
       event.key === "End" ? buttons.length - 1 :
+      index < 0 ? (event.key === "ArrowDown" ? 0 : buttons.length - 1) :
       (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
     buttons[next]?.focus();
   };
@@ -80,7 +85,7 @@ export default function AIHistoryPopover({
       <label className="ai-history-search">
         <Search size={14} aria-hidden="true" />
         <input ref={searchRef} type="search" value={query} onChange={event => onQueryChange(event.target.value)}
-          placeholder={t("ai:searchConversations")} aria-label={title + " - " + t("ai:searchConversations")} />
+          placeholder={searchPlaceholder} aria-label={title + " - " + searchPlaceholder} />
       </label>
       <div className="ai-history-results">
         {groups.map(group => {
