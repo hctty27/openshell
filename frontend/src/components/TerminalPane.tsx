@@ -2,13 +2,14 @@ import { useTranslation } from "react-i18next";
 import { Sparkles, X } from "lucide-react";
 import { message } from "../i18n/message";
 import { t } from "../i18n";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Terminal } from "@xterm/xterm";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
-import { api, listen, errorText } from "../bridge";
+import { api, errorText } from "../bridge";
+import { terminalOutputDispatcher } from "../features/terminal/terminalOutputDispatcher";
 import { Browser, Clipboard } from "@wailsio/runtime";
 import type { Tab, Ref, Theme, TerminalTheme, DisconnectBehavior, LocalShell } from "../types";
 import { resolveTerminalTheme } from "../terminalThemes";
@@ -52,6 +53,12 @@ interface Props {
   onTakeControl?(): void;
 }
 export default function TerminalPane(p: Props) {
+  const callbackProps = useRef(p);
+  callbackProps.current = p;
+  return <MemoizedTerminalPane {...p} callbackProps={callbackProps} />;
+}
+
+function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
   useTranslation();
   const dialogs = useDialogs();
   const dialogsRef = useRef(dialogs);
@@ -76,8 +83,7 @@ export default function TerminalPane(p: Props) {
   const [searchText, setSearchText] = useState("");
   const [regexMode, setRegexMode] = useState(false);
   const resolvedTheme = resolveTerminalTheme(p.theme, p.terminalTheme, p.tab.session.terminalTheme);
-  const callbacks = useRef(p);
-  callbacks.current = p;
+  const callbacks = p.callbackProps;
   useEffect(() => {
     const ref = p.tab.ref;
     if (terminalMode === "none" || !container.current) return;
@@ -269,9 +275,8 @@ export default function TerminalPane(p: Props) {
         if (!disposed) callbacks.current.onNotice(error);
       });
     };
-    const off = listen(local ? "local:output" : "ssh:output", (payload) => {
+    const onOutput = (payload: { data: string; sequence?: number }) => {
       if (disposed || terminalMode === "offline") return;
-      if (local ? (payload.tabId !== p.tab.id || payload.terminalId !== localID) : !same(payload.ref)) return;
       const bytes = Uint8Array.from(atob(payload.data), (c) => c.charCodeAt(0));
       if (!local && ref) callbacks.current.onRemoteOutput?.(ref, bytes);
       const sequence = typeof payload.sequence === "number" ? payload.sequence : 0;
@@ -284,7 +289,10 @@ export default function TerminalPane(p: Props) {
         syncEdgeBackground();
         restoreClonedDirectory();
       });
-    });
+    };
+    const off = local
+      ? terminalOutputDispatcher.onLocal(p.tab.id, localID, onOutput)
+      : terminalOutputDispatcher.onSSH(ref!, onOutput);
     const encoder = new TextEncoder();
     const inputQueue: string[] = [];
     let inputFlushing = false;
@@ -703,7 +711,7 @@ export default function TerminalPane(p: Props) {
     if (!searchOpen) searchAddon.current?.clearDecorations();
   }, [searchOpen]);
   const closeSearch = () => {
-    p.onSearchOpenChange(false);
+    callbacks.current.onSearchOpenChange(false);
     terminal.current?.focus();
   };
   const searchOptions = (regex: boolean) => ({
@@ -727,7 +735,7 @@ export default function TerminalPane(p: Props) {
     const pattern = "ERROR|WARN(?:ING)?|FATAL|FAIL(?:ED)?";
     setSearchText(pattern);
     setRegexMode(true);
-    p.onSearchOpenChange(true);
+    callbacks.current.onSearchOpenChange(true);
     searchAddon.current?.findNext(pattern, searchOptions(true));
   };
   return (
@@ -742,7 +750,7 @@ export default function TerminalPane(p: Props) {
         <div className="terminal-ai-control" role="status">
           <Sparkles size={14} aria-hidden="true" />
           <span>{t("ai:terminalInUse", { name: p.tab.session.name })}</span>
-          <button type="button" onClick={p.onTakeControl}
+          <button type="button" onClick={() => callbacks.current.onTakeControl?.()}
             title={t("ai:stopAiAndTakeControl")}>{t("ai:takeControl")}</button>
         </div>
       )}
@@ -750,7 +758,7 @@ export default function TerminalPane(p: Props) {
         <button type="button" className="terminal-pane-undock"
           title={t("terminal:undockPane")} aria-label={t("terminal:undockPane")}
           onMouseDown={event => event.stopPropagation()}
-          onClick={p.onUndock}><X size={13}/></button>
+          onClick={() => callbacks.current.onUndock?.()}><X size={13}/></button>
       )}
       {p.active && searchOpen && (
         <div className="terminal-find">
@@ -799,3 +807,29 @@ export default function TerminalPane(p: Props) {
     </div>
   );
 }
+
+const MemoizedTerminalPane = memo(TerminalPaneImpl, (a, b) =>
+  a.tab === b.tab &&
+  a.disconnectBehavior === b.disconnectBehavior &&
+  a.localShell === b.localShell &&
+  a.preserveHistory === b.preserveHistory &&
+  a.showDisconnectReason === b.showDisconnectReason &&
+  a.active === b.active &&
+  a.visible === b.visible &&
+  a.fontSize === b.fontSize &&
+  a.theme === b.theme &&
+  a.terminalTheme === b.terminalTheme &&
+  a.autoCopySelection === b.autoCopySelection &&
+  a.rightClickPaste === b.rightClickPaste &&
+  a.logHighlights === b.logHighlights &&
+  a.confirmMultilinePaste === b.confirmMultilinePaste &&
+  a.aiControlled === b.aiControlled &&
+  a.commandFocusVersion === b.commandFocusVersion &&
+  a.searchOpen === b.searchOpen &&
+  a.transferFocusRequest === b.transferFocusRequest &&
+  Boolean(a.onUndock) === Boolean(b.onUndock) &&
+  a.paneBounds?.left === b.paneBounds?.left &&
+  a.paneBounds?.top === b.paneBounds?.top &&
+  a.paneBounds?.width === b.paneBounds?.width &&
+  a.paneBounds?.height === b.paneBounds?.height
+);
