@@ -16,6 +16,7 @@ import { resolveTerminalTheme } from "../terminalThemes";
 import { buildRemoteCdCommand, decideCloneDirectoryAction, parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
 import { useDialogs } from "./DialogProvider";
 import { attachImeFocusRecovery } from "../features/terminal/imeFocusRecovery";
+import { getTerminalEdgeBackground } from "../features/terminal/edgeBackground";
 interface Props {
   tab: Tab;
   disconnectBehavior?: DisconnectBehavior;
@@ -106,7 +107,7 @@ export default function TerminalPane(p: Props) {
         callbacks.current.terminalTheme,
         callbacks.current.tab.session.terminalTheme,
       ),
-      scrollbar: { width: 14 },
+      scrollbar: { width: 8 },
       minimumContrastRatio: 4.5,
       cursorBlink: true,
       // Prefer text selection in mouse-aware TUIs; Alt forwards mouse actions.
@@ -127,7 +128,20 @@ export default function TerminalPane(p: Props) {
     terminal.current = term;
     fit.current = addon;
     term.open(container.current);
+    const syncEdgeBackground = () => {
+      const surface = container.current;
+      if (!surface || disposed) return;
+      const theme = resolveTerminalTheme(
+        callbacks.current.theme,
+        callbacks.current.terminalTheme,
+        callbacks.current.tab.session.terminalTheme,
+      );
+      const color = getTerminalEdgeBackground(term, theme);
+      if (color) surface.style.setProperty("--terminal-edge-background", color);
+      else surface.style.removeProperty("--terminal-edge-background");
+    };
     const bufferListener = term.buffer.onBufferChange(buffer => {
+      syncEdgeBackground();
       if (!disposed && ref && !local) {
         callbacks.current.onAlternateScreenChange?.(ref, buffer.type === "alternate");
       }
@@ -204,6 +218,7 @@ export default function TerminalPane(p: Props) {
       term.write(bytes, () => {
         lastProcessedSequence = Math.max(lastProcessedSequence, sequence);
         acknowledge();
+        syncEdgeBackground();
         restoreClonedDirectory();
       });
     });
@@ -258,7 +273,10 @@ export default function TerminalPane(p: Props) {
       if (local) void api.ResizeLocalTerminal(p.tab.id, localID, term.cols, term.rows).catch(() => {});
       else if (ref) void api.ResizeTerminal(ref, term.cols, term.rows).catch(() => {});
     };
-    const resizeSubscription = term.onResize(sendResize);
+    const resizeSubscription = term.onResize(() => {
+      syncEdgeBackground();
+      sendResize();
+    });
     const selection = term.onSelectionChange(() =>
       callbacks.current.onSelection?.(term.getSelection()),
     );
@@ -402,6 +420,7 @@ export default function TerminalPane(p: Props) {
         measuredWidth = clientWidth;
         measuredHeight = clientHeight;
         addon.fit();
+        syncEdgeBackground();
         if (callbacks.current.active) imeRecovery.schedule();
       });
     };
@@ -414,6 +433,7 @@ export default function TerminalPane(p: Props) {
     requestAnimationFrame(() => {
       if (disposed) return;
       addon.fit();
+      syncEdgeBackground();
       measuredWidth = container.current?.clientWidth ?? 0;
       measuredHeight = container.current?.clientHeight ?? 0;
       const cols = Math.max(term.cols, 20);
@@ -447,6 +467,7 @@ export default function TerminalPane(p: Props) {
     });
     return () => {
       disposed = true;
+      container.current?.style.removeProperty("--terminal-edge-background");
       // Unmounting intentionally discards any remaining terminal render buffer.
       // Release its backend credits so the SSH reader cannot remain blocked.
       lastProcessedSequence = lastReceivedSequence;
@@ -564,7 +585,14 @@ export default function TerminalPane(p: Props) {
     }
   }, [p.fontSize]);
   useEffect(() => {
-    if (terminal.current) terminal.current.options.theme = resolvedTheme;
+    const term = terminal.current;
+    if (!term) return;
+    term.options.theme = resolvedTheme;
+    const surface = container.current;
+    if (!surface) return;
+    const color = getTerminalEdgeBackground(term, resolvedTheme);
+    if (color) surface.style.setProperty("--terminal-edge-background", color);
+    else surface.style.removeProperty("--terminal-edge-background");
   }, [resolvedTheme]);
   useEffect(() => {
     if (p.visible ?? p.active) {
