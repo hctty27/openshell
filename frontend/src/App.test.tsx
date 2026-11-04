@@ -72,7 +72,10 @@ vi.mock("./bridge", async () => ({
     return () => transferEvents.listeners.get(name)?.delete(callback);
   },
 }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.mocked(api.Connect).mockClear();
+});
 test("opens right AI dock from the edge rail without a titlebar icon", async () => {
   await act(async () => {
     render(<App />);
