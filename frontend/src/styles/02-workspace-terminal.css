@@ -392,7 +392,7 @@
   inset: 0;
   min-width: 0;
   min-height: 0;
-  padding: 8px;
+  padding: 0;
   background: var(--terminal-background, var(--terminal-workspace));
   visibility: hidden;
 }
@@ -651,7 +651,7 @@
 .terminal-surface .xterm {
   box-sizing: border-box;
   height: 100%;
-  padding: 0;
+  padding: 8px 0 0 8px;
   background-color: var(--terminal-edge-background, var(--terminal-background, var(--terminal-workspace)));
 }
 .terminal-surface .xterm .xterm-viewport {
