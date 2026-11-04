@@ -75,6 +75,7 @@ func (a *App) AISaveProvider(req AISaveProviderRequest) (store.AIProvider, error
 		return store.AIProvider{}, apperror.New("aiInvalidProviderDetails", nil)
 	}
 	for _, model := range p.Models {
+		if model.ContextWindow != 0 && (model.ContextWindow < 4096 || model.ContextWindow > aiMaxContextTokens) { return store.AIProvider{}, fmt.Errorf("模型上下文窗口须在 4096 到 262144 Token 之间") }
 		if model.ID == "" || len(model.ID) > 150 || strings.ContainsAny(model.ID, "\r\n") {
 			return store.AIProvider{}, apperror.New("aiInvalidModelID", nil)
 		}
@@ -206,6 +207,7 @@ func (a *App) AIStart(req AIStartRequest) (AITaskStart, error) {
 	c.TargetSessionIDs = sessionIDs
 	c.TargetBindings = bindings
 	c.Messages = append(c.Messages, store.AIMessage{Role: "user", Content: req.Text})
+	c.Context = aiContextState(c, provider, req.ModelID, 0)
 	a.aiMu.Lock()
 	if a.aiTasks == nil { a.aiTasks = make(map[string]*aiRunningTask) }
 	for _, running := range a.aiTasks {
@@ -324,17 +326,35 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 	// Keep current turn's tool-call/result pairs intact for API protocol compliance.
 	historyEnd := len(c.Messages) - 1
 	if historyEnd < 0 { historyEnd = 0 }
-	historical := aiHistoryContext(c.Messages[:historyEnd])
 	end("running", "")
 	for step:=0; step<12; step++ {
 		if err := ctx.Err(); err != nil { end("cancelled", err.Error()); return }
-		chatMessages := make([]store.AIMessage, 0, len(historical)+len(c.Messages)-historyEnd+1)
-		chatMessages = append(chatMessages, store.AIMessage{Role:"system",Content:system})
-		chatMessages = append(chatMessages, historical...)
-		chatMessages = append(chatMessages, c.Messages[historyEnd:]...)
-		msg, err := requestAICompletion(ctx, provider.BaseURL, key, c.ModelID, chatMessages, toolSpec,
+		chatMessages := aiPreparedMessages(c, system, historyEnd, false)
+		estimated := aiEstimateRequest(chatMessages, toolSpec)
+		window := aiModelWindow(provider, c.ModelID)
+		if estimated*100 >= window*70 {
+			chatMessages = aiPreparedMessages(c, system, historyEnd, true)
+			estimated = aiEstimateRequest(chatMessages, toolSpec)
+		}
+		if (estimated+aiReservedOutputTokens)*100 >= window*90 &&
+			aiCompactBoundary(c, historyEnd) > c.CompactedThrough {
+			a.emit("ai:context", map[string]any{"conversationId":c.ID, "status":"compacting"})
+			_, compactErr := a.aiCompact(ctx, &c, provider, key, historyEnd)
+			if compactErr != nil { end("failed", "自动压缩上下文失败: "+compactErr.Error()); return }
+			chatMessages = aiPreparedMessages(c, system, historyEnd, true)
+			estimated = aiEstimateRequest(chatMessages, toolSpec)
+			a.emit("ai:context", map[string]any{"conversationId":c.ID, "status":"running"})
+		}
+		if estimated+aiReservedOutputTokens > window {
+			end("failed", "当前请求超出模型上下文容量，请缩小输入或切换更大的模型")
+			return
+		}
+		c.Context = aiContextState(c, provider, c.ModelID, estimated)
+		a.emit("ai:context", map[string]any{"conversationId":c.ID, "status":"running", "context":c.Context})
+		msg, promptTokens, err := requestAICompletionWithUsage(ctx, provider.BaseURL, key, c.ModelID, chatMessages, toolSpec,
 			func(delta string) { a.emit("ai:delta", map[string]any{"taskId":taskID,"conversationId":c.ID,"text":delta}) })
 		if err != nil { end("failed", err.Error()); return }
+		if promptTokens > 0 { c.Context.LastPromptTokens = promptTokens }
 		c.Messages = append(c.Messages, msg)
 		if err := a.store.SaveAIConversation(context.Background(), c); err != nil { end("failed",err.Error()); return }
 		a.emit("ai:conversation", c)
@@ -425,7 +445,6 @@ func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToo
 // aiHistoryContext retains the conversation while removing stale executable references.
 // Stored messages are not modified, so history remains available to the UI.
 func aiHistoryContext(messages []store.AIMessage) []store.AIMessage {
-	if len(messages) > 30 { messages = messages[len(messages)-30:] }
 	result := make([]store.AIMessage, 0, len(messages))
 	for _, msg := range messages {
 		switch msg.Role {
@@ -500,6 +519,7 @@ type aiStreamCall struct {
 	Function store.AIFunction `json:"function"`
 }
 type aiStreamChunk struct {
+	Usage *struct { PromptTokens int `json:"prompt_tokens"` } `json:"usage"`
 	Choices []struct {
 		Delta struct {
 			Content string `json:"content"`
@@ -509,25 +529,51 @@ type aiStreamChunk struct {
 }
 
 func requestAICompletion(ctx context.Context, baseURL, key, model string, messages []store.AIMessage, tools []map[string]any, onDelta func(string)) (store.AIMessage,error) {
-	body,err:=json.Marshal(map[string]any{"model":model,"messages":messages,"tools":tools,"tool_choice":"auto","stream":true})
-	if err!=nil{return store.AIMessage{},err}
+	msg, _, err := requestAICompletionWithUsage(ctx, baseURL, key, model, messages, tools, onDelta)
+	return msg, err
+}
+
+func requestAICompletionWithUsage(ctx context.Context, baseURL, key, model string, messages []store.AIMessage, tools []map[string]any, onDelta func(string)) (store.AIMessage, int, error) {
+	msg, usage, err := requestAICompletionAttempt(ctx, baseURL, key, model, messages, tools, onDelta, true)
+	if err != nil {
+		lower := strings.ToLower(err.Error())
+		if (strings.Contains(lower, "stream_options") || strings.Contains(lower, "include_usage")) &&
+			(strings.Contains(lower, "400") || strings.Contains(lower, "422")) {
+			return requestAICompletionAttempt(ctx, baseURL, key, model, messages, tools, onDelta, false)
+		}
+	}
+	return msg, usage, err
+}
+
+func requestAICompletionAttempt(ctx context.Context, baseURL, key, model string, messages []store.AIMessage, tools []map[string]any, onDelta func(string), requestUsage bool) (store.AIMessage, int, error) {
+	payload := map[string]any{"model":model,"messages":messages,"stream":true}
+	if len(tools) != 0 {
+		payload["tools"] = tools
+		payload["tool_choice"] = "auto"
+	}
+	if requestUsage {
+		payload["stream_options"] = map[string]any{"include_usage":true}
+	}
+	body,err:=json.Marshal(payload)
+	if err!=nil{return store.AIMessage{},0,err}
 	req,err:=http.NewRequestWithContext(ctx,http.MethodPost,strings.TrimRight(baseURL,"/")+"/chat/completions",bytes.NewReader(body))
-	if err!=nil{return store.AIMessage{},err}
+	if err!=nil{return store.AIMessage{},0,err}
 	req.Header.Set("Content-Type","application/json")
 	req.Header.Set("Authorization","Bearer "+key)
 	req.Header.Set("Accept","text/event-stream")
 	client:=&http.Client{Timeout:120*time.Second}
 	resp,err:=client.Do(req)
-	if err!=nil{return store.AIMessage{},err}
+	if err!=nil{return store.AIMessage{},0,err}
 	defer resp.Body.Close()
 	if resp.StatusCode!=http.StatusOK {
 		data,_:=io.ReadAll(io.LimitReader(resp.Body,4096))
-		return store.AIMessage{},fmt.Errorf("AI API HTTP %d: %s",resp.StatusCode,string(data))
+		return store.AIMessage{},0,fmt.Errorf("AI API HTTP %d: %s",resp.StatusCode,string(data))
 	}
 	out:=store.AIMessage{Role:"assistant"}
 	parts:=map[int]*store.AIToolCall{}
 	scanner:=bufio.NewScanner(io.LimitReader(resp.Body,8*1024*1024))
 	scanner.Buffer(make([]byte,8192),2*1024*1024)
+	promptTokens := 0
 	for scanner.Scan() {
 		line:=strings.TrimSpace(scanner.Text())
 		if !strings.HasPrefix(line,"data:") { continue }
@@ -535,6 +581,7 @@ func requestAICompletion(ctx context.Context, baseURL, key, model string, messag
 		if data=="[DONE]" { break }
 		var chunk aiStreamChunk
 		if err:=json.Unmarshal([]byte(data),&chunk);err!=nil { continue }
+		if chunk.Usage != nil && chunk.Usage.PromptTokens > 0 { promptTokens = chunk.Usage.PromptTokens }
 		for _,choice:=range chunk.Choices {
 			if choice.Delta.Content!="" { out.Content+=choice.Delta.Content; onDelta(choice.Delta.Content) }
 			for _,tc:=range choice.Delta.ToolCalls {
@@ -547,15 +594,15 @@ func requestAICompletion(ctx context.Context, baseURL, key, model string, messag
 			}
 		}
 	}
-	if err:=scanner.Err();err!=nil{return store.AIMessage{},err}
+	if err:=scanner.Err();err!=nil{return store.AIMessage{},0,err}
 	for i:=0;i<len(parts);i++ {
 		call:=parts[i]
 		if call==nil {continue}
-		if call.ID=="" {return store.AIMessage{},apperror.New("aiMissingToolCallID", nil)}
+		if call.ID=="" {return store.AIMessage{},0,apperror.New("aiMissingToolCallID", nil)}
 		out.ToolCalls=append(out.ToolCalls,*call)
 	}
-	if out.Content=="" && len(out.ToolCalls)==0 {return store.AIMessage{},apperror.New("aiEmptyResponse", nil)}
-	return out,nil
+	if out.Content=="" && len(out.ToolCalls)==0 {return store.AIMessage{},0,apperror.New("aiEmptyResponse", nil)}
+	return out,promptTokens,nil
 }
 
 func truncateAIRunes(s string, max int)string{
