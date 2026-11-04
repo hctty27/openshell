@@ -100,6 +100,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   useTranslation();
   const dialogs = useDialogs();
   const [localDir,setLocalDir] = useState("");
+  const navigatedLocalDir = useRef("");
   const [remoteDir,setRemoteDir] = useState("");
   const [localFiles,setLocalFiles] = useState<SFTPEntry[]>([]);
   const [remoteFiles,setRemoteFiles] = useState<SFTPEntry[]>([]);
@@ -125,6 +126,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   useEffect(() => {
     let alive=true;
     setTasks([]);
+    navigatedLocalDir.current = "";
     api.SFTPHome(refID).then(async paths => {
       if (!alive) return;
       setLocalDir(paths.local);
@@ -150,7 +152,14 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   useEffect(()=>{
     if(!localDir)return;
     let alive=true;setLocalBusy(true);setLocalError("");
-    api.SFTPList(refID,"local",localDir).then(items=>{if(alive){setLocalFiles(items??[]);setLocalListedKey(directoryCacheKey(refID,localDir));}})
+    api.SFTPList(refID,"local",localDir).then(items=>{if(alive){
+      setLocalFiles(items??[]);
+      setLocalListedKey(directoryCacheKey(refID,localDir));
+      if (navigatedLocalDir.current === localDir) {
+        navigatedLocalDir.current = "";
+        void api.SaveTransferLocalDir(refID.sessionId,localDir).catch(onNotice);
+      }
+    }})
       .catch(error=>{if(alive){setLocalFiles([]);setLocalError(error);}})
       .finally(()=>{if(alive)setLocalBusy(false);});
     return ()=>{alive=false;};
@@ -202,7 +211,10 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
 
   const changeDir = (side:Side, directory:string) => {
     if(!directory)return;
-    if(side==="local")setLocalDir(directory);else setRemoteDir(directory);
+    if(side==="local"){
+      navigatedLocalDir.current = directory;
+      setLocalDir(directory);
+    } else setRemoteDir(directory);
     setSelection(s=>({...s,[side]:[]}));
   };
   const choose = (side:Side,item:SFTPEntry,multi:boolean) => {
@@ -274,22 +286,21 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     }catch(error){onNotice(error);}
   };
   const closeEditor = async () => {
-    if(editorSaveInProgress.current) return;
+    if(editorSaveInProgress.current)return;
     if(editor && draftText!==editor.content){
       const ok=await dialogs.confirm({title:t("sftp:discardEditorTitle"),description:t("sftp:discardEditorDescription"),tone:"warning",confirmLabel:t("sftp:discard")});
       if(!ok)return;
     }
     setEditor(null);
   };
-  const saveEditor = async (content: string) => {
+  const saveEditor = async (content:string) => {
     if(!editor || editorSaveInProgress.current || content===editor.content)return;
-    editorSaveInProgress.current = true;
+    editorSaveInProgress.current=true;
     setEditorSaving(true);
     try {
       const next=await api.SFTPSaveRemoteText(refID,editor.path,editor.revision,content);
       setEditor(next);
-      // Do not overwrite characters typed while the remote save was in flight.
-      setDraftText(current => current === content ? next.content : current);
+      setDraftText(current=>current===content?next.content:current);
       refresh("remote");
     }catch(error){onNotice(error);}
     finally{editorSaveInProgress.current=false;setEditorSaving(false);}
@@ -374,16 +385,16 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
       </div>}
       {editor && (
         <Suspense fallback={<div className="sftp-editor-backdrop"><div className="sftp-editor-loading">{t("sftp:loading")}</div></div>}>
-        <SFTPFileEditor
-          key={refID.tabId + ":" + refID.generation + ":" + editor.path}
-          path={editor.path}
-          initialContent={editor.content}
-          dirty={draftText!==editor.content}
-          saving={editorSaving}
-          onChange={setDraftText}
-          onSave={content=>void saveEditor(content)}
-          onClose={()=>void closeEditor()}
-        />
+          <SFTPFileEditor
+            key={refID.tabId + ":" + refID.generation + ":" + editor.path}
+            path={editor.path}
+            initialContent={editor.content}
+            dirty={draftText!==editor.content}
+            saving={editorSaving}
+            onChange={setDraftText}
+            onSave={content=>void saveEditor(content)}
+            onClose={()=>void closeEditor()}
+          />
         </Suspense>
       )}
       {menu && <FloatingContextMenu {...menu} onClose={()=>setMenu(null)}/>}
