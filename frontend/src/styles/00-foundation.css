@@ -171,3 +171,60 @@ kbd {
   min-height: 0;
   overflow: hidden;
 }
+
+/* Shared title bar for the session manager and AI assistant sidebars. */
+.panel-header {
+  position: relative;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 var(--chrome-bar-height);
+  height: var(--chrome-bar-height);
+  min-width: 0;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--border);
+  gap: 6px;
+}
+.panel-header-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.panel-header-title > svg {
+  flex: 0 0 auto;
+  color: var(--accent-fill);
+}
+.panel-header-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0;
+}
+.panel-header-actions button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-muted);
+}
+.panel-header-actions .sidebar-pin-toggle {
+  position: relative;
+  margin-left: 4px;
+}
+.panel-header-actions .sidebar-pin-toggle[aria-pressed="true"],
+.panel-header-actions .sidebar-pin-toggle:hover,
+.panel-header-actions .sidebar-pin-toggle:focus-visible {
+  color: var(--accent-fill);
+  background: var(--accent-soft);
+}
