@@ -121,6 +121,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   useTranslation();
   const dialogs = useDialogs();
   const [localDir,setLocalDir] = useState("");
+  const navigatedLocalDir = useRef("");
   const [remoteDir,setRemoteDir] = useState("");
   const [localFiles,setLocalFiles] = useState<SFTPEntry[]>([]);
   const [remoteFiles,setRemoteFiles] = useState<SFTPEntry[]>([]);
@@ -149,6 +150,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   useEffect(() => {
     let alive=true;
     setTasks([]);
+    navigatedLocalDir.current = "";
     api.SFTPHome(refID).then(async paths => {
       if (!alive) return;
       setLocalDir(paths.local);
@@ -174,7 +176,14 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   useEffect(()=>{
     if(!localDir)return;
     let alive=true;setLocalBusy(true);setLocalError("");
-    api.SFTPList(refID,"local",localDir).then(items=>{if(alive){setLocalFiles(items??[]);setLocalListedKey(directoryCacheKey(refID,localDir));}})
+    api.SFTPList(refID,"local",localDir).then(items=>{if(alive){
+      setLocalFiles(items??[]);
+      setLocalListedKey(directoryCacheKey(refID,localDir));
+      if (navigatedLocalDir.current === localDir) {
+        navigatedLocalDir.current = "";
+        void api.SaveTransferLocalDir(refID.sessionId,localDir).catch(onNotice);
+      }
+    }})
       .catch(error=>{if(alive){setLocalFiles([]);setLocalError(error);}})
       .finally(()=>{if(alive)setLocalBusy(false);});
     return ()=>{alive=false;};
@@ -226,7 +235,10 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
 
   const changeDir = (side:Side, directory:string) => {
     if(!directory)return;
-    if(side==="local")setLocalDir(directory);else setRemoteDir(directory);
+    if(side==="local"){
+      navigatedLocalDir.current = directory;
+      setLocalDir(directory);
+    } else setRemoteDir(directory);
     selectionAnchor.current[side] = null;
     setSelection(s=>({...s,[side]:[]}));
     setDeleting(s=>({...s,[side]:null}));
