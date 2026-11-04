@@ -8,6 +8,7 @@ interface Props {
   children: ReactNode;
   align?: "start" | "end";
   minWidth?: number;
+  matchAnchorWidth?: boolean;
   maxHeight?: number;
   className?: string;
 }
@@ -17,7 +18,7 @@ const ANCHOR_GAP = 6;
 
 export default function AIDropdownSurface({
   open, anchorRef, onDismiss, children, align = "start",
-  minWidth = 180, maxHeight = 250, className = "",
+  minWidth = 180, matchAnchorWidth = false, maxHeight = 250, className = "",
 }: Props) {
   const surfaceRef = useRef<HTMLDivElement>(null);
 
@@ -31,8 +32,9 @@ export default function AIDropdownSurface({
       const rect = anchor.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      const width = Math.min(Math.max(rect.width, minWidth), viewportWidth - VIEWPORT_GAP * 2);
-      surface.style.width = `${Math.max(0, width)}px`;
+      const preferredWidth = matchAnchorWidth ? rect.width : Math.max(rect.width, minWidth);
+      const width = Math.max(0, Math.min(preferredWidth, viewportWidth - VIEWPORT_GAP * 2));
+      surface.style.width = `${width}px`;
       surface.style.maxHeight = `${Math.max(0, Math.min(maxHeight, viewportHeight - VIEWPORT_GAP * 2))}px`;
 
       const height = Math.min(surface.scrollHeight, maxHeight, viewportHeight - VIEWPORT_GAP * 2);
@@ -61,7 +63,7 @@ export default function AIDropdownSurface({
       window.removeEventListener("scroll", position, true);
       observer?.disconnect();
     };
-  }, [open, anchorRef, align, minWidth, maxHeight]);
+  }, [open, anchorRef, align, minWidth, matchAnchorWidth, maxHeight]);
 
   useEffect(() => {
     if (!open) return;

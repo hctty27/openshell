@@ -108,3 +108,21 @@ test("Escape dismisses the model popup and restores trigger focus", () => {
   expect(screen.queryByRole("listbox")).toBeNull();
   expect(document.activeElement).toBe(trigger);
 });
+
+test("model popup width follows the trigger width and updates on resize", () => {
+  render(<AIModelPicker providers={providers} providerID="p1" modelID="gpt-6" onChange={vi.fn()} />);
+  const trigger = screen.getByRole("combobox", { name: "选择 AI 模型" });
+  let width = 170;
+  vi.spyOn(trigger, "getBoundingClientRect").mockImplementation(() => ({
+    x: 24, y: 180, top: 180, left: 24, right: 24 + width, bottom: 210,
+    width, height: 30, toJSON: () => ({}),
+  }) as DOMRect);
+
+  fireEvent.click(trigger);
+  const popup = screen.getByRole("listbox").closest(".ai-dropdown-popover") as HTMLElement;
+  expect(popup.style.width).toBe("170px");
+
+  width = 130;
+  fireEvent.resize(window);
+  expect(popup.style.width).toBe("130px");
+});

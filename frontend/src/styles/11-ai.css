@@ -358,10 +358,11 @@
   width: 170px;
   min-width: 60px;
 }
-.ai-model-picker__trigger { justify-content: flex-start; }
+.ai-model-picker__trigger { justify-content: space-between; }
 .ai-model-picker__trigger[aria-invalid="true"] { color: var(--danger); }
 .ai-model-picker__trigger svg { flex-shrink: 0; }
 .ai-model-picker__trigger span {
+  flex: 1 1 auto;
   overflow: hidden;
   min-width: 0;
   white-space: nowrap;

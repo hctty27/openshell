@@ -414,7 +414,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                 <ChevronDown size={13} aria-hidden="true" />
               </button>
               <AIDropdownSurface open={showTargets} anchorRef={targetTriggerRef}
-                onDismiss={() => setShowTargets(false)} align="end" minWidth={180} maxHeight={250}>
+                onDismiss={() => setShowTargets(false)} align="end" matchAnchorWidth maxHeight={250}>
                 <div className="ai-target-menu" role="group" aria-label={t("ai:sessionsLabel")}
                   onKeyDown={onTargetsKeyDown}>
                   {connected.map(tab => (
