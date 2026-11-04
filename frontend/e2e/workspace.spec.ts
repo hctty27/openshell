@@ -540,8 +540,8 @@ test("terminal grid stays centered inside scrollbar left edge across sizes and t
   await expect(page.locator(".terminal-pane.active .xterm-screen")).toBeVisible();
 
   await page.getByTitle("设置", { exact: true }).click();
+  await page.getByRole("button", { name: "外观", exact: true }).click();
   await page.getByRole("button", { name: "浅色", exact: true }).click();
-  await page.getByRole("button", { name: "终端", exact: true }).click();
   await page.locator("#settings-terminal-theme").selectOption("classic");
   await page.getByRole("button", { name: "保存设置" }).click();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
@@ -646,7 +646,7 @@ test("terminal grid stays centered inside scrollbar left edge across sizes and t
   }
 
   await page.getByTitle("设置", { exact: true }).click();
-  await page.getByRole("button", { name: "终端", exact: true }).click();
+  await page.getByRole("button", { name: "外观", exact: true }).click();
   await page.locator("#settings-terminal-theme").selectOption("light");
   await page.getByRole("button", { name: "保存设置" }).click();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
@@ -654,6 +654,7 @@ test("terminal grid stays centered inside scrollbar left edge across sizes and t
     .toEqual(Array(4).fill("rgb(248, 250, 252)"));
 
   await page.getByTitle("设置", { exact: true }).click();
+  await page.getByRole("button", { name: "外观", exact: true }).click();
   await page.getByRole("button", { name: "深色", exact: true }).click();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
   await expect.poll(async () => (await snapshot()).backgrounds)
@@ -823,9 +824,8 @@ test("bilingual switching preserves SSH terminal and survives reload", async ({
   await page.getByTitle("设置", { exact: true }).click();
   await expect(page.locator("#settings-language")).toHaveValue("zh-CN");
   await page.locator("#settings-language").selectOption("en");
-  await expect(
-    page.getByRole("button", { name: "Save settings" }),
-  ).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator("#settings-language")).toHaveValue("en");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });

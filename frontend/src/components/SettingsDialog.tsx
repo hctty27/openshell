@@ -9,6 +9,7 @@ import {
   Server,
   Network,
   Settings2,
+  Palette,
   Sparkles,
   Info,
   Terminal,
@@ -22,6 +23,7 @@ import { api, errorText } from "../bridge";
 import ModalSurface from "./ModalSurface";
 import { useDialogs } from "./DialogProvider";
 import GeneralSettingsPanel from "./GeneralSettingsPanel";
+import AppearanceSettingsPanel from "./AppearanceSettingsPanel";
 import ConnectionSettingsPanel from "./ConnectionSettingsPanel";
 import TerminalSettingsPanel from "./TerminalSettingsPanel";
 import AIProviderSettings from "./AIProviderSettings";
@@ -107,11 +109,41 @@ export default function SettingsDialog(p: Props) {
   const [error, setError] = useState<unknown>("");
   const [success, setSuccess] = useState<DisplayText>("");
   const [busy, setBusy] = useState(false);
+  const [aiDirty, setAiDirty] = useState(false);
+  const confirmDiscardAI = () => dialogs.confirm({
+    title: message("settings:aiUnsavedChangesTitle"),
+    description: message("settings:aiUnsavedChangesDescription"),
+    confirmLabel: message("settings:discardSessionChanges"),
+    cancelLabel: message("settings:continueEditing"),
+    tone: "warning",
+  });
+  const selectSettingsTab = (next: string) => {
+    if (next === tab) return;
+    const apply = () => {
+      setTab(next);
+      setAiDirty(false);
+      setError("");
+      setSuccess("");
+    };
+    if (tab === "ai" && aiDirty) {
+      void confirmDiscardAI().then(confirmed => { if (confirmed) apply(); });
+      return;
+    }
+    apply();
+  };
   const sessionDirty = JSON.stringify(session) !== JSON.stringify(initialSession.current) ||
     secret !== "" || saveSecret !== !!p.session?.credentialRef;
   const requestClose = () => {
     if (busy) return;
-    if (p.kind !== "session" || !sessionDirty) {
+    if (p.kind === "settings") {
+      if (aiDirty) {
+        void confirmDiscardAI().then(confirmed => { if (confirmed) p.onClose(); });
+      } else {
+        p.onClose();
+      }
+      return;
+    }
+    if (!sessionDirty) {
       p.onClose();
       return;
     }
@@ -188,9 +220,10 @@ export default function SettingsDialog(p: Props) {
             <nav className="settings-sidebar" aria-label={t("settings:settingsNavigation")}>
               {[
                 { id: "general", label: t("settings:general"), icon: Settings2 },
+                { id: "appearance", label: t("settings:appearance"), icon: Palette },
                 { id: "terminal", label: t("settings:terminal"), icon: Terminal },
                 { id: "connection", label: t("settings:connection"), icon: Network },
-                { id: "ai", label: t("settings:aiModels"), icon: Sparkles },
+                { id: "ai", label: t("settings:aiSettings"), icon: Sparkles },
                 { id: "about", label: t("settings:about"), icon: Info },
               ].map(({ id, label, icon: Icon }) => (
                 <button
@@ -198,11 +231,7 @@ export default function SettingsDialog(p: Props) {
                   type="button"
                   className={tab === id ? "active" : ""}
                   aria-current={tab === id ? "page" : undefined}
-                  onClick={() => {
-                    setTab(id);
-                    setError("");
-                    setSuccess("");
-                  }}
+                  onClick={() => selectSettingsTab(id)}
                 >
                   <Icon size={16} aria-hidden="true" />
                   <span>{label}</span>
@@ -435,11 +464,19 @@ export default function SettingsDialog(p: Props) {
               onLanguageError={setError}
               onExportSessionBackup={p.onExportSessionBackup}
               onImportSessionBackup={p.onImportSessionBackup}
-              theme={p.theme}
-              onTheme={p.onTheme}
             />
           )}
-          {tab === "ai" && <AIProviderSettings />}
+          {tab === "appearance" && (
+            <AppearanceSettingsPanel
+              theme={p.theme}
+              onTheme={p.onTheme}
+              terminalTheme={p.terminalTheme}
+              onTerminalTheme={p.onTerminalTheme}
+              fontSize={p.fontSize}
+              onFont={p.onFont}
+            />
+          )}
+          {tab === "ai" && <AIProviderSettings onDirtyChange={setAiDirty} />}
           {tab === "about" && <AboutSettingsPanel />}
           {tab === "connection" && (
             <ConnectionSettingsPanel
@@ -463,11 +500,6 @@ export default function SettingsDialog(p: Props) {
           )}
           {tab === "terminal" && (
             <TerminalSettingsPanel
-              theme={p.theme}
-              terminalTheme={p.terminalTheme}
-              onTerminalTheme={p.onTerminalTheme}
-              fontSize={p.fontSize}
-              onFont={p.onFont}
               logHighlights={p.logHighlights}
               onLogHighlights={p.onLogHighlights}
               autoCopySelection={p.autoCopySelection}
@@ -538,7 +570,7 @@ export default function SettingsDialog(p: Props) {
                 {t("settings:saveSettings")}
               </button>
             )}
-            {(tab === "general" || tab === "terminal") && (
+            {(tab === "appearance" || tab === "terminal") && (
               <button
                 className="primary"
                 disabled={busy}
