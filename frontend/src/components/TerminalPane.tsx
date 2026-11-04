@@ -190,12 +190,15 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
     };
     refit.current = applyGeometry;
     let edgeBackgroundFrame = 0;
+    let edgeBackgroundPending = false;
     let appliedEdgeBackground: string | null = null;
     const syncEdgeBackground = () => {
       // Background terminals continue parsing and ACKing output, but need no
       // extra CSS updates until they become visible again.
-      if (disposed || edgeBackgroundFrame || !(callbacks.current.visible ?? callbacks.current.active)) return;
-      edgeBackgroundFrame = requestAnimationFrame(() => {
+      if (disposed || edgeBackgroundPending || !(callbacks.current.visible ?? callbacks.current.active)) return;
+      edgeBackgroundPending = true;
+      const frame = requestAnimationFrame(() => {
+        edgeBackgroundPending = false;
         edgeBackgroundFrame = 0;
         const surface = container.current;
         if (disposed || !surface || !(callbacks.current.visible ?? callbacks.current.active)) return;
@@ -210,6 +213,8 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
         else surface.style.removeProperty("--terminal-edge-background");
         appliedEdgeBackground = color;
       });
+      // Keep the pending flag correct even when tests invoke rAF synchronously.
+      if (edgeBackgroundPending) edgeBackgroundFrame = frame;
     };
     refreshEdgeBackground.current = syncEdgeBackground;
     const bufferListener = term.buffer.onBufferChange(buffer => {
