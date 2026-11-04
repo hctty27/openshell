@@ -18,7 +18,7 @@ test("context control shows the percentage beside the ring and detailed progress
   const onCompact = vi.fn();
   render(<AIContextIndicator stats={stats} compacting={false} disabled={false} onCompact={onCompact} />);
 
-  const trigger = screen.getByRole("button", { name: /上下文使用情况: 9%/ });
+  const trigger = screen.getByRole("button", { name: "上下文使用情况" });
   expect(trigger.textContent).toBe("9%");
   expect(trigger.querySelector("svg text")).toBeNull();
   fireEvent.click(trigger);
@@ -33,7 +33,7 @@ test("context control shows the percentage beside the ring and detailed progress
 
 test("context popup closes on Escape and restores the header trigger focus", () => {
   render(<AIContextIndicator stats={stats} compacting={false} disabled={false} onCompact={vi.fn()} />);
-  const trigger = screen.getByRole("button", { name: /上下文使用情况: 9%/ });
+  const trigger = screen.getByRole("button", { name: "上下文使用情况" });
   fireEvent.click(trigger);
   fireEvent.keyDown(document, { key: "Escape" });
   expect(screen.queryByRole("dialog", { name: "上下文使用情况" })).toBeNull();
@@ -43,7 +43,7 @@ test("context popup closes on Escape and restores the header trigger focus", () 
 test("context popup closes when history opens and never compacts without a conversation", () => {
   const onCompact = vi.fn();
   const view = render(<AIContextIndicator stats={stats} compacting={false} disabled onCompact={onCompact} />);
-  fireEvent.click(screen.getByRole("button", { name: /上下文使用情况: 9%/ }));
+  fireEvent.click(screen.getByRole("button", { name: "上下文使用情况" }));
   expect(screen.getByRole("button", { name: "手动压缩上下文" }).hasAttribute("disabled")).toBe(true);
   view.rerender(<AIContextIndicator stats={stats} compacting={false} disabled onCompact={onCompact} historyOpen />);
   expect(screen.queryByRole("dialog", { name: "上下文使用情况" })).toBeNull();
