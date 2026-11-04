@@ -140,6 +140,7 @@
   "aiAddProvider": "Add API",
   "aiEditProvider": "Edit API",
   "aiModelIDs": "Model IDs (one per line)",
-  "aiModelIDsHelp": "Add multiple models under one API; the key and base URL are shared.",
-  "aiProviderSaved": "API provider saved"
+  "aiModelIDsHelp": "Enter one model ID per line, optionally followed by '| token limit' (for example: gpt-model | 262144). Default: 32768; maximum: 262144.",
+  "aiProviderSaved": "API provider saved",
+  "aiModelWindowInvalid": "Invalid model ID or context window (4096–262144)."
 }
