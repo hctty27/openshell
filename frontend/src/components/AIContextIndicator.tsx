@@ -7,14 +7,16 @@ interface Props {
   compacting: boolean;
   disabled: boolean;
   onCompact(): void;
+  autoCompact?: boolean;
+  compactThreshold?: number;
 }
 
-export default function AIContextIndicator({ stats, compacting, disabled, onCompact }: Props) {
+export default function AIContextIndicator({ stats, compacting, disabled, onCompact, autoCompact = true, compactThreshold = 90 }: Props) {
   const [open, setOpen] = useState(false);
   const window = stats?.window || 32768;
   const used = stats?.estimatedTokens || 0;
   const percentage = Math.min(100, Math.round(100 * used / window));
-  const state = percentage >= 90 ? "critical" : percentage >= 70 ? "warning" : "normal";
+  const state = percentage >= (autoCompact ? compactThreshold : 90) ? "critical" : percentage >= 70 ? "warning" : "normal";
   return <div className="ai-context-control">
     <button type="button" className={"ai-context-ring is-" + state} aria-label={t("ai:contextUsage")}
       title={t("ai:contextUsage") + ": " + used + "/" + window}
@@ -32,7 +34,7 @@ export default function AIContextIndicator({ stats, compacting, disabled, onComp
       <p>{used.toLocaleString()} / {window.toLocaleString()} ({percentage}%)</p>
       <p className="ai-context-note">{t("ai:contextEstimated")}</p>
       {!!stats?.lastPromptTokens && <p className="ai-context-note">{t("ai:lastPromptTokens")}: {stats.lastPromptTokens.toLocaleString()}</p>}
-      <div className="ai-context-row"><span>{t("ai:autoCompact")}</span><span>{t("ai:atNinety")}</span></div>
+      <div className="ai-context-row"><span>{t("ai:autoCompact")}</span><span>{autoCompact ? t("ai:atThreshold", { threshold: compactThreshold }) : t("ai:autoCompactOff")}</span></div>
       <div className="ai-context-row"><span>{t("ai:compactCount")}</span><span>{stats?.compactionCount || 0}</span></div>
       <button type="button" className="ai-context-compact" disabled={disabled || compacting}
         onClick={onCompact}>{compacting ? t("ai:compacting") : t("ai:compactNow")}</button>
