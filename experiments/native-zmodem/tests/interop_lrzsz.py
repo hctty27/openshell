@@ -22,7 +22,7 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def transfer_pair(left: list[str], right: list[str], left_cwd: Path, right_cwd: Path) -> None:
+def transfer_pair(left: list[str], right: list[str], left_cwd: Path, right_cwd: Path, chunk_size: int = 4096) -> None:
     with tempfile.TemporaryDirectory(prefix="zmodem-test-log-") as logs:
         with (Path(logs) / "left.err").open("wb") as left_log, (
             Path(logs) / "right.err"
@@ -48,7 +48,7 @@ def transfer_pair(left: list[str], right: list[str], left_cwd: Path, right_cwd: 
             def bridge(source, sink):
                 try:
                     while True:
-                        data = os.read(source.fileno(), 4096)
+                        data = os.read(source.fileno(), chunk_size)
                         if not data:
                             break
                         offset = 0
@@ -120,24 +120,30 @@ def main() -> None:
         for directory in (src, sidecar_output, lrzsz_output):
             directory.mkdir()
 
-        filename = "interop.bin"
-        payload = bytes((n * 191 + 11) % 256 for n in range(64 * 1024 + 17))
-        source = src / filename
-        source.write_bytes(payload)
+        cases = [
+            ("empty.bin", b"", 4096),
+            ("one.bin", b"x", 4096),
+            ("interop.bin", bytes((n * 191 + 11) % 256 for n in range(64 * 1024 + 17)), 4096),
+            ("fragmented.bin", bytes((n * 13) % 256 for n in range(2047)), 23),
+            ("中文数据.bin", "UTF-8 filename ZMODEM test".encode(), 4096),
+            ("megabyte.bin", bytes((n * 173) % 256 for n in range(1024 * 1024)), 4096),
+        ]
+        for filename, payload, chunk_size in cases:
+            source = src / filename
+            source.write_bytes(payload)
+            print(f"Linux sz -> Rust receiver: {filename} ({len(payload)} bytes)", flush=True)
+            transfer_pair(["sz", "-q", str(source)], [sidecar, "receive", str(sidecar_output)],
+                          src, sidecar_output, chunk_size)
+            received = sidecar_output / filename
+            assert received.exists() and sha256(received) == sha256(source)
 
-        print("Test A: Linux lrzsz sz -> native Rust receiver", flush=True)
-        transfer_pair(["sz", "-q", str(source)], [sidecar, "receive", str(sidecar_output)],
-                      src, sidecar_output)
-        received = sidecar_output / filename
-        assert received.exists() and sha256(received) == sha256(source)
+            print(f"Rust sender -> Linux rz: {filename} ({len(payload)} bytes)", flush=True)
+            transfer_pair([sidecar, "send", str(source)], ["rz", "-q", "-y"],
+                          src, lrzsz_output, chunk_size)
+            received = lrzsz_output / filename
+            assert received.exists() and sha256(received) == sha256(source)
 
-        print("Test B: native Rust sender -> Linux lrzsz rz", flush=True)
-        transfer_pair([sidecar, "send", str(source)], ["rz", "-q", "-y"],
-                      src, lrzsz_output)
-        received = lrzsz_output / filename
-        assert received.exists() and sha256(received) == sha256(source)
-
-        print("Passed: bidirectional byte-for-byte lrzsz interoperability", flush=True)
+        print(f"Passed: {len(cases) * 2} cross-implementation file transfers, SHA-256 verified", flush=True)
 
 
 if __name__ == "__main__":
