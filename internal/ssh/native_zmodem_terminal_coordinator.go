@@ -151,6 +151,7 @@ func (c *nativeTerminalCoordinator) run(
 	if err != nil {
 		return err
 	}
+	publishDestination := path
 	stage := ""
 	if action == "receive" {
 		stage, err = os.MkdirTemp(path, ".openshell-zmodem-terminal-")
@@ -252,7 +253,7 @@ func (c *nativeTerminalCoordinator) run(
 		return err
 	}
 	if stage != "" {
-		if err := nativeZmodemPublish(stage, localPath); err != nil {
+		if err := nativeZmodemPublish(stage, publishDestination); err != nil {
 			return fmt.Errorf("原生 ZMODEM 接收成功，但保存文件失败：%w", err)
 		}
 	}
