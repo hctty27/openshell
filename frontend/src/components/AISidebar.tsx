@@ -15,6 +15,7 @@ import AITranscript from "./AITranscript";
 import { belongsToConversationScope } from "../features/ai/conversationScope";
 import { AI_PROVIDERS_CHANGED } from "../features/ai/providerEvents";
 import { readLastModel, saveLastModel } from "../features/ai/modelSelection";
+import { resolveAIModelSelection } from "../features/ai/modelFallback";
 import { t } from "../i18n";
 import { decodeAppError } from "../i18n/errors";
 import { useTranslation } from "react-i18next";
@@ -72,6 +73,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [contextInfo, setContextInfo] = useState<AIContextStats | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const modelSaveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const [compacting, setCompacting] = useState(false);
   const [runtimeSettings, setRuntimeSettings] = useState<AIRuntimeSettings>(defaultAIRuntimeSettings);
   useEffect(() => {
@@ -173,7 +176,10 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     const offContext = listen("ai:context", (event: {conversationId: string; status: string; context?: AIContextStats}) => {
       if (event.conversationId !== currentConversationRef.current) return;
       setCompacting(event.status === "compacting");
-      if (event.context) setContextInfo(event.context);
+      if (event.context) {
+        setContextInfo(event.context);
+        setContextLoading(false);
+      }
     });
     const offApproval = listen("ai:approval", (event: Approval) => {
       if (activeTaskRef.current && event.taskId === activeTaskRef.current) setApproval(event);
@@ -221,9 +227,36 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     targets[0]?.ref?.generation === active.ref.generation,
   );
   const terminalAvailable = terminalSingleTarget && !terminalAlternate;
-  const provider = providerID ? providers.find(item => item.id === providerID) : providers[0];
-  const model = modelID ? provider?.models.find(item => item.id === modelID) : provider?.models[0];
+  const resolvedSelection = resolveAIModelSelection(
+    providers,
+    { providerId: providerID, modelId: modelID },
+    lastModelRef.current,
+  );
+  const provider = providers.find(item => item.id === resolvedSelection?.providerId);
+  const model = provider?.models.find(item => item.id === resolvedSelection?.modelId);
   const current = conversations.find(item => item.id === conversationID && belongsToConversationScope(item, terminalScopeId));
+
+  useEffect(() => {
+    if (!resolvedSelection || (providerID === resolvedSelection.providerId && modelID === resolvedSelection.modelId)) return;
+    setProviderID(resolvedSelection.providerId);
+    setModelID(resolvedSelection.modelId);
+    lastModelRef.current = resolvedSelection;
+    saveLastModel(resolvedSelection);
+  }, [providerID, modelID, resolvedSelection?.providerId, resolvedSelection?.modelId]);
+
+  useEffect(() => {
+    if (!conversationID || !current || !provider || !model) return;
+    if (current.providerId === provider.id && current.modelId === model.id) return;
+    const conversationId = conversationID;
+    const nextProviderId = provider.id;
+    const nextModelId = model.id;
+    modelSaveQueue.current = modelSaveQueue.current
+      .catch(() => {})
+      .then(() => api.AISetConversationModel(conversationId, nextProviderId, nextModelId))
+      .catch(error => {
+        if (currentConversationRef.current === conversationId) setError(errorText(error));
+      });
+  }, [conversationID, current?.providerId, current?.modelId, provider?.id, model?.id]);
   const emptyContextStats: AIContextStats = {
     window: model?.contextWindow || 32768,
     estimatedTokens: 0,
@@ -234,12 +267,16 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   useEffect(() => {
     if (!conversationID || !provider?.id || !model?.id || typeof api.AIContext !== "function") {
       setContextInfo(null);
+      setContextLoading(false);
       return;
     }
     let active = true;
+    setContextInfo(null);
+    setContextLoading(true);
     void api.AIContext(conversationID, provider.id, model.id)
       .then(result => { if (active) setContextInfo(result); })
-      .catch(() => { if (active) setContextInfo(null); });
+      .catch(() => { if (active) setContextInfo(null); })
+      .finally(() => { if (active) setContextLoading(false); });
     return () => { active = false; };
   }, [conversationID, provider?.id, model?.id, current?.messages.length, current?.compactionCount]);
   const compactHistory = async () => {
@@ -316,6 +353,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setLegacyHistoryNeedsRebind(item.targetNames.length > 0 && bindings.length === 0);
     activeTaskRef.current = "";
     setContextInfo(null);
+    setContextLoading(true);
     setConversationID(item.id);
     setProviderID(item.providerId);
     setModelID(item.modelId);
@@ -335,6 +373,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setLegacyHistoryNeedsRebind(false);
     activeTaskRef.current = "";
     setContextInfo(null);
+    setContextLoading(false);
     setConversationID("");
     setProviderID(lastModelRef.current.providerId);
     setModelID(lastModelRef.current.modelId);
@@ -346,6 +385,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     setShowTargets(false);
   };
   const chooseModel = (nextProviderID: string, nextModelID: string) => {
+    setContextInfo(null);
+    setContextLoading(Boolean(conversationID));
     setProviderID(nextProviderID);
     setModelID(nextModelID);
     const selected = { providerId: nextProviderID, modelId: nextModelID };
@@ -371,6 +412,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     clearStream();
     setSubmitting(true);
     try {
+      await modelSaveQueue.current;
       const started = await api.AIStart({
         conversationId: conversationID, providerId: provider.id, modelId: model.id,
         mode, execution, scopeId: terminalScopeId ?? "", text, targets: targets.map(tab => tab.ref!),
@@ -391,8 +433,10 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
         <strong className="panel-header-title" title={isTerminal ? `${active?.session.name ?? ""} · ${active?.session.username ?? ""}@${active?.session.host ?? ""}` : undefined}>{isTerminal ? <span className="workspace-panel-dot" aria-hidden="true" /> : <Sparkles size={15} />}<span>{t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")}</span></strong>
         <div className="ai-header-actions panel-header-actions">
           <AIContextIndicator
-            stats={conversationID ? contextInfo ?? emptyContextStats : emptyContextStats}
-            compacting={compacting} disabled={!conversationID || !!running || submitting}
+            stats={conversationID ? contextInfo : emptyContextStats}
+            loading={!!conversationID && contextLoading}
+            unavailable={!!conversationID && !contextLoading && !contextInfo}
+            compacting={compacting} disabled={!conversationID || !contextInfo || !!running || submitting}
              disabledReason={!conversationID ? t("ai:contextNoHistory") : t("ai:contextCompactBusy")}
             autoCompact={runtimeSettings.autoCompact} compactThreshold={runtimeSettings.compactThreshold}
             historyOpen={showHistory} onOpen={() => setShowHistory(false)}
