@@ -56,6 +56,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Test SBOM and ZMODEM inventory validators
         run: python3 -m unittest scripts.test_audit_sbom scripts.test_generate_zmodem_manifest
+      - name: Build the frontend assets embedded in the Go application
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
       - name: Generate Windows production Go CycloneDX SBOM
         shell: bash
         run: |
@@ -70,7 +75,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm ci
           npm sbom --sbom-format=cyclonedx --sbom-type=application --omit=dev > ../build/sbom/frontend-runtime.cdx.json
           npm sbom --sbom-format=cyclonedx --sbom-type=application > ../build/sbom/frontend-all.cdx.json
       - name: Validate the inventories and report unresolved licenses
