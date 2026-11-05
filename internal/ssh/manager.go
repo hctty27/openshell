@@ -50,6 +50,7 @@ type connection struct {
 	outputGate *terminalOutputGate
 	inputGate *terminalInputGate
 	nativeTerminalTransfer *nativeTerminalTransferTask
+	nativeTerminalPoisoned bool
 	aiController *AITerminalLease
 	readiness terminalShellReadiness
 	serverVersion string
