@@ -4,7 +4,24 @@ import { initializeI18n } from "../i18n";
 import { DialogProvider } from "./DialogProvider";
 import SettingsDialog from "./SettingsDialog";
 
-beforeEach(() => initializeI18n("zh-CN"));
+const savePreference = vi.hoisted(() => vi.fn(async (_key: string, _value: string) => {}));
+vi.mock("../bridge", async () => {
+  const actual = await vi.importActual<typeof import("../bridge")>("../bridge");
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      SavePreference: savePreference,
+      GetTransferDefaultLocalDir: vi.fn(async () => ""),
+    },
+  };
+});
+
+beforeEach(() => {
+  initializeI18n("zh-CN");
+  savePreference.mockReset();
+  savePreference.mockResolvedValue(undefined);
+});
 afterEach(cleanup);
 
 function renderSessionEditor() {
@@ -96,4 +113,81 @@ test("saving a modified session closes without a discard confirmation", async ()
   await waitFor(() => expect(onSession).toHaveBeenCalledOnce());
   await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   expect(screen.queryByRole("dialog", { name: "放弃未保存的修改？" })).toBeNull();
+});
+
+function renderPreferences() {
+  const onClose = vi.fn();
+  const onRefresh = vi.fn(async () => {});
+  const onFont = vi.fn();
+  const onPreferenceError = vi.fn();
+  render(
+    <DialogProvider>
+      <SettingsDialog
+        kind="settings"
+        groups={[]}
+        fontSize={14}
+        theme="dark"
+        onTheme={vi.fn()}
+        terminalTheme="follow"
+        onTerminalTheme={vi.fn()}
+        autoCopySelection={false}
+        onAutoCopySelection={vi.fn()}
+        rightClickPaste={false}
+        onRightClickPaste={vi.fn()}
+        confirmMultilinePaste={true}
+        logHighlights={false}
+        onLogHighlights={vi.fn()}
+        onConfirmMultilinePaste={vi.fn()}
+        onClose={onClose}
+        onSession={vi.fn(async () => {})}
+        onRefresh={onRefresh}
+        onFont={onFont}
+        onPreferenceError={onPreferenceError}
+      />
+    </DialogProvider>,
+  );
+  return { onClose, onRefresh, onFont, onPreferenceError };
+}
+
+test("preferences dialog has no footer and saves appearance and terminal controls automatically", async () => {
+  const { onFont } = renderPreferences();
+  expect(document.querySelector(".settings-dialog--settings > footer")).toBeNull();
+
+  fireEvent.click(screen.getByRole("button", { name: "外观" }));
+  fireEvent.click(screen.getByRole("button", { name: "浅色" }));
+  fireEvent.change(screen.getByLabelText("终端配色方案"), { target: { value: "classic" } });
+  fireEvent.change(screen.getByLabelText("字体大小"), { target: { value: "18" } });
+
+  fireEvent.click(screen.getByRole("button", { name: "终端" }));
+  fireEvent.click(screen.getByLabelText("鼠标右键粘贴"));
+
+  await waitFor(() => expect(savePreference).toHaveBeenCalledWith("theme", "light"));
+  await waitFor(() => expect(savePreference).toHaveBeenCalledWith("terminalTheme", "classic"));
+  await waitFor(() => expect(savePreference).toHaveBeenCalledWith("fontSize", "18"));
+  await waitFor(() => expect(savePreference).toHaveBeenCalledWith("rightClickPaste", "true"));
+  expect(onFont).toHaveBeenCalledWith(18);
+  expect(screen.queryByRole("button", { name: "保存设置" })).toBeNull();
+});
+
+test("connection changes persist immediately and refresh the app state", async () => {
+  const { onRefresh, onClose } = renderPreferences();
+  fireEvent.click(screen.getByRole("button", { name: "连接" }));
+  fireEvent.change(screen.getByLabelText("SSH 断开后的操作"), {
+    target: { value: "retain" },
+  });
+  await waitFor(() => expect(savePreference).toHaveBeenCalledWith("disconnectBehavior", "retain"));
+  await waitFor(() => expect(onRefresh).toHaveBeenCalledOnce());
+
+  fireEvent.click(screen.getByTitle("关闭"));
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(document.querySelector(".settings-dialog--settings > footer")).toBeNull();
+});
+
+test("preference write failures remain visible and notify the app", async () => {
+  savePreference.mockRejectedValueOnce(new Error("写入失败"));
+  const { onPreferenceError } = renderPreferences();
+  fireEvent.click(screen.getByRole("button", { name: "外观" }));
+  fireEvent.click(screen.getByRole("button", { name: "浅色" }));
+  await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("写入失败"));
+  expect(onPreferenceError).toHaveBeenCalledOnce();
 });
