@@ -74,7 +74,7 @@ def create_manifest(directory: Path, preparation_script: Path) -> dict:
             **pins,
             "lrzszLicenseText": "COPYING-lrzsz.txt (GNU GPL version 2)",
             "sourceArchive": "lrzsz-win32-source.zip",
-            "runtimeDllLicense": "unverified-for-bundled-2020-binary",
+            "runtimeDllLicense": "unverified-for-2023-release-asset",
             "runtimeSource": "https://github.com/msys2/msys2-runtime",
         },
         "limitations": (
