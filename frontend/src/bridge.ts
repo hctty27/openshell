@@ -1,5 +1,6 @@
 import { t } from "./i18n";
 import { Call, Events } from "@wailsio/runtime";
+import { installGlobalErrorDiagnostics, isTrackedBackendOperation, recordBackendOperation } from "./features/diagnostics/collector";
 import type {
   AppState,
   SessionRequest,
@@ -16,6 +17,9 @@ import type {
   SFTPSyncPreview,
 } from "./types";
 type Backend = {
+  DiagnosticsSnapshot(): Promise<import("./features/diagnostics/types").DiagnosticsSnapshot>;
+  DiagnosticsExport(): Promise<string>;
+  DiagnosticsRecordBatch(events: import("./features/diagnostics/types").DiagnosticEvent[]): Promise<void>;
   AIProviders(): Promise<import("./types").AIProvider[]>;
   AIRuntimeSettings(): Promise<import("./types").AIRuntimeSettings>;
   AISaveRuntimeSettings(settings: import("./types").AIRuntimeSettings): Promise<void>;
@@ -97,16 +101,31 @@ export const desktop = nativeDesktop || Boolean(fixtureBackend);
 
 export const api = new Proxy({} as Backend, {
   get: (_, name) => (...args: unknown[]) => {
+    const methodName = String(name);
+    const tracked = isTrackedBackendOperation(methodName);
+    const started = tracked ? performance.now() : 0;
+    let request: Promise<unknown>;
     if (fixtureBackend) {
       const method = fixtureBackend[name as keyof Backend];
-      if (typeof method !== "function") {
-        return Promise.reject(new Error(`Unavailable browser fixture method: ${String(name)}`));
-      }
-      return (method as (...values: unknown[]) => Promise<unknown>)(...args);
+      request = typeof method === "function"
+        ? (method as (...values: unknown[]) => Promise<unknown>)(...args)
+        : Promise.reject(new Error(`Unavailable browser fixture method: ${String(name)}`));
+    } else {
+      request = nativeDesktop
+        ? Call.ByName(`main.App.${String(name)}`, ...args) as Promise<unknown>
+        : Promise.reject(new Error(t("common:useThisFeatureInTheWindowsDesktopApp")));
     }
-    return nativeDesktop
-      ? Call.ByName(`main.App.${String(name)}`, ...args) as Promise<unknown>
-      : Promise.reject(new Error(t("common:useThisFeatureInTheWindowsDesktopApp")));
+    if (!tracked) return request;
+    return Promise.resolve(request).then(
+      result => {
+        recordBackendOperation(methodName, performance.now() - started, false);
+        return result;
+      },
+      error => {
+        recordBackendOperation(methodName, performance.now() - started, true);
+        throw error;
+      },
+    );
   },
 });
 
@@ -116,3 +135,5 @@ export function listen(name: string, callback: (payload: any) => void): () => vo
   return Events.On(name, event => callback(event.data));
 }
 export { errorText } from "./i18n/errors";
+
+installGlobalErrorDiagnostics();

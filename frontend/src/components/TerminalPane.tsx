@@ -11,6 +11,7 @@ import "@xterm/xterm/css/xterm.css";
 import { api, errorText } from "../bridge";
 import { terminalOutputDispatcher } from "../features/terminal/terminalOutputDispatcher";
 import { TerminalOutputAcknowledger } from "../features/terminal/terminalOutputAcknowledger";
+import { recordTerminalWrite } from "../features/diagnostics/collector";
 import { Browser, Clipboard } from "@wailsio/runtime";
 import type { Tab, Ref, Theme, TerminalTheme, DisconnectBehavior, LocalShell } from "../types";
 import { resolveTerminalTheme } from "../terminalThemes";
@@ -291,7 +292,9 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       lastReceivedSequence = Math.max(lastReceivedSequence, sequence);
       // Go pauses reading at the high watermark and resumes only when
       // xterm.js has actually parsed the acknowledged bytes.
+      const writeStarted = performance.now();
       term.write(bytes, () => {
+        recordTerminalWrite(performance.now() - writeStarted);
         acknowledger.processedSequence(sequence);
         syncEdgeBackground();
         restoreClonedDirectory();

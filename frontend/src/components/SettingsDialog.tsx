@@ -12,6 +12,7 @@ import {
   Palette,
   Sparkles,
   Info,
+  Activity,
   Terminal,
   FolderOpen,
   Plus,
@@ -29,6 +30,7 @@ import TerminalSettingsPanel from "./TerminalSettingsPanel";
 import AIProviderSettings from "./AIProviderSettings";
 import SFTPEditorSettingsPanel from "./editor/SFTPEditorSettingsPanel";
 import AboutSettingsPanel from "./AboutSettingsPanel";
+import DiagnosticsSettingsPanel from "./DiagnosticsSettingsPanel";
 import type {
   Session,
   LocalForward,
@@ -226,6 +228,7 @@ export default function SettingsDialog(p: Props) {
                 { id: "sftp", label: "SFTP", icon: FolderOpen },
                 { id: "connection", label: t("settings:connection"), icon: Network },
                 { id: "ai", label: t("settings:aiSettings"), icon: Sparkles },
+                { id: "diagnostics", label: t("settings:diagnostics"), icon: Activity },
                 { id: "about", label: t("settings:about"), icon: Info },
               ].map(({ id, label, icon: Icon }) => (
                 <button
@@ -480,6 +483,7 @@ export default function SettingsDialog(p: Props) {
           )}
           {tab === "ai" && <AIProviderSettings onDirtyChange={setAiDirty} />}
           {tab === "sftp" && <SFTPEditorSettingsPanel />}
+          {tab === "diagnostics" && <DiagnosticsSettingsPanel />}
           {tab === "about" && <AboutSettingsPanel />}
           {tab === "connection" && (
             <ConnectionSettingsPanel
