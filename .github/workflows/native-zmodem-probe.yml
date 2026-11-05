@@ -186,20 +186,7 @@ jobs:
           export OPENSHELL_ZMODEM_LIVE_SSH_KEY="$ZMODEM_SSH_TEST_DIR/client"
           export OPENSHELL_ZMODEM_LIVE_SSH_HOSTKEY="$ZMODEM_SSH_TEST_DIR/host.pub"
           export OPENSHELL_ZMODEM_LIVE_SIDECAR="$GITHUB_WORKSPACE/experiments/native-zmodem/target/release/zmodem-sidecar"
-          go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInteractivePTY        if: failure()
-        shell: bash
-        run: |
-          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.log" ]; then
-            sudo tail -100 "$ZMODEM_SSH_TEST_DIR/sshd.log"
-          fi
-      - name: Stop loopback SSH test server
-        if: always()
-        shell: bash
-        run: |
-          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.pid" ]; then
-            sudo kill "$(cat "$ZMODEM_SSH_TEST_DIR/sshd.pid")" || true
-          fi
- -v ./internal/ssh
+          go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInteractivePTY$' -v ./internal/ssh
       - name: Print SSH server diagnostics if the interop test failed
         if: failure()
         shell: bash
