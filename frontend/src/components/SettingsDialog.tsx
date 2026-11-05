@@ -156,6 +156,7 @@ export default function SettingsDialog(p: Props) {
   const selectSettingsTab = (next: string) => {
     if (next === tab) return;
     const apply = () => {
+      flushFontSave();
       setTab(next);
       setAiDirty(false);
       setError("");
