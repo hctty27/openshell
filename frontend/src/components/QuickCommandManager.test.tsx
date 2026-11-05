@@ -51,7 +51,7 @@ test("manager edits and saves existing commands", async () => {
       />
     </DialogProvider>,
   );
-  fireEvent.click(screen.getByRole("button", { name: /磁盘/ }));
+  fireEvent.click(screen.getByText("磁盘").closest("button")!);
   fireEvent.change(screen.getByLabelText("命令内容"), {
     target: { value: "df -Th" },
   });
@@ -74,7 +74,7 @@ test("manager accepts multiline commands, preserves trailing Enter and removes a
       />
     </DialogProvider>,
   );
-  fireEvent.click(screen.getByRole("button", { name: /磁盘/ }));
+  fireEvent.click(screen.getByText("磁盘").closest("button")!);
   expect(screen.queryByLabelText("点击后的操作")).toBeNull();
   expect(screen.getByText(/换行表示按下 Enter/)).toBeTruthy();
   fireEvent.change(screen.getByLabelText("命令内容"), {
@@ -99,7 +99,7 @@ test("manager rejects control characters in command content", async () => {
       />
     </DialogProvider>,
   );
-  fireEvent.click(screen.getByRole("button", { name: /磁盘/ }));
+  fireEvent.click(screen.getByText("磁盘").closest("button")!);
   fireEvent.change(screen.getByLabelText("命令内容"), {
     target: { value: "ls\u0000" },
   });
@@ -121,7 +121,7 @@ test("removing a quick command requires a custom confirmation", async () => {
       />
     </DialogProvider>,
   );
-  fireEvent.click(screen.getByRole("button", { name: /磁盘/ }));
+  fireEvent.click(screen.getByText("磁盘").closest("button")!);
   fireEvent.click(screen.getByRole("button", { name: "删除" }));
   expect(
     await screen.findByRole("alertdialog", { name: "删除快速命令" }),
@@ -148,7 +148,7 @@ test("manager removes category controls and searches command name and content", 
   const search = screen.getByRole("searchbox", { name: "搜索命令..." });
   fireEvent.change(search, { target: { value: "free" } });
   expect(container.querySelectorAll(".quick-manager-item")).toHaveLength(1);
-  expect(screen.getByRole("button", { name: /内存/ })).toBeTruthy();
+  expect(screen.getByText("内存").closest("button")!).toBeTruthy();
   fireEvent.change(search, { target: { value: "not-found" } });
   expect(screen.getByText("没有匹配的命令")).toBeTruthy();
 });
@@ -194,6 +194,7 @@ test("manager supports drag-to-reorder", async () => {
     dropEffect: "none",
     setData: vi.fn(),
     getData: vi.fn(),
+    types: [],
   };
   fireEvent.dragStart(screen.getByRole("button", { name: "调整「磁盘」顺序" }), {
     dataTransfer: transfer,
@@ -218,7 +219,7 @@ test("manager saves with Ctrl+S", async () => {
       />
     </DialogProvider>,
   );
-  fireEvent.click(screen.getByRole("button", { name: /磁盘/ }));
+  fireEvent.click(screen.getByText("磁盘").closest("button")!);
   fireEvent.keyDown(screen.getByLabelText("命令内容"), { key: "s", ctrlKey: true });
   await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
 });
