@@ -76,14 +76,22 @@ cargo build --locked --release --bin zmodem-sidecar
 python3 tests/interop_lrzsz.py target/release/zmodem-sidecar
 ```
 
-**Not established yet:** testing over an actual SSH PTY or JumpServer, interoperability
-with all lrzsz server versions, multi-file ZMODEM sessions, 100 MiB+ throughput,
-network latency/loss and reconnect handling, Windows↔Linux process
-interoperability across SSH PTY, interruption/cleanup guarantees, production-safe path handling, progress
-UI events, or automated fallback. These tests bridge *local pipes* (an appropriate
-first protocol interoperability gate), not remote servers. The sidecar enforces a
-128 MiB prototype limit and supports only a single file per invocation; it should
-not be surfaced as an OpenShell feature.
+### Real SSH PTY experiment (Linux runner)
+
+**CI evidence:** [OpenSSH PTY ↔ Rust sidecar, 10/10 SHA-256 verified](https://github.com/hctty27/openshell/actions/runs/41996088364).
+
+- `ssh-pty-bridge/main.go` starts an **independent authenticated SSH session** with a pinned server host key and requests a PTY. The terminal is put into raw/no-echo mode before executing remote Linux `rz` or `sz`.
+- The Go bridge forwards unmodified bytes between the SSH channel and `zmodem-sidecar`, with exactly one reader in each direction and a transfer deadline. Neither OpenShell's on-screen terminal nor its `trzsz-go` filter is modified.
+- `tests/interop_ssh_pty.py` starts with a real loopback OpenSSH daemon in GitHub Actions and tests **both directions** using 0-byte, 1-byte, 64 KiB binary, Chinese filename and >1 MiB binary files: **10/10 SSH PTY transfers, SHA-256 identical**.
+- Normal peer shutdown can cause a trailing `EPIPE` / closed-pipe result; the bridge tolerates these only after **both** native sidecar and remote lrzsz exit successfully. The experiment remains out of production builds and release artifacts.
+
+**Not established yet:** integration with an existing OpenShell terminal's SSH PTY and
+trzsz filter handoff, Windows native sidecar ↔ Linux remote SSH PTY, JumpServer,
+multiple-file ZMODEM sessions, 100 MiB+ transfers, weak network/cancel/reconnect
+behavior, production-safe path handling, progress UI and automated fallback.
+The Linux test exercises an *independent SSH PTY*, not the already-running
+interactive terminal. The Rust sidecar enforces a 128 MiB prototype limit and
+supports one file per session; it must not be shipped as an OpenShell feature.
 
 ## Integration strategy (after real SSH/PTY test validation)
 
@@ -98,14 +106,15 @@ not be surfaced as an OpenShell feature.
 
 Rust state-machine engine requires a Go↔Rust transport bridge (C ABI/FFI, subprocess protocol, or Go port). A subprocess adds a separate Windows binary but can still be **MSYS2-free**, and keeps crash/fault isolation. FFI complicates cgo, cross-compilation and packaging. A native Go port removes the language boundary but expands test and maintenance burden.
 
-**Recommendation:** the compile, local Windows pipe and Linux lrzsz pipe interoperability gates are now met. Next validate an **exclusive SSH PTY transport bridge** and reliable cancel/timeout handling before integrating an opt-in native path into OpenShell. Prefer keeping the Rust sidecar isolated over introducing FFI initially. The existing client continues using `trzsz-go + lrzsz-win32` unchanged.
+**Recommendation:** the compilation, Windows local-pipe, Linux lrzsz pipe, and isolated Linux SSH PTY interoperability gates are now met. Next verify an **exclusive live OpenShell terminal handoff** and robust cancel/timeout handling before enabling an opt-in native path in development builds. Prefer keeping the Rust sidecar isolated over introducing FFI initially. The existing client continues using `trzsz-go + lrzsz-win32` unchanged.
 
 ## 验收状态
 
 - [x] Windows x64 原生协议库可编译、可运行（[Actions #41985890935](https://github.com/hctty27/openshell/actions/runs/41985890935) 成功；仅协议 API 编译/EXE 冒烟验证，不代表实际文件传输成功）
-- [x] Linux 本地管道环境下与真实 `lrzsz rz/sz` 双向收发，12/12 文件校验通过；真实 SSH PTY 仍需验证
+- [x] Linux 本地管道环境下与真实 `lrzsz rz/sz` 双向收发，12/12 文件校验通过
 - [x] Windows 原生 Rust 独立进程双向管道传输，4/4 文件 SHA-256 校验通过（尚非 SSH）
-- [ ] 在 Windows OpenShell SSH PTY 中与真实远端 `rz/sz` 端到端收发
+- [x] Linux 独立 SSH PTY 与真实远端 `rz/sz` 双向端到端收发，10/10 SHA-256 通过
+- [ ] 在 Windows OpenShell 已打开的 SSH PTY 中与真实远端 `rz/sz` 端到端收发
 - [ ] 文件名/取消/超时/弱网/安全写入测试
 - [ ] 完成 Rust 依赖许可证清单、产物来源证明
 - [ ] Windows 打包替换并完成回归测试
