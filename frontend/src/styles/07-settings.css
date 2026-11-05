@@ -19,11 +19,6 @@
   font-weight: 600;
 }
 
-.settings-dialog--settings > footer {
-  flex-shrink: 0;
-  padding: 12px 22px;
-}
-
 .settings-layout {
   display: flex;
   flex: 1;
@@ -76,6 +71,10 @@
   min-height: 0;
   overflow-y: auto;
   padding: 22px 26px;
+}
+
+.settings-save-error {
+  margin: 0 0 16px;
 }
 
 .settings-panel-heading {
