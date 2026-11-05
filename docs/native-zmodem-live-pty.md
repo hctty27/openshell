@@ -5,6 +5,7 @@
 - 原生传输任务与完整 `ConnectionRef` 绑定；只允许同一连接代际的操作取消它，防止重连后的旧任务影响新标签页。
 - `Manager` 的断开、CancelTab、重连、Close、keepalive 失败以及 SSH transport/terminal 退出路径均会主动取消任务；不在持有 `Manager.mu` 时等待 Rust 子进程退出。
 - 原生任务与已存在的 AI 终端 lease、旧版 `rz/sz` 传输互斥。常规用户输入依旧走 `trzsz-go`，没有新增 Wails/UI 调用入口。
+- 若原生协议失败或取消后输入 gate 仍处于独占状态，则设置连接级 `nativeTerminalPoisoned`；即使任务退出，也禁止新的 AI lease 或原生任务，直到重连生成新的连接代际，避免失败后的半接管终端被重用。
 - 新增 `TestNativeZmodemTerminalLifecycle...`，使用真实测试 SSH 服务模拟取消、断线、重连、终端结束和过期连接引用。
 
 ## 真实交互式 PTY 测试
