@@ -176,7 +176,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 if *bytes > MAX_SIZE || max.is_some_and(|size| *bytes > u64::from(size)) {
                     return Err("received file larger than advertised/allowed".into());
                 }
-                file.write_all(data)?;
+                file.write_all(&data)?;
                 receiver.file_written(data.len())?;
             }
             Action::Event(Event::FileStarted(info)) => {
