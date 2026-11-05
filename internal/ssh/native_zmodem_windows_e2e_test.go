@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/ssh"
 )
 
 // This test runs only when CI supplies actual native Windows binaries.
