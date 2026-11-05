@@ -51,7 +51,7 @@ func TestNativeZmodemExperimentalReadinessChecksTerminalAndLeases(t *testing.T) 
 	}
 	m.mu.Lock()
 	c.nativeTerminalPoisoned = false
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c.nativeTerminalTransfer = &nativeTerminalTransferTask{ref: ref, cancel: cancel}
 	m.mu.Unlock()
