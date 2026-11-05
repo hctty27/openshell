@@ -2,8 +2,8 @@ import { renderMessage, type DisplayText } from "../i18n/message";
 import { useTranslation } from "react-i18next";
 import { message } from "../i18n/message";
 import { t } from "../i18n";
-import { useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Save, Trash2, X } from "lucide-react";
+import { useState, type DragEvent, type KeyboardEvent } from "react";
+import { GripVertical, Plus, Save, Search, Trash2, X } from "lucide-react";
 import type { Group, QuickCommand, Session } from "../types";
 import { errorText } from "../bridge";
 import { useDialogs } from "./DialogProvider";
@@ -31,28 +31,34 @@ export default function QuickCommandManager(p: Props) {
   useTranslation();
   const dialogs = useDialogs();
   const [draft, setDraft] = useState<QuickCommand>(empty);
-  const [category, setCategory] = useState("");
+  const [query, setQuery] = useState("");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>("");
   const [success, setSuccess] = useState<DisplayText>("");
-  const categories = [
-    ...new Set(p.commands.map((c) => c.category || t("common:general"))),
-  ];
+
+  const search = query.trim().toLocaleLowerCase();
   const listed = p.commands.filter(
-    (c) => !category || (c.category || t("common:general")) === category,
+    (command) =>
+      !search ||
+      command.name.toLocaleLowerCase().includes(search) ||
+      command.command.toLocaleLowerCase().includes(search),
   );
+
   const edit = (command: QuickCommand) => {
     setDraft({ ...command });
     setError("");
     setSuccess("");
   };
-  const persist = async (next: QuickCommand[], message: DisplayText) => {
+
+  const persist = async (next: QuickCommand[], feedback: DisplayText) => {
     setBusy(true);
     setError("");
     setSuccess("");
     try {
       await p.onSave(next);
-      setSuccess(message);
+      setSuccess(feedback);
       return true;
     } catch (e) {
       setError(e);
@@ -61,10 +67,12 @@ export default function QuickCommandManager(p: Props) {
       setBusy(false);
     }
   };
+
   const save = async () => {
     const item = {
       ...draft,
       name: draft.name.trim(),
+      // Keep the legacy field for existing saved commands and backend validation.
       category: draft.category.trim() || t("common:general"),
     };
     delete item.mode;
@@ -94,11 +102,13 @@ export default function QuickCommandManager(p: Props) {
     }
     if (!item.id) item.id = crypto.randomUUID();
     const next = draft.id
-      ? p.commands.map((c) => (c.id === draft.id ? item : c))
+      ? p.commands.map((command) => (command.id === draft.id ? item : command))
       : [...p.commands, item];
-    if (await persist(next, message("terminal:commandSaved")))
+    if (await persist(next, message("terminal:commandSaved"))) {
       setDraft(empty());
+    }
   };
+
   const remove = async (item: QuickCommand) => {
     if (
       !(await dialogs.confirm({
@@ -111,256 +121,267 @@ export default function QuickCommandManager(p: Props) {
       }))
     )
       return;
+
     if (
       await persist(
-        p.commands.filter((c) => c.id !== item.id),
+        p.commands.filter((command) => command.id !== item.id),
         message("terminal:commandDeleted"),
       )
     ) {
       if (draft.id === item.id) setDraft(empty());
     }
   };
-  const move = async (item: QuickCommand, direction: -1 | 1) => {
-    const i = p.commands.findIndex((c) => c.id === item.id);
-    const filteredIndex = listed.findIndex((c) => c.id === item.id);
-    const neighbor = listed[filteredIndex + direction];
-    const j = neighbor ? p.commands.findIndex((c) => c.id === neighbor.id) : -1;
-    if (i < 0 || j < 0) return;
+
+  const reorder = async (sourceId: string, targetId: string) => {
+    if (busy || search || sourceId === targetId) return;
+    const from = p.commands.findIndex((command) => command.id === sourceId);
+    const to = p.commands.findIndex((command) => command.id === targetId);
+    if (from < 0 || to < 0) return;
     const next = [...p.commands];
-    [next[i], next[j]] = [next[j], next[i]];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     await persist(next, message("terminal:orderUpdated"));
   };
+
+  const moveWithKeyboard = (event: KeyboardEvent<HTMLButtonElement>, item: QuickCommand) => {
+    if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (busy || search) return;
+    const index = p.commands.findIndex((command) => command.id === item.id);
+    const neighbor = p.commands[index + (event.key === "ArrowUp" ? -1 : 1)];
+    if (neighbor) void reorder(item.id, neighbor.id);
+  };
+
+  const startDrag = (event: DragEvent<HTMLButtonElement>, item: QuickCommand) => {
+    if (busy || search) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", item.id);
+    setDraggingId(item.id);
+    setDropTargetId(null);
+  };
+
+  const finishDrag = () => {
+    setDraggingId(null);
+    setDropTargetId(null);
+  };
+
   return (
     <ModalSurface
       className="quick-manager"
       aria-label={t("terminal:manageQuickCommands")}
       onDismiss={p.onClose}
       locked={busy}
+      onKeyDown={(event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!busy) void save();
+        }
+      }}
     >
-        <header className="quick-manager-header">
-          <div>
-            <span className="eyebrow">{t("terminal:quickCommandsLabel")}</span>
-            <h2>{t("terminal:manageQuickCommands")}</h2>
-          </div>
-          <button title={t("common:close")} disabled={busy} onClick={p.onClose}>
-            <X size={19} />
-          </button>
-        </header>
-        <div className="quick-manager-body">
-          <aside className="quick-manager-side">
-            <div className="quick-manager-side-head">
-              <strong>
-                {t("terminal:commandListTitle", { count: p.commands.length })}
-              </strong>
-              <button
-                title={t("terminal:addCommand")}
-                disabled={busy}
-                onClick={() => edit(empty())}
-              >
-                <Plus size={16} />
-              </button>
-            </div>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              aria-label={t("terminal:filterCommandCategories")}
+      <header className="quick-manager-header">
+        <h2>{t("terminal:manageQuickCommands")}</h2>
+        <button
+          type="button"
+          className="quick-manager-close"
+          title={t("common:close")}
+          aria-label={t("common:close")}
+          disabled={busy}
+          onClick={p.onClose}
+        >
+          <X size={18} />
+        </button>
+      </header>
+      <div className="quick-manager-body">
+        <aside className="quick-manager-side">
+          <div className="quick-manager-side-head">
+            <strong>{t("terminal:commandListTitle", { count: p.commands.length })}</strong>
+            <button
+              type="button"
+              className="quick-manager-add"
+              title={t("terminal:addCommand")}
+              aria-label={t("terminal:addCommand")}
+              disabled={busy}
+              onClick={() => edit(empty())}
             >
-              <option value="">{t("terminal:allCategories")}</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <div className="quick-manager-items">
-              {listed.length === 0 && (
-                <p className="muted small">{t("terminal:noCommands")}</p>
-              )}
-              {listed.map((item) => (
-                <div
-                  key={item.id}
-                  className={`quick-manager-item ${draft.id === item.id ? "selected" : ""}`}
-                >
-                  <button
-                    className="quick-manager-item-label"
-                    disabled={busy}
-                    onClick={() => edit(item)}
-                  >
-                    <strong>{item.name}</strong>
-                    <small>
-                      {item.category || t("common:general")} ·{" "}
-                      {item.scope === "global"
-                        ? t("common:global")
-                        : item.scope === "group"
-                          ? t("common:folder")
-                          : t("common:session")}
-                    </small>
-                  </button>
-                  <button
-                    title={t("terminal:moveUp")}
-                    disabled={busy || listed[0]?.id === item.id}
-                    onClick={() => move(item, -1)}
-                  >
-                    <ArrowUp size={13} />
-                  </button>
-                  <button
-                    title={t("terminal:moveDown")}
-                    disabled={busy || listed.at(-1)?.id === item.id}
-                    onClick={() => move(item, 1)}
-                  >
-                    <ArrowDown size={13} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </aside>
-          <div className="quick-manager-editor">
-            <h3>
-              {draft.id ? t("terminal:editCommand") : t("terminal:addCommand")}
-            </h3>
-            <label>
-              {t("terminal:buttonName")}
-              <input
-                value={draft.name}
-                maxLength={40}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                placeholder={t("terminal:eGCheckMemory")}
-              />
-            </label>
-            <label>
-              {t("terminal:command")}
-              <textarea
-                rows={3}
-                maxLength={16384}
-                value={draft.command}
-                onChange={(e) =>
-                  setDraft({ ...draft, command: e.target.value })
-                }
-                placeholder={t("terminal:eGFreeH")}
-              />
-            </label>
-            <p className="muted small">
-              {t("terminal:quickCommandNewlineHint")}
-            </p>
-            <div className="quick-manager-fields">
-              <label>
-                {t("terminal:category")}
-                <input
-                  list="quick-command-categories"
-                  value={draft.category}
-                  maxLength={40}
-                  onChange={(e) =>
-                    setDraft({ ...draft, category: e.target.value })
-                  }
-                />
-                <datalist id="quick-command-categories">
-                  {categories.map((c) => (
-                    <option key={c} value={c} />
-                  ))}
-                </datalist>
-              </label>
-              <label>
-                {t("terminal:scope")}
-                <select
-                  value={draft.scope}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      scope: e.target.value as QuickCommand["scope"],
-                      scopeId: "",
-                    })
-                  }
-                >
-                  <option value="global">{t("terminal:allServers")}</option>
-                  <option value="group">{t("terminal:serverFolder")}</option>
-                  <option value="session">{t("terminal:sshSession")}</option>
-                </select>
-              </label>
-            </div>
-            {draft.scope === "group" && (
-              <label>
-                {t("terminal:targetFolder")}
-                <select
-                  value={draft.scopeId}
-                  onChange={(e) =>
-                    setDraft({ ...draft, scopeId: e.target.value })
-                  }
-                >
-                  <option value="">{t("terminal:selectAFolder")}</option>
-                  {p.groups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {draft.scope === "session" && (
-              <label>
-                {t("terminal:targetSession")}
-                <select
-                  value={draft.scopeId}
-                  onChange={(e) =>
-                    setDraft({ ...draft, scopeId: e.target.value })
-                  }
-                >
-                  <option value="">{t("terminal:selectASession")}</option>
-                  {p.sessions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={draft.confirm}
-                onChange={(e) =>
-                  setDraft({ ...draft, confirm: e.target.checked })
-                }
-              />
-              {t("terminal:confirmBeforeEachRun")}
-            </label>
-            <p className="muted small">
-              {t("terminal:commandsGoToTheActiveSshTerminalExit")}
-            </p>
-            {!!error && (
-              <p className="form-error" role="alert">
-                {errorText(error)}
+              <Plus size={16} />
+            </button>
+          </div>
+          <label className="quick-manager-search">
+            <Search size={15} aria-hidden="true" />
+            <input
+              type="search"
+              aria-label={t("terminal:searchCommands")}
+              placeholder={t("terminal:searchCommands")}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          <div className="quick-manager-items">
+            {listed.length === 0 && (
+              <p className="muted small">
+                {search ? t("terminal:noMatchingCommands") : t("terminal:noCommands")}
               </p>
             )}
-            {success && (
-              <p className="form-success">{renderMessage(success)}</p>
-            )}
-            <div className="quick-manager-actions">
-              {draft.id && (
+            {listed.map((item) => (
+              <div
+                key={item.id}
+                className={[
+                  "quick-manager-item",
+                  draft.id === item.id ? "selected" : "",
+                  draggingId === item.id ? "dragging" : "",
+                  dropTargetId === item.id ? "drop-target" : "",
+                ].filter(Boolean).join(" ")}
+                onDragOver={(event) => {
+                  if (busy || search || !draggingId || draggingId === item.id) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDropTargetId(item.id);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const sourceId = draggingId;
+                  finishDrag();
+                  if (sourceId) void reorder(sourceId, item.id);
+                }}
+              >
                 <button
-                  className="danger"
+                  type="button"
+                  className="quick-manager-item-label"
                   disabled={busy}
-                  onClick={() => remove(draft)}
+                  onClick={() => edit(item)}
                 >
-                  <Trash2 size={15} /> {t("common:delete")}
+                  <strong>{item.name}</strong>
+                  <small title={item.command}>{item.command.replace(/[\r\n]+/g, " ↵ ")}</small>
                 </button>
-              )}
+                <button
+                  type="button"
+                  className="quick-manager-drag-handle"
+                  aria-label={t("terminal:reorderCommand", { name: item.name })}
+                  title={t("terminal:reorderHint")}
+                  draggable={!busy && !search}
+                  disabled={busy || !!search}
+                  onDragStart={(event) => startDrag(event, item)}
+                  onDragEnd={finishDrag}
+                  onKeyDown={(event) => moveWithKeyboard(event, item)}
+                >
+                  <GripVertical size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </aside>
+        <div className="quick-manager-editor">
+          <h3>{draft.id ? t("terminal:editCommand") : t("terminal:addCommand")}</h3>
+          <label>
+            {t("terminal:buttonName")}
+            <input
+              value={draft.name}
+              maxLength={40}
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+              placeholder={t("terminal:eGCheckMemory")}
+            />
+          </label>
+          <label>
+            {t("terminal:command")}
+            <textarea
+              rows={4}
+              maxLength={16384}
+              value={draft.command}
+              onChange={(event) => setDraft({ ...draft, command: event.target.value })}
+              placeholder={t("terminal:eGFreeH")}
+              spellCheck={false}
+            />
+          </label>
+          <p className="muted small quick-manager-hint">
+            {t("terminal:quickCommandNewlineHint")}
+          </p>
+          <label>
+            {t("terminal:scope")}
+            <select
+              value={draft.scope}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  scope: event.target.value as QuickCommand["scope"],
+                  scopeId: "",
+                })
+              }
+            >
+              <option value="global">{t("terminal:allServers")}</option>
+              <option value="group">{t("terminal:serverFolder")}</option>
+              <option value="session">{t("terminal:sshSession")}</option>
+            </select>
+          </label>
+          {draft.scope === "group" && (
+            <label>
+              {t("terminal:targetFolder")}
+              <select
+                value={draft.scopeId}
+                onChange={(event) => setDraft({ ...draft, scopeId: event.target.value })}
+              >
+                <option value="">{t("terminal:selectAFolder")}</option>
+                {p.groups.map((group) => (
+                  <option key={group.id} value={group.id}>{group.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {draft.scope === "session" && (
+            <label>
+              {t("terminal:targetSession")}
+              <select
+                value={draft.scopeId}
+                onChange={(event) => setDraft({ ...draft, scopeId: event.target.value })}
+              >
+                <option value="">{t("terminal:selectASession")}</option>
+                {p.sessions.map((session) => (
+                  <option key={session.id} value={session.id}>{session.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={draft.confirm}
+              onChange={(event) => setDraft({ ...draft, confirm: event.target.checked })}
+            />
+            {t("terminal:confirmBeforeEachRun")}
+          </label>
+          <p className="muted small quick-manager-hint">
+            {t("terminal:commandsGoToTheActiveSshTerminalExit")}
+          </p>
+          {!!error && (
+            <p className="form-error" role="alert">{errorText(error)}</p>
+          )}
+          {success && <p className="form-success">{renderMessage(success)}</p>}
+          <div className="quick-manager-actions">
+            {draft.id && (
               <button
-                className="secondary"
+                type="button"
+                className="danger"
                 disabled={busy}
-                onClick={() => edit(empty())}
+                onClick={() => remove(draft)}
               >
-                <Plus size={15} /> {t("common:new")}
+                <Trash2 size={15} /> {t("common:delete")}
               </button>
-              <button
-                className="primary"
-                disabled={busy || !draft.name.trim() || !draft.command}
-                onClick={save}
-              >
-                <Save size={15} /> {t("terminal:saveCommand")}
-              </button>
-            </div>
+            )}
+            <button
+              type="button"
+              className="primary"
+              disabled={busy || !draft.name.trim() || !draft.command}
+              onClick={save}
+            >
+              <Save size={15} /> {t("terminal:saveCommand")}
+            </button>
           </div>
         </div>
+      </div>
     </ModalSurface>
   );
 }
