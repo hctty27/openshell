@@ -220,8 +220,15 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const provider = providerID ? providers.find(item => item.id === providerID) : providers[0];
   const model = modelID ? provider?.models.find(item => item.id === modelID) : provider?.models[0];
   const current = conversations.find(item => item.id === conversationID && belongsToConversationScope(item, terminalScopeId));
+  const emptyContextStats: AIContextStats = {
+    window: model?.contextWindow || 32768,
+    estimatedTokens: 0,
+    lastPromptTokens: 0,
+    compactionCount: 0,
+    isEstimate: true,
+  };
   useEffect(() => {
-    if (!provider?.id || !model?.id || typeof api.AIContext !== "function") {
+    if (!conversationID || !provider?.id || !model?.id || typeof api.AIContext !== "function") {
       setContextInfo(null);
       return;
     }
@@ -380,7 +387,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
         <strong className="panel-header-title" title={isTerminal ? `${active?.session.name ?? ""} · ${active?.session.username ?? ""}@${active?.session.host ?? ""}` : undefined}>{isTerminal ? <span className="workspace-panel-dot" aria-hidden="true" /> : <Sparkles size={15} />}<span>{t(isTerminal ? "ai:terminalAssistant" : "ai:assistant")}</span></strong>
         <div className="ai-header-actions panel-header-actions">
           <AIContextIndicator
-            stats={contextInfo ?? (model ? { window: model.contextWindow || 32768, estimatedTokens: 0, lastPromptTokens: 0, compactionCount: 0, isEstimate: true } : null)}
+            stats={conversationID ? contextInfo ?? emptyContextStats : emptyContextStats}
             compacting={compacting} disabled={!conversationID || !!running || submitting}
              disabledReason={!conversationID ? t("ai:contextNoHistory") : t("ai:contextCompactBusy")}
             autoCompact={runtimeSettings.autoCompact} compactThreshold={runtimeSettings.compactThreshold}
