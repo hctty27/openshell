@@ -51,6 +51,8 @@
   "send": "Send",
   "chooseModel": "Choose AI model",
   "selectModel": "Select model",
+  "noModelsConfigured": "No models configured",
+  "addModel": "Add model",
   "modelUnavailable": "Model unavailable. Select another model.",
   "availableModels": "Available AI models",
   "addModelFirst": "Add an AI model in Settings first",

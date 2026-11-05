@@ -51,6 +51,8 @@
   "send": "发送",
   "chooseModel": "选择 AI 模型",
   "selectModel": "选择模型",
+  "noModelsConfigured": "未配置模型",
+  "addModel": "添加模型",
   "modelUnavailable": "模型不可用，请重新选择",
   "availableModels": "可用 AI 模型",
   "addModelFirst": "请先在全局设置中添加 AI 模型",

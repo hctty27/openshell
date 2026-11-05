@@ -210,6 +210,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     [logHighlights, setLogHighlights] = useState(initialState.logHighlights === true),
     [dialog, setDialog] = useState<{
       kind: "session" | "settings";
+      initialTab?: "ai";
       session?: Session;
       groupID?: string;
     } | null>(null),
@@ -1462,7 +1463,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   <AISidebar tabs={[tab]} active={tab} pinned isOpen={visible}
                     terminalScopeId={terminalHistoryScopes.current[tab.id]}
                     terminalAlternate={Boolean(tab.ref && alternateTerminals[tab.id]?.generation === tab.ref.generation && alternateTerminals[tab.id]?.active)}
-                    onTogglePin={() => {}} />
+                    onTogglePin={() => {}}
+                    onOpenAISettings={() => setDialog({ kind: "settings", initialTab: "ai" })} />
                 </div>
               );
             })}
@@ -1550,7 +1552,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
             role="separator" aria-label={tr("ai:resizeAiSidebar")} />
         )}
         <AISidebar tabs={tabs} active={active} pinned={aiPinned} isOpen={aiOpen}
-          onTogglePin={toggleAIPin} />
+          onTogglePin={toggleAIPin}
+          onOpenAISettings={() => setDialog({ kind: "settings", initialTab: "ai" })} />
       </div>
       </div>
       {showSessionPicker && (

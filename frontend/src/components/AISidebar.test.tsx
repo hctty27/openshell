@@ -414,3 +414,15 @@ test("context meter is in header and dropdowns dismiss each other", async () => 
   fireEvent.click(screen.getByRole("button", { name: "上下文使用情况" }));
   expect(screen.queryByRole("dialog", { name: "当前会话记录" })).toBeNull();
 });
+
+
+test("global AI session selector stays closed when no SSH session exists", async () => {
+  await act(async () => render(<AISidebar tabs={[]} pinned isOpen onTogglePin={vi.fn()} />));
+  const trigger = screen.getByRole("button", { name: "会话：无已连接会话" });
+  expect(trigger.getAttribute("title")).toBe("请先连接 SSH 会话");
+  expect(trigger.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(trigger);
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
+  expect(document.querySelector(".ai-target-menu")).toBeNull();
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+});

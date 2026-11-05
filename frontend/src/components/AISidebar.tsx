@@ -27,6 +27,7 @@ interface Props {
   terminalAlternate?: boolean;
   terminalScopeId?: string;
   onTogglePin(): void;
+  onOpenAISettings?(): void;
 }
 
 interface Approval {
@@ -37,7 +38,7 @@ interface Approval {
   tabId: string;
 }
 
-export default function AISidebar({ tabs, active, pinned, isOpen, terminalAlternate = false, terminalScopeId, onTogglePin }: Props) {
+export default function AISidebar({ tabs, active, pinned, isOpen, terminalAlternate = false, terminalScopeId, onTogglePin, onOpenAISettings }: Props) {
   useTranslation("ai");
   const isTerminal = terminalScopeId !== undefined;
   const execution = isTerminal ? "terminal" : "independent";
@@ -185,6 +186,9 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   }, [terminalScopeId]);
 
   const connected = tabs.filter(tab => tab.status === "connected" && tab.ref && (!isTerminal || tab.id === active?.id));
+  useEffect(() => {
+    if (!connected.length) setShowTargets(false);
+  }, [connected.length]);
   const requiredID = active?.status === "connected" ? active.id : "";
   // Restore logical session selections against live tabs, never stale connection references.
   const matchesHistoryTarget = (tab: Tab, sessionID: string) => {
@@ -476,11 +480,14 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                 <div className={"ai-compose-config" + (!isTerminal ? " ai-compose-config--with-target" : "")}>
                   <AIModelPicker providers={providers}
                     providerID={provider?.id ?? providerID} modelID={model?.id ?? modelID}
-                    onChange={chooseModel} disabled={submitting || !!running} />
+                    onChange={chooseModel} onConfigure={onOpenAISettings} disabled={submitting || !!running} />
                   {!isTerminal && (
                     <div className="ai-selector ai-compose-target">
-              <button ref={targetTriggerRef} type="button" className="ai-selector-button" onClick={() => setShowTargets(!showTargets)}
+              <button ref={targetTriggerRef} type="button" className="ai-selector-button"
+                aria-disabled={!connected.length}
+                onClick={() => { if (connected.length) setShowTargets(value => !value); }}
                   onKeyDown={event => {
+                    if (!connected.length) return;
                     if (event.key === "Escape" && showTargets) {
                       event.preventDefault();
                       event.stopPropagation();
@@ -490,13 +497,13 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                       setShowTargets(true);
                     }
                   }}
-                aria-expanded={showTargets}
-                title={selectedTargetTitle} aria-label={selectedTargetTitle}>
+                aria-expanded={connected.length > 0 && showTargets}
+                title={connected.length ? selectedTargetTitle : t("ai:connectSshFirst")} aria-label={selectedTargetTitle}>
                 <Server size={13} aria-hidden="true" />
                 <span className="ai-selector-label">{selectedTargetLabel}</span>
-                <ChevronDown size={13} aria-hidden="true" />
+                {connected.length > 0 && <ChevronDown size={13} aria-hidden="true" />}
               </button>
-              <AIDropdownSurface open={showTargets} anchorRef={targetTriggerRef}
+              <AIDropdownSurface open={showTargets && connected.length > 0} anchorRef={targetTriggerRef}
                 onDismiss={() => setShowTargets(false)} align="end" matchAnchorWidth maxHeight={260}>
                 <div className="ai-target-menu" role="group" aria-label={t("ai:sessionsLabel")}
                   onKeyDown={onTargetsKeyDown}>
@@ -506,7 +513,6 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                       <span title={tab.session.name}>{tab.session.name}</span>
                     </label>
                   ))}
-                  {!connected.length && <p className="ai-muted">{t("ai:connectSshFirst")}</p>}
                 </div>
               </AIDropdownSurface>
             </div>

@@ -183,6 +183,33 @@
 .ai-dropdown-popover::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
 .ai-dropdown-popover:hover::-webkit-scrollbar-thumb,
 .ai-dropdown-popover:focus-within::-webkit-scrollbar-thumb { background: var(--scrollbar); }
+.ai-dropdown-empty-action {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.ai-dropdown-empty-action:hover,
+.ai-dropdown-empty-action:focus-visible {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+.ai-dropdown-empty-action:disabled { cursor: default; opacity: .6; }
+.ai-selector-button[aria-disabled="true"] { cursor: default; }
+.ai-selector-button[aria-disabled="true"]:hover {
+  border-color: var(--border);
+  background: var(--field-bg);
+  color: var(--text-secondary);
+}
 .ai-target-menu {
   display: flex;
   flex-direction: column;
