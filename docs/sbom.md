@@ -33,6 +33,8 @@ The Windows release workflow already pins the [lrzsz-win32](https://github.com/t
 
 The upstream lrzsz-win32 source commit was dated **2020-03-01**, while its Windows Release ZIP asset was uploaded on **2023-12-03**. That ZIP contains `msys-2.0.dll`. [MSYS2's current package listing](https://packages.msys2.org/packages/msys2-runtime) indicates `GPL-3.0-or-later` for the *current* runtime package; [MSYS2 license guidance](https://www.msys2.org/license/) notes that the distribution has different licensing for its components. **Do not extrapolate current package license or revision to the exact DLL shipped in the 2023 asset.**
 
+**Recorded binary evidence (Windows packaging run [#41977108930](https://github.com/hctty27/openshell/actions/runs/41977108930)):** `msys-2.0.dll` PE `FileVersion=3.4.9`, `ProductVersion=3.4.9`, `ProductName=MSYS2`, `CompanyName=Red Hat`, SHA-256 `fb6136d849fb7a28a2d9aa7684394f6d20252942f129d2ea90ba709691a62bad`. The `CYGWIN_LICENSE` and related source/licensing information for an **exact matching MSYS2 build** have not yet been verified. Cygwin's [licensing guidance](https://cygwin.com/licensing.html) identifies LGPLv3+ with an exception for its API library, while MSYS2 package metadata may display an overall GPL identifier; do not assert either as definitive for the unverified 2023 DLL. <https://github.com/cygwin/cygwin/releases/tag/cygwin-3.4.9> is an upstream release candidate for further investigation, not a verified identical MSYS2-patched build.
+
 Review procedure:
 
 1. Download the exact pinned ZIP and compare its SHA-256 to the existing preparation script's pinned value. Extract the DLL and record its SHA-256 and PE file version/embedded build information if available.
