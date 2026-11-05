@@ -1,6 +1,7 @@
 package sftp
 
 import (
+    "bytes"
     "crypto/sha256"
     "encoding/hex"
     "io"
@@ -18,6 +19,17 @@ import (
 )
 
 const maxEditSize int64 = 1024 * 1024
+
+// The SFTP client reads larger files in parallel. Cap the destination buffer
+// because a remote file may grow between Lstat and the actual read.
+type limitedDocumentWriter struct { bytes.Buffer }
+
+func (w *limitedDocumentWriter) Write(data []byte) (int, error) {
+    if int64(w.Len())+int64(len(data)) > maxEditSize {
+        return 0, apperror.New("sftpAdvancedFileExceedsTextEditorLimit", nil)
+    }
+    return w.Buffer.Write(data)
+}
 const maxSyncEntries = 4000
 
 // RemoteDocument uses optimistic concurrency: only the version read can be saved.
@@ -36,7 +48,15 @@ func loadDocument(c *pkg.Client, name string) (RemoteDocument, error) {
     f, err := c.Open(name)
     if err != nil { return RemoteDocument{}, err }
     defer f.Close()
-    content, err := io.ReadAll(io.LimitReader(f,maxEditSize+1))
+    var content []byte
+    if info.Size() <= 32*1024 {
+        // Small files need only a single read; avoid WriteTo's extra Stat.
+        content, err = io.ReadAll(io.LimitReader(f,maxEditSize+1))
+    } else {
+        writer := &limitedDocumentWriter{}
+        _, err = f.WriteTo(writer)
+        content = writer.Bytes()
+    }
     if err != nil { return RemoteDocument{}, err }
     if int64(len(content)) > maxEditSize { return RemoteDocument{}, apperror.New("sftpAdvancedFileExceedsTextEditorLimit",nil) }
     if !utf8.Valid(content) || strings.IndexByte(string(content),0) >= 0 { return RemoteDocument{}, apperror.New("sftpAdvancedNotAUTF8TextFile",nil) }
@@ -46,9 +66,9 @@ func loadDocument(c *pkg.Client, name string) (RemoteDocument, error) {
 
 func (m *Manager) ReadRemoteText(ref domain.ConnectionRef, name string) (RemoteDocument,error) {
     if err:=validate("remote",name);err!=nil {return RemoteDocument{},err}
-    c,err:=m.remote(ref)
+    c,release,err:=m.borrowRemote(ref)
     if err!=nil{return RemoteDocument{},err}
-    defer c.Close()
+    defer release()
     return loadDocument(c,name)
 }
 
@@ -58,9 +78,9 @@ func (m *Manager) SaveRemoteText(ref domain.ConnectionRef, name, expectedRevisio
         return RemoteDocument{},apperror.New("sftpAdvancedInvalidUTF8TextOrFileSizeExceeds1MiB",nil)
     }
     if len(expectedRevision)!=64 {return RemoteDocument{},apperror.New("sftpAdvancedMissingValidFileRevision",nil)}
-    c,err:=m.remote(ref)
+    c,release,err:=m.borrowRemote(ref)
     if err!=nil{return RemoteDocument{},err}
-    defer c.Close()
+    defer release()
     original,err:=loadDocument(c,name)
     if err!=nil{return RemoteDocument{},err}
     if original.Revision!=expectedRevision {return RemoteDocument{},apperror.New("sftpAdvancedRemoteFileChangedSinceItWasOpenedReloadBeforeSaving",nil)}
@@ -113,9 +133,9 @@ func (m *Manager) PreviewSync(ref domain.ConnectionRef, direction, localDir, rem
     if direction!="upload" && direction!="download" {return SyncPreview{},apperror.New("sftpAdvancedUnsupportedSynchronizationDirection",nil)}
     if err:=validate("local",localDir);err!=nil{return SyncPreview{},err}
     if err:=validate("remote",remoteDir);err!=nil{return SyncPreview{},err}
-    c,err:=m.remote(ref)
+    c,release,err:=m.borrowRemote(ref)
     if err!=nil{return SyncPreview{},err}
-    defer c.Close()
+    defer release()
     local,err:=walkLocal(localDir)
     if err!=nil{return SyncPreview{},err}
     remote,err:=walkRemote(c,remoteDir)
@@ -207,8 +227,8 @@ func (m *Manager) EnsureDirectory(ref domain.ConnectionRef, side, directory stri
     if err:=validate(side,directory);err!=nil{return err}
     if _,err:=m.lookup(ref);err!=nil{return err}
     if side=="local"{return os.MkdirAll(directory,0755)}
-    c,err:=m.remote(ref)
+    c,release,err:=m.borrowRemote(ref)
     if err!=nil{return err}
-    defer c.Close()
+    defer release()
     return c.MkdirAll(directory)
 }
