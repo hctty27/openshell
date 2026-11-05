@@ -48,6 +48,11 @@ jobs:
         run: |
           & ./target/release/openshell-zmodem-probe.exe
           if ($LASTEXITCODE -ne 0) { throw "Windows protocol probe failed" }
+      - name: Windows native sidecar-to-sidecar binary pipe transfers
+        shell: pwsh
+        run: |
+          python tests/interop_sidecar.py target/release/zmodem-sidecar.exe
+          if ($LASTEXITCODE -ne 0) { throw "Native Windows ZMODEM pipe transfer failed" }
       - name: Preserve dependency graph for manual license review
         shell: pwsh
         run: |
