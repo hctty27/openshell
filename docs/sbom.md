@@ -20,7 +20,7 @@ GitHub Actions workflow: [Generate third-party SBOM](../.github/workflows/sbom.y
 
 ## Bundled ZMODEM components
 
-The Windows release workflow already pins the [lrzsz-win32](https://github.com/trzsz/lrzsz-win32/releases/tag/v0.12.21rc) source commit and archive checksum and verifies the downloaded ZIP. It also pins the exact MSYS2 3.4.9 DLL SHA-256 and bundles the [historical candidate's licensing reference texts](../third_party/msys2-runtime-3.4.9/README.md). It now also runs `scripts/generate_zmodem_manifest.py`, which:
+The Windows release workflow already pins the [lrzsz-win32](https://github.com/trzsz/lrzsz-win32/releases/tag/v0.12.21rc) source commit and archive checksum and verifies the downloaded ZIP. It also pins the exact MSYS2 3.4.9 DLL SHA-256 and bundles the [historical candidate's licensing reference texts and 3.4.9-3 build recipe](../third_party/msys2-runtime-3.4.9/README.md). The historical recipe points at the upstream Cygwin source tag and MSYS2 patches but is **not** evidence of a binary/source hash match. It now also runs `scripts/generate_zmodem_manifest.py`, which:
 
 1. Ensures the `rz.exe` and `sz.exe` OpenShell launchers, upstream native `rz.exe`/`sz.exe`, `msys-2.0.dll`, GPL copying text, upstream source ZIP and notices are present and nonempty.
 2. Checks the included GPL v2 text and ensures the notices match the pinned upstream release, source commit and binary archive checksum from the packaging script.
