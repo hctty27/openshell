@@ -44,6 +44,7 @@ interface Props {
   languageSaving?: boolean;
   onLanguage?(language: Language): Promise<void>;
   kind: "session" | "settings";
+  initialTab?: "ai";
   session?: Session;
   sessionConnected?: boolean;
   groupID?: string;
@@ -91,7 +92,7 @@ export default function SettingsDialog(p: Props) {
   useTranslation();
   const dialogs = useDialogs();
   const [tab, setTab] = useState(
-    p.kind === "session" ? "session" : "general",
+    p.kind === "session" ? "session" : (p.initialTab ?? "general"),
   );
   const [session, setSession] = useState({
     ...emptySession,
