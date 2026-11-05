@@ -325,3 +325,40 @@ func TestNativeZmodemInteractiveCoordinatorRequiresRemoteDrainProof(t *testing.T
 		t.Fatalf("unconfirmed binary tail leaked to terminal: %x", legacy.Bytes())
 	}
 }
+
+
+func TestNativeZmodemInteractiveCoordinatorRemoteNonzeroExitNeverRestoresTerminal(t *testing.T) {
+	var legacy bytes.Buffer
+	capture := &nativeTerminalCapturedInput{ch: make(chan []byte, 4)}
+	input := newTerminalInputGate(io.Discard, capture)
+	output := newTerminalOutputGate(&legacy)
+	file := filepath.Join(t.TempDir(), "send.bin")
+	if err := os.WriteFile(file, []byte("payload"), 0600); err != nil { t.Fatal(err) }
+	coordinator := &nativeTerminalCoordinator{
+		input: input, output: output,
+		runner: func(ctx context.Context, direction, path string, inbound io.ReadCloser, outbound io.Writer) error {
+			_, err := io.ReadFull(inbound, make([]byte, nativeZmodemHeaderSize))
+			return err
+		},
+	}
+	done := make(chan error, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	go func() { done <- coordinator.run(ctx, "upload", file, "") }()
+	command := string(nativeTerminalNextInput(t, capture))
+	if _, err := output.Write(nativeZmodemHeaderTestStream()); err != nil { t.Fatal(err) }
+	if _, err := output.Write(append(nativeTerminalCompletionFromCommand(t, command, 9), []byte("shell prompt")...)); err != nil { t.Fatal(err) }
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "退出状态为 9") {
+			t.Fatalf("nonzero remote shell exit not reported: %v", err)
+		}
+	case <-time.After(3*time.Second): t.Fatal("remote failure never completed")
+	}
+	if _, err := input.Write([]byte("manual")); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("failed remote transfer restored manual input: %v", err)
+	}
+	if legacy.Len() != 0 {
+		t.Fatalf("failed remote terminal emitted protocol tail: %q", legacy.String())
+	}
+}
