@@ -34,7 +34,14 @@
   app-region: drag;
   --wails-draggable: drag;
 }
-.window-titlebar-brand svg { color: var(--accent-fill); }
+.window-titlebar-logo {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  object-fit: contain;
+  pointer-events: none;
+}
 .window-titlebar-settings {
   flex: 0 0 30px;
   height: 28px;

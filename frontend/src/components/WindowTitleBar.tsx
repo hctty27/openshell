@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Copy, Minus, Settings, Square, SquareTerminal, X } from "lucide-react";
+import { Copy, Minus, Settings, Square, X } from "lucide-react";
 import { Window } from "@wailsio/runtime";
 import { nativeDesktop } from "../bridge";
 import { t } from "../i18n";
@@ -38,7 +38,7 @@ export default function WindowTitleBar({ tabs, onSettings, onNotice }: Props) {
   return (
     <header className="window-titlebar">
       <div className="window-titlebar-brand" onDoubleClick={toggleMaximise}>
-        <SquareTerminal size={15} aria-hidden="true" />
+        <img className="window-titlebar-logo" src="/app-icon.svg" alt="" aria-hidden="true" />
         <span>OpenShell</span>
       </div>
       <div className="window-titlebar-drag-area" onDoubleClick={toggleMaximise} aria-hidden="true" />
