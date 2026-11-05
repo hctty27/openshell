@@ -121,6 +121,7 @@ func (m *Manager) Cancel(id string) error {
     return nil
 }
 func (m *Manager) CancelConnection(ref domain.ConnectionRef) {
+    m.invalidateRemoteClients(ref.TabID, &ref)
     m.mu.Lock()
     var cancels []context.CancelFunc
     for _,j := range m.tasks {
@@ -140,6 +141,7 @@ func (m *Manager) Close() {
 
 // Shutdown prevents new transfers, cancels existing jobs and waits for their cleanup.
 func (m *Manager) Shutdown(ctx context.Context) error {
+    m.closeRemotePool()
     m.mu.Lock()
     m.closed = true
     var cancels []context.CancelFunc
@@ -446,6 +448,7 @@ func copyContext(ctx context.Context,dst io.Writer,src io.Reader,progress func(i
 }
 
 func (m *Manager) CancelTab(tabID string) {
+    m.invalidateRemoteClients(tabID, nil)
     m.mu.Lock()
     var cancels []context.CancelFunc
     for _, j := range m.tasks {
