@@ -115,3 +115,26 @@ SSH PTY stdout/stderr -> terminalOutputGate -> trzsz-go / 预置 native 接收�
 2. 租约获取顺序、失败回滚和异常清理必须由统一协调器管理；不能随意通过 `restore` 把未排空的尾帧送回旧过滤器。
 3. 验证远端取消、关闭标签页、断线、文件选择取消、服务端不读输入的背压行为，以及 Windows 原生客户端连接 Linux OpenSSH PTY。
 4. 未通过前继续保持旧 `rz/sz` 及 MSYS2，不发布或切换正式功能。
+
+## PR #213：交互式 ZMODEM 双向接管协调器（仅实验、未启用）
+
+在现有 `terminalInputGate`、`terminalOutputGate` 和 `runNativeZmodemTerminalSidecar` 基础上，新增 `nativeTerminalCoordinator`，提供明确授权且**尚未连接 Wails/UI** 的接管编排模型。
+
+### 状态与顺序
+
+1. 调用者明确选择操作方向和本地单文件（或下载目录），校验文件类型与 128 MiB 原型限制；下载先建立私有临时目录。不能凭远端输出自动启动传输。
+2. 取得 `terminalInputGate` 独占租约，禁止键盘与 AI 输入混入协议流。
+3. 调用 `terminalOutputGate.armOnZmodemHeader` 预置原生接收器，无损检测跨块头帧，防止旧 `trzsz-go` 抢读。
+4. 启动 sidecar runner；它的初始输出由 `nativeTerminalOutboundBarrier` 暂停，直至收到匹配方向的远端 ZMODEM 帧头。上传需要 `ZRINIT` (01)，下载需要 `ZRQINIT` (00)。
+5. 通过原生输入租约发送受约束的 Shell 命令：上传 `rz -q`（当前工作目录），下载 `sz -q -- '经 POSIX 引号转义的路径'`。不会使用 `exec` 替换交互式 Shell。
+6. 命中后远端协议字节只进入 sidecar stdin，sidecar stdout 只进入 SSH PTY 的原生输入租约；普通文本仍走旧输出处理器。
+7. **成功退出 sidecar 不代表远端 Shell 已恢复。** 必须另有 `remoteDrained` 可信结束证明，才允许先恢复输出、再恢复输入，最后发布已下载的文件。
+8. 发送命令后，若取消、方向不符、sidecar 失败或结束状态不明则 **fail closed**：不恢复旧路由；需要断开并重连这个终端，避免二进制尾帧泄漏。
+
+### 限制与后续
+
+- 当前 `remoteDrained` 仅是由将来可信边界检测器提供的内部通道；**尚无生产提供者**，协调器没有 Wails/UI 调用方，不应在真实服务器上直接启用。
+- 18 字节 ZMODEM 启动帧检测只是握手识别，**不是身份认证，也不验证完整 CRC**。方向不符不释放 sidecar 的初始响应。
+- 单文件 / 128 MiB 上限、POSIX Shell、缺少真实交互式 Windows→Linux 全链路验证；不支持 JumpServer、弱网和自动重试。
+- 测试通过注入确定性的 sidecar runner 验证双向流所有权、完成屏障、取消后 fail-closed，以及成功后单文件安全发布。
+- 原来的 `rz/sz`、`trzsz-go`、MSYS2、发行包完全不变。下一步实现可信结束边界检测、连接生命周期绑定以及实际 SSH PTY 联调。
