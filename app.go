@@ -31,6 +31,7 @@ type App struct {
 	secrets      domain.SecretStore
 	ssh          *sshclient.Manager
 	sftp         *files.Manager
+	nativeZmodem *sshclient.NativeZmodemManager
 	sftpReadMu sync.Mutex
 	sftpReadCancels map[string]context.CancelFunc
 	sftpReadCancelled map[string]time.Time
@@ -132,6 +133,7 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 		if name == "ssh:disconnected" {
 			if ref, ok := payload.(domain.ConnectionRef); ok {
 				if a.sftp != nil { a.sftp.CancelConnection(ref) }
+				if a.nativeZmodem != nil { a.nativeZmodem.CancelConnection(ref) }
 			}
 		}
 		a.emit(name, payload)
@@ -141,6 +143,11 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 	if err != nil || keepAliveSeconds < 0 || keepAliveSeconds > 300 { keepAliveSeconds = 30 }
 	a.ssh.SetKeepAliveInterval(time.Duration(keepAliveSeconds) * time.Second)
 	a.sftp = files.NewManager(a.ssh.Client, func(name string, payload any) { a.emit(name, payload) })
+	sidecar := ""
+	if os.Getenv("OPENSHELL_NATIVE_ZMODEM_EXPERIMENT") == "1" {
+		sidecar = os.Getenv("OPENSHELL_NATIVE_ZMODEM_SIDECAR")
+	}
+	a.nativeZmodem = sshclient.NewNativeZmodemManager(a.ssh, func(name string, payload any) { a.emit(name, payload) }, sidecar)
 	return a, nil
 }
 func (a *App) startup(ctx context.Context) { a.ctx = ctx }
@@ -168,6 +175,7 @@ func (a *App) QuitConfirmed() {
 }
 func (a *App) shutdown(context.Context) {
 	a.stopAllAI()
+	a.nativeZmodem.Close()
 	a.sftp.Close()
 	a.closeAllLocalTerminals()
 	a.ssh.Close()
