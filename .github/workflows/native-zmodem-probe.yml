@@ -191,6 +191,7 @@ jobs:
           export OPENSHELL_ZMODEM_CROSS_OS_PTY=1
           export OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS=2
           go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY$' -v ./internal/ssh
+          go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInterruptedInteractivePTY$' -v ./internal/ssh
       - name: Print SSH server diagnostics if the interop test failed
         if: failure()
         shell: bash
