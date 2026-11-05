@@ -1,5 +1,7 @@
 # OpenShell Website
 
+Cloudflare Pages project: [openshell-site](https://openshell-site.pages.dev/) (GitHub-connected, `main` branch). Custom-domain cutover is managed separately after the Pages site is verified.
+
 独立的 OpenShell 官网源码（纯 HTML / CSS / JavaScript），部署到 Cloudflare Pages。它不依赖桌面客户端的 React、Wails、Go 或构建流程。
 
 ## 本地预览
