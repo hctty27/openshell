@@ -13,6 +13,8 @@ concurrency:
 jobs:
   windows-linux-live:
     name: Windows Rust + Go to real Linux OpenSSH PTY
+    # Do not expose the dedicated SSH lab secrets to arbitrary branch code.
+    if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 45
     env:
