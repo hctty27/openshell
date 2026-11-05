@@ -20,6 +20,8 @@ source candidate for the MSYS2 runtime version reported by the bundled DLL.
 | `COPYING.LIB` | `winsup/COPYING.LIB` | `65c5ca88a67c30becee01c5a8816d964b03862f9` |
 | `COPYING` | `winsup/COPYING` | `94a9ed024d3859793618152ea559a168bbcbb5e2` |
 
+Historical package recipe: [msys2/MSYS2-packages@4056de7224a47dd0249f61111351d556dfada60f](https://github.com/msys2/MSYS2-packages/blob/4056de7224a47dd0249f61111351d556dfada60f/msys2-runtime/PKGBUILD), committed **2023-11-22**, declares `pkgver=3.4.9`, `pkgrel=3`, the upstream `cygwin-3.4.9` source tag and approximately 40 MSYS2 build patches. The verbatim `PKGBUILD-3.4.9-3` copy in this directory has Git blob SHA `fb6d0308d36a01a026a68542efc58467938efc5b`. The recipe and its individual patch files are available at that immutable GitHub commit; **the patches have not been vendored into OpenShell's release**.
+
 These are **reference license texts**, not a verified corresponding-source
 distribution for the exact `msys-2.0.dll` bytes. In the Windows package they
 are copied to `zmodem/` under distinct MSYS2-specific filenames.
