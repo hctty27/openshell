@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#081223">
+  <meta name="description" content="OpenShell — 免费开源的 Windows SSH/SFTP 客户端。多会话、分屏终端、文件传输和可选的 AI 助手。">
+  <meta name="color-scheme" content="dark">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="OpenShell">
+  <meta property="og:title" content="OpenShell — 轻量、现代的 SSH 工作空间">
+  <meta property="og:description" content="Windows SSH/SFTP 客户端：多终端、分屏、SFTP 与可选 AI。免费、开源。">
+  <meta property="og:url" content="https://openshell.testnb.me/">
+  <meta property="og:image" content="https://raw.githubusercontent.com/hctty27/openshell/main/docs/screenshots/02-ssh-sftp.webp">
+  <link rel="canonical" href="https://openshell.testnb.me/">
+  <link rel="icon" href="./assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>OpenShell — 轻量、现代的 SSH 工作空间</title>
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main" data-i18n="skip">跳转到主要内容</a>
+  <header class="site-header" id="top">
+    <div class="container nav-inner">
+      <a class="brand" href="#top" aria-label="OpenShell">
+        <img src="./assets/logo.svg" alt="" width="34" height="34">
+        <span>OpenShell</span>
+      </a>
+      <nav class="desktop-nav" aria-label="Primary navigation">
+        <a href="#features" data-i18n="navFeatures">功能</a>
+        <a href="#preview" data-i18n="navPreview">产品预览</a>
+        <a href="#trust" data-i18n="navTrust">隐私与安全</a>
+        <a href="#download" data-i18n="navDownload">下载</a>
+      </nav>
+      <div class="header-actions">
+        <button class="language-btn" id="language-toggle" type="button" aria-label="Switch to English">EN</button>
+        <a class="header-github" href="https://github.com/hctty27/openshell" target="_blank" rel="noopener noreferrer" aria-label="OpenShell GitHub">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.53v-1.89c-3.1.67-3.76-1.33-3.76-1.33-.5-1.28-1.23-1.62-1.23-1.62-1.01-.69.08-.68.08-.68 1.12.08 1.7 1.14 1.7 1.14 1 .1.95 1.32 3.25.9.1-.73.39-1.22.71-1.5-2.47-.28-5.06-1.24-5.06-5.49 0-1.22.44-2.22 1.15-3.01-.12-.28-.5-1.43.11-2.98 0 0 .93-.3 3.05 1.15A10.5 10.5 0 0 1 12 6.4c.94 0 1.88.13 2.76.37 2.12-1.45 3.05-1.15 3.05-1.15.61 1.55.23 2.7.11 2.98.72.79 1.15 1.8 1.15 3.01 0 4.27-2.59 5.2-5.07 5.48.4.35.75 1.03.75 2.08V22c0 .3.2.64.76.53A11.1 11.1 0 0 0 12 .9Z"/></svg>
+        </a>
+        <a class="small-cta" href="#download" data-i18n="headerCta">立即下载</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero section">
+      <div class="hero-glow hero-glow-one" aria-hidden="true"></div>
+      <div class="hero-glow hero-glow-two" aria-hidden="true"></div>
+      <div class="container hero-content">
+        <a class="hero-tag" href="https://github.com/hctty27/openshell/releases/latest" target="_blank" rel="noopener noreferrer">
+          <span class="live-dot" aria-hidden="true"></span>
+          <span data-i18n="heroTag">免费开源 · Windows x64</span>
+          <span aria-hidden="true" class="tag-arrow">↗</span>
+        </a>
+        <h1><span data-i18n="heroLine1">你的服务器，</span><br><span class="gradient-text" data-i18n="heroLine2">尽在掌控。</span></h1>
+        <p class="hero-subtitle" data-i18n="heroDescription">将 SSH 终端、SFTP 文件管理与可选的 AI 助手放在同一个工作空间。连接更顺手，操作更专注。</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#download">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M4 17v3h16v-3"/></svg>
+            <span data-i18n="heroDownload">下载 Windows 版</span>
+          </a>
+          <a class="button button-secondary" href="https://github.com/hctty27/openshell" target="_blank" rel="noopener noreferrer">
+            <span data-i18n="heroSource">查看源代码</span><span aria-hidden="true">↗</span>
+          </a>
+        </div>
+        <div class="hero-foot">
+          <span class="pill"><span class="pill-dot"></span><span data-i18n="heroTrust">MIT 开源许可</span></span>
+          <span class="hero-separator" aria-hidden="true"></span>
+          <span data-i18n="heroNoAccount">无需注册账号</span>
+          <span class="hero-separator" aria-hidden="true"></span>
+          <span id="version-label" data-i18n="heroLatest">获取最新版本</span>
+        </div>
+
+        <div class="app-stage" id="preview">
+          <div class="stage-halo" aria-hidden="true"></div>
+          <div class="app-window">
+            <div class="app-window-top">
+              <div class="window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+              <div class="window-title"><img src="./assets/logo.svg" alt="" width="16" height="16"> OpenShell <span class="window-title-divider">/</span> SSH + SFTP</div>
+              <span class="window-label" data-i18n="previewLabel">真实产品截图</span>
+            </div>
+            <img class="product-screenshot" src="https://raw.githubusercontent.com/hctty27/openshell/main/docs/screenshots/02-ssh-sftp.webp" width="1440" height="810" alt="OpenShell SSH 终端和 SFTP 文件管理器界面" data-i18n-alt="previewAlt" decoding="async" fetchpriority="high">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section features-section" id="features">
+      <div class="container">
+        <div class="section-heading">
+          <div class="eyebrow" data-i18n="featuresEyebrow">BUILT FOR YOUR WORKFLOW</div>
+          <h2 data-i18n="featuresHeading">更少切换，更多专注。</h2>
+          <p data-i18n="featuresIntro">从连接服务器到管理文件，把日常操作整合到一个轻量工作空间。</p>
+        </div>
+        <div class="features-grid">
+          <article class="feature-card feature-card-primary">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 10 3 3-3 3m6 0h4"/></svg></span>
+            <h3 data-i18n="f1Title">多会话 SSH 终端</h3>
+            <p data-i18n="f1Text">标签管理、左右与上下分屏、断线重连，让多台服务器始终有序。</p>
+            <div class="feature-visual terminal-visual" aria-hidden="true"><div><b>●</b> ubuntu@production</div><code><em>➜</em> ~/workspace <span>ssh connected</span></code><code><em>➜</em> ~/workspace <span class="green">ready_</span></code></div>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h7l2 2h7v10H4z"/><path d="M4 7V5h7l2 2"/></svg></span>
+            <h3 data-i18n="f2Title">完整的 SFTP 文件管理</h3>
+            <p data-i18n="f2Text">上传、下载、远程编辑、传输队列与目录同步预览，文件操作无需换软件。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5Z"/></svg></span>
+            <h3 data-i18n="f3Title">按需启用的 AI 助手</h3>
+            <p data-i18n="f3Text">接入你自己的模型 API，结合终端上下文进行辅助分析；不配置 AI 也能完整使用 SSH/SFTP。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M5 12h10M5 18h14"/><path d="m17 9 3 3-3 3"/></svg></span>
+            <h3 data-i18n="f4Title">熟悉又高效的操作</h3>
+            <p data-i18n="f4Text">快速命令、终端搜索、Xshell 会话导入、rz/sz 与 trzsz，减少重复操作。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 7v5c0 5 3.4 8 8 9 4.6-1 8-4 8-9V7Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+            <h3 data-i18n="f5Title">本地优先的设计</h3>
+            <p data-i18n="f5Text">会话存储在本机，敏感凭据由 Windows 凭据管理器保存；诊断报告不会自动上传。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M9 9v11"/></svg></span>
+            <h3 data-i18n="f6Title">简单、克制的工作空间</h3>
+            <p data-i18n="f6Text">可调整的布局和中英文界面，让终端始终是工作重点。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section workflow-section">
+      <div class="container workflow">
+        <div class="workflow-copy">
+          <div class="eyebrow" data-i18n="workflowEyebrow">ONE WORKSPACE</div>
+          <h2 data-i18n="workflowHeading">从连接到交付，<br>不必来回切换。</h2>
+          <p data-i18n="workflowBody">连接服务器、浏览远程目录、编辑配置、传输文件。OpenShell 让这些工作发生在同一个窗口内。</p>
+          <a href="https://github.com/hctty27/openshell/blob/main/README.zh-CN.md" id="documentation-link" target="_blank" rel="noopener noreferrer" class="inline-link"><span data-i18n="workflowDocs">阅读使用文档</span><span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="workflow-panel" aria-label="OpenShell feature overview">
+          <div class="workflow-row"><span class="workflow-num">01</span><div><strong data-i18n="wf1Title">连接</strong><span data-i18n="wf1Desc">SSH 会话与安全主机验证</span></div><span class="workflow-indicator">↗</span></div>
+          <div class="workflow-row"><span class="workflow-num">02</span><div><strong data-i18n="wf2Title">操作</strong><span data-i18n="wf2Desc">终端分屏、搜索和快捷命令</span></div><span class="workflow-indicator">↗</span></div>
+          <div class="workflow-row"><span class="workflow-num">03</span><div><strong data-i18n="wf3Title">传输</strong><span data-i18n="wf3Desc">SFTP 管理、远程编辑与任务队列</span></div><span class="workflow-indicator">↗</span></div>
+          <div class="workflow-row"><span class="workflow-num">04</span><div><strong data-i18n="wf4Title">扩展</strong><span data-i18n="wf4Desc">可选 AI 辅助与诊断工具</span></div><span class="workflow-indicator">↗</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section trust-section" id="trust">
+      <div class="container trust-inner">
+        <div class="section-heading centered">
+          <div class="eyebrow" data-i18n="trustEyebrow">OPEN BY DESIGN</div>
+          <h2 data-i18n="trustHeading">透明，才能值得信赖。</h2>
+          <p data-i18n="trustIntro">公开源代码、明确数据流向和发布签名状态。安全不是一句营销口号。</p>
+        </div>
+        <div class="trust-grid">
+          <div><span class="trust-stat">MIT</span><strong data-i18n="trust1Title">免费开源</strong><p data-i18n="trust1Text">代码公开可审查，开发与发布记录可追溯。</p></div>
+          <div><span class="trust-stat" data-i18n="trust2Stat">本地</span><strong data-i18n="trust2Title">本地存储与诊断</strong><p data-i18n="trust2Text">会话数据留在设备上。AI 请求仅在启用并配置模型时发往所选服务。</p></div>
+          <div><span class="trust-stat" data-i18n="trust3Stat">透明</span><strong data-i18n="trust3Title">真实的签名状态</strong><p data-i18n="trust3Text">发布页披露 Windows 安装包是否签名。当前 v1.0.0 尚未签名。</p></div>
+        </div>
+        <div class="policy-links"><a href="https://github.com/hctty27/openshell/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer" data-i18n="privacyLink">隐私政策 ↗</a><a href="https://github.com/hctty27/openshell/blob/main/CODE_SIGNING_POLICY.md" target="_blank" rel="noopener noreferrer" data-i18n="signingLink">代码签名政策 ↗</a><a href="https://github.com/hctty27/openshell/blob/main/docs/third-party-review.md" target="_blank" rel="noopener noreferrer" data-i18n="licenseLink">第三方组件许可 ↗</a></div>
+      </div>
+    </section>
+
+    <section class="section download-section" id="download">
+      <div class="container">
+        <div class="download-panel">
+          <div class="download-top">
+            <div>
+              <div class="eyebrow" data-i18n="downloadEyebrow">GET OPENSHELL</div>
+              <h2 data-i18n="downloadHeading">准备好开始了吗？</h2>
+              <p data-i18n="downloadDescription">Windows x64 · 免费下载 · 无需登录</p>
+            </div>
+            <span class="download-release" id="release-pill" data-i18n="releaseFallback">GitHub 最新版本</span>
+          </div>
+          <div class="download-options">
+            <a id="setup-link" class="download-option" href="https://github.com/hctty27/openshell/releases/latest" target="_blank" rel="noopener noreferrer">
+              <span class="download-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 17v3h16v-3"/></svg></span>
+              <span class="download-option-copy"><strong data-i18n="setupTitle">Windows 安装版</strong><span data-i18n="setupDesc">推荐 · 安装后从开始菜单启动</span></span>
+              <span class="download-chevron">↗</span>
+            </a>
+            <a id="portable-link" class="download-option" href="https://github.com/hctty27/openshell/releases/latest" target="_blank" rel="noopener noreferrer">
+              <span class="download-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8m-8 4h5"/></svg></span>
+              <span class="download-option-copy"><strong data-i18n="portableTitle">Windows 便携版</strong><span data-i18n="portableDesc">解压即用 · 请保留 zmodem 目录</span></span>
+              <span class="download-chevron">↗</span>
+            </a>
+          </div>
+          <p class="download-note" data-i18n="downloadNote">使用前请阅读 Release 的签名状态和更新说明。当前 v1.0.0 未签名，Windows 可能显示安全提示。需要 WebView2 Runtime。</p>
+          <div class="download-bottom"><a href="https://github.com/hctty27/openshell/releases" target="_blank" rel="noopener noreferrer" data-i18n="allReleases">查看全部版本 ↗</a><a href="https://developer.microsoft.com/microsoft-edge/webview2/" target="_blank" rel="noopener noreferrer" data-i18n="webview">WebView2 运行环境 ↗</a></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-top"><div class="brand"><img src="./assets/logo.svg" alt="" width="29" height="29"><span>OpenShell</span></div><p data-i18n="footerTagline">专注连接，轻装前行。</p></div>
+      <div class="footer-bottom"><span>© <span id="copyright-year">2026</span> OpenShell · MIT License</span><div><a href="https://github.com/hctty27/openshell" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://github.com/hctty27/openshell/issues" target="_blank" rel="noopener noreferrer" data-i18n="footerFeedback">反馈问题</a><a href="https://github.com/hctty27/openshell/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer" data-i18n="footerPrivacy">隐私政策</a><a href="https://github.com/hctty27/openshell/blob/main/CODE_SIGNING_POLICY.md" target="_blank" rel="noopener noreferrer" data-i18n="footerSigning">签名政策</a></div></div>
+    </div>
+  </footer>
+</body>
+</html>
