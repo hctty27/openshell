@@ -171,7 +171,7 @@
 }
 .terminal-tab > button:first-child:active { cursor: grabbing; }
 .terminal-tab > button:first-child:focus-visible {
-  outline: 2px solid var(--accent-fill);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .terminal-tab > button:first-child > span:nth-child(2) {
@@ -645,7 +645,7 @@
   outline: none;
 }
 .terminal-find input:focus {
-  border-color: var(--accent);
+  border-color: var(--focus-border);
 }
 .terminal-find button {
   width: 24px;

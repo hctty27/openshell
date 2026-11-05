@@ -36,7 +36,7 @@
 .sftp-actions button:disabled { opacity: .4; cursor: default; }
 .sftp-cancel-delete { display: inline-flex; flex: 0 0 auto; align-items: center; color: var(--text-muted); padding: 4px; }
 .sftp-cancel-delete:hover { color: var(--text-primary); }
-.sftp-file-table:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.sftp-file-table:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .sftp-breadcrumb {
   display: flex;
   align-items: center;
@@ -48,6 +48,7 @@
   overflow: hidden;
   background: var(--field-bg);
 }
+.sftp-breadcrumb:focus-within { border-color: var(--focus-border); }
 .sftp-breadcrumb button { height: 100%; width: 29px; flex-shrink: 0; padding: 3px; color: var(--text-muted); }
 .sftp-breadcrumb input {
   flex: 1; min-width: 0; height: 100%; border: 0;

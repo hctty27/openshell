@@ -13,6 +13,8 @@
   --on-accent: #FFFFFF;
   --accent-soft: #5D9CEC25;
   --accent-border: #5D9CEC88;
+  --focus-border: #91B7D9;
+  --focus-ring: #AACFF8;
   --info: #8DBAF3;
   --info-soft: #5D9CEC1A;
   --info-border: #5D9CEC66;
@@ -50,6 +52,8 @@
   --on-accent: #FFFFFF;
   --accent-soft: #2563EB18;
   --accent-border: #2563EB63;
+  --focus-border: #5B7DA3;
+  --focus-ring: #3D70AD;
   --info: #2563EB;
   --info-soft: #2563EB14;
   --info-border: #2563EB4F;
@@ -116,7 +120,7 @@ button:disabled {
   cursor: not-allowed;
 }
 button:focus-visible {
-  outline: 2px solid var(--accent-border);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 input,
@@ -129,12 +133,17 @@ textarea {
   padding: 10px 11px;
   outline: none;
   min-width: 0;
+  transition: border-color 120ms ease;
 }
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: var(--accent-border);
-  box-shadow: 0 0 0 2px #5ab69a0b;
+  border-color: var(--focus-border);
+  box-shadow: none;
+}
+input:is([type="checkbox"], [type="radio"]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 textarea {
   resize: vertical;

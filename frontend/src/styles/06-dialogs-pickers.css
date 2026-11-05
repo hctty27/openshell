@@ -150,7 +150,7 @@
   color: var(--text-muted);
   background: var(--field-bg);
 }
-.session-picker__search:focus-within { border-color: var(--accent-border); }
+.session-picker__search:focus-within { border-color: var(--focus-border); }
 .session-picker__search input {
   flex: 1;
   min-width: 0;
