@@ -76,6 +76,7 @@ interface Props {
   onImportSessionBackup?(): Promise<void>;
   onRefresh(): Promise<void>;
   onFont(n: number): void;
+  onPreferenceError?(error: unknown): void;
 }
 const emptySession: Session = {
   id: "",
@@ -114,6 +115,37 @@ export default function SettingsDialog(p: Props) {
   const [success, setSuccess] = useState<DisplayText>("");
   const [busy, setBusy] = useState(false);
   const [aiDirty, setAiDirty] = useState(false);
+  const preferenceQueue = useRef<Promise<void>>(Promise.resolve());
+  const fontSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingFontSize = useRef<number | null>(null);
+  const persistPreference = (key: string, value: string, refresh = false) => {
+    setError("");
+    preferenceQueue.current = preferenceQueue.current
+      .then(async () => {
+        await api.SavePreference(key, value);
+        if (refresh) await p.onRefresh();
+      })
+      .catch((error) => {
+        setError(error);
+        p.onPreferenceError?.(error);
+      });
+  };
+  const flushFontSave = () => {
+    if (fontSaveTimer.current !== null) {
+      clearTimeout(fontSaveTimer.current);
+      fontSaveTimer.current = null;
+    }
+    if (pendingFontSize.current === null) return;
+    const size = pendingFontSize.current;
+    pendingFontSize.current = null;
+    persistPreference("fontSize", String(size));
+  };
+  const changeFont = (size: number) => {
+    p.onFont(size);
+    pendingFontSize.current = size;
+    if (fontSaveTimer.current !== null) clearTimeout(fontSaveTimer.current);
+    fontSaveTimer.current = setTimeout(flushFontSave, 300);
+  };
   const confirmDiscardAI = () => dialogs.confirm({
     title: message("settings:aiUnsavedChangesTitle"),
     description: message("settings:aiUnsavedChangesDescription"),
@@ -140,6 +172,7 @@ export default function SettingsDialog(p: Props) {
   const requestClose = () => {
     if (busy) return;
     if (p.kind === "settings") {
+      flushFontSave();
       if (aiDirty) {
         void confirmDiscardAI().then(confirmed => { if (confirmed) p.onClose(); });
       } else {
@@ -246,6 +279,9 @@ export default function SettingsDialog(p: Props) {
             </nav>
           )}
         <div className="settings-body">
+          {p.kind === "settings" && !!error && (
+            <div className="form-error settings-save-error" role="alert">{errorText(error)}</div>
+          )}
           {tab === "session" && (
             <>
               <div className="form-note">
@@ -475,11 +511,11 @@ export default function SettingsDialog(p: Props) {
           {tab === "appearance" && (
             <AppearanceSettingsPanel
               theme={p.theme}
-              onTheme={p.onTheme}
+              onTheme={(value) => { p.onTheme(value); persistPreference("theme", value); }}
               terminalTheme={p.terminalTheme}
-              onTerminalTheme={p.onTerminalTheme}
+              onTerminalTheme={(value) => { p.onTerminalTheme(value); persistPreference("terminalTheme", value); }}
               fontSize={p.fontSize}
-              onFont={p.onFont}
+              onFont={changeFont}
             />
           )}
           {tab === "ai" && <AIProviderSettings onDirtyChange={setAiDirty} />}
@@ -489,36 +525,36 @@ export default function SettingsDialog(p: Props) {
           {tab === "connection" && (
             <ConnectionSettingsPanel
               keepAliveSeconds={keepAliveSeconds}
-              setKeepAliveSeconds={setKeepAliveSeconds}
+              setKeepAliveSeconds={(value) => { setKeepAliveSeconds(value); persistPreference("keepAliveSeconds", String(value), true); }}
               autoReconnect={autoReconnect}
-              setAutoReconnect={setAutoReconnect}
+              setAutoReconnect={(value) => { setAutoReconnect(value); persistPreference("autoReconnect", String(value), true); }}
               maxReconnectAttempts={maxReconnectAttempts}
-              setMaxReconnectAttempts={setMaxReconnectAttempts}
+              setMaxReconnectAttempts={(value) => { setMaxReconnectAttempts(value); persistPreference("maxReconnectAttempts", String(value), true); }}
               showDisconnectReason={showDisconnectReason}
-              setShowDisconnectReason={setShowDisconnectReason}
+              setShowDisconnectReason={(value) => { setShowDisconnectReason(value); persistPreference("showDisconnectReason", String(value), true); }}
               disconnectBehavior={disconnectBehavior}
-              setDisconnectBehavior={setDisconnectBehavior}
+              setDisconnectBehavior={(value) => { setDisconnectBehavior(value); persistPreference("disconnectBehavior", value, true); }}
               localShell={localShell}
-              setLocalShell={setLocalShell}
+              setLocalShell={(value) => { setLocalShell(value); persistPreference("localShell", value, true); }}
               preserveTerminalHistory={preserveTerminalHistory}
-              setPreserveTerminalHistory={setPreserveTerminalHistory}
+              setPreserveTerminalHistory={(value) => { setPreserveTerminalHistory(value); persistPreference("preserveTerminalHistory", String(value), true); }}
               confirmActiveDisconnect={confirmActiveDisconnect}
-              setConfirmActiveDisconnect={setConfirmActiveDisconnect}
+              setConfirmActiveDisconnect={(value) => { setConfirmActiveDisconnect(value); persistPreference("confirmActiveDisconnect", String(value), true); }}
             />
           )}
           {tab === "terminal" && (
             <TerminalSettingsPanel
               logHighlights={p.logHighlights}
-              onLogHighlights={p.onLogHighlights}
+              onLogHighlights={(value) => { p.onLogHighlights(value); persistPreference("logHighlights", String(value)); }}
               autoCopySelection={p.autoCopySelection}
-              onAutoCopySelection={p.onAutoCopySelection}
+              onAutoCopySelection={(value) => { p.onAutoCopySelection(value); persistPreference("autoCopySelection", String(value)); }}
               rightClickPaste={p.rightClickPaste}
-              onRightClickPaste={p.onRightClickPaste}
+              onRightClickPaste={(value) => { p.onRightClickPaste(value); persistPreference("rightClickPaste", String(value)); }}
               confirmMultilinePaste={p.confirmMultilinePaste}
-              onConfirmMultilinePaste={p.onConfirmMultilinePaste}
+              onConfirmMultilinePaste={(value) => { p.onConfirmMultilinePaste(value); persistPreference("confirmMultilinePaste", String(value)); }}
             />
           )}
-          {!!error && (
+          {p.kind === "session" && !!error && (
             <div className="form-error" role="alert">
               {errorText(error)}
             </div>
@@ -531,11 +567,12 @@ export default function SettingsDialog(p: Props) {
           )}
         </div>
         </div>
-        <footer>
-          <button className="secondary" disabled={busy} onClick={requestClose}>
-            {t("common:close")}
-          </button>
-          <div>
+        {p.kind === "session" && (
+          <footer>
+            <button className="secondary" disabled={busy} onClick={requestClose}>
+              {t("common:close")}
+            </button>
+            <div>
             {tab === "session" && (
               <button
                 className="primary"
@@ -563,51 +600,9 @@ export default function SettingsDialog(p: Props) {
                 {t("settings:saveSession")}
               </button>
             )}
-            {tab === "connection" && (
-              <button className="primary" disabled={busy} onClick={() => run(async () => {
-                await api.SavePreference("keepAliveSeconds", String(keepAliveSeconds));
-                await api.SavePreference("autoReconnect", String(autoReconnect));
-                await api.SavePreference("maxReconnectAttempts", String(maxReconnectAttempts));
-                await api.SavePreference("showDisconnectReason", String(showDisconnectReason));
-                await api.SavePreference("confirmActiveDisconnect", String(confirmActiveDisconnect));
-                 await api.SavePreference("disconnectBehavior", disconnectBehavior);
-                 await api.SavePreference("localShell", localShell);
-                 await api.SavePreference("preserveTerminalHistory", String(preserveTerminalHistory));
-                await p.onRefresh();
-              }, message("settings:settingsSaved"))}>
-                {t("settings:saveSettings")}
-              </button>
-            )}
-            {(tab === "appearance" || tab === "terminal") && (
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={() =>
-                  run(async () => {
-                    await api.SavePreference("fontSize", String(p.fontSize));
-                    await api.SavePreference("theme", p.theme);
-                    await api.SavePreference("terminalTheme", p.terminalTheme);
-                    await api.SavePreference(
-                      "autoCopySelection",
-                      String(p.autoCopySelection),
-                    );
-                    await api.SavePreference(
-                      "rightClickPaste",
-                      String(p.rightClickPaste),
-                    );
-                    await api.SavePreference(
-                      "confirmMultilinePaste",
-                      String(p.confirmMultilinePaste),
-                    );
-                    await api.SavePreference("logHighlights", String(p.logHighlights));
-                  }, message("settings:settingsSaved"))
-                }
-              >
-                {t("settings:saveSettings")}
-              </button>
-            )}
-          </div>
-        </footer>
+            </div>
+          </footer>
+        )}
     </ModalSurface>
   );
 }
