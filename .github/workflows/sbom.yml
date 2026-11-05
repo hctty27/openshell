@@ -1,0 +1,89 @@
+name: Generate third-party SBOM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'scripts/audit_sbom.py'
+      - 'scripts/test_audit_sbom.py'
+      - 'scripts/generate_zmodem_manifest.py'
+      - 'scripts/test_generate_zmodem_manifest.py'
+      - 'scripts/prepare_zmodem_windows.ps1'
+      - '.github/workflows/sbom.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'scripts/audit_sbom.py'
+      - 'scripts/test_audit_sbom.py'
+      - 'scripts/generate_zmodem_manifest.py'
+      - 'scripts/test_generate_zmodem_manifest.py'
+      - 'scripts/prepare_zmodem_windows.ps1'
+      - '.github/workflows/sbom.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sbom-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  sbom:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Test SBOM and ZMODEM inventory validators
+        run: python3 -m unittest scripts.test_audit_sbom scripts.test_generate_zmodem_manifest
+      - name: Generate Windows production Go CycloneDX SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/sbom
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.12.0
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 GOFLAGS=-tags=production \
+            "$(go env GOPATH)/bin/cyclonedx-gomod" app -json -licenses \
+            -version "$(tr -d '\r\n' < .github/release-version.txt)" \
+            -output build/sbom/go-windows-amd64.cdx.json .
+      - name: Generate frontend dependency CycloneDX SBOMs
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm sbom --sbom-format=cyclonedx --sbom-type=application --omit=dev > ../build/sbom/frontend-runtime.cdx.json
+          npm sbom --sbom-format=cyclonedx --sbom-type=application > ../build/sbom/frontend-all.cdx.json
+      - name: Validate the inventories and report unresolved licenses
+        run: |
+          python3 scripts/audit_sbom.py \
+            --go build/sbom/go-windows-amd64.cdx.json \
+            --frontend-runtime build/sbom/frontend-runtime.cdx.json \
+            --frontend-all build/sbom/frontend-all.cdx.json \
+            --output build/sbom/license-review.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openshell-sbom
+          path: build/sbom/
+          if-no-files-found: error
+          retention-days: 30
