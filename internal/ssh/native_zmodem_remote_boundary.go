@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -146,4 +145,3 @@ func (s *nativeRemoteBoundarySink) replayTrailing() []byte {
 }
 
 var _ io.Writer = (*nativeRemoteBoundarySink)(nil)
-var _ = fmt.Sprintf
