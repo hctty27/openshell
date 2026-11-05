@@ -24,14 +24,14 @@ The Windows release workflow already pins the [lrzsz-win32](https://github.com/t
 
 1. Ensures the `rz.exe` and `sz.exe` OpenShell launchers, upstream native `rz.exe`/`sz.exe`, `msys-2.0.dll`, GPL copying text, upstream source ZIP and notices are present and nonempty.
 2. Checks the included GPL v2 text and ensures the notices match the pinned upstream release, source commit and binary archive checksum from the packaging script.
-3. Records SHA-256, file size and declared origin for each component in `zmodem/BUNDLED_COMPONENTS.json`.
+3. Records SHA-256, file size and declared origin for each component in `zmodem/BUNDLED_COMPONENTS.json`. The Windows package build also records PE version fields for `msys-2.0.dll` and confirms they refer to the same SHA-256.
 4. Includes this JSON inside **both** the next portable ZIP and NSIS installer. A copy is also attached to future GitHub Releases as `OpenShell-vX.Y.Z-windows-x64-zmodem-manifest.json`.
 
 **The manifest records what was packaged, not evidence that the DLL has an identifiable GPL source revision.** OpenShell does not apply its own SignPath Foundation certificate to upstream native ZMODEM binaries or DLLs.
 
 ## Open MSYS2 runtime issue
 
-The upstream lrzsz-win32 Windows release was originally created in **2020** and contains `msys-2.0.dll`. [MSYS2's current package listing](https://packages.msys2.org/packages/msys2-runtime) indicates `GPL-3.0-or-later` for the *current* runtime package; [MSYS2 license guidance](https://www.msys2.org/license/) notes that the distribution has different licensing for its components. **Do not extrapolate current package license or revision to the exact 2020 DLL.**
+The upstream lrzsz-win32 source commit was dated **2020-03-01**, while its Windows Release ZIP asset was uploaded on **2023-12-03**. That ZIP contains `msys-2.0.dll`. [MSYS2's current package listing](https://packages.msys2.org/packages/msys2-runtime) indicates `GPL-3.0-or-later` for the *current* runtime package; [MSYS2 license guidance](https://www.msys2.org/license/) notes that the distribution has different licensing for its components. **Do not extrapolate current package license or revision to the exact DLL shipped in the 2023 asset.**
 
 Review procedure:
 
@@ -52,4 +52,4 @@ Review procedure:
 
 通过新增工作流，生成 Go Windows 生产依赖以及 npm 运行时/全量依赖的 CycloneDX SBOM，并自动输出**缺少许可证信息的待审核清单**，不会将其判定为已授权。
 
-未来的 Windows 发行包还会内置 `zmodem/BUNDLED_COMPONENTS.json`，记录所有内置 ZMODEM 文件的 SHA-256、大小及已知来源；Release 同时附一份清单。`msys-2.0.dll` 的精确版本、对应源码和授权义务仍待人工确认，不能将当前 MSYS2 包许可证直接套用到 2020 年的 DLL。
+未来的 Windows 发行包还会内置 `zmodem/BUNDLED_COMPONENTS.json`，记录所有内置 ZMODEM 文件的 SHA-256、大小及已知来源；Release 同时附一份清单。`msys-2.0.dll` 的精确版本、对应源码和授权义务仍待人工确认，不能将当前 MSYS2 包许可证直接套用到 2023 年上传的 DLL。
