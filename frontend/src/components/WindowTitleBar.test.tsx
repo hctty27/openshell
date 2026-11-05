@@ -20,6 +20,17 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+test("title bar displays the bundled OpenShell logo", () => {
+  const { container } = render(
+    <WindowTitleBar tabs={[]} onSettings={vi.fn()} onNotice={vi.fn()} />,
+  );
+
+  const logo = container.querySelector<HTMLImageElement>(".window-titlebar-brand img");
+  expect(logo?.getAttribute("src")).toBe("/app-icon.svg");
+  expect(logo?.getAttribute("alt")).toBe("");
+  expect(container.querySelector(".window-titlebar-brand svg")).toBeNull();
+});
+
 test("custom close button uses native Window.Close so Go can intercept WindowClosing", async () => {
   const onNotice = vi.fn();
   const { container } = render(
