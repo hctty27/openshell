@@ -7,6 +7,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"fmt"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -28,6 +31,17 @@ func (w *nativeTerminalCapturedInput) Write(p []byte) (int, error) {
 	default:
 	}
 	return len(p), nil
+}
+
+
+func nativeTerminalCompletionFromCommand(t *testing.T, command string, status int) []byte {
+	t.Helper()
+	pattern := regexp.MustCompile("OpenShellNativeZmodem;([0-9a-f]{32});")
+	matched := pattern.FindStringSubmatch(command)
+	if len(matched) != 2 {
+		t.Fatalf("remote command did not include a nonce-bound completion marker: %q", command)
+	}
+	return []byte(fmt.Sprintf("\x1b]777;OpenShellNativeZmodem;%s;%d\x07", matched[1], status))
 }
 
 func nativeTerminalNextInput(t *testing.T, capture *nativeTerminalCapturedInput) []byte {
@@ -65,12 +79,12 @@ func TestNativeZmodemInteractiveCoordinatorUploadHandoffAndRecovery(t *testing.T
 			return nil
 		},
 	}
-	proof := make(chan struct{})
 	done := make(chan error, 1)
-	go func() { done <- coordinator.run(context.Background(), "upload", file, "", proof) }()
+	go func() { done <- coordinator.run(context.Background(), "upload", file, "") }()
 
-	if got := string(nativeTerminalNextInput(t, capture)); got != "rz -q\r" {
-		t.Fatalf("unexpected explicit command %q", got)
+	remoteCommand := string(nativeTerminalNextInput(t, capture))
+	if !strings.Contains(remoteCommand, "{ rz -q;") {
+		t.Fatalf("unexpected explicit command %q", remoteCommand)
 	}
 	select {
 	case p := <-capture.ch:
@@ -99,7 +113,7 @@ func TestNativeZmodemInteractiveCoordinatorUploadHandoffAndRecovery(t *testing.T
 		t.Fatalf("restored terminal without verified remote boundary: %v", err)
 	case <-time.After(30*time.Millisecond):
 	}
-	close(proof)
+	if _, err := output.Write(append(nativeTerminalCompletionFromCommand(t, remoteCommand, 0), []byte("shell-ready")...)); err != nil { t.Fatal(err) }
 	select {
 	case err := <-done:
 		if err != nil { t.Fatal(err) }
@@ -108,7 +122,7 @@ func TestNativeZmodemInteractiveCoordinatorUploadHandoffAndRecovery(t *testing.T
 	}
 	if _, err := input.Write([]byte("normal")); err != nil { t.Fatal(err) }
 	if _, err := output.Write([]byte("prompt")); err != nil { t.Fatal(err) }
-	if got := legacy.String(); got != "shell>prompt" {
+	if got := legacy.String(); got != "shell>shell-readyprompt" {
 		t.Fatalf("legacy output not restored: %q", got)
 	}
 }
@@ -127,11 +141,11 @@ func TestNativeZmodemInteractiveCoordinatorDownloadPublishesAfterRemoteProof(t *
 			return os.WriteFile(filepath.Join(stage, "result.txt"), []byte("download"), 0600)
 		},
 	}
-	proof := make(chan struct{})
 	done := make(chan error, 1)
-	go func() { done <- coordinator.run(context.Background(), "download", dest, "a'b.txt", proof) }()
-	if got := string(nativeTerminalNextInput(t, capture)); got != "sz -q -- 'a'\\''b.txt'\r" {
-		t.Fatalf("unsafe or wrong remote shell command %q", got)
+	go func() { done <- coordinator.run(context.Background(), "download", dest, "a'b.txt") }()
+	remoteCommand := string(nativeTerminalNextInput(t, capture))
+	if !strings.Contains(remoteCommand, "sz -q -- 'a'\\''b.txt';") {
+		t.Fatalf("unsafe or wrong remote shell command %q", remoteCommand)
 	}
 	// Remote ZRQINIT denotes a download, not ZRINIT.
 	header := []byte("**\x18B000123456789ab")
@@ -141,7 +155,7 @@ func TestNativeZmodemInteractiveCoordinatorDownloadPublishesAfterRemoteProof(t *
 	if _, err := os.Stat(filepath.Join(dest, "result.txt")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("received file published before remote completion proof: %v", err)
 	}
-	close(proof)
+	if _, err := output.Write(append(nativeTerminalCompletionFromCommand(t, remoteCommand, 0), []byte("shell-ready")...)); err != nil { t.Fatal(err) }
 	select {
 	case err := <-done:
 		if err != nil { t.Fatal(err) }
@@ -170,7 +184,7 @@ func TestNativeZmodemInteractiveCoordinatorWrongDirectionFailsClosed(t *testing.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- coordinator.run(ctx, "upload", file, "", make(chan struct{})) }()
+	go func() { done <- coordinator.run(ctx, "upload", file, "") }()
 	_ = nativeTerminalNextInput(t, capture)
 	// ZRQINIT (download) must not be mistaken for upload's ZRINIT.
 	_, _ = output.Write([]byte("**\x18B000123456789ab"))
@@ -201,7 +215,7 @@ func TestNativeZmodemInteractiveCoordinatorCancelBeforeHeaderKeepsTerminalIsolat
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- coordinator.run(ctx, "upload", file, "", make(chan struct{})) }()
+	go func() { done <- coordinator.run(ctx, "upload", file, "") }()
 	_ = nativeTerminalNextInput(t, capture)
 	cancel()
 	select {
@@ -237,10 +251,10 @@ func TestNativeZmodemInteractiveCoordinatorValidationRejectsUnsafeCommands(t *te
 	output := newTerminalOutputGate(&legacy)
 	c := &nativeTerminalCoordinator{input: input, output: output,
 		runner: func(context.Context, string, string, io.ReadCloser, io.Writer) error { return nil }}
-	if err := c.run(context.Background(), "upload", "/does-not-exist", "", nil); err == nil {
-		t.Fatal("accepted missing completion proof")
+	if err := c.run(context.Background(), "upload", "/does-not-exist", ""); err == nil {
+		t.Fatal("accepted missing local file")
 	}
-	if err := c.run(nil, "upload", "/does-not-exist", "", make(chan struct{})); err == nil {
+	if err := c.run(nil, "upload", "/does-not-exist", ""); err == nil {
 		t.Fatal("accepted nil transfer context")
 	}
 	if legacy.Len() != 0 { t.Fatal("validation wrote to SSH terminal") }
@@ -262,9 +276,9 @@ func TestNativeZmodemInteractiveCoordinatorConcurrentRequestCannotStealLeases(t 
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- coordinator.run(ctx, "upload", file, "", make(chan struct{})) }()
+	go func() { done <- coordinator.run(ctx, "upload", file, "") }()
 	_ = nativeTerminalNextInput(t, capture)
-	if err := coordinator.run(context.Background(), "upload", file, "", make(chan struct{})); !errors.Is(err, errNativeTerminalInputBusy) {
+	if err := coordinator.run(context.Background(), "upload", file, ""); !errors.Is(err, errNativeTerminalInputBusy) {
 		t.Fatalf("overlapping native coordinator accepted: %v", err)
 	}
 	cancel()
@@ -293,7 +307,7 @@ func TestNativeZmodemInteractiveCoordinatorRequiresRemoteDrainProof(t *testing.T
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- coordinator.run(ctx, "upload", source, "", make(chan struct{})) }()
+	go func() { done <- coordinator.run(ctx, "upload", source, "") }()
 	_ = nativeTerminalNextInput(t, capture)
 	if _, err := output.Write(nativeZmodemHeaderTestStream()); err != nil { t.Fatal(err) }
 	select {
