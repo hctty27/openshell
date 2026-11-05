@@ -85,22 +85,22 @@ func TestNativeZmodemCrossOSInteractivePTY(t *testing.T) {
 	stage := path.Join(remoteHome, ".openshell-zmodem-cross-"+id)
 	if err := sftpClient.Mkdir(stage); err != nil { t.Fatal(err) }
 	var remoteFiles []string
-	// Register cleanup before manager.Close: the SSH client must stay open
-	// until all cleanup transfers have completed.
+	var manager *Manager
+	// Clean SFTP fixtures while the SSH client is still connected, then
+	// terminate the OpenShell interactive terminal and SSH transport.
 	t.Cleanup(func() {
 		for _, p := range remoteFiles { _ = sftpClient.Remove(p) }
 		_ = sftpClient.RemoveDirectory(stage)
 		_ = sftpClient.Close()
-		_ = client.Close()
+		if manager != nil { manager.Close() } else { _ = client.Close() }
 	})
 
 	ref := domain.ConnectionRef{TabID: "cross-os-pty", SessionID: "native-cross-os", Generation: 1}
-	manager := NewManager(keys{}, nil)
+	manager = NewManager(keys{}, nil)
 	manager.mu.Lock()
 	manager.connections[ref.TabID] = &connection{ref: ref, client: client, history: NewHistory(1024*1024)}
 	manager.generations[ref.TabID] = ref.Generation
 	manager.mu.Unlock()
-	t.Cleanup(manager.Close)
 	if err := manager.OpenTerminal(ref, 80, 24); err != nil { t.Fatal(err) }
 
 	root := t.TempDir()
@@ -194,4 +194,24 @@ func (c *nativeCrossOSDelayedConn) Write(p []byte) (int, error) {
 		time.Sleep(c.delay)
 	}
 	return total, nil
+}
+
+
+func TestNativeZmodemDelayedTCPStreamPreservesBytes(t *testing.T) {
+	left, right := net.Pipe()
+	defer left.Close()
+	defer right.Close()
+	delayed := &nativeCrossOSDelayedConn{Conn: left, delay: time.Millisecond}
+	payload := nativeLivePayload(64*1024+37)
+	done := make(chan error, 1)
+	go func() {
+		_, err := delayed.Write(payload)
+		done <- err
+	}()
+	received := make([]byte, len(payload))
+	if _, err := io.ReadFull(right, received); err != nil { t.Fatal(err) }
+	if err := <-done; err != nil { t.Fatal(err) }
+	if sha256.Sum256(received) != sha256.Sum256(payload) {
+		t.Fatal("delayed TCP stream lost bytes")
+	}
 }
