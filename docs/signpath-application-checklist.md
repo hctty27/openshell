@@ -17,7 +17,7 @@ Updated 2026-11-05. **This is a readiness checklist, not an application or appro
 - [ ] Verify reviewers' and approver's names/roles and that every contribution from outside the trusted committer set receives review.
 - [ ] Review [SignPath Foundation eligibility](https://signpath.org/terms), project reputation, maintenance and executable restrictions; obtain Foundation approval (not guaranteed).
 - [ ] Complete the [third-party review](third-party-review.md), especially `msys-2.0.dll` and full Go/npm dependency notices; confirm no prohibited proprietary bundled code.
-- [ ] Add an accessible **Code signing policy** and **Privacy policy** link on the separately hosted [OpenShell website](https://openshell.testnb.me/), and ensure release/download pages link to the policy. This website's source is not in the checked OpenShell repository.
+- [ ] Deploy [website policy links](website-policy-links.md) on the separately hosted [OpenShell website](https://openshell.testnb.me/), and verify the actual footer/download section displays **Code signing policy** and **Privacy policy** links. The website's source is not in this repository; publishing the snippet alone does not complete this step.
 - [ ] Confirm privacy accuracy for any website, analytics, new updater, or externally hosted features that may not be in the reviewed desktop repository.
 - [ ] Perform a native Windows installer, portable and upgrade acceptance test and preserve evidence.
 

@@ -19,8 +19,8 @@
 - `scripts/prepare_zmodem_windows.ps1` pins the lrzsz upstream release to `v0.12.21rc`, verifies the downloaded ZIP with SHA-256 `dace2db172b1b5a1e5998692760a75355b254e1826718d88bae7fa3e6d7363282246bc`, and bundles `lrzsz-win32-source.zip`, `COPYING-lrzsz.txt` and `THIRD_PARTY_NOTICES.txt`.
 - The source archive is pinned to commit `2e46d4258035cea45262244f59c34d0db4fae2a7`. The binary ZIP is downloaded from the upstream release, not rebuilt by OpenShell.
 - The `THIRD_PARTY_NOTICES.txt` links to the [MSYS2 runtime](https://github.com/msys2/msys2-runtime) but the script does not currently bundle an exact-version MSYS2 source archive or separate runtime license notices. Do not assume the lrzsz source archive covers the DLL's redistribution requirements.
-- The upstream [lrzsz-win32 v0.12.21rc release](https://github.com/trzsz/lrzsz-win32/releases/tag/v0.12.21rc) dates to 2020. The [current MSYS2 runtime listing](https://packages.msys2.org/packages/msys2-runtime) reports `GPL-3.0-or-later`, but that does **not** establish the exact old `msys-2.0.dll` revision or licensing. Identification is still pending.
-- Windows packaging now verifies required ZMODEM files and records their SHA-256 hashes in `zmodem/BUNDLED_COMPONENTS.json`; this inventory ships in future packages and can be attached independently to Releases. See [SBOM / component manifest](sbom.md).
+- The upstream [lrzsz-win32 v0.12.21rc release](https://github.com/trzsz/lrzsz-win32/releases/tag/v0.12.21rc) is based on a 2020-03-01 source commit, but its binary ZIP asset was uploaded on **2023-12-03**. A [Windows PR packaging run](https://github.com/hctty27/openshell/actions/runs/41977108930) verified the bundled `msys-2.0.dll` has PE `ProductVersion=3.4.9`, `FileVersion=3.4.9`, ProductName `MSYS2`, and SHA-256 `fb6136d849fb7a28a2d9aa7684394f6d20252942f129d2ea90ba709691a62bad`. This is evidence of the file and major runtime version, **not** a verified match to a specific MSYS2 source package or build revision. The [current MSYS2 runtime listing](https://packages.msys2.org/packages/msys2-runtime) reports `GPL-3.0-or-later`, but that does **not** establish the exact old `msys-2.0.dll` revision or licensing. Identification is still pending.
+- Windows packaging now verifies required ZMODEM files, records SHA-256 hashes and Windows PE version metadata for the runtime DLL in `zmodem/BUNDLED_COMPONENTS.json`; this inventory ships in future packages and can be attached independently to Releases. See [SBOM / component manifest](sbom.md).
 - `build/windows/installer/openshell.nsi` includes the entire verified ZMODEM helper directory in the installer; the portable ZIP also includes that directory.
 - Current SignPath workflow submits only the top-level `OpenShell.exe` and NSIS installer for signing. It does not submit upstream native helpers as separate signing requests.
 
@@ -28,7 +28,8 @@
 
 - [x] Add repeatable Windows Go-production and npm runtime/full dependency inventories as CI CycloneDX artifacts (see [SBOM generation](sbom.md)); these do **not** include bundled upstream ZMODEM binaries.
 - [ ] Review **all** identified Go/npm component licenses, exceptions and required notices; reconcile any missing metadata, transitive components and bundled binaries with the actual compiled release.
-- [ ] Confirm the precise MSYS2 runtime revision used in the upstream binary release. Record its license(s), source location, copyright and distribution requirements; add required notices/source-offer artifacts to both portable and installer packages as necessary.
+- [x] Record embedded MSYS2 runtime PE version (`3.4.9`) and SHA-256 from a reproducible Windows GitHub Actions packaging run.
+- [ ] Confirm the **exact historical MSYS2 packaging revision** and corresponding source archive matching the `3.4.9` runtime binary. Record its license(s), required notices and source distribution obligations; add required notices/source-offer artifacts to both portable and installer packages as necessary.
 - [ ] Reproduce and inspect both `v1.0.0` packages on Windows; inspect the actual file manifest rather than relying on source scripts only.
 - [ ] Confirm which third-party binaries are unsigned or already signed, and ensure OpenShell's Foundation certificate is not applied to them.
 - [ ] Ensure the first-party binaries have `OpenShell` product-name and matching version metadata and enforce those attributes through the SignPath configuration.
@@ -40,6 +41,8 @@
 - [lrzsz-win32 upstream repository](https://github.com/trzsz/lrzsz-win32)
 - [MSYS2 runtime source](https://github.com/msys2/msys2-runtime)
 - [MSYS2 runtime package metadata](https://github.com/msys2/MSYS2-packages/blob/master/msys2-runtime/PKGBUILD)
+- [Cygwin licensing, LGPL and linking exception](https://cygwin.com/licensing.html)
+- [Cygwin 3.4.9 release](https://github.com/cygwin/cygwin/releases/tag/cygwin-3.4.9) — potential upstream base, **not** proof that this MSYS2-patched binary was built from an identical tree
 
 ---
 

@@ -182,6 +182,7 @@ jobs:
         run: |
           python scripts/generate_zmodem_manifest.py --target build/bin/zmodem
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/record_zmodem_runtime.ps1 -TargetDir build/bin/zmodem
 
       - name: Validate OpenShell EXE icon
         shell: pwsh
