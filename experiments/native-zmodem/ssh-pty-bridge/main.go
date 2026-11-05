@@ -4,19 +4,16 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
+	sshclient "github.com/hctty27/openshell/internal/ssh"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -92,102 +89,7 @@ func dialSSH(opts options) (*ssh.Client, error) {
 }
 
 func bridge(ctx context.Context, client *ssh.Client, sidecar, direction, localPath, command string) error {
-	session, err := client.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.Close()
-
-	remoteIn, err := session.StdinPipe()
-	if err != nil {
-		return err
-	}
-	remoteOut, err := session.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	if err := session.RequestPty("dumb", 24, 80, ssh.TerminalModes{ssh.ECHO: 0}); err != nil {
-		return fmt.Errorf("request remote PTY: %w", err)
-	}
-
-	process := exec.CommandContext(ctx, sidecar, direction, localPath)
-	var sidecarLog bytes.Buffer
-	process.Stderr = &sidecarLog
-	localIn, err := process.StdinPipe()
-	if err != nil {
-		return err
-	}
-	localOut, err := process.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	if err := session.Start(command); err != nil {
-		return fmt.Errorf("start remote ZMODEM: %w", err)
-	}
-	if err := process.Start(); err != nil {
-		return fmt.Errorf("start native sidecar: %w", err)
-	}
-
-	// Exactly one reader owns each direction. Terminal rendering and the
-	// production trzsz filter are not involved in this experimental session.
-	copied := make(chan error, 2)
-	remoteOutputDone := make(chan struct{})
-	localOutputDone := make(chan struct{})
-	go func() {
-		defer close(remoteOutputDone)
-		_, copyErr := io.Copy(localIn, remoteOut)
-		_ = localIn.Close()
-		copied <- copyErr
-	}()
-	go func() {
-		defer close(localOutputDone)
-		_, copyErr := io.Copy(remoteIn, localOut)
-		_ = remoteIn.Close()
-		copied <- copyErr
-	}()
-
-	// Wait only after stdout has been fully drained. Both SSH Session.Wait
-	// and exec.Cmd.Wait may otherwise close pipes before io.Copy finishes.
-	localFinished := make(chan error, 1)
-	remoteFinished := make(chan error, 1)
-	go func() { <-localOutputDone; localFinished <- process.Wait() }()
-	go func() { <-remoteOutputDone; remoteFinished <- session.Wait() }()
-
-	var localErr, remoteErr error
-	for localFinished != nil || remoteFinished != nil {
-		select {
-		case <-ctx.Done():
-			_ = session.Close()
-			_ = process.Process.Kill()
-			return fmt.Errorf("SSH ZMODEM experiment cancelled or timed out: %w", ctx.Err())
-		case localErr = <-localFinished:
-			localFinished = nil
-			if localErr != nil {
-				_ = session.Close()
-				return fmt.Errorf("native ZMODEM sidecar failed: %w; stderr: %s", localErr, sidecarLog.String())
-			}
-		case remoteErr = <-remoteFinished:
-			remoteFinished = nil
-			if remoteErr != nil {
-				_ = session.Close()
-				_ = process.Process.Kill()
-				return fmt.Errorf("remote rz/sz failed: %w; sidecar stderr: %s", remoteErr, sidecarLog.String())
-			}
-		}
-	}
-	for range 2 {
-		select {
-		case copyErr := <-copied:
-			// Successful peers can close their pipes while the final protocol
-			// bytes are still being drained. Other copy failures are fatal.
-			if copyErr != nil && !errors.Is(copyErr, io.ErrClosedPipe) && !errors.Is(copyErr, os.ErrClosed) && !errors.Is(copyErr, syscall.EPIPE) {
-				return fmt.Errorf("SSH PTY copy failed: %w", copyErr)
-			}
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	return nil
+	return sshclient.RunNativeZmodemTransport(ctx, client, sidecar, direction, localPath, command)
 }
 
 func run(args []string) error {

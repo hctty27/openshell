@@ -54,6 +54,15 @@ jobs:
           $env:PYTHONIOENCODING = 'utf-8'
           python tests/interop_sidecar.py target/release/zmodem-sidecar.exe
           if ($LASTEXITCODE -ne 0) { throw "Native Windows ZMODEM pipe transfer failed" }
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Test experimental Go native ZMODEM manager on Windows
+        working-directory: .
+        shell: pwsh
+        run: go test -run '^TestNativeZmodem' ./internal/ssh
       - name: Preserve dependency graph for manual license review
         shell: pwsh
         run: |
