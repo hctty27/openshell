@@ -1,0 +1,99 @@
+name: Native ZMODEM Windows to Linux lab
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-zmodem-windows-linux-lab
+  cancel-in-progress: false
+
+jobs:
+  windows-linux-live:
+    name: Windows Rust + Go to real Linux OpenSSH PTY
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      ZMODEM_LAB_ADDRESS: ${{ secrets.NATIVE_ZMODEM_LAB_ADDRESS }}
+      ZMODEM_LAB_USER: ${{ secrets.NATIVE_ZMODEM_LAB_USER }}
+      ZMODEM_LAB_PRIVATE_KEY: ${{ secrets.NATIVE_ZMODEM_LAB_PRIVATE_KEY }}
+      ZMODEM_LAB_HOST_PUBLIC_KEY: ${{ secrets.NATIVE_ZMODEM_LAB_HOST_PUBLIC_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify explicit test-only Linux fixture configuration
+        shell: pwsh
+        run: |
+          foreach ($name in @('ZMODEM_LAB_ADDRESS', 'ZMODEM_LAB_USER', 'ZMODEM_LAB_PRIVATE_KEY', 'ZMODEM_LAB_HOST_PUBLIC_KEY')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Missing GitHub Actions secret for isolated native ZMODEM Linux lab: $name"
+            }
+          }
+          if ($env:ZMODEM_LAB_ADDRESS -notmatch '^[A-Za-z0-9.-]+:[0-9]{1,5}$') {
+            throw 'NATIVE_ZMODEM_LAB_ADDRESS must be a hostname:port or IPv4:port, not a shell command'
+          }
+          if ($env:ZMODEM_LAB_USER -notmatch '^[A-Za-z_][A-Za-z0-9_-]{0,31}$') {
+            throw 'NATIVE_ZMODEM_LAB_USER must be a dedicated non-root Linux test user'
+          }
+          if ($env:ZMODEM_LAB_USER -eq 'root') { throw 'Root login is not allowed in this lab' }
+      - name: Prepare Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Build native Windows Rust ZMODEM sidecar
+        shell: pwsh
+        working-directory: experiments/native-zmodem
+        run: |
+          cargo generate-lockfile
+          if ($LASTEXITCODE -ne 0) { throw 'Cargo lock generation failed' }
+          cargo test --locked --bin zmodem-sidecar
+          if ($LASTEXITCODE -ne 0) { throw 'Windows sidecar unit tests failed' }
+          cargo build --locked --release --bin zmodem-sidecar
+          if ($LASTEXITCODE -ne 0) { throw 'Windows sidecar build failed' }
+      - name: Materialize ephemeral SSH credentials in runner temporary directory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = Join-Path $env:RUNNER_TEMP 'native-zmodem-linux-lab'
+          [IO.Directory]::CreateDirectory($dir) | Out-Null
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+          $keyFile = Join-Path $dir 'client_ed25519'
+          $hostKeyFile = Join-Path $dir 'host_ed25519.pub'
+          $key = $env:ZMODEM_LAB_PRIVATE_KEY.Replace("`r`n", "`n").TrimEnd() + "`n"
+          $hostKey = $env:ZMODEM_LAB_HOST_PUBLIC_KEY.Trim() + "`n"
+          if (-not $key.StartsWith('-----BEGIN OPENSSH PRIVATE KEY-----')) {
+            throw 'Expected OpenSSH private key; do not use a password or a personal production key'
+          }
+          if ($hostKey -notmatch '^ssh-(ed25519|rsa) [A-Za-z0-9+/=]+') {
+            throw 'Expected an explicit Linux sshd public HOST key, not a known_hosts record'
+          }
+          [IO.File]::WriteAllText($keyFile, $key, $utf8)
+          [IO.File]::WriteAllText($hostKeyFile, $hostKey, $utf8)
+          "OPENSHELL_ZMODEM_CROSS_OS_PTY=1" >> $env:GITHUB_ENV
+          "OPENSHELL_ZMODEM_LIVE_SSH_ADDR=$env:ZMODEM_LAB_ADDRESS" >> $env:GITHUB_ENV
+          "OPENSHELL_ZMODEM_LIVE_SSH_USER=$env:ZMODEM_LAB_USER" >> $env:GITHUB_ENV
+          "OPENSHELL_ZMODEM_LIVE_SSH_KEY=$keyFile" >> $env:GITHUB_ENV
+          "OPENSHELL_ZMODEM_LIVE_SSH_HOSTKEY=$hostKeyFile" >> $env:GITHUB_ENV
+          "OPENSHELL_ZMODEM_LIVE_SIDECAR=$env:GITHUB_WORKSPACE\experiments\native-zmodem\target\release\zmodem-sidecar.exe" >> $env:GITHUB_ENV
+          "OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS=2" >> $env:GITHUB_ENV
+      - name: Windows Go + Rust to Linux real interactive SSH PTY and SFTP SHA-256
+        shell: pwsh
+        timeout-minutes: 18
+        run: |
+          go test -count=1 -timeout=16m -v ./internal/ssh -run '^TestNativeZmodemCrossOSInteractivePTY$'
+          if ($LASTEXITCODE -ne 0) { throw 'Windows -> Linux SSH PTY native transfer failed' }
+      - name: Windows to Linux real transfer fault-injection
+        shell: pwsh
+        timeout-minutes: 18
+        run: |
+          go test -count=1 -timeout=16m -v ./internal/ssh -run '^TestNativeZmodemLiveInterruptedInteractivePTY$'
+          if ($LASTEXITCODE -ne 0) { throw 'Windows -> Linux SSH PTY cancel/deadline/disconnect failed' }
+      - name: Remove temporary SSH credentials
+        if: always()
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'native-zmodem-linux-lab'
+          if (Test-Path $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
