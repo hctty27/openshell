@@ -203,6 +203,8 @@ jobs:
           project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
           signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
           artifact-configuration-slug: ${{ env.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          parameters: |
+            version: "${{ env.APP_VERSION }}"
           github-artifact-id: ${{ steps.upload-unsigned-exe.outputs.artifact-id }}
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: 3600
@@ -285,6 +287,8 @@ jobs:
           project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
           signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
           artifact-configuration-slug: ${{ env.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          parameters: |
+            version: "${{ env.APP_VERSION }}"
           github-artifact-id: ${{ steps.upload-unsigned-setup.outputs.artifact-id }}
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: 3600
@@ -337,6 +341,7 @@ jobs:
             exit 0
           }
           $notes = if ($env:SIGNPATH_ENABLED -eq 'true') { "Windows x64 安装版与便携版；已通过 SignPath 进行代码签名（Free code signing provided by SignPath.io, certificate by SignPath Foundation）。" } else { "Windows x64 安装版与便携版；未经代码签名。" }
+          $notes += "`n`nCode signing policy: https://github.com/hctty27/openshell/blob/main/CODE_SIGNING_POLICY.md`nPrivacy policy: https://github.com/hctty27/openshell/blob/main/PRIVACY.md"
           $releaseArgs = @(
             "release", "create", $tag,
             "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe",
