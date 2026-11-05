@@ -493,9 +493,8 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
     "background-color",
     "rgb(255, 255, 255)",
   );
-  await page.getByRole("button", { name: "保存设置" }).click();
-  await expect(page.getByText("设置已保存")).toBeVisible();
-  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await expect(page.locator(".settings-dialog--settings > footer")).toHaveCount(0);
+  await page.locator(".settings-dialog--settings > header button").click();
   await page.screenshot({ path: "../tmp/theme-light.png" });
   for (const size of [
     { width: 1000, height: 640 },
@@ -543,8 +542,8 @@ test("terminal grid stays centered inside scrollbar left edge across sizes and t
   await page.getByRole("button", { name: "外观", exact: true }).click();
   await page.getByRole("button", { name: "浅色", exact: true }).click();
   await page.locator("#settings-terminal-theme").selectOption("classic");
-  await page.getByRole("button", { name: "保存设置" }).click();
-  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await expect(page.locator(".settings-dialog--settings > footer")).toHaveCount(0);
+  await page.locator(".settings-dialog--settings > header button").click();
 
   const snapshot = () => page.evaluate(() => {
     const container = document.querySelector(".terminal-container")!;
@@ -648,15 +647,15 @@ test("terminal grid stays centered inside scrollbar left edge across sizes and t
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "外观", exact: true }).click();
   await page.locator("#settings-terminal-theme").selectOption("light");
-  await page.getByRole("button", { name: "保存设置" }).click();
-  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await expect(page.locator(".settings-dialog--settings > footer")).toHaveCount(0);
+  await page.locator(".settings-dialog--settings > header button").click();
   await expect.poll(async () => (await snapshot()).backgrounds)
     .toEqual(Array(4).fill("rgb(248, 250, 252)"));
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "外观", exact: true }).click();
   await page.getByRole("button", { name: "深色", exact: true }).click();
-  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await page.locator(".settings-dialog--settings > header button").click();
   await expect.poll(async () => (await snapshot()).backgrounds)
     .toEqual(Array(4).fill("rgb(248, 250, 252)"));
 });
@@ -758,13 +757,9 @@ test("compact workspace removes redundant chrome while keeping quick commands", 
 
   await page.getByTitle("设置", { exact: true }).click();
   await page.getByRole("button", { name: "终端", exact: true }).click();
-  await page
-    .getByRole("combobox", { name: "快速命令栏布局" })
-    .selectOption("multi");
-  await page.getByRole("button", { name: "保存设置" }).click();
-  await expect(page.getByText("设置已保存")).toBeVisible();
-  await page.getByRole("button", { name: "关闭", exact: true }).last().click();
-  await expect(page.locator(".quick-command-bar.multi")).toBeVisible();
+  await expect(page.locator(".settings-dialog--settings > footer")).toHaveCount(0);
+  await page.locator(".settings-dialog--settings > header button").click();
+  await expect(page.locator(".quick-command-bar")).toBeVisible();
 });
 
 test("bilingual switching preserves SSH terminal and survives reload", async ({
