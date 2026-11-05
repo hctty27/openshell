@@ -2,6 +2,7 @@ package sftp
 
 import (
     "bytes"
+    "context"
     "crypto/sha256"
     "encoding/hex"
     "io"
@@ -40,36 +41,95 @@ type RemoteDocument struct {
     Size int64 `json:"size"`
 }
 
-func loadDocument(c *pkg.Client, name string) (RemoteDocument, error) {
-    info, err := c.Lstat(name)
-    if err != nil { return RemoteDocument{}, err }
-    if !info.Mode().IsRegular() { return RemoteDocument{}, apperror.New("sftpAdvancedOnlyRegularTextFilesCanBeEdited",nil) }
-    if info.Size() > maxEditSize { return RemoteDocument{}, apperror.New("sftpTextEditorLimit",map[string]any{"limit":maxEditSize}) }
-    f, err := c.Open(name)
-    if err != nil { return RemoteDocument{}, err }
-    defer f.Close()
-    var content []byte
-    if info.Size() <= 32*1024 {
-        // Small files need only a single read; avoid WriteTo's extra Stat.
-        content, err = io.ReadAll(io.LimitReader(f,maxEditSize+1))
-    } else {
-        writer := &limitedDocumentWriter{}
-        _, err = f.WriteTo(writer)
-        content = writer.Bytes()
-    }
-    if err != nil { return RemoteDocument{}, err }
-    if int64(len(content)) > maxEditSize { return RemoteDocument{}, apperror.New("sftpAdvancedFileExceedsTextEditorLimit",nil) }
-    if !utf8.Valid(content) || strings.IndexByte(string(content),0) >= 0 { return RemoteDocument{}, apperror.New("sftpAdvancedNotAUTF8TextFile",nil) }
-    digest := sha256.Sum256(content)
-    return RemoteDocument{Path:name,Content:string(content),Revision:hex.EncodeToString(digest[:]),Size:int64(len(content))},nil
+type documentReader struct {
+    ctx context.Context
+    source io.Reader
 }
 
-func (m *Manager) ReadRemoteText(ref domain.ConnectionRef, name string) (RemoteDocument,error) {
-    if err:=validate("remote",name);err!=nil {return RemoteDocument{},err}
-    c,release,err:=m.borrowRemote(ref)
-    if err!=nil{return RemoteDocument{},err}
+func (r documentReader) Read(p []byte) (int, error) {
+    if err := r.ctx.Err(); err != nil { return 0, err }
+    return r.source.Read(p)
+}
+
+type documentWriter struct {
+    ctx context.Context
+    target io.Writer
+}
+
+func (w documentWriter) Write(p []byte) (int, error) {
+    if err := w.ctx.Err(); err != nil { return 0, err }
+    return w.target.Write(p)
+}
+
+func recordReadStage(record func(string, time.Duration), stage string, started time.Time) {
+    if record != nil { record(stage, time.Since(started)) }
+}
+
+func loadDocument(c *pkg.Client, name string) (RemoteDocument, error) {
+    return loadDocumentContext(context.Background(), c, name, nil)
+}
+
+func loadDocumentContext(ctx context.Context, c *pkg.Client, name string, record func(string, time.Duration)) (RemoteDocument, error) {
+    if err := ctx.Err(); err != nil { return RemoteDocument{}, err }
+    started := time.Now()
+    info, err := c.Lstat(name)
+    recordReadStage(record, "stat", started)
+    if err != nil { return RemoteDocument{}, err }
+    if !info.Mode().IsRegular() { return RemoteDocument{}, apperror.New("sftpAdvancedOnlyRegularTextFilesCanBeEdited", nil) }
+    if info.Size() > maxEditSize { return RemoteDocument{}, apperror.New("sftpTextEditorLimit", map[string]any{"limit": maxEditSize}) }
+    if err := ctx.Err(); err != nil { return RemoteDocument{}, err }
+
+    started = time.Now()
+    f, err := c.Open(name)
+    recordReadStage(record, "open", started)
+    if err != nil { return RemoteDocument{}, err }
+    defer func() {
+        started := time.Now()
+        _ = f.Close()
+        recordReadStage(record, "close", started)
+    }()
+
+    if err := ctx.Err(); err != nil { return RemoteDocument{}, err }
+    started = time.Now()
+    var content []byte
+    if info.Size() <= 32*1024 {
+        // ReadAt requests the known file size plus one byte in a single small-file read.
+        // If the file has grown since Lstat, fall back to a bounded full read.
+        content = make([]byte, int(info.Size())+1)
+        n, readErr := f.ReadAt(content, 0)
+        if readErr != nil && readErr != io.EOF { err = readErr } else if n == len(content) {
+            content, err = io.ReadAll(io.LimitReader(documentReader{ctx: ctx, source: f}, maxEditSize+1))
+        } else {
+            content = content[:n]
+        }
+    } else {
+        // Preserve pipelined SFTP reads for larger text files on high-latency links.
+        writer := &limitedDocumentWriter{}
+        _, err = f.WriteTo(documentWriter{ctx: ctx, target: writer})
+        content = writer.Bytes()
+    }
+    recordReadStage(record, "read", started)
+    if err != nil { return RemoteDocument{}, err }
+    if err := ctx.Err(); err != nil { return RemoteDocument{}, err }
+    if int64(len(content)) > maxEditSize { return RemoteDocument{}, apperror.New("sftpAdvancedFileExceedsTextEditorLimit", nil) }
+    if !utf8.Valid(content) || strings.IndexByte(string(content), 0) >= 0 { return RemoteDocument{}, apperror.New("sftpAdvancedNotAUTF8TextFile", nil) }
+    digest := sha256.Sum256(content)
+    return RemoteDocument{Path: name, Content: string(content), Revision: hex.EncodeToString(digest[:]), Size: int64(len(content))}, nil
+}
+
+func (m *Manager) ReadRemoteText(ref domain.ConnectionRef, name string) (RemoteDocument, error) {
+    return m.ReadRemoteTextContext(context.Background(), ref, name, nil)
+}
+
+func (m *Manager) ReadRemoteTextContext(ctx context.Context, ref domain.ConnectionRef, name string, record func(string, time.Duration)) (RemoteDocument, error) {
+    if err := validate("remote", name); err != nil { return RemoteDocument{}, err }
+    if err := ctx.Err(); err != nil { return RemoteDocument{}, err }
+    started := time.Now()
+    c, release, err := m.borrowRemote(ref)
+    recordReadStage(record, "pool", started)
+    if err != nil { return RemoteDocument{}, err }
     defer release()
-    return loadDocument(c,name)
+    return loadDocumentContext(ctx, c, name, record)
 }
 
 func (m *Manager) SaveRemoteText(ref domain.ConnectionRef, name, expectedRevision, content string) (RemoteDocument,error) {
