@@ -177,6 +177,11 @@ jobs:
       - name: Verify ZMODEM console-free launchers
         shell: pwsh
         run: ./scripts/verify_zmodem_windows.ps1
+      - name: Record bundled third-party file hashes and provenance
+        shell: pwsh
+        run: |
+          python scripts/generate_zmodem_manifest.py --target build/bin/zmodem
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Validate OpenShell EXE icon
         shell: pwsh
@@ -262,6 +267,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path $setup)) { throw "Installer was not generated" }
 
+      - name: Export bundled third-party manifest
+        shell: pwsh
+        run: |
+          Copy-Item "build/bin/zmodem/BUNDLED_COMPONENTS.json" "dist/OpenShell-v$env:APP_VERSION-windows-x64-zmodem-manifest.json" -Force
+
       - name: Validate NSIS installer icon
         shell: pwsh
         run: |
@@ -313,6 +323,7 @@ jobs:
           path: |
             dist/*.zip
             dist/*.exe
+            dist/*.json
           if-no-files-found: error
           retention-days: 7
 
@@ -346,6 +357,7 @@ jobs:
             "release", "create", $tag,
             "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe",
             "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip",
+            "dist/OpenShell-v$env:APP_VERSION-windows-x64-zmodem-manifest.json",
             "--repo", $env:GITHUB_REPOSITORY,
             "--title", "OpenShell $tag",
             "--generate-notes",

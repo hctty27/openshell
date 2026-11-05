@@ -9,6 +9,7 @@ Updated 2026-11-05. **This is a readiness checklist, not an application or appro
 - [x] Document the current unsigned status accurately and list signing roles, their GitHub member account, manual approval rule, approved artifact scope and user-initiated network transfers.
 - [x] Record actual bundled ZMODEM artifacts, pinned upstream SHA-256 and outstanding third-party license checks in [third-party review](third-party-review.md).
 - [x] Existing workflow has conditional SignPath request code and Authenticode validity checks; unsigned releases continue working without an API token.
+- [x] Automated [CycloneDX dependency SBOM and ZMODEM binary hash manifest](sbom.md); license metadata gaps remain visible and do not count as clearance.
 
 ## Maintainer verification required before applying
 

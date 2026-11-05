@@ -12,19 +12,22 @@
 | `zmodem/native/rz.exe`, `zmodem/native/sz.exe` | [trzsz/lrzsz-win32](https://github.com/trzsz/lrzsz-win32), release `v0.12.21rc` | Third-party GPL-2.0 tools, bundled unchanged; **not signed with our certificate** | Verify bundled source archive / COPYING match the actual release and redistribution obligations |
 | `zmodem/native/msys-2.0.dll` | Included in upstream lrzsz Windows release; derived from MSYS2 runtime | Upstream runtime DLL; **not signed with our certificate** | **Open item:** identify exact DLL build/version, relevant licenses, required notices and corresponding source availability |
 | Microsoft Edge WebView2 Runtime / Windows ConPTY | Windows components required/used at runtime, not bundled by this release workflow | External/platform dependencies | Confirm treatment under SignPath's system-library rules if questioned |
-| Go modules and npm packages | `go.mod`, `go.sum`, `frontend/package-lock.json` | Source dependencies used to create the app | **Open item:** generate complete license/SBOM inventory for exact locked versions and check attribution/re-distribution requirements |
+| Go modules and npm packages | `go.mod`, `go.sum`, `frontend/package-lock.json` | Source dependencies used to create the app | **Automated:** CycloneDX inventories on CI; **open:** verify all detected license terms, source and attribution obligations (see [SBOM](sbom.md)) |
 
 ## Evidence already in the repository
 
 - `scripts/prepare_zmodem_windows.ps1` pins the lrzsz upstream release to `v0.12.21rc`, verifies the downloaded ZIP with SHA-256 `dace2db172b1b5a1e5998692760a75355b254e1826718d88bae7fa3e6d7363282246bc`, and bundles `lrzsz-win32-source.zip`, `COPYING-lrzsz.txt` and `THIRD_PARTY_NOTICES.txt`.
 - The source archive is pinned to commit `2e46d4258035cea45262244f59c34d0db4fae2a7`. The binary ZIP is downloaded from the upstream release, not rebuilt by OpenShell.
 - The `THIRD_PARTY_NOTICES.txt` links to the [MSYS2 runtime](https://github.com/msys2/msys2-runtime) but the script does not currently bundle an exact-version MSYS2 source archive or separate runtime license notices. Do not assume the lrzsz source archive covers the DLL's redistribution requirements.
+- The upstream [lrzsz-win32 v0.12.21rc release](https://github.com/trzsz/lrzsz-win32/releases/tag/v0.12.21rc) dates to 2020. The [current MSYS2 runtime listing](https://packages.msys2.org/packages/msys2-runtime) reports `GPL-3.0-or-later`, but that does **not** establish the exact old `msys-2.0.dll` revision or licensing. Identification is still pending.
+- Windows packaging now verifies required ZMODEM files and records their SHA-256 hashes in `zmodem/BUNDLED_COMPONENTS.json`; this inventory ships in future packages and can be attached independently to Releases. See [SBOM / component manifest](sbom.md).
 - `build/windows/installer/openshell.nsi` includes the entire verified ZMODEM helper directory in the installer; the portable ZIP also includes that directory.
 - Current SignPath workflow submits only the top-level `OpenShell.exe` and NSIS installer for signing. It does not submit upstream native helpers as separate signing requests.
 
 ## Checklist before claiming comprehensive compliance
 
-- [ ] Inventory **all** effective locked Go and npm dependencies (including transitive and bundled binaries); archive license identities and notice obligations, plus any exceptions.
+- [x] Add repeatable Windows Go-production and npm runtime/full dependency inventories as CI CycloneDX artifacts (see [SBOM generation](sbom.md)); these do **not** include bundled upstream ZMODEM binaries.
+- [ ] Review **all** identified Go/npm component licenses, exceptions and required notices; reconcile any missing metadata, transitive components and bundled binaries with the actual compiled release.
 - [ ] Confirm the precise MSYS2 runtime revision used in the upstream binary release. Record its license(s), source location, copyright and distribution requirements; add required notices/source-offer artifacts to both portable and installer packages as necessary.
 - [ ] Reproduce and inspect both `v1.0.0` packages on Windows; inspect the actual file manifest rather than relying on source scripts only.
 - [ ] Confirm which third-party binaries are unsigned or already signed, and ensure OpenShell's Foundation certificate is not applied to them.
