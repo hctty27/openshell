@@ -1,0 +1,55 @@
+# OpenShell SBOM & third-party verification (Windows x64)
+
+> **Status: automated inventory, NOT final license clearance.** SBOM and hashes help trace components but cannot independently prove a binary's license, source equivalence, or SignPath eligibility.
+
+## Automated inventories
+
+GitHub Actions workflow: [Generate third-party SBOM](../.github/workflows/sbom.yml).
+
+| File in `openshell-sbom` Actions artifact | Coverage |
+| --- | --- |
+| `go-windows-amd64.cdx.json` | Go application modules under Windows amd64 production build constraints; CycloneDX via pinned `cyclonedx-gomod` v1.12.0 |
+| `frontend-runtime.cdx.json` | Installed npm production dependency graph via Node/npm's `npm sbom --omit=dev` |
+| `frontend-all.cdx.json` | Full installed npm graph, including build and development dependencies |
+| `license-review.json` | Count of components lacking explicit or evidence-only license metadata, with names, versions and package URLs |
+
+- These files are **workflow artifacts**, retained for 30 days; they are not automatically published as long-term GitHub Release assets.
+- The Go SBOM reflects cross-platform module resolution for `GOOS=windows`, `GOARCH=amd64`, `CGO_ENABLED=0`, `GOFLAGS=-tags=production`. It does not independently attest to a compiled EXE's bytes, nor to the upstream ZMODEM helpers.
+- Tool-detected license names are candidates for review rather than completed legal determinations. Components with missing license metadata are left visible in `license-review.json`, not silently approved.
+- To reproduce, run the workflow manually or execute its pinned Go CLI and the npm commands with the project's current locked dependencies.
+
+## Bundled ZMODEM components
+
+The Windows release workflow already pins the [lrzsz-win32](https://github.com/trzsz/lrzsz-win32/releases/tag/v0.12.21rc) source commit and archive checksum and verifies the downloaded ZIP. It now also runs `scripts/generate_zmodem_manifest.py`, which:
+
+1. Ensures the `rz.exe` and `sz.exe` OpenShell launchers, upstream native `rz.exe`/`sz.exe`, `msys-2.0.dll`, GPL copying text, upstream source ZIP and notices are present and nonempty.
+2. Checks the included GPL v2 text and ensures the notices match the pinned upstream release, source commit and binary archive checksum from the packaging script.
+3. Records SHA-256, file size and declared origin for each component in `zmodem/BUNDLED_COMPONENTS.json`.
+4. Includes this JSON inside **both** the next portable ZIP and NSIS installer. A copy is also attached to future GitHub Releases as `OpenShell-vX.Y.Z-windows-x64-zmodem-manifest.json`.
+
+**The manifest records what was packaged, not evidence that the DLL has an identifiable GPL source revision.** OpenShell does not apply its own SignPath Foundation certificate to upstream native ZMODEM binaries or DLLs.
+
+## Open MSYS2 runtime issue
+
+The upstream lrzsz-win32 Windows release was originally created in **2020** and contains `msys-2.0.dll`. [MSYS2's current package listing](https://packages.msys2.org/packages/msys2-runtime) indicates `GPL-3.0-or-later` for the *current* runtime package; [MSYS2 license guidance](https://www.msys2.org/license/) notes that the distribution has different licensing for its components. **Do not extrapolate current package license or revision to the exact 2020 DLL.**
+
+Review procedure:
+
+1. Download the exact pinned ZIP and compare its SHA-256 to the existing preparation script's pinned value. Extract the DLL and record its SHA-256 and PE file version/embedded build information if available.
+2. Find the matching historical MSYS2 runtime binary package, and compare the DLL SHA-256 or another independently reproducible version identifier. A similar filename alone is insufficient.
+3. Fetch corresponding historical source/patch package and validate its license requirements, copyright, notice text and source distribution obligations.
+4. If the historical DLL cannot be attributed, **do not claim clearance**. Consider switching to a reproducible upstream build with pinned runtime/source and correct notices, or removing prebundled helpers until resolved.
+5. Confirm the full Windows installer and portable ZIP retain all necessary third-party notices, sources and manifests. Independently inspect actual final packages before filing the SignPath application.
+
+## Security and change control
+
+- A successful SBOM workflow proves the parsers can read the generated graphs, not that all license terms have been met.
+- Any new upstream binary or DLL must update preparation-script origin/pin, corresponding sources, notices, and acceptance checks.
+- Do not upload API tokens, private SSH keys, or user diagnostic ZIP files as SBOM artifacts.
+- Original `v1.0.0` files are unaffected by these changes. The manifest and attached SBOM process apply only to builds produced after the changes are merged.
+
+## 中文摘要
+
+通过新增工作流，生成 Go Windows 生产依赖以及 npm 运行时/全量依赖的 CycloneDX SBOM，并自动输出**缺少许可证信息的待审核清单**，不会将其判定为已授权。
+
+未来的 Windows 发行包还会内置 `zmodem/BUNDLED_COMPONENTS.json`，记录所有内置 ZMODEM 文件的 SHA-256、大小及已知来源；Release 同时附一份清单。`msys-2.0.dll` 的精确版本、对应源码和授权义务仍待人工确认，不能将当前 MSYS2 包许可证直接套用到 2020 年的 DLL。
