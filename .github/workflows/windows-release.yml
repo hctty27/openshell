@@ -359,13 +359,7 @@ jobs:
           $releases = @(gh release list --repo $env:GITHUB_REPOSITORY --limit 1000 --exclude-drafts --json tagName,publishedAt | ConvertFrom-Json | Sort-Object publishedAt -Descending)
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           # Preserve stable major milestones such as v1.0.0 and v2.0.0.
-          $older = @($releases | Select-Object -Skip 3 | Where-Object { $_.tagName -notmatch '^v[1-9]\d*\.0\.0
-          foreach ($release in $older) {
-            Write-Host "Deleting old Release $($release.tagName), keeping its Git tag."
-            gh release delete $release.tagName --repo $env:GITHUB_REPOSITORY --yes
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
- })
+          $older = @($releases | Select-Object -Skip 3 | Where-Object { $_.tagName -notmatch '^v[1-9]\d*\.0\.0$' })
           foreach ($release in $older) {
             Write-Host "Deleting old Release $($release.tagName), keeping its Git tag."
             gh release delete $release.tagName --repo $env:GITHUB_REPOSITORY --yes
