@@ -248,6 +248,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 			current.stdin = nil
 			current.filter = nil
 			current.writer = nil
+			current.outputGate = nil
 		}
 		m.mu.Unlock()
 		return err
@@ -288,8 +289,12 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 			return true
 		},
 	}
-	session.Stdout, session.Stderr = observedOutput, observedOutput
+	gate := newTerminalOutputGate(observedOutput)
+	// The existing trzsz filter remains the sole consumer until an explicit
+	// native lease is acquired; raw protocol bytes never bypass this gate.
+	session.Stdout, session.Stderr = gate, gate
 	if err = session.Shell(); err != nil {
+		gate.close()
 		filter.Close()
 		_ = filterInput.Close()
 		_ = remoteOutput.Close()
@@ -299,6 +304,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	m.mu.Lock()
 	if current := m.connections[ref.TabID]; current != connection || current.ref != ref {
 		m.mu.Unlock()
+		gate.close()
 		filter.Close()
 		_ = filterInput.Close()
 		_ = remoteOutput.Close()
@@ -308,10 +314,12 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	connection.stdin = filterInput
 	connection.filter = filter
 	connection.writer = writer
+	connection.outputGate = gate
 	m.mu.Unlock()
 	go func() {
 		err := session.Wait()
 		_ = err
+		gate.close()
 		filter.Close()
 		_ = filterInput.Close()
 		_ = remoteOutput.Close()

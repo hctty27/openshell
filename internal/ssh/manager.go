@@ -47,6 +47,7 @@ type connection struct {
 	stdinMu sync.Mutex
 	filter   interface { Close(); SetTerminalColumns(int32); IsTransferringFiles() bool; StopTransferringFiles(bool) }
 	writer   *terminalWriter
+	outputGate *terminalOutputGate
 	aiController *AITerminalLease
 	readiness terminalShellReadiness
 	serverVersion string
