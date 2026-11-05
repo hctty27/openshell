@@ -63,6 +63,24 @@ jobs:
         working-directory: .
         shell: pwsh
         run: go test -run '^TestNativeZmodem' ./internal/ssh
+      - name: Prepare verified Windows lrzsz interoperability peer (test-only)
+        working-directory: .
+        shell: pwsh
+        run: |
+          $peerRoot = Join-Path $env:RUNNER_TEMP "native-zmodem-lrzsz-peer"
+          ./scripts/prepare_zmodem_windows.ps1 -TargetDir $peerRoot
+          if ($LASTEXITCODE -ne 0) { throw "Unable to prepare verified lrzsz-win32 test peer" }
+          "OPENSHELL_ZMODEM_LRZSZ_NATIVE_DIR=$(Join-Path $peerRoot 'native')" >> $env:GITHUB_ENV
+      - name: Windows native Rust vs real lrzsz-win32 over SSH with PTY request
+        working-directory: .
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          $env:OPENSHELL_ZMODEM_WINDOWS_E2E = "1"
+          $env:OPENSHELL_ZMODEM_SIDECAR_PATH = (Resolve-Path "experiments/native-zmodem/target/release/zmodem-sidecar.exe").Path
+          $env:PYTHONIOENCODING = "utf-8"
+          go test -count=1 -timeout=7m -v ./internal/ssh -run '^TestWindowsNativeZmodemSSHInterop$'
+          if ($LASTEXITCODE -ne 0) { throw "Windows Go+Rust native SSH ZMODEM interop failed" }
       - name: Preserve dependency graph for manual license review
         shell: pwsh
         run: |
