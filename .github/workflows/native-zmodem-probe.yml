@@ -60,3 +60,26 @@ jobs:
             experiments/native-zmodem/dependency-tree.txt
           retention-days: 14
           if-no-files-found: error
+
+  linux-lrzsz-interop:
+    name: Linux lrzsz ↔ native Rust protocol interop
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: experiments/native-zmodem
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install real Linux lrzsz
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lrzsz
+          rz --version
+          sz --version
+      - name: Compile isolated Rust protocol sidecar
+        run: |
+          cargo generate-lockfile
+          cargo test --locked
+          cargo build --locked --release --bin zmodem-sidecar
+      - name: Verify bidirectional real lrzsz interoperability
+        run: python3 tests/interop_lrzsz.py target/release/zmodem-sidecar
