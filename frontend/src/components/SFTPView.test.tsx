@@ -18,6 +18,8 @@ vi.mock("../bridge", () => ({
     SFTPTransfers: vi.fn(async () => []),
     SaveTransferLocalDir: vi.fn(async () => {}),
     SFTPReadRemoteText: vi.fn(),
+    SFTPReadRemoteTextRequest: vi.fn(),
+    SFTPCancelReadRemoteText: vi.fn(async () => {}),
     SFTPSaveRemoteText: vi.fn(),
     SFTPList: vi.fn(async () => []),
     SFTPOperate: vi.fn(async () => {}),
@@ -365,7 +367,7 @@ test("saving a remote file does not discard edits made during the upload", async
   };
   vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
     side === "remote" ? [file("config.yaml", original.path)] : []);
-  vi.mocked(api.SFTPReadRemoteText).mockResolvedValue(original);
+  vi.mocked(api.SFTPReadRemoteTextRequest).mockResolvedValue(original);
   let finishSave: (document: SFTPDocument) => void = () => {};
   vi.mocked(api.SFTPSaveRemoteText).mockImplementation(() =>
     new Promise(resolve => { finishSave = resolve; }));
@@ -388,7 +390,7 @@ test("remote SFTP editor uses a native modal and requires confirmation to discar
   };
   vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
     side === "remote" ? [file("config.yaml", source.path)] : []);
-  vi.mocked(api.SFTPReadRemoteText).mockResolvedValue(source);
+  vi.mocked(api.SFTPReadRemoteTextRequest).mockResolvedValue(source);
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
 
   fireEvent.doubleClick((await screen.findByText("config.yaml")).closest('[role="listitem"]')!);
@@ -417,19 +419,58 @@ test("remote editor opens immediately and ignores a cancelled read", async () =>
   vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
     side === "remote" ? [file("config.yaml", source.path)] : []);
   let finishRead: (document: SFTPDocument) => void = () => {};
-  vi.mocked(api.SFTPReadRemoteText).mockImplementation(() =>
+  vi.mocked(api.SFTPReadRemoteTextRequest).mockImplementation(() =>
     new Promise(resolve => { finishRead = resolve; }));
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
 
   const row = (await screen.findByText("config.yaml")).closest('[role="listitem"]')!;
   fireEvent.doubleClick(row);
   fireEvent.doubleClick(row);
-  expect(api.SFTPReadRemoteText).toHaveBeenCalledTimes(1);
+  expect(api.SFTPReadRemoteTextRequest).toHaveBeenCalledTimes(1);
   const modal = screen.getByRole("dialog", { name: t("sftp:editText") });
-  expect(within(modal).getByText(t("sftp:loading"))).toBeTruthy();
+  expect(within(modal).getByText(t("sftp:editorReading"))).toBeTruthy();
+  expect(within(modal).getByText("/root/config.yaml")).toBeTruthy();
 
-  fireEvent(modal, new Event("cancel", { cancelable: true }));
+  fireEvent.click(within(modal).getByRole("button", { name: t("common:close") }));
   await waitFor(() => expect(document.querySelector(".sftp-editor-dialog")).toBeNull());
+  expect(api.SFTPCancelReadRemoteText).toHaveBeenCalledWith(expect.stringMatching(/^sftp-read-/));
   await act(async () => finishRead(source));
   expect(document.querySelector(".sftp-editor-dialog")).toBeNull();
+});
+
+test("SFTP editor loading can be dismissed by Escape without opening a late result", async () => {
+  const source: SFTPDocument = { path: "/root/config.yaml", content: "original", revision: "initial", size: 8 };
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
+    side === "remote" ? [file("config.yaml", source.path)] : []);
+  let finishRead: (document: SFTPDocument) => void = () => {};
+  vi.mocked(api.SFTPReadRemoteTextRequest).mockImplementation(() =>
+    new Promise(resolve => { finishRead = resolve; }));
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+
+  fireEvent.doubleClick((await screen.findByText("config.yaml")).closest('[role="listitem"]')!);
+  const modal = screen.getByRole("dialog", { name: t("sftp:editText") });
+  expect(within(modal).getByRole("button", { name: t("common:cancel") })).toBeTruthy();
+  fireEvent(modal, new Event("cancel", { cancelable: true }));
+  await waitFor(() => expect(document.querySelector(".sftp-editor-dialog")).toBeNull());
+  expect(api.SFTPCancelReadRemoteText).toHaveBeenCalledTimes(1);
+  await act(async () => finishRead(source));
+  expect(document.querySelector(".sftp-editor-dialog")).toBeNull();
+});
+
+test("SFTP editor shows a retry option when a remote read fails", async () => {
+  const source: SFTPDocument = { path: "/root/config.yaml", content: "original", revision: "initial", size: 8 };
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
+    side === "remote" ? [file("config.yaml", source.path)] : []);
+  vi.mocked(api.SFTPReadRemoteTextRequest)
+    .mockRejectedValueOnce(new Error("network unavailable"))
+    .mockResolvedValueOnce(source);
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+
+  fireEvent.doubleClick((await screen.findByText("config.yaml")).closest('[role="listitem"]')!);
+  const modal = screen.getByRole("dialog", { name: t("sftp:editText") });
+  expect(await within(modal).findByText(t("sftp:editorLoadFailed"))).toBeTruthy();
+  expect(within(modal).getByText(/network unavailable/)).toBeTruthy();
+  fireEvent.click(within(modal).getByRole("button", { name: t("sftp:editorRetry") }));
+  expect(await screen.findByTestId("sftp-edit-draft")).toBeTruthy();
+  expect(api.SFTPReadRemoteTextRequest).toHaveBeenCalledTimes(2);
 });
