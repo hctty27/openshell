@@ -63,7 +63,7 @@ def validate():
 
     for key in parser.translations | parser.alt_translations:
         # Both dictionaries are explicit JavaScript object literals.
-        matches = re.findall(rf"(?:^|[,{])\s*{re.escape(key)}\s*:", js, flags=re.MULTILINE)
+        matches = re.findall(r"(?:^|[,{])\s*" + re.escape(key) + r"\s*:", js, flags=re.MULTILINE)
         assert len(matches) == 2, f"Missing bilingual translation: {key}"
 
     for url, rel in parser.external_links:
