@@ -78,6 +78,18 @@ func (s *nativeTerminalInboundSink) Write(p []byte) (int, error) {
 	s.mu.Unlock()
 	n, err := s.pipe.Write(p)
 	if err != nil {
+		s.mu.Lock()
+		finished := s.finished
+		s.mu.Unlock()
+		// The Rust sidecar may finish immediately after it consumes the
+		// final control frame, while the SSH stdout goroutine still holds
+		// one in-flight pipe.Write. Closing that dedicated reader to clean
+		// up must not turn a successful transfer into a fatal SSH writer
+		// error. The output gate continues to own subsequent bytes; none
+		// are allowed to fall back into the visible terminal.
+		if finished && errors.Is(err, io.ErrClosedPipe) {
+			return len(p), nil
+		}
 		select {
 		case s.fail <- err:
 		default:
