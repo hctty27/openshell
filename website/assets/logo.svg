@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="OpenShell">
+  <rect x="54" y="54" width="916" height="916" rx="196" fill="#09234D"/>
+  <path d="M676 300 H317 Q240 300 240 377 V722 Q240 799 317 799 H724 Q801 799 801 722 V523" fill="none" stroke="#F9FBFE" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M359 485 L444 555 L359 625" fill="none" stroke="#F9FBFE" stroke-width="63" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M523 649 H636" fill="none" stroke="#F9FBFE" stroke-width="63" stroke-linecap="round"/>
+  <path d="M814 242 C826 307 865 346 931 358 C865 370 826 409 814 474 C802 409 763 370 697 358 C763 346 802 307 814 242 Z" fill="#33DBC4"/>
+</svg>
