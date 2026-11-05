@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import AIDropdownSurface from "./AIDropdownSurface";
-import { Check, ChevronDown, Cpu } from "lucide-react";
+import { Check, ChevronDown, Cpu, Plus } from "lucide-react";
 import type { AIProvider } from "../types";
 import { t } from "../i18n";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ interface Props {
   providerID: string;
   modelID: string;
   disabled?: boolean;
+  onConfigure?(): void;
   onChange(providerID: string, modelID: string): void;
 }
 
@@ -20,11 +21,12 @@ type ModelOption = {
   modelName: string;
 };
 
-export default function AIModelPicker({ providers, providerID, modelID, disabled, onChange }: Props) {
+export default function AIModelPicker({ providers, providerID, modelID, disabled, onConfigure, onChange }: Props) {
   useTranslation("ai");
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const configureRef = useRef<HTMLButtonElement>(null);
   const listID = useId();
 
   const options: ModelOption[] = providers.flatMap(provider =>
@@ -39,11 +41,15 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
     option.providerID === providerID && option.modelID === modelID,
   );
   const selected = options[selectedIndex];
-  const missing = Boolean(providerID && modelID && !selected);
+  const missing = Boolean(options.length && providerID && modelID && !selected);
 
   useEffect(() => {
     if (open) setHighlighted(Math.max(0, selectedIndex));
   }, [open, selectedIndex]);
+
+  useEffect(() => {
+    if (open && !options.length) configureRef.current?.focus();
+  }, [open, options.length]);
 
   useEffect(() => {
     if (!open || !options.length) return;
@@ -95,21 +101,22 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
       <button ref={triggerRef} type="button"
         className="ai-model-picker__trigger"
         role="combobox" aria-label={t("ai:chooseModel")}
-        aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? listID : undefined}
+        aria-expanded={open} aria-haspopup={options.length ? "listbox" : "dialog"} aria-controls={open && options.length ? listID : undefined}
         aria-activedescendant={open && options.length ? `${listID}-option-${highlighted}` : undefined}
         aria-invalid={missing || undefined}
-        title={selected ? `${selected.providerName} · ${selected.modelName}` : t("ai:selectModel")}
+        title={selected ? `${selected.providerName} · ${selected.modelName}` :
+          !options.length ? t("ai:noModelsConfigured") : missing ? t("ai:modelUnavailable") : t("ai:selectModel")}
         disabled={disabled}
         onClick={() => setOpen(value => !value)}
         onKeyDown={onTriggerKeyDown}>
         <Cpu size={13} aria-hidden="true" />
         <span>{selected ? `${selected.providerName} · ${selected.modelName}` :
-          missing ? t("ai:modelUnavailable") : t("ai:selectModel")}</span>
+          !options.length ? t("ai:noModelsConfigured") : missing ? t("ai:modelUnavailable") : t("ai:selectModel")}</span>
         <ChevronDown size={13} aria-hidden="true" />
       </button>
       <AIDropdownSurface open={open} anchorRef={triggerRef} onDismiss={() => setOpen(false)}
         matchAnchorWidth maxHeight={260} className="ai-model-picker__popup">
-          <div id={listID} role="listbox" aria-label={t("ai:availableModels")} className="ai-model-picker__options">
+          {options.length ? <div id={listID} role="listbox" aria-label={t("ai:availableModels")} className="ai-model-picker__options">
             {options.map((option, index) => {
               const isSelected = index === selectedIndex;
               return (
@@ -127,8 +134,11 @@ export default function AIModelPicker({ providers, providerID, modelID, disabled
                 </button>
               );
             })}
-            {!options.length && <p className="ai-muted">{t("ai:addModelFirst")}</p>}
-          </div>
+          </div> : <button type="button" ref={configureRef} className="ai-dropdown-empty-action"
+            disabled={!onConfigure} onClick={() => { close(); onConfigure?.(); }}>
+            <Plus size={14} aria-hidden="true" />
+            <span>{t("ai:addModel")}</span>
+          </button>}
       </AIDropdownSurface>
     </div>
   );
