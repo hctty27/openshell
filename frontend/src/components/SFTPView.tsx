@@ -185,7 +185,9 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   const [queueOpen,setQueueOpen] = useState(true);
   const [editor,setEditor] = useState<SFTPDocument|null>(null);
   const [editorLoadingPath,setEditorLoadingPath] = useState<string|null>(null);
+  const [editorLoadError,setEditorLoadError] = useState<string|null>(null);
   const editorRequestID = useRef(0);
+  const editorReadRequest = useRef<string|null>(null);
   const editorLoadInProgress = useRef(false);
   const [draftText,setDraftText] = useState("");
   const [editorSaving,setEditorSaving] = useState(false);
@@ -198,6 +200,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     editorRequestID.current++;
     editorLoadInProgress.current=false;
     setEditorLoadingPath(null);
+    setEditorLoadError(null);
     setEditor(null);
     setDraftText("");
     setTasks([]);
@@ -222,7 +225,14 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     api.SFTPTransfers(refID).then(list=>{
       if(alive)setTasks(current => mergeTransferHistory(list??[],current.filter(task => sameTransferRef(task.ref, refID))));
     }).catch(()=>{});
-    return ()=>{alive=false;};
+    return ()=>{
+      alive=false;
+      const active = editorReadRequest.current;
+      if (active) {
+        editorReadRequest.current=null;
+        void api.SFTPCancelReadRemoteText(active).catch(()=>{});
+      }
+    };
   },[refID.tabId,refID.sessionId,refID.generation]);
   useEffect(()=>{
     if(!localDir)return;
@@ -429,29 +439,39 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
       if(source.side!==target && source.path)void transfer(source.side,[source.path],target==="remote"?remoteDir:localDir);
     }catch{ /* ignore unrelated drags */ }
   };
-  const openEditor = async (entry:SFTPEntry) => {
+  const openEditor = async (entry:Pick<SFTPEntry,"path">) => {
     if(editorLoadInProgress.current || editor || editorSaveInProgress.current)return;
     const requestID=++editorRequestID.current;
+    const requestKey=`sftp-read-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    editorReadRequest.current=requestKey;
     editorLoadInProgress.current=true;
     setEditorLoadingPath(entry.path);
+    setEditorLoadError(null);
+    let completed=false;
     try {
-      const doc=await api.SFTPReadRemoteText(refID,entry.path);
+      const doc=await api.SFTPReadRemoteTextRequest(refID,entry.path,requestKey);
       if(requestID!==editorRequestID.current)return;
+      completed=true;
       setEditor(doc);setDraftText(doc.content);
     }catch(error){
-      if(requestID===editorRequestID.current)onNotice(error);
+      if(requestID===editorRequestID.current)setEditorLoadError(errorText(error));
     }finally{
       if(requestID===editorRequestID.current){
+        editorReadRequest.current=null;
         editorLoadInProgress.current=false;
-        setEditorLoadingPath(null);
+        if(completed)setEditorLoadingPath(null);
       }
     }
   };
   const closeEditor = async () => {
     if(editorLoadingPath){
+      const active = editorReadRequest.current;
+      editorReadRequest.current=null;
       editorRequestID.current++;
       editorLoadInProgress.current=false;
       setEditorLoadingPath(null);
+      setEditorLoadError(null);
+      if(active)void api.SFTPCancelReadRemoteText(active).catch(()=>{});
       return;
     }
     if(editorSaveInProgress.current)return;
@@ -571,7 +591,29 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
               onSave={content=>void saveEditor(content)}
               onClose={()=>void closeEditor()}
             />
-          </Suspense> : <div className="sftp-editor-loading"><LoaderCircle size={18} className="spin"/>{t("sftp:loading")}</div>}
+          </Suspense> : <section className="sftp-editor">
+            <header>
+              <strong title={editorLoadingPath ?? ""}><FileText size={15}/><span>{editorLoadingPath}</span></strong>
+              <div className="sftp-editor-tools">
+                <button type="button" title={t("common:close")} aria-label={t("common:close")} onClick={()=>void closeEditor()}><X size={17}/></button>
+              </div>
+            </header>
+            <div className="sftp-editor-pending" role="status">
+              {editorLoadError ? <>
+                <CircleAlert size={20} className="sftp-editor-error-icon"/>
+                <strong>{t("sftp:editorLoadFailed")}</strong>
+                <span className="sftp-editor-error-message">{editorLoadError}</span>
+              </> : <>
+                <LoaderCircle size={20} className="spin"/>
+                <strong>{t("sftp:editorReading")}</strong>
+                <span>{t("sftp:editorReadingHint")}</span>
+              </>}
+            </div>
+            <footer>
+              {editorLoadError && <button type="button" onClick={()=>{if(editorLoadingPath)void openEditor({path:editorLoadingPath});}}>{t("sftp:editorRetry")}</button>}
+              <button type="button" onClick={()=>void closeEditor()}>{t("common:cancel")}</button>
+            </footer>
+          </section>}
         </ModalSurface>
       )}
       {menu && <FloatingContextMenu {...menu} onClose={()=>setMenu(null)}/>}
