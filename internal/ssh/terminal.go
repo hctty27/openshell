@@ -428,10 +428,18 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		return errAITerminalBusy
 	}
 	stdin := c.stdin
-	c.readiness.userInput(p)
 	m.mu.Unlock()
-	_, e = stdin.Write(p)
-	return e
+	n, err := stdin.Write(p)
+	if err != nil { return err }
+	if n != len(p) { return io.ErrShortWrite }
+	// A native lease can reject manual input. Never update shell readiness
+	// for bytes that did not actually pass through the legacy input path.
+	m.mu.Lock()
+	if current := m.connections[ref.TabID]; current == c && c.ref == ref {
+		c.readiness.userInput(p)
+	}
+	m.mu.Unlock()
+	return nil
 }
 // CancelZmodem requests cancellation through the filter for trzsz, or sends
 // an interrupt for legacy ZMODEM, where the filter exposes no stop method.
