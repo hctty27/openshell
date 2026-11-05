@@ -149,7 +149,39 @@ describe("WorkspaceTabStrip", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /关闭右侧会话|Close tabs to the right/ }));
     expect(onCloseTabs).toHaveBeenCalledWith([tabs[2]]);
     fireEvent.contextMenu(container.querySelector('[data-tab-id="first"]')!);
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("uses the shared context menu and a single connection action", () => {
+    const { container, tabs, onDisconnect, onReconnect } = setup();
+    fireEvent.contextMenu(container.querySelector('[data-tab-id="first"]')!);
+    expect(document.querySelector(".session-context-menu")).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: /断开连接|Disconnect/ })).not.toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /重新连接|Reconnect/ })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: /断开连接|Disconnect/ }));
+    expect(onDisconnect).toHaveBeenCalledWith(tabs[0]);
+
+    fireEvent.contextMenu(container.querySelector('[data-tab-id="third"]')!);
+    expect(screen.getByRole("menuitem", { name: /重新连接|Reconnect/ })).not.toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /断开连接|Disconnect/ })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: /重新连接|Reconnect/ }));
+    expect(onReconnect).toHaveBeenCalledWith(tabs[2]);
+  });
+
+  it("omits unavailable tab closing commands", () => {
+    const { container } = setup();
+    fireEvent.contextMenu(container.querySelector('[data-tab-id="third"]')!);
+    expect(screen.queryByRole("menuitem", { name: /关闭右侧会话|Close tabs to the right/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: /关闭其他会话|Close other tabs/ })).not.toBeNull();
+  });
+
+  it("opens the tab context menu using the keyboard", () => {
+    const { container } = setup();
+    const tabButton = container.querySelector<HTMLElement>('[data-tab-id="first"] > button')!;
+    fireEvent.keyDown(tabButton, { key: "F10", shiftKey: true });
+    expect(screen.getByRole("menu")).not.toBeNull();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
