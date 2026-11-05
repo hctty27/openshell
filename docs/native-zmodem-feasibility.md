@@ -66,7 +66,7 @@ Rust state-machine engine requires a Go↔Rust transport bridge (C ABI/FFI, subp
 
 ## 验收状态
 
-- [ ] Windows x64 原生协议库可编译、可运行（等待 Actions）
+- [x] Windows x64 原生协议库可编译、可运行（[Actions #41985890935](https://github.com/hctty27/openshell/actions/runs/41985890935) 成功；仅协议 API 编译/EXE 冒烟验证，不代表实际文件传输成功）
 - [ ] 用真实 Linux `rz/sz` 完成收发互操作
 - [ ] 文件名/取消/超时/弱网/安全写入测试
 - [ ] 完成 Rust 依赖许可证清单、产物来源证明
