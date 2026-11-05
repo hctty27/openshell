@@ -22,6 +22,8 @@ OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH/SFT
 
 **项目状态：** 已进入 v1.0 正式版阶段，持续维护更新。已提供 Windows x64 安装版与便携版，各版本改动和实际签名状态见 [发布说明](https://github.com/hctty27/openshell/releases)。
 
+**政策文件：** [Code signing policy（代码签名政策）](CODE_SIGNING_POLICY.md) · [隐私政策](PRIVACY.md) · [第三方组件授权审查](docs/third-party-review.md) · [SignPath 申请清单](docs/signpath-application-checklist.md)。
+
 ## 界面预览
 
 **SSH 终端与 SFTP 文件管理**
@@ -211,7 +213,7 @@ npx playwright test
 
 OpenShell 使用 **[MIT 许可证](LICENSE)**。随包分发的第三方组件遵循各自许可证，Windows ZMODEM 工具附带 GPL 声明与对应源码包。
 
-免费代码签名由 [SignPath.io](https://about.signpath.io/) 提供，证书由 [SignPath Foundation](https://signpath.org/) 提供。
+免费代码签名由 [SignPath.io](https://about.signpath.io/) 提供，证书由 [SignPath Foundation](https://signpath.org/) 提供。 仅在申请获批且签名功能实际启用后适用；当前发布的 **v1.0.0 Windows 安装包和便携版仍未签名**，不代表已获 SignPath 认证。
 
 签名仅在所需 SignPath 配置和密钥齐全时启用，否则构建产物不带签名；以每个 Release 的实际说明为准。应用可执行文件与安装程序由 GitHub Actions 构建，便携 ZIP 包含应用可执行文件。仅将本仓库源码构建的产物提交签名。
 
