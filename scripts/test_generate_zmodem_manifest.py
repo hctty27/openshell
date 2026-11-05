@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.generate_zmodem_manifest import BUNDLED_FILES, create_manifest
+from scripts.generate_zmodem_manifest import BUNDLED_FILES, MSYS2_SOURCE_CANDIDATE, create_manifest
 
 
 class ZmodemManifestTests(unittest.TestCase):
@@ -18,11 +18,17 @@ class ZmodemManifestTests(unittest.TestCase):
             (target / "COPYING-lrzsz.txt").write_text(
                 "GNU GENERAL PUBLIC LICENSE\nVersion 2\n", encoding="utf-8"
             )
+            for name, marker in {
+                "CYGWIN_LICENSE-msys2.txt": "Lesser Gnu Public License",
+                "COPYING-LGPLv3-msys2.txt": "GNU LESSER GENERAL PUBLIC LICENSE",
+                "COPYING-GPLv3-msys2.txt": "GNU GENERAL PUBLIC LICENSE",
+            }.items():
+                (target / name).write_text(marker, encoding="utf-8")
             tag = "v0.12.21rc"
             digest = "a" * 64
             revision = "b" * 40
             (target / "THIRD_PARTY_NOTICES.txt").write_text(
-                tag + digest + revision, encoding="utf-8"
+                tag + digest + revision + MSYS2_SOURCE_CANDIDATE, encoding="utf-8"
             )
             pins = root / "prepare.ps1"
             pins.write_text(
@@ -35,6 +41,8 @@ class ZmodemManifestTests(unittest.TestCase):
             manifest = create_manifest(target, pins)
             self.assertEqual(len(manifest["files"]), len(BUNDLED_FILES))
             self.assertEqual(manifest["upstream"]["sourceCommit"], revision)
+            self.assertEqual(manifest["upstream"]["runtimeSourceCandidateCommit"], MSYS2_SOURCE_CANDIDATE)
+            self.assertIs(manifest["upstream"]["runtimeSourceCandidateVerified"], False)
             (target / "native/rz.exe").unlink()
             with self.assertRaises(ValueError):
                 create_manifest(target, pins)
