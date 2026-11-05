@@ -49,6 +49,8 @@ type connection struct {
 	writer   *terminalWriter
 	outputGate *terminalOutputGate
 	inputGate *terminalInputGate
+	nativeTerminalTransfer *nativeTerminalTransferTask
+	nativeTerminalPoisoned bool
 	aiController *AITerminalLease
 	readiness terminalShellReadiness
 	serverVersion string
@@ -99,6 +101,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 	}
 	var oldClient *connection
 	if old := m.connections[tab]; old != nil {
+		cancelNativeTerminalTransferLocked(old)
 		if old.keepaliveCancel != nil { old.keepaliveCancel() }
 		oldClient = old
 		delete(m.connections, tab)
@@ -168,6 +171,7 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 		closeHopClients(c.hops)
 		m.mu.Lock()
 		if m.connections[tab] == c {
+			cancelNativeTerminalTransferLocked(c)
 			delete(m.connections, tab)
 			if c.keepaliveCancel != nil { c.keepaliveCancel() }
 			reason := c.disconnectReason
@@ -231,6 +235,7 @@ func (m *Manager) Disconnect(ref domain.ConnectionRef) error {
 		m.mu.Unlock()
 		return nil
 	}
+	cancelNativeTerminalTransferLocked(c)
 	delete(m.connections, ref.TabID)
 	releaseZmodemSelection(c)
 	if c.keepaliveCancel != nil { c.keepaliveCancel() }
@@ -250,6 +255,7 @@ func (m *Manager) Close() {
 	m.connecting = map[string]context.CancelFunc{}
 	m.connections = map[string]*connection{}
 	for _, c := range live {
+		cancelNativeTerminalTransferLocked(c)
 		releaseZmodemSelection(c)
 		if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	}
@@ -289,6 +295,7 @@ func (m *Manager) CancelTab(tab string) {
 	}
 	c := m.connections[tab]
 	if c != nil {
+		cancelNativeTerminalTransferLocked(c)
 		delete(m.connections, tab)
 		releaseZmodemSelection(c)
 		if c.keepaliveCancel != nil { c.keepaliveCancel() }
@@ -373,7 +380,7 @@ func (m *Manager) startKeepaliveLocked(c *connection) {
 func (m *Manager) failKeepalive(c *connection, ctx context.Context, reason string) {
 	m.mu.Lock()
 	active := ctx.Err() == nil && m.connections[c.ref.TabID] == c
-	if active { c.disconnectReason = reason }
+	if active { c.disconnectReason = reason; cancelNativeTerminalTransferLocked(c) }
 	m.mu.Unlock()
 	if active { closeSSHConnection(c) }
 }

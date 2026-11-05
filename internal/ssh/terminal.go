@@ -324,6 +324,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	go func() {
 		err := session.Wait()
 		_ = err
+		m.CancelExperimentalNativeTerminalTransfer(ref)
 		gate.close()
 		filter.Close()
 		_ = filterInput.Close()
