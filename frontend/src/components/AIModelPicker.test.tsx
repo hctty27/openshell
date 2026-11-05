@@ -163,3 +163,18 @@ test("single-model popup does not scroll on hover; overflow enables scrolling on
     else Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
   }
 });
+
+
+test("empty model picker offers a single compact settings action", () => {
+  const onConfigure = vi.fn();
+  render(<AIModelPicker providers={[]} providerID="" modelID=""
+    onChange={vi.fn()} onConfigure={onConfigure} />);
+  const trigger = screen.getByRole("combobox", { name: "选择 AI 模型" });
+  expect(trigger.textContent).toContain("未配置模型");
+  fireEvent.click(trigger);
+  const action = screen.getByRole("button", { name: "添加模型" });
+  expect(screen.queryByRole("listbox")).toBeNull();
+  fireEvent.click(action);
+  expect(onConfigure).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("button", { name: "添加模型" })).toBeNull();
+});
