@@ -71,5 +71,9 @@
   "dropSplitBottom": "Drop to split below",
   "undockPane": "Remove pane from split",
   "dropSplitSmart": "Release for smart split",
-  "splitPaneLimit": "Maximum of 4 split panes"
+  "splitPaneLimit": "Maximum of 4 split panes",
+  "searchCommands": "Search commands...",
+  "noMatchingCommands": "No matching commands",
+  "reorderCommand": "Reorder {{name}}",
+  "reorderHint": "Drag to reorder, or press Alt + Up/Down"
 }
