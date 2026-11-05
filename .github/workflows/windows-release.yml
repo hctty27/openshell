@@ -24,6 +24,10 @@ on:
     branches: [main]
     paths:
       - "scripts/verify_windows_gui_subsystem.py"
+      - "scripts/prepare_zmodem_windows.ps1"
+      - "scripts/generate_zmodem_manifest.py"
+      - "scripts/test_generate_zmodem_manifest.py"
+      - "third_party/msys2-runtime-3.4.9/**"
       - ".github/workflows/windows-release.yml"
 
 permissions:

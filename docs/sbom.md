@@ -20,14 +20,14 @@ GitHub Actions workflow: [Generate third-party SBOM](../.github/workflows/sbom.y
 
 ## Bundled ZMODEM components
 
-The Windows release workflow already pins the [lrzsz-win32](https://github.com/trzsz/lrzsz-win32/releases/tag/v0.12.21rc) source commit and archive checksum and verifies the downloaded ZIP. It now also runs `scripts/generate_zmodem_manifest.py`, which:
+The Windows release workflow already pins the [lrzsz-win32](https://github.com/trzsz/lrzsz-win32/releases/tag/v0.12.21rc) source commit and archive checksum and verifies the downloaded ZIP. It also pins the exact MSYS2 3.4.9 DLL SHA-256 and bundles the [historical candidate's licensing reference texts and 3.4.9-3 build recipe](../third_party/msys2-runtime-3.4.9/README.md). The historical recipe points at the upstream Cygwin source tag and MSYS2 patches but is **not** evidence of a binary/source hash match. It now also runs `scripts/generate_zmodem_manifest.py`, which:
 
 1. Ensures the `rz.exe` and `sz.exe` OpenShell launchers, upstream native `rz.exe`/`sz.exe`, `msys-2.0.dll`, GPL copying text, upstream source ZIP and notices are present and nonempty.
 2. Checks the included GPL v2 text and ensures the notices match the pinned upstream release, source commit and binary archive checksum from the packaging script.
-3. Records SHA-256, file size and declared origin for each component in `zmodem/BUNDLED_COMPONENTS.json`. The Windows package build also records PE version fields for `msys-2.0.dll` and confirms they refer to the same SHA-256.
+3. Records SHA-256, file size and declared origin for each component in `zmodem/BUNDLED_COMPONENTS.json`. The Windows package build also records PE version fields for `msys-2.0.dll` and confirms they refer to the same SHA-256. The report marks the MSYS2 source candidate as **unverified**.
 4. Includes this JSON inside **both** the next portable ZIP and NSIS installer. A copy is also attached to future GitHub Releases as `OpenShell-vX.Y.Z-windows-x64-zmodem-manifest.json`.
 
-**The manifest records what was packaged, not evidence that the DLL has an identifiable GPL source revision.** OpenShell does not apply its own SignPath Foundation certificate to upstream native ZMODEM binaries or DLLs.
+**The manifest records what was packaged, not evidence that the DLL has a verified matching source revision.** OpenShell does not apply its own SignPath Foundation certificate to upstream native ZMODEM binaries or DLLs.
 
 ## Open MSYS2 runtime issue
 

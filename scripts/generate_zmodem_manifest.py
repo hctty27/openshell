@@ -15,9 +15,17 @@ BUNDLED_FILES = {
     "native/sz.exe": "lrzsz-upstream",
     "native/msys-2.0.dll": "msys2-runtime-upstream",
     "COPYING-lrzsz.txt": "lrzsz-license",
+    "CYGWIN_LICENSE-msys2.txt": "historical-msys2-license-reference",
+    "COPYING-LGPLv3-msys2.txt": "historical-msys2-license-reference",
+    "COPYING-GPLv3-msys2.txt": "historical-msys2-license-reference",
+    "PKGBUILD-msys2-3.4.9-3.txt": "historical-msys2-package-recipe-reference",
     "lrzsz-win32-source.zip": "lrzsz-source",
     "THIRD_PARTY_NOTICES.txt": "third-party-notices",
 }
+
+
+MSYS2_SOURCE_CANDIDATE = "677ece60fc37b0c5d336db1e345a4c33ffff15f6"
+MSYS2_PACKAGE_RECIPE_COMMIT = "4056de7224a47dd0249f61111351d556dfada60f"
 
 
 def extract_pinned_release(script: str) -> dict:
@@ -61,9 +69,24 @@ def create_manifest(directory: Path, preparation_script: Path) -> dict:
     if "GNU GENERAL PUBLIC LICENSE" not in copying or "Version 2" not in copying:
         raise ValueError("Bundled lrzsz license text is not the expected GPL version 2")
     notices = (directory / "THIRD_PARTY_NOTICES.txt").read_text(encoding="utf-8", errors="replace")
-    for required in (pins["releaseTag"], pins["upstreamArchiveSHA256"], pins["sourceCommit"]):
+    for required in (pins["releaseTag"], pins["upstreamArchiveSHA256"], pins["sourceCommit"], MSYS2_SOURCE_CANDIDATE, MSYS2_PACKAGE_RECIPE_COMMIT):
         if required not in notices:
             raise ValueError("Bundled third-party notice disagrees with upstream pin: " + required)
+
+    license_markers = {
+        "CYGWIN_LICENSE-msys2.txt": "Lesser Gnu Public License",
+        "COPYING-LGPLv3-msys2.txt": "GNU LESSER GENERAL PUBLIC LICENSE",
+        "COPYING-GPLv3-msys2.txt": "GNU GENERAL PUBLIC LICENSE",
+    }
+    for filename, marker in license_markers.items():
+        content = (directory / filename).read_text(encoding="utf-8", errors="replace")
+        if marker.lower() not in content.lower():
+            raise ValueError(f"Unexpected MSYS2 historical license reference: {filename}")
+
+    recipe = (directory / "PKGBUILD-msys2-3.4.9-3.txt").read_text(encoding="utf-8", errors="replace")
+    for expected in ("pkgver=3.4.9", "pkgrel=3", "cygwin-${pkgver}"):
+        if expected not in recipe:
+            raise ValueError("Unexpected historical MSYS2 PKGBUILD reference")
 
     return {
         "schemaVersion": 1,
@@ -76,6 +99,11 @@ def create_manifest(directory: Path, preparation_script: Path) -> dict:
             "sourceArchive": "lrzsz-win32-source.zip",
             "runtimeDllLicense": "unverified-for-2023-release-asset",
             "runtimeSource": "https://github.com/msys2/msys2-runtime",
+            "runtimeSourceCandidateCommit": MSYS2_SOURCE_CANDIDATE,
+            "runtimeSourceCandidateVerified": False,
+            "runtimePackageRecipeCommit": MSYS2_PACKAGE_RECIPE_COMMIT,
+            "runtimePackageRecipeVersion": "3.4.9-3 (candidate, not matched to embedded DLL)",
+            "runtimeNoticeSnapshot": "msys2-3.4.9 candidate at immutable commit; exact binary/package match unverified",
         },
         "limitations": (
             "These hashes identify files in this build; they do not prove the runtime "
