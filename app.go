@@ -31,6 +31,9 @@ type App struct {
 	secrets      domain.SecretStore
 	ssh          *sshclient.Manager
 	sftp         *files.Manager
+	sftpReadMu sync.Mutex
+	sftpReadCancels map[string]context.CancelFunc
+	sftpReadCancelled map[string]time.Time
 	closing      map[string]domain.ConnectionRef
 	emit         sshclient.EmitFunc
 	quit         func()
