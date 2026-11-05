@@ -50,14 +50,15 @@ try {
         throw "Unexpected bundled MSYS2 runtime checksum: $runtimeSha256"
     }
     $msys2LicenseDir = "third_party/msys2-runtime-3.4.9"
-    foreach ($license in @(
-        @("CYGWIN_LICENSE", "CYGWIN_LICENSE-msys2.txt"),
-        @("COPYING.LIB", "COPYING-LGPLv3-msys2.txt"),
-        @("COPYING", "COPYING-GPLv3-msys2.txt")
-    )) {
-        $licensePath = Join-Path $msys2LicenseDir $license[0]
+    $licenseFiles = @{
+        "CYGWIN_LICENSE" = "CYGWIN_LICENSE-msys2.txt"
+        "COPYING.LIB" = "COPYING-LGPLv3-msys2.txt"
+        "COPYING" = "COPYING-GPLv3-msys2.txt"
+    }
+    foreach ($licenseFile in $licenseFiles.GetEnumerator()) {
+        $licensePath = Join-Path $msys2LicenseDir $licenseFile.Key
         if (!(Test-Path -LiteralPath $licensePath -PathType Leaf)) { throw "Missing bundled MSYS2 license notice: $licensePath" }
-        Copy-Item -LiteralPath $licensePath -Destination (Join-Path $target $license[1]) -Force
+        Copy-Item -LiteralPath $licensePath -Destination (Join-Path $target $licenseFile.Value) -Force
     }
 
     # rz/sz are console programs. trzsz-go starts them without CREATE_NO_WINDOW;
