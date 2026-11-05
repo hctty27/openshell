@@ -40,3 +40,15 @@ $env:OPENSHELL_NATIVE_ZMODEM_SIDECAR = "C:\path\to\zmodem-sidecar.exe"
 5. sidecar 的 stderr 不写入传输通道，但有限的调试错误可反馈给开发端。禁止输出用户文件内容或私钥。
 
 **结论：这是一项开发者手动启用的 Go 后端集成，不属于完成正式版切换。下一阶段应在 Windows Runner 中对实际 Go 管理器与 Rust EXE 的 SSH PTY 联调，并设计用户终端 PTY 的单一数据消费者移交机制。**
+
+## PTY 与 SSH exec 阶段的超时防护
+
+此前仅 SSH `NewSession()` 使用了异步等待和取消控制。假如远程 SSH 服务端接受新 Session，却不回复 `pty-req` 或 `exec` 请求，原生传输管理器可能在真正启动 sidecar 前永久挂起。
+
+目前 `RunNativeZmodemTransport` 对创建 Session、`RequestPty` 和 `session.Start` 都实施同一传输 `context` 的取消与截止时间约束：
+
+- 取消时关闭本次**独立** SSH Session，不关闭共享 SSH Client 或当前可见终端。
+- 若远端一直不回应 PTY 或执行请求，立即返回可以通过 `errors.Is(err, context.DeadlineExceeded)` 识别的错误。
+- 新测试服务端模式 `pty-hang` 模拟不回复 PTY 请求；原 `start` 模式模拟不回复 exec 请求；`open` 模式模拟不接受新 SSH Channel。以上三个阶段均受截止时间控制。
+- 下载到临时目录过程中发生取消、管理器关闭或超时，必须清理未完成文件与目录，释放活跃任务记录。
+- Windows 和 Linux SSH 回归测试都运行这些 Go 用例。它们检查异常生命周期，不等于已完成公网弱网模拟、真实 Windows→Linux Linux PTY 端到端测试或交互终端流接管。
