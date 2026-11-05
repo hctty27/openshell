@@ -79,7 +79,7 @@ jobs:
       - name: Install real Linux lrzsz
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq lrzsz
+          sudo apt-get install -y -qq lrzsz openssh-server
           rz --version
           sz --version
       - name: Compile isolated Rust protocol sidecar
@@ -90,3 +90,70 @@ jobs:
           cargo build --locked --release --bin zmodem-sidecar
       - name: Verify bidirectional real lrzsz interoperability
         run: python3 tests/interop_lrzsz.py target/release/zmodem-sidecar
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Build and unit-test isolated SSH PTY bridge
+        run: |
+          go test ./experiments/native-zmodem/ssh-pty-bridge
+          go build -o experiments/native-zmodem/target/release/zmodem-ssh-pty-bridge ./experiments/native-zmodem/ssh-pty-bridge
+        working-directory: .
+      - name: Start loopback OpenSSH server with PTY enabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_dir="$RUNNER_TEMP/openshell-zmodem-sshd"
+          mkdir -p "$test_dir"
+          ssh-keygen -q -t ed25519 -N '' -f "$test_dir/client"
+          ssh-keygen -q -t ed25519 -N '' -f "$test_dir/host"
+          cp "$test_dir/client.pub" "$test_dir/authorized_keys"
+          chmod 600 "$test_dir/authorized_keys"
+          sudo mkdir -p /run/sshd
+          cat > "$test_dir/sshd_config" <<EOF
+          Port 22449
+          ListenAddress 127.0.0.1
+          HostKey $test_dir/host
+          PidFile $test_dir/sshd.pid
+          AuthorizedKeysFile $test_dir/authorized_keys
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PubkeyAuthentication yes
+          UsePAM yes
+          StrictModes no
+          AllowUsers $(id -un)
+          LogLevel VERBOSE
+          EOF
+          sudo /usr/sbin/sshd -f "$test_dir/sshd_config" -E "$test_dir/sshd.log"
+          echo "ZMODEM_SSH_TEST_DIR=$test_dir" >> "$GITHUB_ENV"
+      - name: Verify ephemeral public-key SSH login before protocol test
+        shell: bash
+        run: |
+          ssh -p 22449 -i "$ZMODEM_SSH_TEST_DIR/client" \
+            -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+            -o UserKnownHostsFile="$ZMODEM_SSH_TEST_DIR/known_hosts" \
+            "$(id -un)@127.0.0.1" 'printf ssh-ready'
+      - name: Verify Rust ↔ lrzsz over authenticated real SSH PTY
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/interop_ssh_pty.py \
+            target/release/zmodem-ssh-pty-bridge \
+            target/release/zmodem-sidecar \
+            127.0.0.1:22449 "$(id -un)" \
+            "$ZMODEM_SSH_TEST_DIR/client" "$ZMODEM_SSH_TEST_DIR/host.pub"
+      - name: Print SSH server diagnostics if the interop test failed
+        if: failure()
+        shell: bash
+        run: |
+          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.log" ]; then
+            sudo tail -100 "$ZMODEM_SSH_TEST_DIR/sshd.log"
+          fi
+      - name: Stop loopback SSH test server
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.pid" ]; then
+            sudo kill "$(cat "$ZMODEM_SSH_TEST_DIR/sshd.pid")" || true
+          fi
