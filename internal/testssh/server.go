@@ -134,6 +134,11 @@ func StartWithMode(t testing.TB, mode string) *Server {
 								channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{uint32(code)}))
 								return
 							case "pty-req", "window-change":
+								if mode == "pty-hang" && r.Type == "pty-req" {
+									// Simulate an SSH server that accepts the
+									// session but never acknowledges its PTY.
+									continue
+								}
 								r.Reply(true, nil)
 							case "shell":
 								r.Reply(true, nil)
