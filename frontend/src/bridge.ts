@@ -26,6 +26,7 @@ type Backend = {
   AISaveProvider(req: {provider: import("./types").AIProvider; apiKey: string}): Promise<import("./types").AIProvider>;
   AIDeleteProvider(id: string): Promise<void>;
   AIConversations(): Promise<import("./types").AIConversation[]>;
+  AISetConversationModel(conversationID: string, providerID: string, modelID: string): Promise<import("./types").AIConversation>;
   AIDeleteConversation(id: string): Promise<void>;
   AIContext(conversationID: string, providerID: string, modelID: string): Promise<import("./types").AIContextStats>;
   AICompactConversation(conversationID: string): Promise<import("./types").AIConversation>;

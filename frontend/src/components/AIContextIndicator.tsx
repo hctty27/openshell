@@ -4,6 +4,8 @@ import { t } from "../i18n";
 
 interface Props {
   stats: AIContextStats | null;
+  loading?: boolean;
+  unavailable?: boolean;
   compacting: boolean;
   disabled: boolean;
   disabledReason?: string;
@@ -17,7 +19,7 @@ interface Props {
 const RING_CIRCUMFERENCE = 2 * Math.PI * 8;
 
 export default function AIContextIndicator({
-  stats, compacting, disabled, disabledReason, onCompact, autoCompact = true, compactThreshold = 90, historyOpen = false, onOpen,
+  stats, loading = false, unavailable = false, compacting, disabled, disabledReason, onCompact, autoCompact = true, compactThreshold = 90, historyOpen = false, onOpen,
 }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -26,6 +28,8 @@ export default function AIContextIndicator({
   const limit = Math.max(1, stats?.window || 32768);
   const used = Math.max(0, stats?.estimatedTokens || 0);
   const percentage = Math.min(100, Math.round(100 * used / limit));
+  const unknown = loading || unavailable;
+  const percentageLabel = loading ? "…" : unavailable ? "—" : percentage + "%";
   const state = percentage >= (autoCompact ? compactThreshold : 90) ? "critical" : percentage >= 70 ? "warning" : "normal";
 
   useEffect(() => {
@@ -82,31 +86,32 @@ export default function AIContextIndicator({
   return <div className="ai-context-control" ref={rootRef}>
     <button ref={triggerRef} type="button" className={"ai-context-ring is-" + state}
       aria-label={t("ai:contextUsage")}
-      aria-description={percentage + "%"}
-      title={t("ai:contextUsage") + ": " + used.toLocaleString() + "/" + limit.toLocaleString()}
+      aria-description={percentageLabel}
+      aria-busy={loading}
+      title={t("ai:contextUsage") + ": " + (unknown ? percentageLabel : used.toLocaleString() + "/" + limit.toLocaleString())}
       aria-haspopup="dialog" aria-expanded={open}
       onClick={() => { if (!open) onOpen?.(); setOpen(value => !value); }}>
       <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
         <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" opacity=".16" strokeWidth="2.2" />
         <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2.2"
           strokeLinecap="round" transform="rotate(-90 10 10)"
-          strokeDasharray={percentage * RING_CIRCUMFERENCE / 100 + " " + RING_CIRCUMFERENCE} />
+          strokeDasharray={(unknown ? 0 : percentage) * RING_CIRCUMFERENCE / 100 + " " + RING_CIRCUMFERENCE} />
       </svg>
-      <span className="ai-context-percent">{percentage}%</span>
+      <span className="ai-context-percent">{percentageLabel}</span>
     </button>
     {open && <div ref={popoverRef} className="ai-context-popover" role="dialog" aria-label={t("ai:contextUsage")}>
       <div className="ai-context-heading">
         <strong className="ai-context-title">{t("ai:contextUsage")}</strong>
-        <strong className="ai-context-value">{percentage}%</strong>
+        <strong className="ai-context-value">{percentageLabel}</strong>
       </div>
       <div className="ai-context-progress" role="progressbar" aria-label={t("ai:contextUsage")}
-        aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage}>
-        <span className={"is-" + state} style={{ width: percentage + "%" }} />
+        aria-valuemin={0} aria-valuemax={100} aria-valuenow={unknown ? undefined : percentage}>
+        <span className={"is-" + state} style={{ width: (unknown ? 0 : percentage) + "%" }} />
       </div>
       <div className="ai-context-tokens"
         title={stats?.lastPromptTokens ? t("ai:lastPromptTokens") + ": " + stats.lastPromptTokens.toLocaleString() : undefined}>
-        <span>{used.toLocaleString()} / {limit.toLocaleString()} Tokens</span>
-        {(stats?.isEstimate ?? true) && <span className="ai-context-estimated">{t("ai:contextEstimateShort")}</span>}
+        <span>{unknown ? percentageLabel : used.toLocaleString() + " / " + limit.toLocaleString() + " Tokens"}</span>
+        {!unknown && (stats?.isEstimate ?? true) && <span className="ai-context-estimated">{t("ai:contextEstimateShort")}</span>}
       </div>
       <div className="ai-context-divider" />
       <div className="ai-context-row"><span>{t("ai:autoCompact")}</span><span>{autoCompact ? compactThreshold + "%" : t("ai:autoCompactOff")}</span></div>

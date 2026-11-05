@@ -114,6 +114,42 @@ func (a *App) AIConversations() ([]store.AIConversation, error) {
 	return a.store.AIConversations(a.ctx)
 }
 
+func (a *App) AISetConversationModel(conversationID, providerID, modelID string) (store.AIConversation, error) {
+	provider, err := a.store.GetAIProvider(a.ctx, providerID)
+	if err != nil { return store.AIConversation{}, err }
+	validModel := false
+	for _, model := range provider.Models {
+		if model.ID == modelID { validModel = true; break }
+	}
+	if !validModel { return store.AIConversation{}, apperror.New("aiSelectConfiguredModel", nil) }
+
+	a.aiMu.Lock()
+	for _, task := range a.aiTasks {
+		if task.conversationID == conversationID {
+			a.aiMu.Unlock()
+			return store.AIConversation{}, apperror.New("aiConversationRunning", nil)
+		}
+	}
+	conversation, err := a.store.GetAIConversation(a.ctx, conversationID)
+	if err != nil { a.aiMu.Unlock(); return store.AIConversation{}, err }
+	if conversation.ProviderID == providerID && conversation.ModelID == modelID {
+		a.aiMu.Unlock()
+		return conversation, nil
+	}
+	conversation.ProviderID, conversation.ModelID = providerID, modelID
+	conversation.Context.Window = aiModelWindow(provider, modelID)
+	conversation.Context.IsEstimate = true
+	if err := a.store.SaveAIConversation(a.ctx, conversation); err != nil {
+		a.aiMu.Unlock()
+		return store.AIConversation{}, err
+	}
+	conversation, err = a.store.GetAIConversation(a.ctx, conversationID)
+	a.aiMu.Unlock()
+	if err != nil { return store.AIConversation{}, err }
+	a.emit("ai:conversation", conversation)
+	return conversation, nil
+}
+
 func (a *App) AIDeleteConversation(id string) error {
 	a.aiMu.Lock()
 	for _, task := range a.aiTasks {
