@@ -117,10 +117,13 @@ func TestNativeRemoteBoundaryIgnoresWrongNonceAndIncompleteMarker(t *testing.T) 
 	case <-sink.completion: t.Fatal("incomplete marker accepted")
 	default:
 	}
-	if !bytes.Equal(remote.Bytes(), append(impostor, []byte("\x1b]777;"+nativeRemoteBoundaryName+";")...)) {
-		// All bytes not representing a possible prefix are forwarded.
-		// A trailing unmatched prefix may be withheld by design.
-		if !bytes.Equal(remote.Bytes(), impostor) { t.Fatal("incorrect nonce bytes were corrupted") }
+	if !bytes.HasPrefix(remote.Bytes(), impostor) {
+		t.Fatalf("incorrect nonce was dropped or modified: %x", remote.Bytes())
+	}
+	// Only a suffix that might yet become the current transfer's marker
+	// may be withheld. A wrong nonce must not signal completion.
+	if len(sink.pending) >= len(sink.prefix) {
+		t.Fatalf("unbounded remote completion lookbehind: %d", len(sink.pending))
 	}
 }
 
