@@ -1,0 +1,62 @@
+name: Windows native ZMODEM feasibility
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "experiments/native-zmodem/**"
+      - "docs/native-zmodem-feasibility.md"
+      - ".github/workflows/native-zmodem-probe.yml"
+  push:
+    branches: [main]
+    paths:
+      - "experiments/native-zmodem/**"
+      - "docs/native-zmodem-feasibility.md"
+      - ".github/workflows/native-zmodem-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-zmodem-probe-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  windows-native:
+    name: Rust protocol crate Windows x64 smoke
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: experiments/native-zmodem
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check Rust toolchain
+        shell: pwsh
+        run: |
+          rustc --version
+          cargo --version
+      - name: Resolve the exact crate release and lock dependencies
+        run: cargo generate-lockfile
+      - name: Compile protocol crate on native Windows x64
+        run: cargo test --locked --verbose
+      - name: Build standalone probe EXE
+        run: cargo build --locked --release
+      - name: Run the Windows probe
+        shell: pwsh
+        run: |
+          & ./target/release/openshell-zmodem-probe.exe
+          if ($LASTEXITCODE -ne 0) { throw "Windows protocol probe failed" }
+      - name: Preserve dependency graph for manual license review
+        shell: pwsh
+        run: |
+          cargo tree --locked | Out-File -Encoding utf8 dependency-tree.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-zmodem-windows-spike-evidence
+          path: |
+            experiments/native-zmodem/Cargo.lock
+            experiments/native-zmodem/dependency-tree.txt
+          retention-days: 14
+          if-no-files-found: error
