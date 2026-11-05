@@ -1609,6 +1609,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onImportSessionBackup={previewBackup}
           onRefresh={refresh}
           onFont={setFontSize}
+          onPreferenceError={notify}
           keepAliveSeconds={state.keepAliveSeconds}
           autoReconnect={state.autoReconnect}
           maxReconnectAttempts={state.maxReconnectAttempts}
