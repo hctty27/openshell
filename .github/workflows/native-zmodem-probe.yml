@@ -5,12 +5,16 @@ on:
     branches: [main]
     paths:
       - "experiments/native-zmodem/**"
+      - "internal/ssh/native_zmodem*.go"
+      - "internal/testssh/server.go"
       - "docs/native-zmodem-feasibility.md"
       - ".github/workflows/native-zmodem-probe.yml"
   push:
     branches: [main]
     paths:
       - "experiments/native-zmodem/**"
+      - "internal/ssh/native_zmodem*.go"
+      - "internal/testssh/server.go"
       - "docs/native-zmodem-feasibility.md"
       - ".github/workflows/native-zmodem-probe.yml"
   workflow_dispatch:
