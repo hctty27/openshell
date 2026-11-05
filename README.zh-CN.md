@@ -22,7 +22,7 @@ OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH/SFT
 
 **项目状态：** 已进入 v1.0 正式版阶段，持续维护更新。已提供 Windows x64 安装版与便携版，各版本改动和实际签名状态见 [发布说明](https://github.com/hctty27/openshell/releases)。
 
-**政策文件：** [Code signing policy（代码签名政策）](CODE_SIGNING_POLICY.md) · [隐私政策](PRIVACY.md) · [第三方组件授权审查](docs/third-party-review.md) · [SignPath 申请清单](docs/signpath-application-checklist.md)。
+**政策文件：** [Code signing policy（代码签名政策）](CODE_SIGNING_POLICY.md) · [隐私政策](PRIVACY.md) · [第三方组件授权审查](docs/third-party-review.md) · [SBOM 与二进制清单](docs/sbom.md) · [SignPath 申请清单](docs/signpath-application-checklist.md)。
 
 ## 界面预览
 
