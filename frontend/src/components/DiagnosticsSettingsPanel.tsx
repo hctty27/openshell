@@ -7,9 +7,9 @@ import type { DiagnosticsSnapshot } from "../features/diagnostics/types";
 type View = "overview" | "logs" | "performance";
 
 const tabs = [
-  { id: "overview", label: "diagnosticsOverview" },
-  { id: "logs", label: "diagnosticsLogs" },
-  { id: "performance", label: "diagnosticsPerformance" },
+  { id: "overview", label: "settings:diagnosticsOverview" },
+  { id: "logs", label: "settings:diagnosticsLogs" },
+  { id: "performance", label: "settings:diagnosticsPerformance" },
 ] as const;
 
 function formatBytes(bytes: number): string {
@@ -119,7 +119,7 @@ export default function DiagnosticsSettingsPanel() {
             className={view === tab.id ? "active" : ""}
             onClick={() => setView(tab.id)}
           >
-            {t("settings:" + tab.label)}
+            {t(tab.label)}
           </button>
         ))}
       </div>
