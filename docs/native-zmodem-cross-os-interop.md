@@ -57,7 +57,7 @@ GitHub 仓库 **Settings → Secrets and variables → Actions** 中配置以下
 | `NATIVE_ZMODEM_LAB_PRIVATE_KEY` | 与测试账号 authorized_keys 匹配的专用未加密 OpenSSH 私钥（多行原文） |
 | `NATIVE_ZMODEM_LAB_HOST_PUBLIC_KEY` | **远端 sshd 服务器的真实主机公钥**，如 `ssh-ed25519 AAA...`，不能使用客户端公钥或盲目信任首次连接 |
 
-在 Actions 页面选择 **Native ZMODEM Windows to Linux lab → Run workflow**，选择目标分支并手动启动。工作流在 `windows-latest` 上原生编译、测试 Rust `zmodem-sidecar.exe`，从 Secrets 写入 Runner 临时目录，随后运行两个真实交互式 SSH PTY 测试：
+在 Actions 页面选择 **Native ZMODEM Windows to Linux lab → Run workflow**，仅选择已审查的 **`main` 分支**并手动启动。工作流要求 `github.ref == 'refs/heads/main'`；其他分支将跳过测试，避免将实验 SSH 私钥暴露给未经审查的分支代码。工作流在 `windows-latest` 上原生编译、测试 Rust `zmodem-sidecar.exe`，从 Secrets 写入 Runner 临时目录，随后运行两个真实交互式 SSH PTY 测试：
 
 1. `TestNativeZmodemCrossOSInteractivePTY`：空文件、64 KiB、中文文件名及约 4 MiB 文件，上传+下载 8 次，SFTP SHA-256 交叉校验。
 2. `TestNativeZmodemLiveInterruptedInteractivePTY`：32 MiB 文件下载过程中取消、超时及关闭 SSH 连接，验证文件不被错误发布、原生任务退出及其他 SSH 通道隔离。
