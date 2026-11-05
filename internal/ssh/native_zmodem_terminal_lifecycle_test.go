@@ -91,6 +91,12 @@ func TestNativeZmodemTerminalLifecycleCancelAndDisconnect(t *testing.T) {
 			left := c.nativeTerminalTransfer
 			m.mu.Unlock()
 			if left != nil { t.Fatal("native terminal task leaked after shutdown") }
+			c.inputGate.mu.Lock()
+			stillLeased := c.inputGate.leased
+			c.inputGate.mu.Unlock()
+			if stillLeased && !c.nativeTerminalPoisoned {
+				t.Fatal("failed native transfer did not poison the unrecoverable terminal")
+			}
 		})
 	}
 }
@@ -115,5 +121,16 @@ func TestNativeZmodemTerminalLifecycleBlocksAIAndParallelTransfers(t *testing.T)
 	case err := <-done:
 		if !errors.Is(err, context.Canceled) { t.Fatalf("unexpected cancel result: %v", err) }
 	case <-time.After(5 * time.Second): t.Fatal("cancel did not finish")
+	}
+	m.mu.Lock()
+	c := m.connections[ref.TabID]
+	poisoned := c != nil && c.nativeTerminalPoisoned
+	m.mu.Unlock()
+	if !poisoned { t.Fatal("cancelled native transfer should require a terminal reconnect") }
+	if _, err := m.AcquireAITerminal(ref); err == nil {
+		t.Fatal("AI acquired an unsafe terminal after the native task ended")
+	}
+	if err := m.runNativeTerminalExperiment(context.Background(), ref, os.Args[0], "upload", source, ""); err == nil {
+		t.Fatal("second transfer reused an unsafe terminal without reconnect")
 	}
 }
