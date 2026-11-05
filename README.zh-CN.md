@@ -20,7 +20,7 @@
 
 OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH/SFTP 客户端，支持多标签、分屏终端、会话管理、SFTP、rz/sz、Xshell 会话导入与快捷命令。
 
-**项目状态：** 正在积极开发，尚未达到 1.0 正式版。已提供 Windows x64 安装版与便携版，各版本改动和实际签名状态见 [发布说明](https://github.com/hctty27/openshell/releases)。
+**项目状态：** 已进入 v1.0 正式版阶段，持续维护更新。已提供 Windows x64 安装版与便携版，各版本改动和实际签名状态见 [发布说明](https://github.com/hctty27/openshell/releases)。
 
 ## 界面预览
 
@@ -43,7 +43,7 @@ OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH/SFT
 | 连接控制 | 支持 SSH 保活、异常重连、主动断开、断线返回本地终端，关闭活动连接或退出应用前进行确认。 |
 | SFTP 文件管理 | 浏览本地与远程文件，上传下载文件和目录、断点续传、远程文本编辑、单向目录同步预览、权限管理。 |
 | 终端文件传输 | 支持 `rz` / `sz` 与 `trz` / `tsz`，统一使用内嵌文件选择器与顶部传输中心，无需弹出系统资源管理器或额外 CMD 窗口。 |
-| 快速命令 | 支持分类、排序及全局 / 文件夹 / 会话作用范围，通过换行控制是否执行。 |
+| 快速命令 | 支持搜索、排序及全局 / 文件夹 / 会话作用范围，通过换行控制是否执行。 |
 | 外观与语言 | 英文与简体中文切换，浅色 / 深色应用主题，独立的经典黑色、深灰和白色终端配色。 |
 
 ## 下载安装
@@ -188,7 +188,7 @@ npx playwright test
 
 - [CI](.github/workflows/ci.yml)：PR 和 `main` 推送运行 Go race 检测、`go vet`、前端测试、生产构建及选定的 Chromium 回归。
 - [Windows terminal smoke](.github/workflows/windows-terminal-smoke.yml)：对终端、SSH、SFTP、ConPTY 相关 PR 执行 Windows 冒烟验证。
-- [Windows release](.github/workflows/windows-release.yml)：只有 `main` 的版本标记变化且 CI 通过后才正式发布。保留最近 3 个 Release 和旧 Git Tag，最终构建产物保留 7 天。手动运行仅生成 Artifacts，不发布 Release。
+- [Windows release](.github/workflows/windows-release.yml)：只有 `main` 的版本标记变化且 CI 通过后才正式发布。保留最近 3 个 Release 及 v1.0.0 等大版本里程碑，旧 Git Tag 不删除，最终构建产物保留 7 天。手动运行仅生成 Artifacts，不发布 Release。
 
 **推荐一键发布：** 打开 GitHub Actions 中的 [Publish OpenShell (one click)](.github/workflows/publish.yml)，选择 `main` 分支，默认 `patch`（也可选 `minor` / `major`），点击 **Run workflow**。工作流自动同步版本标记、npm 版本文件、Windows 版本信息和更新日志，提交版本变更，并在固定提交上执行 Go / 前端验证；Windows 构建复用已验证的前端产物，最后发布安装包和便携 ZIP。若版本已准备好但打包失败，再次运行将继续发布该版本，不会重复升级版本号。请勿同时运行多个发布流程。
 
@@ -203,7 +203,7 @@ npx playwright test
 - Windows 原生输入法、剪贴板、凭据存储、异常传输和性能仍需实机验证；工具调用兼容性取决于具体 API 服务商及模型。
 - 终端上下文附件限制为 200 行 / 32 KiB。如果旧终端历史已经被裁剪，预览可能缺少截断提示。
 
-实现细节与验证范围见 [Windows 验收记录](docs/windows-acceptance.md)、[稳定性验收](docs/stability-acceptance.md)、[对话记忆验证](docs/conversation-memory-validation.md) 与 [多语言说明](docs/internationalization.md)。
+实现细节与验证范围见 [Windows 验收记录](docs/windows-acceptance.md)、[稳定性验收](docs/stability-acceptance.md) 与 [多语言说明](docs/internationalization.md)。
 
 欢迎提交问题和范围明确的 PR。反馈 [Issue](https://github.com/hctty27/openshell/issues) 时，请附上 OpenShell 版本、Windows 版本、复现步骤及脱敏日志。修改文档中的功能行为时，请同步维护中英文 README。
 
