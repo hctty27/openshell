@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -179,7 +180,7 @@ func bridge(ctx context.Context, client *ssh.Client, sidecar, direction, localPa
 		case copyErr := <-copied:
 			// Successful peers can close their pipes while the final protocol
 			// bytes are still being drained. Other copy failures are fatal.
-			if copyErr != nil && !errors.Is(copyErr, io.ErrClosedPipe) && !errors.Is(copyErr, os.ErrClosed) {
+			if copyErr != nil && !errors.Is(copyErr, io.ErrClosedPipe) && !errors.Is(copyErr, os.ErrClosed) && !errors.Is(copyErr, syscall.EPIPE) {
 				return fmt.Errorf("SSH PTY copy failed: %w", copyErr)
 			}
 		case <-ctx.Done():
