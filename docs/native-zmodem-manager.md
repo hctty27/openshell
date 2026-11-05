@@ -73,3 +73,17 @@ SSH interactive PTY stdout/stderr
 - `takeover` **不能**从下游 `zmodemDirectionWriter.Write` 的同步回调直接调用，因为切换需要等待现有 `Write` 退出。下一阶段必须先设计非阻塞、可无损保存已识别 ZMODEM 头帧的握手协议。
 
 **未完成：** 本 PR 没有把 Rust sidecar 接到 gate 的 native 输出，也没有接管当前终端的标准输入；只完成输出流的单一消费者基础和隔离测试。输入方向、缓冲/头帧、取消、异常恢复与真实交互式 `rz/sz` 尚未通过端到端验收，因此不应对外开放切换。
+
+
+## ZMODEM 启动帧无损识别（实验基础）
+
+新增 `nativeZmodemStartScanner` 和 `terminalOutputGate.armOnZmodemHeader`，针对现有 ZMODEM 检测器使用的 `**\\x18B0[01][0-9a-f]{12}` 十六进制帧头（18 字节）实现分块识别。
+
+- 只有显式调用 `armOnZmodemHeader(native io.Writer)` 时才进行缓存、协议头识别和切换；**正式 OpenShell 不调用该方法**，旧版 `rz/sz`、文件选择和终端数据流完全按原样运行。
+- 最多暂存 17 字节候选帧前缀；非匹配字节原样进入旧过滤器。若帧头在两个或多个 SSH 输出块间拆分，不会提前向 `trzsz-go` 发送候选协议字节。
+- 命中完整帧头时，在同一写锁下将之前的普通终端文本送入旧过滤器，完整帧头和该块中后续全部原始字节送入 native sink；之后全部后续字节只进入 native。
+- 若尚未识别到完整帧头，调用 `disarm(lease)` 可以将暂存的候选字节完整还给旧过滤器，不丢失普通终端输出。
+- 一旦命中 native，必须等原生协议双端已经完成并清空队列才能 `restore(lease)`。native 写入失败后不允许隐式回退；不能让错误的协议尾字节泄漏至终端渲染器或 AI 历史。
+- 新增测试覆盖所有单次分割点、逐字节拆分、假帧头、不完整帧头、非 UTF-8 二进制负载、大数据量缓存界限、旧过滤器旁路和失效租约。
+
+**关键剩余工作：** 当前仅具有“预置接收者后的原子输出切换”能力，尚未实现输入方向的 SSH PTY 所有权切换，也未提供实际 Rust sidecar 的已连接启动与主动文件选择；不支持在终端输入 `rz/sz` 时直接接管。不能直接在 `zmodemDirectionWriter.Write` 的同步回调中执行 `arm`，否则会导致死锁。真实用户交互需要下一阶段设计 sidecar 就绪、输入/输出同步移交以及明确的取消恢复状态机。

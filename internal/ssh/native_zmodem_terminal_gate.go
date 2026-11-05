@@ -11,16 +11,17 @@ var (
 	errTerminalStreamLease = errors.New("终端输出独占令牌已失效")
 )
 
-// terminalOutputGate is the single owner of incoming SSH terminal bytes.
-// The legacy trzsz filter remains the default destination. A future native
-// transfer may take exclusive ownership at a verified protocol boundary,
-// but must never let the same bytes reach both destinations.
+// terminalOutputGate serializes access to one SSH terminal output stream.
+// Legacy trzsz is the unconditional default until an explicit opt-in arm.
+// Neither the application nor production UI currently calls armOnZmodemHeader.
 type terminalOutputGate struct {
-	mu     sync.Mutex
-	legacy io.Writer
-	native io.Writer
-	lease  uint64
-	closed bool
+	mu      sync.Mutex
+	legacy  io.Writer
+	native  io.Writer
+	armed   io.Writer
+	scanner nativeZmodemStartScanner
+	lease   uint64
+	closed  bool
 }
 
 func newTerminalOutputGate(legacy io.Writer) *terminalOutputGate {
@@ -37,13 +38,45 @@ func (g *terminalOutputGate) Write(p []byte) (int, error) {
 	if g.native != nil {
 		return g.native.Write(p)
 	}
-	return g.legacy.Write(p)
+	if g.armed == nil {
+		return g.legacy.Write(p)
+	}
+
+	legacy, native, matched := g.scanner.feed(p)
+	if matched {
+		// Switch ownership before either downstream call. A failed legacy
+		// write must not allow later ZMODEM payload into the terminal.
+		g.native = g.armed
+		g.armed = nil
+	}
+	if err := writeNativeGateBytes(g.legacy, legacy); err != nil {
+		return 0, err
+	}
+	if matched {
+		if err := writeNativeGateBytes(g.native, native); err != nil {
+			return 0, err
+		}
+	}
+	// A partial header may be buffered until a later Write or disarm.
+	return len(p), nil
 }
 
-// takeover changes the destination only after every earlier Write has
-// completed. The returned token prevents an old transfer from restoring
-// routing for a newer one. Do not call from inside the downstream writer's
-// Write callback, which would be a reentrant acquisition of g.mu.
+func writeNativeGateBytes(writer io.Writer, p []byte) error {
+	if len(p) == 0 {
+		return nil
+	}
+	n, err := writer.Write(p)
+	if err != nil {
+		return err
+	}
+	if n != len(p) {
+		return io.ErrShortWrite
+	}
+	return nil
+}
+
+// takeover selects a native consumer immediately. It is serialized behind
+// any in-progress legacy Write, and cannot interrupt an armed header probe.
 func (g *terminalOutputGate) takeover(native io.Writer) (uint64, error) {
 	if native == nil {
 		return 0, errors.New("原生协议输出目标为空")
@@ -54,7 +87,7 @@ func (g *terminalOutputGate) takeover(native io.Writer) (uint64, error) {
 	if g.closed {
 		return 0, io.ErrClosedPipe
 	}
-	if g.native != nil {
+	if g.native != nil || g.armed != nil {
 		return 0, errTerminalStreamOwned
 	}
 	g.lease++
@@ -62,10 +95,55 @@ func (g *terminalOutputGate) takeover(native io.Writer) (uint64, error) {
 	return g.lease, nil
 }
 
-// restore is only safe after both native protocol peers and their output
-// readers have finished. A native write failure NEVER triggers implicit
-// restoration, because subsequent protocol bytes would leak into the
-// terminal history and renderer.
+// armOnZmodemHeader pre-installs the native destination without switching
+// the live stream yet. The scanner withholds at most 17 possible header bytes.
+// On the first complete frame, any preceding text goes to legacy; the entire
+// header and all following bytes in that Write go exclusively to native.
+//
+// IMPORTANT: this is a non-production handoff primitive. The caller must have
+// its Rust receiver and stdin routing ready before arming. Never call it from
+// inside the downstream legacy Write callback (the gate lock is not reentrant).
+func (g *terminalOutputGate) armOnZmodemHeader(native io.Writer) (uint64, error) {
+	if native == nil {
+		return 0, errors.New("原生协议输出目标为空")
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.closed {
+		return 0, io.ErrClosedPipe
+	}
+	if g.native != nil || g.armed != nil {
+		return 0, errTerminalStreamOwned
+	}
+	g.lease++
+	g.scanner = nativeZmodemStartScanner{}
+	g.armed = native
+	return g.lease, nil
+}
+
+// disarm replays the partial, unconfirmed header to the legacy consumer.
+// Once a complete header has triggered the native path, only restore is valid.
+func (g *terminalOutputGate) disarm(lease uint64) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.closed {
+		return io.ErrClosedPipe
+	}
+	if lease == 0 || lease != g.lease || g.armed == nil || g.native != nil {
+		return errTerminalStreamLease
+	}
+	if err := writeNativeGateBytes(g.legacy, g.scanner.tail); err != nil {
+		return err
+	}
+	g.scanner = nativeZmodemStartScanner{}
+	g.armed = nil
+	return nil
+}
+
+// restore is only safe after the native protocol peers and their readers
+// finish. An error never implicitly resumes the legacy terminal stream.
 func (g *terminalOutputGate) restore(lease uint64) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -77,6 +155,7 @@ func (g *terminalOutputGate) restore(lease uint64) error {
 		return errTerminalStreamLease
 	}
 	g.native = nil
+	g.scanner = nativeZmodemStartScanner{}
 	return nil
 }
 
@@ -85,4 +164,6 @@ func (g *terminalOutputGate) close() {
 	defer g.mu.Unlock()
 	g.closed = true
 	g.native = nil
+	g.armed = nil
+	g.scanner = nativeZmodemStartScanner{}
 }
