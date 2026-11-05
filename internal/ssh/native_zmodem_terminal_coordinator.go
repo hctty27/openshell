@@ -18,13 +18,9 @@ import (
 type nativeTerminalSidecarRunner func(context.Context, string, string, io.ReadCloser, io.Writer) error
 
 // nativeTerminalCoordinator is an experiment-only bridge between the already
-// present input and output gates. It is NOT wired into the Wails application:
-// there is no trusted remote shell completion observer yet.
-//
-// A transfer requires an explicit caller-supplied, verified remote completion
-// barrier. Errors after sending the shell command intentionally leave both
-// gates exclusively leased. The caller must disconnect that terminal rather
-// than leak unfinished ZMODEM frames back to trzsz/xterm.
+// present input and output gates. It is NOT wired into the Wails application.
+// A per-transfer shell completion marker is detected behind the output gate;
+// the old terminal stays isolated on any unconfirmed or failed transfer.
 type nativeTerminalCoordinator struct {
 	input  *terminalInputGate
 	output *terminalOutputGate
@@ -124,9 +120,9 @@ func (w *nativeTerminalOutboundBarrier) Write(p []byte) (int, error) {
 }
 
 // run performs an explicitly initiated, single-file transfer in the existing
-// SSH terminal. The 'remoteDrained' signal MUST come from a verified remote
-// shell boundary (not from terminal text/header matching). Such an observer
-// is not implemented, so this method has no production caller or UI entry.
+// SSH terminal. A fresh nonce-bound OSC marker is emitted only after the
+// invoked remote rz/sz process returns. No UI or production entrypoint calls
+// this experimental method yet.
 //
 // If an error occurs after the command is sent, the existing PTY is not
 // recoverable without independent remote completion proof. In that case the
@@ -134,16 +130,16 @@ func (w *nativeTerminalOutboundBarrier) Write(p []byte) (int, error) {
 func (c *nativeTerminalCoordinator) run(
 	parent context.Context,
 	direction, localPath, remotePath string,
-	remoteDrained <-chan struct{},
 ) error {
-	if parent == nil || c == nil || c.input == nil || c.output == nil || c.runner == nil ||
-		remoteDrained == nil {
-		return errors.New("缺少可信的原生终端传输协调参数")
+	if parent == nil || c == nil || c.input == nil || c.output == nil || c.runner == nil {
+		return errors.New("缺少原生终端传输协调参数")
 	}
 	if err := parent.Err(); err != nil {
 		return err
 	}
-	command, action, err := nativeInteractiveCommand(direction, remotePath)
+	token, err := newNativeRemoteBoundaryToken()
+	if err != nil { return fmt.Errorf("远端传输结束令牌创建失败：%w", err) }
+	command, action, err := nativeInteractiveFencedCommand(direction, remotePath, token)
 	if err != nil {
 		return err
 	}
@@ -177,7 +173,8 @@ func (c *nativeTerminalCoordinator) run(
 	sink := &nativeTerminalInboundSink{
 		pipe: writer, ready: make(chan struct{}), fail: make(chan error, 1), expected: expected,
 	}
-	outputLease, err := c.output.armOnZmodemHeader(sink)
+	fence := newNativeRemoteBoundarySink(sink, token)
+	outputLease, err := c.output.armOnZmodemHeader(fence)
 	if err != nil {
 		_ = reader.Close()
 		_ = writer.Close()
@@ -233,20 +230,21 @@ func (c *nativeTerminalCoordinator) run(
 		return errors.New("未收到远程 ZMODEM 启动帧，终端状态不可确认（需要重连）")
 	}
 
-	// Do not trust successful local process exit as proof that remote rz/sz
-	// has finished and the shell is back at a clean command boundary.
+	// Local sidecar exit alone never grants permission to resume the terminal.
+	// The remote shell emits a nonce-scoped OSC control marker *after* rz/sz
+	// exits; the marker and following shell output do not reach the sidecar.
 	select {
-	case <-remoteDrained:
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
-		}
+	case remote := <-fence.completion:
+		if remote.err != nil { return fmt.Errorf("远端 ZMODEM 结束标记异常（需要重连）：%w", remote.err) }
+		if remote.code != 0 { return fmt.Errorf("远端 rz/sz 退出状态为 %d，终端需要重连", remote.code) }
+		if ctxErr := ctx.Err(); ctxErr != nil { return ctxErr }
 	case <-ctx.Done():
-		return fmt.Errorf("等待远程传输结束证明超时（需要重连终端）：%w", ctx.Err())
+		return fmt.Errorf("等待远端传输结束标记超时（需要重连终端）：%w", ctx.Err())
 	}
 
-	// The verified remote barrier is the ONLY point where it is safe to
-	// resume the normal filter. Restore output first, input second.
-	if err := c.output.restore(outputLease); err != nil {
+	// Replay bytes received after the completion marker while holding the
+	// output gate lock, before admitting any new ordinary SSH output.
+	if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil {
 		return err
 	}
 	if err := c.input.restore(inputLease); err != nil {
