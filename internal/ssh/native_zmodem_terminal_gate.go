@@ -159,6 +159,26 @@ func (g *terminalOutputGate) restore(lease uint64) error {
 	return nil
 }
 
+// restoreWithReplay keeps the gate locked while replaying verified post-
+// protocol shell output. Without the lock, fresh PTY output could overtake
+// bytes withheld after the remote completion marker.
+func (g *terminalOutputGate) restoreWithReplay(lease uint64, trailing func() []byte) error {
+	if trailing == nil { return errors.New("缺少远端输出恢复数据源") }
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed { return io.ErrClosedPipe }
+	if g.native == nil || lease == 0 || g.lease != lease {
+		return errTerminalStreamLease
+	}
+	if err := writeNativeGateBytes(g.legacy, trailing()); err != nil {
+		// Preserve native ownership if the original terminal sink failed.
+		return err
+	}
+	g.native = nil
+	g.scanner = nativeZmodemStartScanner{}
+	return nil
+}
+
 func (g *terminalOutputGate) close() {
 	g.mu.Lock()
 	defer g.mu.Unlock()

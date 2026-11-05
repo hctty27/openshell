@@ -128,13 +128,22 @@ SSH PTY stdout/stderr -> terminalOutputGate -> trzsz-go / 预置 native 接收�
 4. 启动 sidecar runner；它的初始输出由 `nativeTerminalOutboundBarrier` 暂停，直至收到匹配方向的远端 ZMODEM 帧头。上传需要 `ZRINIT` (01)，下载需要 `ZRQINIT` (00)。
 5. 通过原生输入租约发送受约束的 Shell 命令：上传 `rz -q`（当前工作目录），下载 `sz -q -- '经 POSIX 引号转义的路径'`。不会使用 `exec` 替换交互式 Shell。
 6. 命中后远端协议字节只进入 sidecar stdin，sidecar stdout 只进入 SSH PTY 的原生输入租约；普通文本仍走旧输出处理器。
-7. **成功退出 sidecar 不代表远端 Shell 已恢复。** 必须另有 `remoteDrained` 可信结束证明，才允许先恢复输出、再恢复输入，最后发布已下载的文件。
+7. **成功退出 sidecar 不代表远端 Shell 已恢复。** PR #214 已实现带随机令牌和远端退出状态的 Shell 完成标记解析，标记必须完整匹配后才允许恢复输出、输入，最后发布已下载的文件。
 8. 发送命令后，若取消、方向不符、sidecar 失败或结束状态不明则 **fail closed**：不恢复旧路由；需要断开并重连这个终端，避免二进制尾帧泄漏。
 
 ### 限制与后续
 
-- 当前 `remoteDrained` 仅是由将来可信边界检测器提供的内部通道；**尚无生产提供者**，协调器没有 Wails/UI 调用方，不应在真实服务器上直接启用。
+- PR #214 已将旧的外部 `remoteDrained` 通道替换为内置远端 Shell 完成标记检测器；**尚未完成真实交互式 Windows→Linux 端到端联调和连接生命周期绑定**，协调器依旧没有 Wails/UI 调用方，不应在正式客户端启用。
 - 18 字节 ZMODEM 启动帧检测只是握手识别，**不是身份认证，也不验证完整 CRC**。方向不符不释放 sidecar 的初始响应。
 - 单文件 / 128 MiB 上限、POSIX Shell、缺少真实交互式 Windows→Linux 全链路验证；不支持 JumpServer、弱网和自动重试。
 - 测试通过注入确定性的 sidecar runner 验证双向流所有权、完成屏障、取消后 fail-closed，以及成功后单文件安全发布。
 - 原来的 `rz/sz`、`trzsz-go`、MSYS2、发行包完全不变。下一步实现可信结束边界检测、连接生命周期绑定以及实际 SSH PTY 联调。
+
+## PR #214：远端 Shell 完成标记解析与原子终端恢复（实验）
+
+- 每次传输通过 `crypto/rand` 生成 128-bit 随机令牌；Shell 命令在 `rz/sz` 返回后保存退出码，并使用 `printf` 输出专用 OSC 控制标记 `ESC]777;OpenShellNativeZmodem;<token>;<exit_code>BEL`。终端自身回显的 Shell 命令只包含可打印的反斜线转义，不会包含真实 ESC/BEL。
+- 在 `terminalOutputGate` 的 native 接收器后加 `nativeRemoteBoundarySink`，扫描跨 SSH 输出块的完成标记。完成标记不会进入 ZMODEM sidecar；匹配之前的真实协议字节保持原样转发；匹配之后的 Shell 提示符/普通输出先缓存在 64 KiB 有界缓冲中。
+- 只有本地 sidecar 成功、远端完成标记的令牌完全匹配且退出码为 0，才调用 `restoreWithReplay`。该操作在输出 gate 锁内回放尾随 Shell 输出并恢复旧路由，保证与并发 SSH 输出的严格先后顺序。
+- 远端退出码非零、标记错误或缺失、缓冲溢出、取消或超时时持续保持 fail-closed，不会把未知协议字节送回 `trzsz-go`/历史/UI。
+- 帧头和完成标记均为**可信 SSH 对端主动执行的命令边界标识，不是对恶意服务器的认证或 CRC 证据**。调用方仍必须明确授权和选择文件，不能仅凭输出自动启动协议。
+- 本阶段仍没有正式调用入口；未绑入真实 SSH 标签页生命周期，未覆盖 JumpServer、异常重连、弱网及真实 Windows→Linux 的同一交互式 PTY。旧传输链路与 MSYS2 保持不变。
