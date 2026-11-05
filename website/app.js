@@ -90,9 +90,6 @@ function setLanguage(language) {
     const value = words[element.dataset.i18n];
     if (typeof value === "string") {
       element.textContent = value;
-      if (element.dataset.i18n === "workflowHeading") {
-        element.style.whiteSpace = "pre-line";
-      }
     }
   });
   document.querySelectorAll("[data-i18n-alt]").forEach((element) => {
