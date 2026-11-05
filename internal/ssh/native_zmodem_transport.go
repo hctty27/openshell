@@ -42,6 +42,7 @@ func (l *nativeZmodemLog) String() string {
 // RunNativeZmodemTransport is experimental and is not connected to the
 // interactive terminal. Each direction has exactly one reader of binary data.
 func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, direction, localPath, remoteCommand string) error {
+	if ctx == nil { return errors.New("缺少原生 ZMODEM 传输上下文") }
 	if err := ctx.Err(); err != nil { return err }
 	if client == nil || sidecar == "" || localPath == "" || remoteCommand == "" {
 		return errors.New("原生 ZMODEM 桥接参数不完整")
@@ -78,9 +79,9 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 	if err != nil { return err }
 	remoteOut, err := session.StdoutPipe()
 	if err != nil { return err }
-	if err = session.RequestPty("dumb", 24, 80, ssh.TerminalModes{ssh.ECHO: 0}); err != nil {
-		return fmt.Errorf("远程 PTY 创建失败：%w", err)
-	}
+	if err = nativeZmodemSSHRequest(ctx, session, "远程 PTY 创建", func() error {
+		return session.RequestPty("dumb", 24, 80, ssh.TerminalModes{ssh.ECHO: 0})
+	}); err != nil { return err }
 
 	process := exec.CommandContext(ctx, sidecar, direction, localPath)
 	process.WaitDelay = nativeZmodemShutdownTimeout
@@ -90,9 +91,9 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 	if err != nil { return err }
 	localOut, err := process.StdoutPipe()
 	if err != nil { return err }
-	if err = session.Start(remoteCommand); err != nil {
-		return fmt.Errorf("远程 rz/sz 启动失败：%w", err)
-	}
+	if err = nativeZmodemSSHRequest(ctx, session, "远程 rz/sz 启动", func() error {
+		return session.Start(remoteCommand)
+	}); err != nil { return err }
 	if err = process.Start(); err != nil {
 		return fmt.Errorf("本地原生 ZMODEM 启动失败：%w", err)
 	}
@@ -164,6 +165,26 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 		}
 	}
 	return nil
+}
+
+
+ // nativeZmodemSSHRequest bounds SSH channel requests that can otherwise
+ // wait indefinitely for a remote reply. Closing only this session leaves
+ // the user's existing SSH connection and visible terminal untouched.
+func nativeZmodemSSHRequest(ctx context.Context, session *ssh.Session, label string, request func() error) error {
+	result := make(chan error, 1)
+	go func() { result <- request() }()
+	select {
+	case err := <-result:
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf("%s已取消或超时：%w", label, ctxErr)
+		}
+		if err != nil { return fmt.Errorf("%s失败：%w", label, err) }
+		return nil
+	case <-ctx.Done():
+		_ = session.Close()
+		return fmt.Errorf("%s已取消或超时：%w", label, ctx.Err())
+	}
 }
 
 func waitForNativeZmodemShutdown(local, remote <-chan error, localDone, remoteDone bool) {
