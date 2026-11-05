@@ -5,6 +5,8 @@ param(
 $ErrorActionPreference = "Stop"
 $version = "v0.12.21rc"
 $expectedSha256 = "dace2db172b1b5a1e5998692760a75355b254e1826718d88bae7fa3a6de3c325"
+$expectedRuntimeSha256 = "fb6136d849fb7a28a2d9aa7684394f6d20252942f129d2ea90ba709691a62bad"
+$msys2CandidateCommit = "677ece60fc37b0c5d336db1e345a4c33ffff15f6"
 $assetUrl = "https://github.com/trzsz/lrzsz-win32/releases/download/$version/lrzsz_0.12.21rc_windows_x86_64.zip"
 $sourceUrl = "https://github.com/trzsz/lrzsz-win32/archive/2e46d4258035cea45262244f59c34d0db4fae2a7.zip"
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("openshell-lrzsz-" + [Guid]::NewGuid().ToString("N"))
@@ -43,6 +45,20 @@ try {
     foreach ($file in @("rz.exe", "sz.exe", "msys-2.0.dll")) {
         Copy-Item -LiteralPath (Join-Path $sourceBinDir $file) -Destination (Join-Path $native $file) -Force
     }
+    $runtimeSha256 = (Get-FileHash -LiteralPath (Join-Path $native "msys-2.0.dll") -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($runtimeSha256 -ne $expectedRuntimeSha256) {
+        throw "Unexpected bundled MSYS2 runtime checksum: $runtimeSha256"
+    }
+    $msys2LicenseDir = "third_party/msys2-runtime-3.4.9"
+    foreach ($license in @(
+        @("CYGWIN_LICENSE", "CYGWIN_LICENSE-msys2.txt"),
+        @("COPYING.LIB", "COPYING-LGPLv3-msys2.txt"),
+        @("COPYING", "COPYING-GPLv3-msys2.txt")
+    )) {
+        $licensePath = Join-Path $msys2LicenseDir $license[0]
+        if (!(Test-Path -LiteralPath $licensePath -PathType Leaf)) { throw "Missing bundled MSYS2 license notice: $licensePath" }
+        Copy-Item -LiteralPath $licensePath -Destination (Join-Path $target $license[1]) -Force
+    }
 
     # rz/sz are console programs. trzsz-go starts them without CREATE_NO_WINDOW;
     # a Windows GUI-subsystem launcher forwards stdio and starts the unmodified
@@ -68,6 +84,11 @@ Source archive: lrzsz-win32-source.zip
 License: COPYING-lrzsz.txt (GPL-2.0)
 Includes msys-2.0.dll from upstream binary release.
 MSYS2 runtime source and licensing: https://github.com/msys2/msys2-runtime
+Runtime DLL version: 3.4.9
+Runtime DLL SHA-256: $expectedRuntimeSha256
+MSYS2 source candidate snapshot: https://github.com/msys2/msys2-runtime/tree/$msys2CandidateCommit
+Reference license files from that immutable source snapshot: CYGWIN_LICENSE-msys2.txt, COPYING-LGPLv3-msys2.txt, COPYING-GPLv3-msys2.txt
+Important: Candidate source snapshot has NOT been proven to match the exact upstream DLL build/package revision. No source-equivalence or license-clearance claim is made.
 Upstream binary ZIP SHA-256: $expectedSha256
 
 The unmodified upstream binaries are in native/. The top-level rz.exe and sz.exe
