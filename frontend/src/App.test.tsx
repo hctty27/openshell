@@ -492,7 +492,7 @@ test("the tab plus always opens independent SSH tabs for the same saved session"
 
   showPicker();
   fireEvent.click(selectSession());
-  fireEvent.click(screen.getByRole("button", { name: "连接", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "连接" }));
   await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(3));
   expect(screen.getAllByTitle("关闭 us")).toHaveLength(3);
 
