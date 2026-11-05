@@ -4,6 +4,7 @@ package sftp
 
 import (
     "bytes"
+    "context"
     "errors"
     "os"
     "path/filepath"
@@ -190,4 +191,40 @@ func TestRemoteDeleteDoesNotFollowSymlinks(t *testing.T) {
     if err:=m.Operate(ref,"remote","delete",filepath.ToSlash(folder),"");err!=nil {t.Fatal(err)}
     if _,err:=os.Lstat(folder);!errors.Is(err,os.ErrNotExist) {t.Fatalf("folder still exists: %v",err)}
     if _,err:=os.Stat(keep);err!=nil {t.Fatalf("nested link target was removed: %v",err)}
+}
+
+func TestRemoteTextReadStagesForSmallAndLargeFiles(t *testing.T) {
+    m, ref := advancedManager(t)
+    cases := []struct {
+        name string
+        content []byte
+    }{
+        {name: "empty", content: []byte("")},
+        {name: "small", content: []byte("server: production\n")},
+        {name: "large", content: bytes.Repeat([]byte("a"), 64*1024)},
+    }
+
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            name := filepath.Join(t.TempDir(), "config.txt")
+            if err := os.WriteFile(name, tc.content, 0600); err != nil { t.Fatal(err) }
+            stages := make(map[string]time.Duration)
+            doc, err := m.ReadRemoteTextContext(context.Background(), ref, name,
+                func(stage string, duration time.Duration) { stages[stage] = duration })
+            if err != nil { t.Fatal(err) }
+            if doc.Content != string(tc.content) { t.Fatalf("unexpected content length: %d", len(doc.Content)) }
+            if doc.Size != int64(len(tc.content)) { t.Fatalf("unexpected size: %d", doc.Size) }
+            for _, stage := range []string{"pool", "stat", "open", "read", "close"} {
+                if _, ok := stages[stage]; !ok { t.Fatalf("stage %s not recorded", stage) }
+            }
+        })
+    }
+}
+
+func TestRemoteTextReadCancellationBeforeNetworkIO(t *testing.T) {
+    m, ref := advancedManager(t)
+    ctx, cancel := context.WithCancel(context.Background())
+    cancel()
+    _, err := m.ReadRemoteTextContext(ctx, ref, "/not-read.txt", nil)
+    if !errors.Is(err, context.Canceled) { t.Fatalf("expected context canceled, got %v", err) }
 }
