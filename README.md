@@ -22,7 +22,7 @@ OpenShell is a free, open-source Windows SSH/SFTP client for developers and serv
 
 **Status:** v1.0 stable release, with ongoing maintenance. Windows x64 installers and portable packages are available. See the [release notes](https://github.com/hctty27/openshell/releases) for the changes and signing status of each build.
 
-**Policies:** [Code signing policy](CODE_SIGNING_POLICY.md) · [Privacy policy](PRIVACY.md) · [Third-party license review](docs/third-party-review.md) · [SignPath application checklist](docs/signpath-application-checklist.md).
+**Policies:** [Code signing policy](CODE_SIGNING_POLICY.md) · [Privacy policy](PRIVACY.md) · [Third-party license review](docs/third-party-review.md) · [SBOM and binary inventory](docs/sbom.md) · [SignPath application checklist](docs/signpath-application-checklist.md).
 
 ## Screenshots
 
