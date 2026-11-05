@@ -130,21 +130,27 @@ func bridge(ctx context.Context, client *ssh.Client, sidecar, direction, localPa
 	// Exactly one reader owns each direction. Terminal rendering and the
 	// production trzsz filter are not involved in this experimental session.
 	copied := make(chan error, 2)
+	remoteOutputDone := make(chan struct{})
+	localOutputDone := make(chan struct{})
 	go func() {
+		defer close(remoteOutputDone)
 		_, copyErr := io.Copy(localIn, remoteOut)
 		_ = localIn.Close()
 		copied <- copyErr
 	}()
 	go func() {
+		defer close(localOutputDone)
 		_, copyErr := io.Copy(remoteIn, localOut)
 		_ = remoteIn.Close()
 		copied <- copyErr
 	}()
 
+	// Wait only after stdout has been fully drained. Both SSH Session.Wait
+	// and exec.Cmd.Wait may otherwise close pipes before io.Copy finishes.
 	localFinished := make(chan error, 1)
 	remoteFinished := make(chan error, 1)
-	go func() { localFinished <- process.Wait() }()
-	go func() { remoteFinished <- session.Wait() }()
+	go func() { <-localOutputDone; localFinished <- process.Wait() }()
+	go func() { <-remoteOutputDone; remoteFinished <- session.Wait() }()
 
 	var localErr, remoteErr error
 	for localFinished != nil || remoteFinished != nil {
