@@ -125,7 +125,8 @@ func allowedOperation(module, operation string) bool {
     case "sftp":
         switch operation {
         case "SFTPHome", "SFTPList", "SFTPOperate", "SFTPTransfer",
-            "SFTPReadRemoteText", "SFTPSaveRemoteText", "SFTPPreviewSync":
+            "SFTPReadRemoteText", "SFTPSaveRemoteText", "SFTPPreviewSync",
+            "SFTPRead.pool", "SFTPRead.stat", "SFTPRead.open", "SFTPRead.read", "SFTPRead.close":
             return true
         }
     case "ai":
