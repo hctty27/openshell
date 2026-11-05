@@ -177,7 +177,9 @@ func bridge(ctx context.Context, client *ssh.Client, sidecar, direction, localPa
 	for range 2 {
 		select {
 		case copyErr := <-copied:
-			if copyErr != nil && !errors.Is(copyErr, io.ErrClosedPipe) {
+			// Successful peers can close their pipes while the final protocol
+			// bytes are still being drained. Other copy failures are fatal.
+			if copyErr != nil && !errors.Is(copyErr, io.ErrClosedPipe) && !errors.Is(copyErr, os.ErrClosed) {
 				return fmt.Errorf("SSH PTY copy failed: %w", copyErr)
 			}
 		case <-ctx.Done():
