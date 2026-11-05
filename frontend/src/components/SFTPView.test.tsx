@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import SFTPView from "./SFTPView";
 import { DialogProvider } from "./DialogProvider";
-import { initializeI18n } from "../i18n";
+import { initializeI18n, t } from "../i18n";
 import { Clipboard } from "@wailsio/runtime";
 import { BASH_CWD_REPORT_COMMAND } from "../terminalCwd";
 import { api } from "../bridge";
@@ -380,4 +380,32 @@ test("saving a remote file does not discard edits made during the upload", async
   await act(async () => finishSave({ ...original, content: "first change", revision: "next", size: 12 }));
   expect(draft.value).toBe("second change");
   expect(screen.getByTestId("sftp-edit-dirty").textContent).toBe("dirty");
+});
+
+test("remote SFTP editor uses a native modal and requires confirmation to discard changes", async () => {
+  const source: SFTPDocument = {
+    path: "/root/config.yaml", content: "original", revision: "initial", size: 8,
+  };
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
+    side === "remote" ? [file("config.yaml", source.path)] : []);
+  vi.mocked(api.SFTPReadRemoteText).mockResolvedValue(source);
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+
+  fireEvent.doubleClick((await screen.findByText("config.yaml")).closest('[role="listitem"]')!);
+  const draft = await screen.findByTestId("sftp-edit-draft") as HTMLTextAreaElement;
+  const modal = screen.getByRole("dialog", { name: t("sftp:editText") }) as HTMLDialogElement;
+  expect(modal.classList.contains("sftp-editor-dialog")).toBe(true);
+  expect(modal.open).toBe(true);
+
+  fireEvent.change(draft, { target: { value: "unsaved" } });
+  fireEvent(modal, new Event("cancel", { cancelable: true }));
+  let confirmation = await screen.findByRole("dialog", { name: t("sftp:discardEditorTitle") });
+  fireEvent.click(within(confirmation).getByRole("button", { name: t("common:cancel") }));
+  expect(modal.open).toBe(true);
+  expect(draft.value).toBe("unsaved");
+
+  fireEvent(modal, new Event("cancel", { cancelable: true }));
+  confirmation = await screen.findByRole("dialog", { name: t("sftp:discardEditorTitle") });
+  fireEvent.click(within(confirmation).getByRole("button", { name: t("sftp:discard") }));
+  await waitFor(() => expect(document.querySelector(".sftp-editor-dialog")).toBeNull());
 });

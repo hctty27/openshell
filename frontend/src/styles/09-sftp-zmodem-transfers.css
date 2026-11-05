@@ -42,8 +42,8 @@
 .sftp-sync-controls button:disabled { opacity: .4; }
 .sftp-retry-actions {display:flex;align-items:center;gap:3px}
 .sftp-retry-actions button:hover {color:var(--accent)}
-.sftp-editor-backdrop {position:fixed;inset:0;z-index:100;background:#0009;display:flex;align-items:center;justify-content:center;padding:25px}
-.sftp-editor {display:flex;flex-direction:column;min-width:0;width:min(880px,95vw);height:min(680px,85vh);border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel);box-shadow:0 20px 60px #0005;color:var(--text-primary)}
+.modal-surface.sftp-editor-dialog {width:min(1200px,85vw);height:min(780px,80vh);overflow:hidden;background:var(--panel);border-radius:10px}
+.sftp-editor {display:flex;flex-direction:column;min-width:0;width:100%;height:100%;overflow:hidden;background:var(--panel);color:var(--text-primary)}
 .sftp-editor header,.sftp-editor footer {padding:10px 15px;display:flex;align-items:center;gap:10px;flex-shrink:0}
 .sftp-editor header {border-bottom:1px solid var(--border);justify-content:space-between}
 .sftp-editor header strong {display:flex;align-items:center;gap:8px;font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -195,7 +195,7 @@
 
 
 /* Compact remote text editor, including CodeMirror's own search/replace panel. */
-.sftp-editor {width:min(1200px,85vw);height:min(780px,80vh)}
+
 .sftp-editor header strong {flex:1}
 .sftp-editor header strong > span:first-of-type {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sftp-editor-dirty {color:var(--accent);font-size:12px}
@@ -225,8 +225,8 @@
 .sftp-editor-status select {max-width:160px;cursor:pointer}
 .sftp-editor-status > span:last-child {margin-left:auto;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:700px) {
-  .sftp-editor {width:100%;height:95vh}
+  .modal-surface.sftp-editor-dialog {width:calc(100vw - 32px);height:min(95vh,calc(100vh - 32px))}
   .sftp-editor-status {gap:7px;padding:0 7px}
 }
 
-.sftp-editor-loading {padding:15px 22px;background:var(--panel);color:var(--text-primary);border:1px solid var(--border);border-radius:8px;font-size:12px}
+.sftp-editor-loading {display:grid;place-items:center;width:100%;height:100%;padding:15px 22px;background:var(--panel);color:var(--text-primary);font-size:12px}

@@ -149,8 +149,7 @@ export default function SFTPFileEditor({
   const newline = initialRef.current.includes("\r\n") ? "CRLF" : "LF";
 
   return (
-    <div className="sftp-editor-backdrop">
-      <section className="sftp-editor" role="dialog" aria-modal="true" aria-label={t("sftp:editText")}>
+    <section className="sftp-editor">
         <header>
           <strong title={path}><FileText size={15} /><span>{path}</span>{dirty && <span className="sftp-editor-dirty" title={t("sftp:editorUnsaved")}>●</span>}</strong>
           <div className="sftp-editor-tools">
@@ -179,7 +178,6 @@ export default function SFTPFileEditor({
           <button type="button" disabled={saving} onClick={onClose}>{t("common:cancel")}</button>
           <button type="button" disabled={saving || !dirty} className="sftp-editor-save" onClick={() => onSave(viewRef.current?.state.doc.toString() ?? initialRef.current)}><Save size={14} />{t("sftp:saveFile")}</button>
         </footer>
-      </section>
-    </div>
+    </section>
   );
 }
