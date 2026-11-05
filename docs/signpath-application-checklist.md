@@ -10,6 +10,7 @@ Updated 2026-11-05. **This is a readiness checklist, not an application or appro
 - [x] Record actual bundled ZMODEM artifacts, pinned upstream SHA-256 and outstanding third-party license checks in [third-party review](third-party-review.md).
 - [x] Existing workflow has conditional SignPath request code and Authenticode validity checks; unsigned releases continue working without an API token.
 - [x] Automated [CycloneDX dependency SBOM and ZMODEM binary hash manifest](sbom.md); license metadata gaps remain visible and do not count as clearance.
+- [x] Record [historical MSYS2 3.4.9 candidate license texts](../third_party/msys2-runtime-3.4.9/README.md) and pin the exact bundled DLL SHA-256. Corresponding-source verification remains open.
 
 ## Maintainer verification required before applying
 
