@@ -65,6 +65,7 @@ func TestNativeZmodemPublishDoesNotOverwriteExistingFiles(t *testing.T) {
 	if err := nativeZmodemPublish(stage, target); err != nil { t.Fatal(err) }
 	data, err := os.ReadFile(filepath.Join(target, "data.txt"))
 	if err != nil || string(data) != "new" { t.Fatalf("publish mismatch: %q, %v", data, err) }
+	if err := os.Remove(filepath.Join(stage, "data.txt")); err != nil { t.Fatal(err) }
 	if err := os.WriteFile(filepath.Join(stage, "data.txt"), []byte("replace"), 0600); err != nil { t.Fatal(err) }
 	if err := nativeZmodemPublish(stage, target); err == nil { t.Fatal("existing target overwritten") }
 	data, _ = os.ReadFile(filepath.Join(target, "data.txt"))
