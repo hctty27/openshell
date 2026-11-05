@@ -63,6 +63,126 @@ jobs:
         working-directory: .
         shell: pwsh
         run: go test -run '^TestNativeZmodem' ./internal/ssh
+      - name: Prepare verified Windows lrzsz interoperability peer (test-only)
+        working-directory: .
+        shell: pwsh
+        run: |
+          $peerRoot = Join-Path $env:RUNNER_TEMP "native-zmodem-lrzsz-peer"
+          ./scripts/prepare_zmodem_windows.ps1 -TargetDir $peerRoot
+          if ($LASTEXITCODE -ne 0) { throw "Unable to prepare verified lrzsz-win32 test peer" }
+          "OPENSHELL_ZMODEM_LRZSZ_NATIVE_DIR=$(Join-Path $peerRoot 'native')" >> $env:GITHUB_ENV
+      - name: Windows native Rust ↔ real lrzsz-win32 over SSH with PTY request
+        working-directory: .
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          $env:OPENSHELL_ZMODEM_WINDOWS_E2E = "1"
+          $env:OPENSHELL_ZMODEM_SIDECAR_PATH = (Resolve-Path "experiments/native-zmodem/target/release/zmodem-sidecar.exe").Path
+          $env:PYTHONIOENCODING = "utf-8"
+          go test -count=1 -timeout=7m -v ./internal/ssh -run '^TestWindowsNativeZmodemSSHInterop        shell: pwsh
+        run: |
+          cargo tree --locked | Out-File -Encoding utf8 dependency-tree.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-zmodem-windows-spike-evidence
+          path: |
+            experiments/native-zmodem/Cargo.lock
+            experiments/native-zmodem/dependency-tree.txt
+          retention-days: 14
+          if-no-files-found: error
+
+  linux-lrzsz-interop:
+    name: Linux lrzsz ↔ native Rust protocol interop
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: experiments/native-zmodem
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install real Linux lrzsz
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lrzsz openssh-server
+          rz --version
+          sz --version
+      - name: Compile isolated Rust protocol sidecar
+        run: |
+          cargo generate-lockfile
+          cargo test --locked --test roundtrip
+          cargo test --locked --bin zmodem-sidecar
+          cargo build --locked --release --bin zmodem-sidecar
+      - name: Verify bidirectional real lrzsz interoperability
+        run: python3 tests/interop_lrzsz.py target/release/zmodem-sidecar
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Build and unit-test isolated SSH PTY bridge
+        run: |
+          go test ./experiments/native-zmodem/ssh-pty-bridge
+          go build -o experiments/native-zmodem/target/release/zmodem-ssh-pty-bridge ./experiments/native-zmodem/ssh-pty-bridge
+        working-directory: .
+      - name: Start loopback OpenSSH server with PTY enabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_dir="$RUNNER_TEMP/openshell-zmodem-sshd"
+          mkdir -p "$test_dir"
+          ssh-keygen -q -t ed25519 -N '' -f "$test_dir/client"
+          ssh-keygen -q -t ed25519 -N '' -f "$test_dir/host"
+          cp "$test_dir/client.pub" "$test_dir/authorized_keys"
+          chmod 600 "$test_dir/authorized_keys"
+          sudo mkdir -p /run/sshd
+          cat > "$test_dir/sshd_config" <<EOF
+          Port 22449
+          ListenAddress 127.0.0.1
+          HostKey $test_dir/host
+          PidFile $test_dir/sshd.pid
+          AuthorizedKeysFile $test_dir/authorized_keys
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PubkeyAuthentication yes
+          UsePAM yes
+          StrictModes no
+          AllowUsers $(id -un)
+          LogLevel VERBOSE
+          EOF
+          sudo /usr/sbin/sshd -f "$test_dir/sshd_config" -E "$test_dir/sshd.log"
+          echo "ZMODEM_SSH_TEST_DIR=$test_dir" >> "$GITHUB_ENV"
+      - name: Verify ephemeral public-key SSH login before protocol test
+        shell: bash
+        run: |
+          ssh -p 22449 -i "$ZMODEM_SSH_TEST_DIR/client" \
+            -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+            -o UserKnownHostsFile="$ZMODEM_SSH_TEST_DIR/known_hosts" \
+            "$(id -un)@127.0.0.1" 'printf ssh-ready'
+      - name: Verify Rust ↔ lrzsz over authenticated real SSH PTY
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/interop_ssh_pty.py \
+            target/release/zmodem-ssh-pty-bridge \
+            target/release/zmodem-sidecar \
+            127.0.0.1:22449 "$(id -un)" \
+            "$ZMODEM_SSH_TEST_DIR/client" "$ZMODEM_SSH_TEST_DIR/host.pub"
+      - name: Print SSH server diagnostics if the interop test failed
+        if: failure()
+        shell: bash
+        run: |
+          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.log" ]; then
+            sudo tail -100 "$ZMODEM_SSH_TEST_DIR/sshd.log"
+          fi
+      - name: Stop loopback SSH test server
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.pid" ]; then
+            sudo kill "$(cat "$ZMODEM_SSH_TEST_DIR/sshd.pid")" || true
+          fi
+
+          if ($LASTEXITCODE -ne 0) { throw "Windows Go+Rust native SSH ZMODEM interop failed" }
       - name: Preserve dependency graph for manual license review
         shell: pwsh
         run: |
