@@ -82,6 +82,7 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut output = io::stdout().lock();
     let mut done_file = false;
     let mut finish_requested = false;
+    let mut session_completed = false;
     let deadline = Instant::now() + SESSION_TIMEOUT;
 
     while Instant::now() < deadline {
@@ -105,14 +106,17 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             }
             Action::Event(Event::FileCompleted) => done_file = true,
             Action::Event(Event::SessionCompleted) => {
-                if done_file {
-                    return Ok(());
+                if !done_file {
+                    return Err("session ended without file completion".into());
                 }
-                return Err("session ended without file completion".into());
+                session_completed = true;
             }
             Action::Event(Event::Aborted) => return Err("remote aborted sender".into()),
             Action::Event(_) => {}
             Action::Idle => {
+                if session_completed {
+                    return Ok(());
+                }
                 if receive_wire(&rx, &mut waiting)? {
                     let input: Vec<u8> = waiting.iter().take(2048).copied().collect();
                     let used = sender.submit_wire(&input)?;
@@ -159,6 +163,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut output = io::stdout().lock();
     let mut open_file: Option<(File, PathBuf, PathBuf, u64, Option<u32>)> = None;
     let mut completed = false;
+    let mut session_completed = false;
     let deadline = Instant::now() + SESSION_TIMEOUT;
 
     while Instant::now() < deadline {
@@ -209,14 +214,17 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 completed = true;
             }
             Action::Event(Event::SessionCompleted) => {
-                if completed {
-                    return Ok(());
+                if !completed {
+                    return Err("session ended without file completion".into());
                 }
-                return Err("session ended without file completion".into());
+                session_completed = true;
             }
             Action::Event(Event::Aborted) => return Err("remote aborted receiver".into()),
             Action::Event(_) => {}
             Action::Idle => {
+                if session_completed {
+                    return Ok(());
+                }
                 if receive_wire(&rx, &mut waiting)? {
                     let input: Vec<u8> = waiting.iter().take(2048).copied().collect();
                     let used = receiver.submit_wire(&input)?;
