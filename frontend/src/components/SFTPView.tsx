@@ -573,7 +573,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
       </div>}
       {(editor || editorLoadingPath) && (
         <ModalSurface
-          className={editor ? "sftp-editor-dialog" : "sftp-editor-dialog sftp-editor-dialog-pending"}
+          className="sftp-editor-dialog"
           aria-label={t("sftp:editText")}
           onDismiss={()=>void closeEditor()}
           locked={editorSaving}

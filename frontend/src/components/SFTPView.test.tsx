@@ -474,3 +474,24 @@ test("SFTP editor shows a retry option when a remote read fails", async () => {
   expect(await screen.findByTestId("sftp-edit-draft")).toBeTruthy();
   expect(api.SFTPReadRemoteTextRequest).toHaveBeenCalledTimes(2);
 });
+
+test("remote editor keeps the same dialog shell while loading and after content arrives", async () => {
+  const source: SFTPDocument = { path: "/root/config.yaml", content: "original", revision: "initial", size: 8 };
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
+    side === "remote" ? [file("config.yaml", source.path)] : []);
+  let finishRead: (document: SFTPDocument) => void = () => {};
+  vi.mocked(api.SFTPReadRemoteTextRequest).mockImplementation(() =>
+    new Promise(resolve => { finishRead = resolve; }));
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+
+  fireEvent.doubleClick((await screen.findByText("config.yaml")).closest('[role="listitem"]')!);
+  const modal = screen.getByRole("dialog", { name: t("sftp:editText") });
+  const initialClassName = modal.className;
+  expect(initialClassName).toBe("modal-surface sftp-editor-dialog");
+  expect(within(modal).getByText(t("sftp:editorReading"))).toBeTruthy();
+
+  await act(async () => finishRead(source));
+  expect(await screen.findByTestId("sftp-edit-draft")).toBeTruthy();
+  expect(screen.getByRole("dialog", { name: t("sftp:editText") })).toBe(modal);
+  expect(modal.className).toBe(initialClassName);
+});
