@@ -22,6 +22,8 @@ OpenShell is a free, open-source Windows SSH/SFTP client for developers and serv
 
 **Status:** v1.0 stable release, with ongoing maintenance. Windows x64 installers and portable packages are available. See the [release notes](https://github.com/hctty27/openshell/releases) for the changes and signing status of each build.
 
+**Policies:** [Code signing policy](CODE_SIGNING_POLICY.md) · [Privacy policy](PRIVACY.md) · [Third-party license review](docs/third-party-review.md) · [SignPath application checklist](docs/signpath-application-checklist.md).
+
 ## Screenshots
 
 **SSH terminal and SFTP file manager**
@@ -211,7 +213,7 @@ Bug reports and focused pull requests are welcome. Include the OpenShell version
 
 OpenShell is licensed under the **[MIT License](LICENSE)**. Bundled third-party components retain their own licenses; Windows ZMODEM utilities include GPL notices and corresponding source archives.
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). This is the intended provider attribution **if the application is approved and signing is enabled**. The published v1.0.0 Windows downloads are unsigned; no acceptance or signature is being claimed.
 
 Signing is conditional on the required SignPath configuration and secrets being present. Otherwise, builds are unsigned. Check each Release's notes for its actual signing status. The application executable and installer are built through GitHub Actions; the portable ZIP contains the application executable. Only artifacts built from this repository's source code are submitted for signing.
 
