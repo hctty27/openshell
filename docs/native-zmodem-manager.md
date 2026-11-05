@@ -52,3 +52,24 @@ $env:OPENSHELL_NATIVE_ZMODEM_SIDECAR = "C:\path\to\zmodem-sidecar.exe"
 - 新测试服务端模式 `pty-hang` 模拟不回复 PTY 请求；原 `start` 模式模拟不回复 exec 请求；`open` 模式模拟不接受新 SSH Channel。以上三个阶段均受截止时间控制。
 - 下载到临时目录过程中发生取消、管理器关闭或超时，必须清理未完成文件与目录，释放活跃任务记录。
 - Windows 和 Linux SSH 回归测试都运行这些 Go 用例。它们检查异常生命周期，不等于已完成公网弱网模拟、真实 Windows→Linux Linux PTY 端到端测试或交互终端流接管。
+
+
+## 已有交互式 SSH 终端的数据流独占门（实验基础）
+
+终端输出路径新增 `terminalOutputGate`，位于 `ssh.Session.Stdout/Stderr` 和现有 `zmodemDirectionWriter` 之间：
+
+```text
+SSH interactive PTY stdout/stderr
+  -> terminalOutputGate  [默认 legacy]
+       +-- legacy -> zmodemDirectionWriter -> trzsz-go -> terminal history/UI
+       +-- native -> 独占的原生协议字节接收器（本 PR 尚未启用）
+```
+
+- **默认无行为变更**：全部字节仍按原路径进入 `trzsz-go`；不改变 UI、文件选择、上传下载和原有传输工具。
+- `takeover(native io.Writer)` 在前一次 `Write` 完毕后原子切换输出消费者；期间同一字节不会同时发送给 legacy 与 native。
+- `restore(lease)` 要求当前的独占令牌，旧任务无法替新任务恢复输出；**必须在原生协议双端完成并清空缓冲后显式调用**。
+- 当 native sink 写入失败时保持 native 所有权，禁止自动将后续协议字节送至终端历史/UI。
+- 关闭终端即关闭 gate，禁止继续接收数据或恢复过期租约。
+- `takeover` **不能**从下游 `zmodemDirectionWriter.Write` 的同步回调直接调用，因为切换需要等待现有 `Write` 退出。下一阶段必须先设计非阻塞、可无损保存已识别 ZMODEM 头帧的握手协议。
+
+**未完成：** 本 PR 没有把 Rust sidecar 接到 gate 的 native 输出，也没有接管当前终端的标准输入；只完成输出流的单一消费者基础和隔离测试。输入方向、缓冲/头帧、取消、异常恢复与真实交互式 `rz/sz` 尚未通过端到端验收，因此不应对外开放切换。
