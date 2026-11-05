@@ -68,7 +68,7 @@ func (m *Manager) runNativeTerminalExperiment(
 		return errors.New("JumpServer 暂不支持交互式原生 ZMODEM")
 	}
 	if c.transferring || c.zmodemSelection != nil ||
-		c.aiController != nil || c.nativeTerminalTransfer != nil {
+		c.aiController != nil || c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned {
 		m.mu.Unlock()
 		return errors.New("当前终端正被其他任务占用")
 	}
@@ -78,24 +78,26 @@ func (m *Manager) runNativeTerminalExperiment(
 	input, output := c.inputGate, c.outputGate
 	m.mu.Unlock()
 
-	defer func() {
-		cancel()
-		m.mu.Lock()
-		if c.nativeTerminalTransfer == task {
-			c.nativeTerminalTransfer = nil
-		}
-		m.mu.Unlock()
-	}()
+	defer cancel()
 
 	coordinator := &nativeTerminalCoordinator{
 		input: input, output: output,
 		runner: nativeTerminalExecutableRunner(sidecar),
 	}
-	if err := coordinator.run(ctx, direction, localPath, remotePath); err != nil {
-		// A failed in-place ZMODEM transfer cannot safely return to the
-		// legacy stream before the remote protocol is drained. The gate
-		// stays leased until the terminal disconnects or is replaced.
-		return fmt.Errorf("交互式原生 ZMODEM 失败，当前终端需要重新连接：%w", err)
+	result := coordinator.run(ctx, direction, localPath, remotePath)
+	// Reading the gate before taking Manager.mu avoids lock inversion with
+	// user-input writes. A stuck lease means the terminal is unsafe to reuse.
+	input.mu.Lock()
+	unsafe := input.leased
+	input.mu.Unlock()
+	m.mu.Lock()
+	if c.nativeTerminalTransfer == task {
+		c.nativeTerminalTransfer = nil
+		if unsafe { c.nativeTerminalPoisoned = true }
+	}
+	m.mu.Unlock()
+	if result != nil {
+		return fmt.Errorf("交互式原生 ZMODEM 失败，当前终端需要重新连接：%w", result)
 	}
 	return nil
 }
