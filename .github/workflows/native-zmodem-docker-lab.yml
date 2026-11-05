@@ -1,0 +1,97 @@
+name: Native ZMODEM Docker SSH fixture
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "experiments/native-zmodem/docker-ssh-lab/**"
+      - "scripts/test-native-zmodem.ps1"
+      - ".github/workflows/native-zmodem-docker-lab.yml"
+  push:
+    branches: [main]
+    paths:
+      - "experiments/native-zmodem/docker-ssh-lab/**"
+      - "scripts/test-native-zmodem.ps1"
+      - ".github/workflows/native-zmodem-docker-lab.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-zmodem-docker-lab-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  docker-fixture:
+    name: Linux Docker SSH fixture with pinned host key
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build isolated Linux OpenSSH/SFTP/lrzsz image
+        run: docker build -t openshell-zmodem-ssh-lab:test experiments/native-zmodem/docker-ssh-lab
+      - name: Verify ephemeral key authentication and SFTP through published loopback port
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="openshell-zmodem-fixture-${GITHUB_RUN_ID}"
+          temp="$(mktemp -d)"
+          cleanup() {
+            docker rm -f "$name" >/dev/null 2>&1 || true
+            rm -rf "$temp"
+          }
+          trap cleanup EXIT
+          docker run -d --rm --name "$name" -p 127.0.0.1::22 openshell-zmodem-ssh-lab:test
+          for i in $(seq 1 75); do
+            state="$(docker inspect --format '{{.State.Health.Status}}' "$name")"
+            if [ "$state" = healthy ]; then break; fi
+            if [ "$state" = unhealthy ]; then
+              docker logs "$name"
+              exit 1
+            fi
+            sleep 1
+          done
+          test "$(docker inspect --format '{{.State.Health.Status}}' "$name")" = healthy
+          docker cp "$name:/run/openshell-zmodem-lab/client_ed25519" "$temp/client_ed25519"
+          docker cp "$name:/etc/ssh/ssh_host_ed25519_key.pub" "$temp/host.pub"
+          chmod 600 "$temp/client_ed25519"
+          address="$(docker port "$name" 22/tcp)"
+          case "$address" in
+            127.0.0.1:*) port="${address#127.0.0.1:}" ;;
+            *) echo "SSH fixture not bound to loopback: $address" >&2; exit 1 ;;
+          esac
+          printf '[127.0.0.1]:%s %s\n' "$port" "$(cat "$temp/host.pub")" > "$temp/known_hosts"
+          ssh -p "$port" \
+            -i "$temp/client_ed25519" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$temp/known_hosts" \
+            zmodemlab@127.0.0.1 \
+            'test "$(uname -s)" = Linux && command -v rz && command -v sz && test -w "$HOME"'
+          printf 'pwd\n' | sftp -b - -P "$port" \
+            -i "$temp/client_ed25519" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$temp/known_hosts" \
+            zmodemlab@127.0.0.1
+
+  windows-script-syntax:
+    name: Windows PowerShell test script syntax
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Parse local lab script without executing Docker
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          $script = (Resolve-Path 'scripts/test-native-zmodem.ps1').Path
+          [void][System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors)
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-Host
+            throw 'PowerShell test-native-zmodem.ps1 has syntax errors'
+          }
