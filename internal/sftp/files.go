@@ -42,10 +42,14 @@ type Manager struct {
     workers sync.WaitGroup
     reserved map[string]struct{}
     closed bool
+    poolMu sync.Mutex
+    pool map[domain.ConnectionRef]*cachedRemote
+    poolEpoch map[string]uint64
+    poolClosed bool
 }
 
 func NewManager(lookup Lookup, emit func(string, any)) *Manager {
-    return &Manager{lookup: lookup, emit: emit, tasks: make(map[string]*job), slots: make(map[string]chan struct{}), slotUsers: make(map[string]int), reserved: make(map[string]struct{})}
+    return &Manager{lookup: lookup, emit: emit, tasks: make(map[string]*job), slots: make(map[string]chan struct{}), slotUsers: make(map[string]int), reserved: make(map[string]struct{}), pool: make(map[domain.ConnectionRef]*cachedRemote), poolEpoch: make(map[string]uint64)}
 }
 
 func (m *Manager) remote(ref domain.ConnectionRef) (*pkg.Client, error) {
@@ -87,9 +91,9 @@ func makeEntry(dir string, info os.FileInfo, remote bool) Entry {
 func (m *Manager) Homes(ref domain.ConnectionRef) (Paths, error) {
     home, err := os.UserHomeDir()
     if err != nil { return Paths{}, err }
-    c, err := m.remote(ref)
+    c, release, err := m.borrowRemote(ref)
     if err != nil { return Paths{}, err }
-    defer c.Close()
+    defer release()
     remoteHome, err := c.Getwd()
     if err != nil { return Paths{}, err }
     return Paths{Local: home, Remote: remoteHome}, nil
@@ -108,9 +112,9 @@ func (m *Manager) List(ref domain.ConnectionRef, side, directory string) ([]Entr
             infos = append(infos, info)
         }
     } else {
-        c, err := m.remote(ref)
+        c, release, err := m.borrowRemote(ref)
         if err != nil { return nil, err }
-        defer c.Close()
+        defer release()
         infos, err = c.ReadDir(directory)
         if err != nil { return nil, err }
     }
@@ -156,9 +160,9 @@ func (m *Manager) Operate(ref domain.ConnectionRef, side, operation, source, arg
         default: return apperror.New("sftpFileUnsupportedFileOperation",nil)
         }
     }
-    c, err := m.remote(ref)
+    c, release, err := m.borrowRemote(ref)
     if err != nil { return err }
-    defer c.Close()
+    defer release()
     switch operation {
     case "mkdir": return c.Mkdir(source)
     case "rename":
