@@ -287,8 +287,9 @@
   background: var(--hover);
 }
 .quick-manager {
-  width: min(880px, 95vw);
-  max-height: min(740px, 93vh);
+  width: min(840px, 95vw);
+  height: min(570px, 90vh);
+  max-height: 92vh;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--raised);
@@ -298,56 +299,126 @@
   overflow: hidden;
 }
 .quick-manager-header {
+  flex: 0 0 53px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
+  padding: 0 18px 0 20px;
   border-bottom: 1px solid var(--border);
 }
 .quick-manager-header h2 {
-  margin: 7px 0 0;
-  font-size: 18px;
+  margin: 0;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--info);
+  color: var(--text-primary);
+}
+.quick-manager-close {
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  color: var(--text-muted);
 }
 .quick-manager-body {
   min-height: 0;
+  flex: 1;
   display: grid;
-  grid-template-columns: minmax(220px, 34%) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 36%) minmax(0, 1fr);
 }
 .quick-manager-side {
   min-width: 0;
   min-height: 0;
-  padding: 17px;
+  padding: 14px 12px;
   border-right: 1px solid var(--border);
+  background: var(--panel);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 .quick-manager-side-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0 3px;
 }
 .quick-manager-side-head strong {
   font-size: 12px;
+  font-weight: 600;
+}
+.quick-manager-add {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-secondary);
+  border-radius: 5px;
+}
+.quick-manager-add:hover,
+.quick-manager-close:hover {
+  background: var(--hover);
+  color: var(--accent);
+}
+.quick-manager-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--field-bg);
+  color: var(--text-muted);
+}
+.quick-manager-search:focus-within {
+  border-color: var(--accent);
+}
+.quick-manager-search svg {
+  flex-shrink: 0;
+}
+.quick-manager-search input {
+  min-width: 0;
+  width: 100%;
+  height: 31px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  color: var(--text-primary);
+  outline: none;
+  box-shadow: none;
 }
 .quick-manager-items {
   min-height: 0;
   overflow-y: auto;
   flex: 1;
+  scrollbar-gutter: stable;
+}
+.quick-manager-items > p {
+  margin: 12px 5px;
 }
 .quick-manager-item {
   display: flex;
   align-items: center;
-  gap: 3px;
-  border-radius: 6px;
+  gap: 4px;
+  min-height: 52px;
+  padding: 3px 4px 3px 2px;
   border: 1px solid transparent;
-  margin-bottom: 4px;
+  border-radius: 6px;
+  margin-bottom: 3px;
+}
+.quick-manager-item:hover {
+  background: var(--hover);
 }
 .quick-manager-item.selected {
   background: var(--accent-soft);
   border-color: var(--accent-border);
+}
+.quick-manager-item.drop-target {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.quick-manager-item.dragging {
+  opacity: 0.5;
 }
 .quick-manager-item-label {
   min-width: 0;
@@ -355,89 +426,126 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: 9px 6px;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 6px;
   text-align: left;
 }
 .quick-manager-item-label strong,
 .quick-manager-item-label small {
+  display: block;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.quick-manager-item-label small {
-  color: var(--text-muted);
-  margin-top: 5px;
+.quick-manager-item-label strong {
+  font-size: 12px;
+  color: var(--text-primary);
 }
-.quick-manager-item > button:not(.quick-manager-item-label) {
-  padding: 4px;
+.quick-manager-item-label small {
+  font-size: 11px;
   color: var(--text-muted);
+}
+.quick-manager-drag-handle {
+  flex: 0 0 26px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0.65;
+}
+.quick-manager-item:hover .quick-manager-drag-handle,
+.quick-manager-drag-handle:focus-visible {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+.quick-manager-drag-handle:active {
+  cursor: grabbing;
+}
+.quick-manager-drag-handle:disabled {
+  cursor: not-allowed;
 }
 .quick-manager-editor {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 24px 24px;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 .quick-manager-editor h3 {
-  font-size: 14px;
-  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 2px;
 }
 .quick-manager-editor label {
   font-size: 11px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
+  color: var(--text-secondary);
 }
-.quick-manager-editor input,
+.quick-manager-editor input:not([type="checkbox"]),
 .quick-manager-editor select,
 .quick-manager-editor textarea {
   width: 100%;
+  font-size: 12px;
+}
+.quick-manager-editor input:not([type="checkbox"]),
+.quick-manager-editor select {
+  min-height: 34px;
+}
+.quick-manager-editor textarea {
+  min-height: 95px;
+  font: 12px/1.6 Consolas, "Cascadia Mono", monospace;
+  resize: vertical;
 }
 .quick-manager-editor .checkbox {
   flex-direction: row;
   align-items: center;
+  gap: 7px;
+  color: var(--text-primary);
 }
 .quick-manager-editor .checkbox input {
   width: 14px;
+  height: 14px;
 }
-.quick-manager-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+.quick-manager-hint {
+  margin: -2px 0 1px;
+  line-height: 1.5;
 }
 .quick-manager-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
   justify-content: flex-end;
-  margin-top: 4px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 .quick-manager-actions .danger {
   margin-right: auto;
   color: var(--danger);
 }
-.quick-manager-actions .secondary {
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-}
 @media (max-width: 660px) {
+  .quick-manager {
+    height: min(720px, 92vh);
+  }
   .quick-manager-body {
     grid-template-columns: 1fr;
-    overflow-y: auto;
+    grid-template-rows: minmax(180px, 35%) minmax(0, 1fr);
   }
   .quick-manager-side {
-    max-height: 210px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }
   .quick-manager-editor {
-    overflow: visible;
-  }
-  .quick-manager-fields {
-    grid-template-columns: 1fr;
+    padding: 14px;
   }
 }
 
