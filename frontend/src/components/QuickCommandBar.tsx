@@ -52,10 +52,7 @@ export default function QuickCommandBar({
             key={command.id}
             type="button"
             className="quick-command-button"
-            title={t("terminal:message", {
-              category: command.category || t("common:general"),
-              command: command.command,
-            })}
+            title={command.command}
             disabled={tab?.status !== "connected" || !tab?.ref}
             onClick={() => onRun(command)}
           >
