@@ -79,7 +79,8 @@ jobs:
       - name: Compile isolated Rust protocol sidecar
         run: |
           cargo generate-lockfile
-          cargo test --locked
+          cargo test --locked --test roundtrip
+          cargo test --locked --bin zmodem-sidecar
           cargo build --locked --release --bin zmodem-sidecar
       - name: Verify bidirectional real lrzsz interoperability
         run: python3 tests/interop_lrzsz.py target/release/zmodem-sidecar
