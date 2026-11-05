@@ -85,7 +85,7 @@ h1,h2,h3,p{margin-top:0}
 .terminal-visual code .green{color:#48e0aa}
 .workflow-section{padding:95px 0 100px;border-top:1px solid rgba(180,210,240,.085);background:linear-gradient(180deg,#0c1829,#091421)}
 .workflow{display:grid;grid-template-columns:1fr 1fr;gap:90px;align-items:center}
-.workflow-copy h2{margin-bottom:20px}
+.workflow-copy h2{margin-bottom:20px;white-space:pre-line}
 .workflow-copy p{font-size:15px;line-height:2;color:#9cb0c7;max-width:470px}
 .inline-link{color:#67e7cd;display:inline-flex;gap:12px;align-items:center;margin-top:17px;font-weight:700;font-size:13px}
 .inline-link:hover{color:#fff}
