@@ -23,13 +23,14 @@ type nativeZmodemLog struct {
 }
 
 func (l *nativeZmodemLog) Write(p []byte) (int, error) {
+	original := len(p)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if remaining := 4096 - len(l.data); remaining > 0 {
 		if len(p) < remaining { remaining = len(p) }
 		l.data = append(l.data, p[:remaining]...)
 	}
-	return len(p), nil
+	return original, nil
 }
 
 func (l *nativeZmodemLog) String() string {
