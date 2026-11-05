@@ -20,7 +20,7 @@
 
 OpenShell is a free, open-source Windows SSH/SFTP client for developers and server administrators. Manage servers with tabs and split terminals, transfer files with SFTP or rz/sz, import Xshell sessions, and run saved quick commands.
 
-**Status:** actively developed, pre-1.0 software. Windows x64 installers and portable packages are available. See the [release notes](https://github.com/hctty27/openshell/releases) for the changes and signing status of each build.
+**Status:** v1.0 stable release, with ongoing maintenance. Windows x64 installers and portable packages are available. See the [release notes](https://github.com/hctty27/openshell/releases) for the changes and signing status of each build.
 
 ## Screenshots
 
@@ -43,7 +43,7 @@ OpenShell is a free, open-source Windows SSH/SFTP client for developers and serv
 | Connection controls | Configure keepalive and reconnection, disconnect manually, return to a local Windows shell, and confirm before closing live connections. |
 | SFTP | Browse local and remote files, upload and download files or directories, resume transfers, edit remote text, preview one-way directory sync, and manage permissions. |
 | Terminal file transfers | Use `rz` / `sz` or `trz` / `tsz` with an embedded file picker and a cross-session transfer center—without opening Explorer or an extra CMD window. |
-| Quick commands | Save reusable commands with categories, ordering, and global, folder, or session scope. Line breaks control when commands execute. |
+| Quick commands | Save reusable commands with search, ordering, and global, folder, or session scope. Line breaks control when commands execute. |
 | Appearance and language | Switch between English and Simplified Chinese, light and dark application themes, and independent classic, dark, or light terminal palettes. |
 
 ## Download
@@ -188,7 +188,7 @@ Backend tests use controlled SSH servers and mock APIs. Browser tests use a mock
 
 - [CI](.github/workflows/ci.yml) runs Go race tests, `go vet`, frontend tests, a production frontend build, and selected Chromium regressions on pull requests and `main` pushes.
 - [Windows terminal smoke](.github/workflows/windows-terminal-smoke.yml) covers relevant terminal, SSH, SFTP, and ConPTY pull requests.
-- [Windows release](.github/workflows/windows-release.yml) publishes only after the release marker changes on `main` and CI passes. It retains three Releases, keeps older Git tags, and retains final build artifacts for seven days. Manual runs create artifacts without publishing a Release.
+- [Windows release](.github/workflows/windows-release.yml) publishes only after the release marker changes on `main` and CI passes. It retains the three newest Releases plus v1.0.0 and later major-version milestones, keeps older Git tags, and retains final build artifacts for seven days. Manual runs create artifacts without publishing a Release.
 
 **Recommended:** Open [Publish OpenShell (one click)](.github/workflows/publish.yml) in GitHub Actions, select `main`, choose `patch` (default), `minor`, or `major`, and click **Run workflow**. It synchronizes the version marker, npm metadata, Windows version info and changelog; commits the release metadata; runs Go/frontend verification on that exact commit; reuses the tested frontend bundle for the Windows build; then publishes the installer and portable ZIP. If packaging fails after version preparation, rerun the workflow to resume the unpublished version without incrementing it twice. Use only one release workflow at a time.
 
@@ -203,7 +203,7 @@ Backend tests use controlled SSH servers and mock APIs. Browser tests use a mock
 - Native Windows input methods, clipboard behavior, credential storage, transfer edge cases, and performance require real-device validation. Tool-call compatibility depends on your API provider and model.
 - Terminal-context attachments are limited to 200 lines / 32 KiB. A preview may omit a truncation notice if older terminal history was already trimmed.
 
-For implementation details and verification scope, see [Windows acceptance](docs/windows-acceptance.md), [stability acceptance](docs/stability-acceptance.md), [conversation memory validation](docs/conversation-memory-validation.md), and [internationalization](docs/internationalization.md). These supporting documents currently include Chinese content.
+For implementation details and verification scope, see [Windows acceptance](docs/windows-acceptance.md), [stability acceptance](docs/stability-acceptance.md), and [internationalization](docs/internationalization.md). These supporting documents currently include Chinese content.
 
 Bug reports and focused pull requests are welcome. Include the OpenShell version, Windows version, reproduction steps, and redacted logs in an [issue](https://github.com/hctty27/openshell/issues). Keep the English and Chinese READMEs aligned when changing documented behavior.
 
