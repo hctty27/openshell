@@ -357,7 +357,7 @@
 }
 
 .settings-dialog--settings input.settings-switch:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -793,7 +793,7 @@
   font-weight: 600;
 }
 .settings-ai-tabs button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .settings-ai-provider-layout {

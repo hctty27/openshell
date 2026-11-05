@@ -273,7 +273,7 @@
   opacity: .7;
 }
 .ai-target-menu input[type="checkbox"]:focus-visible {
-  outline: 2px solid var(--accent-border);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .ai-messages {
@@ -339,7 +339,7 @@
   transition: border-color 120ms ease;
 }
 .ai-compose-box:focus-within {
-  border-color: var(--accent);
+  border-color: var(--focus-border);
 }
 .ai-compose textarea {
   display: block;
@@ -438,7 +438,7 @@
   color: var(--text-primary);
 }
 .ai-model-picker__options [role="option"]:focus-visible {
-  outline: 2px solid var(--accent-border);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .ai-model-picker__options [role="option"] svg { color: var(--accent); flex-shrink: 0; }
@@ -549,7 +549,7 @@
   color: var(--text-primary);
   font-size: 11px;
 }
-.ai-history-search:focus-within { border-color: var(--accent-border); }
+.ai-history-search:focus-within { border-color: var(--focus-border); }
 .ai-history-results {
   max-height: min(320px, calc(100vh - 140px));
   overflow-x: hidden;
@@ -642,7 +642,7 @@
   color: var(--danger);
 }
 .ai-history-choice:focus-visible,
-.ai-history-delete:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ai-history-delete:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .ai-history-empty { margin: 12px 6px; font-size: 11px; color: var(--text-muted); text-align: center; }
 @media (hover: none) { .ai-history-entry .ai-history-delete { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .ai-dock--auto .ai-panel { transition: none; } }

@@ -29,13 +29,6 @@
 @media (prefers-reduced-motion: reduce) {
   .modal-surface[open] { animation: none; }
 }
-.modal-surface button:focus-visible,
-.modal-surface input:focus-visible,
-.modal-surface select:focus-visible,
-.modal-surface textarea:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
 .app-dialog {
   width: min(420px, calc(100vw - 32px));
   overflow: hidden;

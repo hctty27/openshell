@@ -370,7 +370,7 @@
   color: var(--text-muted);
 }
 .quick-manager-search:focus-within {
-  border-color: var(--accent);
+  border-color: var(--focus-border);
 }
 .quick-manager-search svg {
   flex-shrink: 0;
@@ -385,6 +385,10 @@
   font-size: 12px;
   color: var(--text-primary);
   outline: none;
+  box-shadow: none;
+}
+.quick-manager-search input:focus {
+  border-color: transparent;
   box-shadow: none;
 }
 .quick-manager-items {
