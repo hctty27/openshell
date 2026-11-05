@@ -120,13 +120,20 @@ jobs:
           PasswordAuthentication no
           KbdInteractiveAuthentication no
           PubkeyAuthentication yes
-          UsePAM no
+          UsePAM yes
           StrictModes no
           AllowUsers $(id -un)
-          LogLevel ERROR
+          LogLevel VERBOSE
           EOF
           sudo /usr/sbin/sshd -f "$test_dir/sshd_config" -E "$test_dir/sshd.log"
           echo "ZMODEM_SSH_TEST_DIR=$test_dir" >> "$GITHUB_ENV"
+      - name: Verify ephemeral public-key SSH login before protocol test
+        shell: bash
+        run: |
+          ssh -p 22449 -i "$ZMODEM_SSH_TEST_DIR/client" \
+            -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+            -o UserKnownHostsFile="$ZMODEM_SSH_TEST_DIR/known_hosts" \
+            "$(id -un)@127.0.0.1" 'printf ssh-ready'
       - name: Verify Rust ↔ lrzsz over authenticated real SSH PTY
         shell: bash
         run: |
