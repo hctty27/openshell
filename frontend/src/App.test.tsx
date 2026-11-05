@@ -448,7 +448,8 @@ test("terminal mouse settings are opt-in and saved independently", async () => {
   });
 });
 
-test("the tab plus opens a session list and reuses an already opened SSH tab", async () => {
+test("the tab plus always opens independent SSH tabs for the same saved session", async () => {
+  vi.mocked(api.Connect).mockClear();
   vi.mocked(api.State).mockResolvedValueOnce({
     sessions: [
       {
@@ -464,27 +465,45 @@ test("the tab plus opens a session list and reuses an already opened SSH tab", a
       },
     ],
     groups: [],
-        fontSize: "14",
+    fontSize: "14",
     language: "zh-CN",
     version: "0.1.14",
   });
   await act(async () => {
     render(<App />);
   });
-  fireEvent.click(screen.getByTitle("打开会话列表"));
+
+  const showPicker = () => fireEvent.click(screen.getByTitle("打开会话列表"));
+  const selectSession = () => screen.getByRole("button", { name: "选择会话 us" });
+
+  showPicker();
   expect(screen.getByRole("dialog", { name: "会话管理" })).toBeTruthy();
   expect(screen.queryByLabelText("主机地址")).toBeNull();
-  const row = screen.getByRole("button", { name: "选择会话 us" });
-  fireEvent.click(row);
+  fireEvent.click(selectSession());
   expect(screen.queryByTitle("关闭 us")).toBeNull();
-  fireEvent.doubleClick(row);
+  fireEvent.doubleClick(selectSession());
   await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
   expect(screen.getAllByTitle("关闭 us")).toHaveLength(1);
 
-  fireEvent.click(screen.getByTitle("打开会话列表"));
-  fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 us" }));
-  expect(screen.getAllByTitle("关闭 us")).toHaveLength(1);
-  expect(api.Connect).toHaveBeenCalledTimes(1);
+  showPicker();
+  fireEvent.doubleClick(selectSession());
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
+  expect(screen.getAllByTitle("关闭 us")).toHaveLength(2);
+
+  showPicker();
+  fireEvent.click(selectSession());
+  fireEvent.click(screen.getByRole("button", { name: "连接" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(3));
+  expect(screen.getAllByTitle("关闭 us")).toHaveLength(3);
+
+  showPicker();
+  fireEvent.keyDown(selectSession(), { key: "Enter" });
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(4));
+  expect(screen.getAllByTitle("关闭 us")).toHaveLength(4);
+
+  const connections = vi.mocked(api.Connect).mock.calls;
+  expect(connections.map(([, sessionId]) => sessionId)).toEqual(Array(4).fill("us-id"));
+  expect(new Set(connections.map(([tabId]) => tabId)).size).toBe(4);
 });
 
 test("edits an active session without disconnecting and updates every open tab", async () => {

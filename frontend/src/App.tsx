@@ -671,19 +671,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
   }, [tabs, state.disconnectBehavior]);
   const openFromPicker = (session: Session) => {
     setShowSessionPicker(false);
-    const existing = tabsRef.current.find(
-      (tab) => tab.session.id === session.id,
-    );
-    if (!existing) {
-      open(session);
-      return;
-    }
-    setActiveID(existing.id);
-    if (existing.status === "disconnected" || existing.status === "error") {
-      if (session.authType === "password" && !session.credentialRef)
-        setLogin({ tab: existing, secret: "" });
-      else void connect(existing);
-    }
+    open(session);
   };
   const manualConnect = (tab: Tab) => {
     if (disconnectInFlight.current.has(tab.id)) return;
