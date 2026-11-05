@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"time"
 )
@@ -126,4 +125,3 @@ func runNativeZmodemTerminalSidecar(
 // Ensure that cancellable process coordination never needs to close or
 // overwrite the shared SSH client/channel. Only dedicated local pipes close.
 var _ io.Writer = nativeTerminalProtocolWriter{}
-var _ = os.ErrClosed
