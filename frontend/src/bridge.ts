@@ -45,6 +45,8 @@ type Backend = {
   SFTPTransfers(ref: Ref): Promise<SFTPTask[]>;
   SFTPCancel(taskID: string): Promise<void>;
   SFTPReadRemoteText(ref: Ref, path: string): Promise<SFTPDocument>;
+  SFTPReadRemoteTextRequest(ref: Ref, path: string, requestID: string): Promise<SFTPDocument>;
+  SFTPCancelReadRemoteText(requestID: string): Promise<void>;
   SFTPSaveRemoteText(ref: Ref, path: string, revision: string, content: string): Promise<SFTPDocument>;
   SFTPPreviewSync(ref: Ref, direction: string, localDir: string, remoteDir: string): Promise<SFTPSyncPreview>;
   SFTPBatchChmod(ref: Ref, side: string, paths: string[], mode: string): Promise<number>;
