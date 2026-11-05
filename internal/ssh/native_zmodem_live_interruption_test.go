@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"os"
@@ -129,15 +128,15 @@ func TestNativeZmodemLiveInterruptedInteractivePTY(t *testing.T) {
 			// the real SSH PTY has actually delivered the remote ZRQINIT
 			// frame to the native protocol sink.
 			deadline := time.Now().Add(7*time.Second)
-			var connection *connection
+			var connRecord *connection
 			for {
 				manager.mu.Lock()
-				connection = manager.connections[ref.TabID]
+				connRecord = manager.connections[ref.TabID]
 				manager.mu.Unlock()
-				if connection != nil && connection.outputGate != nil {
-					connection.outputGate.mu.Lock()
-					active := connection.outputGate.native != nil
-					connection.outputGate.mu.Unlock()
+				if connRecord != nil && connRecord.outputGate != nil {
+					connRecord.outputGate.mu.Lock()
+					active := connRecord.outputGate.native != nil
+					connRecord.outputGate.mu.Unlock()
 					if active { break }
 				}
 				select {
@@ -174,8 +173,8 @@ func TestNativeZmodemLiveInterruptedInteractivePTY(t *testing.T) {
 				t.Fatal("native sidecar or SSH reader did not finish after interruption")
 			}
 			manager.mu.Lock()
-			remaining := connection.nativeTerminalTransfer
-			poisoned := connection.nativeTerminalPoisoned
+			remaining := connRecord.nativeTerminalTransfer
+			poisoned := connRecord.nativeTerminalPoisoned
 			manager.mu.Unlock()
 			if remaining != nil || !poisoned {
 				t.Fatalf("failed terminal cleanup: task=%v poisoned=%v", remaining != nil, poisoned)
