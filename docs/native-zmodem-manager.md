@@ -87,3 +87,31 @@ SSH interactive PTY stdout/stderr
 - 新增测试覆盖所有单次分割点、逐字节拆分、假帧头、不完整帧头、非 UTF-8 二进制负载、大数据量缓存界限、旧过滤器旁路和失效租约。
 
 **关键剩余工作：** 当前仅具有“预置接收者后的原子输出切换”能力，尚未实现输入方向的 SSH PTY 所有权切换，也未提供实际 Rust sidecar 的已连接启动与主动文件选择；不支持在终端输入 `rz/sz` 时直接接管。不能直接在 `zmodemDirectionWriter.Write` 的同步回调中执行 `arm`，否则会导致死锁。真实用户交互需要下一阶段设计 sidecar 就绪、输入/输出同步移交以及明确的取消恢复状态机。
+
+
+## PR #212：终端输入独占及 Rust sidecar 生命周期（基础能力）
+
+新增 `terminalInputGate`，与已合并的 `terminalOutputGate` 形成双向流所有权基础：
+
+```text
+用户键盘 / AI -> terminalInputGate -> trzsz-go -> SSH PTY stdin  [默认 legacy]
+                      | 进入 native lease 后拒绝手动输入
+Rust sidecar stdout -> nativeTerminalProtocolWriter(lease) -> SSH PTY stdin
+
+SSH PTY stdout/stderr -> terminalOutputGate -> trzsz-go / 预置 native 接收器
+```
+
+- `connection.stdin` 现在默认指向 `terminalInputGate`，但仍无条件透传旧过滤器；`connection.inputGate` 保存该实例。只有显式获取 `takeover()` 租约后才阻止用户和 AI 的写入。
+- 使用 `writeNative(lease, p)` 将 sidecar 原始二进制响应直接送进已打开的 SSH PTY 的底层输入管道，**不经 `trzsz-go`**。过期或错误的租约不得发送字节。
+- 租约切换与写入由同一互斥锁串行化；旧版正在写入时不会半路混入原生二进制响应。
+- `Manager.Write` 仅在终端写入成功后调用 `readiness.userInput`，避免被拦截的用户按键错误影响终端状态判断。
+- `runNativeZmodemTerminalSidecar` 是开发态可复用的进程管理基础，启动 Rust `zmodem-sidecar send FILE` / `receive DIR`，将一条专用、可关闭的输入流转给进程 stdin，stdout 原样写回 native input lease；stderr 仅存储有限的调试信息，不混入协议数据。
+- 取消或超时会杀掉专用 sidecar 子进程并关闭专用管道，不能关闭共享 SSH Client。测试用当前 Go 测试二进制模拟 sidecar，覆盖二进制原样传输、stderr 与 wire 隔离、非零退出、截止时间与旧租约。
+- 输入 gate 默认不被任何原生任务接管。**尚未实现**将当前 `OpenTerminal` 的输出头帧准备、完整输入接管、sidecar 启动、接收目录选择、控制帧尾部排空与 SSH 终端恢复编排成一个可用的用户功能。
+
+### 必须完成的端到端验收
+
+1. 远端 `rz/sz` 的真实交互式会话从检测头帧到 Rust sidecar 完成，不能让任何协议字节进入终端历史/UI。
+2. 租约获取顺序、失败回滚和异常清理必须由统一协调器管理；不能随意通过 `restore` 把未排空的尾帧送回旧过滤器。
+3. 验证远端取消、关闭标签页、断线、文件选择取消、服务端不读输入的背压行为，以及 Windows 原生客户端连接 Linux OpenSSH PTY。
+4. 未通过前继续保持旧 `rz/sz` 及 MSYS2，不发布或切换正式功能。

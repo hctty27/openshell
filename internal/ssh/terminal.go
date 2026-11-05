@@ -249,6 +249,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 			current.filter = nil
 			current.writer = nil
 			current.outputGate = nil
+			current.inputGate = nil
 		}
 		m.mu.Unlock()
 		return err
@@ -261,6 +262,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	}
 
 	userInput, filterInput := io.Pipe()
+	inputGate := newTerminalInputGate(filterInput, remoteInput)
 	filterOutput, remoteOutput := io.Pipe()
 	outputDone := make(chan struct{})
 	writer := &terminalWriter{m: m, c: connection}
@@ -295,6 +297,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	session.Stdout, session.Stderr = gate, gate
 	if err = session.Shell(); err != nil {
 		gate.close()
+		inputGate.close()
 		filter.Close()
 		_ = filterInput.Close()
 		_ = remoteOutput.Close()
@@ -305,13 +308,15 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	if current := m.connections[ref.TabID]; current != connection || current.ref != ref {
 		m.mu.Unlock()
 		gate.close()
+		inputGate.close()
 		filter.Close()
 		_ = filterInput.Close()
 		_ = remoteOutput.Close()
 		_ = session.Close()
 		return io.ErrClosedPipe
 	}
-	connection.stdin = filterInput
+	connection.stdin = inputGate
+	connection.inputGate = inputGate
 	connection.filter = filter
 	connection.writer = writer
 	connection.outputGate = gate
@@ -322,6 +327,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 		gate.close()
 		filter.Close()
 		_ = filterInput.Close()
+		inputGate.close()
 		_ = remoteOutput.Close()
 		select {
 		case <-outputDone:
@@ -422,10 +428,18 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		return errAITerminalBusy
 	}
 	stdin := c.stdin
-	c.readiness.userInput(p)
 	m.mu.Unlock()
-	_, e = stdin.Write(p)
-	return e
+	n, err := stdin.Write(p)
+	if err != nil { return err }
+	if n != len(p) { return io.ErrShortWrite }
+	// A native lease can reject manual input. Never update shell readiness
+	// for bytes that did not actually pass through the legacy input path.
+	m.mu.Lock()
+	if current := m.connections[ref.TabID]; current == c && c.ref == ref {
+		c.readiness.userInput(p)
+	}
+	m.mu.Unlock()
+	return nil
 }
 // CancelZmodem requests cancellation through the filter for trzsz, or sends
 // an interrupt for legacy ZMODEM, where the filter exposes no stop method.

@@ -48,6 +48,7 @@ type connection struct {
 	filter   interface { Close(); SetTerminalColumns(int32); IsTransferringFiles() bool; StopTransferringFiles(bool) }
 	writer   *terminalWriter
 	outputGate *terminalOutputGate
+	inputGate *terminalInputGate
 	aiController *AITerminalLease
 	readiness terminalShellReadiness
 	serverVersion string
