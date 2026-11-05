@@ -7,6 +7,7 @@ import { mergeTransferHistory, sameTransferRef } from "../features/transfers/tra
 import { CoalescedTaskUpdates } from "../features/performance/coalescedTaskUpdates";
 import { useDialogs } from "./DialogProvider";
 import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMenu";
+import ModalSurface from "./ModalSurface";
 import { i18n, t } from "../i18n";
 import { Clipboard } from "@wailsio/runtime";
 import { BASH_CWD_REPORT_COMMAND } from "../terminalCwd";
@@ -525,18 +526,27 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
         </div>}
       </div>}
       {editor && (
-        <Suspense fallback={<div className="sftp-editor-backdrop"><div className="sftp-editor-loading">{t("sftp:loading")}</div></div>}>
-          <SFTPFileEditor
-            key={refID.tabId + ":" + refID.generation + ":" + editor.path}
-            path={editor.path}
-            initialContent={editor.content}
-            dirty={draftText!==editor.content}
-            saving={editorSaving}
-            onChange={setDraftText}
-            onSave={content=>void saveEditor(content)}
-            onClose={()=>void closeEditor()}
-          />
-        </Suspense>
+        <ModalSurface
+          className="sftp-editor-dialog"
+          aria-label={t("sftp:editText")}
+          onDismiss={()=>void closeEditor()}
+          locked={editorSaving}
+          closeOnBackdrop={false}
+          onOpen={()=>document.querySelector<HTMLElement>(".sftp-editor-dialog .cm-content")?.focus()}
+        >
+          <Suspense fallback={<div className="sftp-editor-loading">{t("sftp:loading")}</div>}>
+            <SFTPFileEditor
+              key={refID.tabId + ":" + refID.generation + ":" + editor.path}
+              path={editor.path}
+              initialContent={editor.content}
+              dirty={draftText!==editor.content}
+              saving={editorSaving}
+              onChange={setDraftText}
+              onSave={content=>void saveEditor(content)}
+              onClose={()=>void closeEditor()}
+            />
+          </Suspense>
+        </ModalSurface>
       )}
       {menu && <FloatingContextMenu {...menu} onClose={()=>setMenu(null)}/>}
     </div>
