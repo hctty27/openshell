@@ -56,6 +56,24 @@ type nativeTerminalInboundSink struct {
 	finished  bool
 }
 
+// nativeTerminalInboundReader makes the sidecar's normal inbound.Close a
+// lifecycle signal to the pipe writer. Without it, the sidecar can close its
+// io.PipeReader when stdout ends before the coordinator notices completion,
+// making harmless final SSH bytes look like an unexpected closed pipe.
+type nativeTerminalInboundReader struct {
+	reader *io.PipeReader
+	sink *nativeTerminalInboundSink
+}
+
+func (r *nativeTerminalInboundReader) Read(p []byte) (int, error) {
+	return r.reader.Read(p)
+}
+
+func (r *nativeTerminalInboundReader) Close() error {
+	r.sink.finish(r.reader)
+	return nil
+}
+
 func (s *nativeTerminalInboundSink) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	if s.finished {
@@ -78,6 +96,18 @@ func (s *nativeTerminalInboundSink) Write(p []byte) (int, error) {
 	s.mu.Unlock()
 	n, err := s.pipe.Write(p)
 	if err != nil {
+		s.mu.Lock()
+		finished := s.finished
+		s.mu.Unlock()
+		// The Rust sidecar may finish immediately after it consumes the
+		// final control frame, while the SSH stdout goroutine still holds
+		// one in-flight pipe.Write. Closing that dedicated reader to clean
+		// up must not turn a successful transfer into a fatal SSH writer
+		// error. The output gate continues to own subsequent bytes; none
+		// are allowed to fall back into the visible terminal.
+		if finished && errors.Is(err, io.ErrClosedPipe) {
+			return len(p), nil
+		}
 		select {
 		case s.fail <- err:
 		default:
@@ -189,7 +219,7 @@ func (c *nativeTerminalCoordinator) run(
 	}
 	sidecarDone := make(chan error, 1)
 	go func() {
-		sidecarDone <- c.runner(ctx, action, path, reader, outbound)
+		sidecarDone <- c.runner(ctx, action, path, &nativeTerminalInboundReader{reader: reader, sink: sink}, outbound)
 	}()
 
 	stopSidecar := func() {
