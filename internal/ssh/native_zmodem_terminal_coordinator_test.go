@@ -273,3 +273,41 @@ func TestNativeZmodemInteractiveCoordinatorConcurrentRequestCannotStealLeases(t 
 	case <-time.After(3*time.Second): t.Fatal("primary transfer did not cancel")
 	}
 }
+
+
+func TestNativeZmodemInteractiveCoordinatorRequiresRemoteDrainProof(t *testing.T) {
+	var legacy bytes.Buffer
+	capture := &nativeTerminalCapturedInput{ch: make(chan []byte, 4)}
+	input := newTerminalInputGate(io.Discard, capture)
+	output := newTerminalOutputGate(&legacy)
+	source := filepath.Join(t.TempDir(), "send.bin")
+	if err := os.WriteFile(source, []byte("payload"), 0600); err != nil { t.Fatal(err) }
+	coordinator := &nativeTerminalCoordinator{
+		input: input, output: output,
+		runner: func(ctx context.Context, direction, path string, in io.ReadCloser, out io.Writer) error {
+			if direction != "send" { return errors.New("incorrect transfer direction") }
+			_, err := io.ReadFull(in, make([]byte, nativeZmodemHeaderSize))
+			return err
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- coordinator.run(ctx, "upload", source, "", make(chan struct{})) }()
+	_ = nativeTerminalNextInput(t, capture)
+	if _, err := output.Write(nativeZmodemHeaderTestStream()); err != nil { t.Fatal(err) }
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("local sidecar success bypassed remote boundary proof: %v", err)
+		}
+	case <-time.After(3*time.Second): t.Fatal("missing remote proof did not time out")
+	}
+	if _, err := input.Write([]byte("unsafe user input")); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("unconfirmed remote termination reopened stdin: %v", err)
+	}
+	if _, err := output.Write([]byte("binary tail")); err != nil { t.Fatal(err) }
+	if legacy.Len() != 0 {
+		t.Fatalf("unconfirmed binary tail leaked to terminal: %x", legacy.Bytes())
+	}
+}
