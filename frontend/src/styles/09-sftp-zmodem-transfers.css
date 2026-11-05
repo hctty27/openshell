@@ -43,6 +43,7 @@
 .sftp-retry-actions {display:flex;align-items:center;gap:3px}
 .sftp-retry-actions button:hover {color:var(--accent)}
 .modal-surface.sftp-editor-dialog {width:min(1200px,85vw);height:min(780px,80vh);overflow:hidden;background:var(--panel);border-radius:10px}
+.sftp-editor-loading {display:flex;align-items:center;justify-content:center;gap:10px;min-height:180px;width:100%;height:100%;font-size:12px;color:var(--text-muted)}
 .sftp-editor {display:flex;flex-direction:column;min-width:0;width:100%;height:100%;overflow:hidden;background:var(--panel);color:var(--text-primary)}
 .sftp-editor header,.sftp-editor footer {padding:10px 15px;display:flex;align-items:center;gap:10px;flex-shrink:0}
 .sftp-editor header {border-bottom:1px solid var(--border);justify-content:space-between}

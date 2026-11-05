@@ -409,3 +409,27 @@ test("remote SFTP editor uses a native modal and requires confirmation to discar
   fireEvent.click(within(confirmation).getByRole("button", { name: t("sftp:discard") }));
   await waitFor(() => expect(document.querySelector(".sftp-editor-dialog")).toBeNull());
 });
+
+test("remote editor opens immediately and ignores a cancelled read", async () => {
+  const source: SFTPDocument = {
+    path: "/root/config.yaml", content: "original", revision: "initial", size: 8,
+  };
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
+    side === "remote" ? [file("config.yaml", source.path)] : []);
+  let finishRead: (document: SFTPDocument) => void = () => {};
+  vi.mocked(api.SFTPReadRemoteText).mockImplementation(() =>
+    new Promise(resolve => { finishRead = resolve; }));
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+
+  const row = (await screen.findByText("config.yaml")).closest('[role="listitem"]')!;
+  fireEvent.doubleClick(row);
+  fireEvent.doubleClick(row);
+  expect(api.SFTPReadRemoteText).toHaveBeenCalledTimes(1);
+  const modal = screen.getByRole("dialog", { name: t("sftp:editText") });
+  expect(within(modal).getByText(t("sftp:loading"))).toBeTruthy();
+
+  fireEvent(modal, new Event("cancel", { cancelable: true }));
+  await waitFor(() => expect(document.querySelector(".sftp-editor-dialog")).toBeNull());
+  await act(async () => finishRead(source));
+  expect(document.querySelector(".sftp-editor-dialog")).toBeNull();
+});
