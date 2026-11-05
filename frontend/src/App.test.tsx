@@ -358,7 +358,7 @@ test("theme previews immediately and is saved in appearance settings", async () 
   fireEvent.click(screen.getByRole("button", { name: "外观" }));
   fireEvent.click(screen.getByRole("button", { name: "浅色" }));
   expect(document.documentElement.dataset.theme).toBe("light");
-  fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
+  expect(screen.queryByRole("button", { name: "保存设置" })).toBeNull();
   await waitFor(() =>
     expect(api.SavePreference).toHaveBeenCalledWith("theme", "light"),
   );
@@ -433,7 +433,7 @@ test("terminal mouse settings are opt-in and saved independently", async () => {
   const confirm = screen.getByLabelText("多行粘贴前确认") as HTMLInputElement;
   expect(confirm.checked).toBe(true);
   fireEvent.click(confirm);
-  fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
+  expect(screen.queryByRole("button", { name: "保存设置" })).toBeNull();
   await waitFor(() => {
     expect(api.SavePreference).toHaveBeenCalledWith(
       "autoCopySelection",
