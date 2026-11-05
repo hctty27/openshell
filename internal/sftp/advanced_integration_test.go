@@ -45,6 +45,51 @@ func TestAdvancedRemoteTextVersion(t *testing.T){
     if err:=os.WriteFile(big,bytes.Repeat([]byte("a"),int(maxEditSize)+1),0600);err!=nil{t.Fatal(err)}
     if _,err=m.ReadRemoteText(ref,big);err==nil{t.Fatal("oversized text accepted")}
 }
+func TestInteractiveClientReuseAndInvalidation(t *testing.T) {
+    m, ref := advancedManager(t)
+
+    first, releaseFirst, err := m.borrowRemote(ref)
+    if err != nil { t.Fatal(err) }
+    second, releaseSecond, err := m.borrowRemote(ref)
+    if err != nil { releaseFirst(); t.Fatal(err) }
+    if first != second { t.Fatal("interactive SFTP client was not reused") }
+    releaseSecond()
+
+    m.CancelTab(ref.TabID)
+    if _, err := first.Getwd(); err != nil {
+        t.Fatalf("in-flight SFTP client closed before release: %v", err)
+    }
+
+    third, releaseThird, err := m.borrowRemote(ref)
+    if err != nil { releaseFirst(); t.Fatal(err) }
+    if third == first { t.Fatal("stale SFTP client survived tab invalidation") }
+    releaseFirst()
+    releaseThird()
+
+    m.Close()
+    if _, _, err := m.borrowRemote(ref); !errors.Is(err, errRemotePoolClosed) {
+        t.Fatalf("borrow after shutdown: %v", err)
+    }
+}
+
+func TestEditorConcurrentReadAndSizeCap(t *testing.T) {
+    m, ref := advancedManager(t)
+    name := filepath.Join(t.TempDir(), "large.yaml")
+    source := strings.Repeat("server: config-value\n", 8000)
+    if err := os.WriteFile(name, []byte(source), 0600); err != nil { t.Fatal(err) }
+    doc, err := m.ReadRemoteText(ref, name)
+    if err != nil || doc.Content != source {
+        t.Fatalf("large editor read mismatch: size=%d err=%v", len(doc.Content), err)
+    }
+
+    writer := &limitedDocumentWriter{}
+    if _, err := writer.Write(bytes.Repeat([]byte("a"), int(maxEditSize))); err != nil { t.Fatal(err) }
+    if _, err := writer.Write([]byte("b")); err == nil {
+        t.Fatal("editor writer allowed content beyond the size cap")
+    }
+    if writer.Len() != int(maxEditSize) { t.Fatal("size cap altered the buffered content") }
+}
+
 func TestSyncPreviewDoesNotDelete(t *testing.T){
     m,ref:=advancedManager(t)
     local,remote:=t.TempDir(),t.TempDir()
