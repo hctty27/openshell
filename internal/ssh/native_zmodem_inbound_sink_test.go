@@ -36,7 +36,11 @@ func TestNativeZmodemInboundSinkConcurrentSidecarFinish(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("header not recognized")
 		}
-		sink.finish(reader)
+		// Real sidecar runner calls inbound.Close as soon as its stdout
+		// stream ends, before coordinator.run has seen sidecarDone.
+		if err := (&nativeTerminalInboundReader{reader: reader, sink: sink}).Close(); err != nil {
+			t.Fatal(err)
+		}
 		select {
 		case result := <-done:
 			if result.err != nil || result.n != len(start) {
