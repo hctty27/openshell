@@ -91,7 +91,7 @@ export default function WorkspaceTabStrip(p: Props) {
     event.stopPropagation();
     setContextMenu({
       tabID,
-      anchor: event.currentTarget.querySelector<HTMLButtonElement>("button") ?? event.currentTarget,
+      anchor: (event.currentTarget as HTMLElement).querySelector<HTMLButtonElement>("button") ?? event.currentTarget as HTMLElement,
       x: event.clientX,
       y: event.clientY,
     });
