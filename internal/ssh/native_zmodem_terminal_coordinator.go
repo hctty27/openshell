@@ -56,6 +56,24 @@ type nativeTerminalInboundSink struct {
 	finished  bool
 }
 
+// nativeTerminalInboundReader makes the sidecar's normal inbound.Close a
+// lifecycle signal to the pipe writer. Without it, the sidecar can close its
+// io.PipeReader when stdout ends before the coordinator notices completion,
+// making harmless final SSH bytes look like an unexpected closed pipe.
+type nativeTerminalInboundReader struct {
+	reader *io.PipeReader
+	sink *nativeTerminalInboundSink
+}
+
+func (r *nativeTerminalInboundReader) Read(p []byte) (int, error) {
+	return r.reader.Read(p)
+}
+
+func (r *nativeTerminalInboundReader) Close() error {
+	r.sink.finish(r.reader)
+	return nil
+}
+
 func (s *nativeTerminalInboundSink) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	if s.finished {
@@ -201,7 +219,7 @@ func (c *nativeTerminalCoordinator) run(
 	}
 	sidecarDone := make(chan error, 1)
 	go func() {
-		sidecarDone <- c.runner(ctx, action, path, reader, outbound)
+		sidecarDone <- c.runner(ctx, action, path, &nativeTerminalInboundReader{reader: reader, sink: sink}, outbound)
 	}()
 
 	stopSidecar := func() {
