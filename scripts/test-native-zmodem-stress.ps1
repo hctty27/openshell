@@ -18,6 +18,8 @@ param(
 
     [string]$ReportDir = "",
 
+    [switch]$Diagnostics,
+
     [switch]$SkipBaseline
 )
 
@@ -34,6 +36,7 @@ $ErrorActionPreference = "Stop"
     -StressWorkers $Workers `
     -StressLatencyMS $LatencyMS `
     -StressReportDir $ReportDir `
+    -StressDiagnostics:$Diagnostics `
     -SkipBaseline:$SkipBaseline
 
 if (-not $?) { throw "Native ZMODEM stress lab failed" }
