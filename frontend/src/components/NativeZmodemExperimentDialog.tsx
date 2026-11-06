@@ -9,7 +9,7 @@ interface Props {
   refID: Ref;
   sessionName: string;
   onDismiss(): void;
-  onNotice(message: unknown): void;
+  onError(error: unknown): void;
 }
 
 type Direction = "upload" | "download";
@@ -29,7 +29,7 @@ function fileName(path: string): string {
 // The backend owns the opt-in gate and PTY lease. This view never sends
 // shell commands, passes secrets, or changes the existing rz/sz default.
 export default function NativeZmodemExperimentDialog({
-  refID, sessionName, onDismiss, onNotice,
+  refID, sessionName, onDismiss, onError,
 }: Props) {
   const [readiness, setReadiness] = useState<NativeZmodemReadiness | null>(null);
   const [direction, setDirection] = useState<Direction>("upload");
@@ -101,7 +101,7 @@ export default function NativeZmodemExperimentDialog({
       }
     } catch (reason) {
       setError(errorText(reason));
-      onNotice(reason);
+      onError(reason);
     } finally {
       setRunning(false);
       setCancelling(false);
