@@ -121,9 +121,18 @@ func (m *Manager) RunExperimentalNativeTerminalTransfer(
 	ref domain.ConnectionRef,
 	sidecar, direction, localPath, remotePath string,
 ) error {
+	return m.RunExperimentalNativeTerminalTransferWithProgress(ctx, ref, sidecar, direction, localPath, remotePath, nil)
+}
+
+func (m *Manager) RunExperimentalNativeTerminalTransferWithProgress(
+	ctx context.Context,
+	ref domain.ConnectionRef,
+	sidecar, direction, localPath, remotePath string,
+	progress func(uint64, uint64),
+) error {
 	status := m.NativeZmodemExperimentalReadiness(ref, sidecar, true)
 	if !status.Ready {
 		return errors.New(status.Message)
 	}
-	return m.runNativeTerminalExperiment(ctx, ref, sidecar, direction, localPath, remotePath)
+	return m.runNativeTerminalExperimentWithProgress(ctx, ref, sidecar, direction, localPath, remotePath, progress)
 }
