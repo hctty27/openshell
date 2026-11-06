@@ -304,7 +304,7 @@ fn main() {
 mod tests {
     use super::{read_source_chunk, safe_name};
     use std::fs::{self, OpenOptions};
-    use std::io::Write;
+    use std::io::{Seek, SeekFrom, Write};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -313,6 +313,7 @@ mod tests {
         let path = std::env::temp_dir().join(format!("openshell-source-chunk-{}-{suffix}", std::process::id()));
         let mut file = OpenOptions::new().read(true).write(true).create_new(true).open(&path).unwrap();
         file.write_all(b"abcdefghijklmnopqrstuvwxyz").unwrap();
+        file.seek(SeekFrom::Start(0)).unwrap();
         let mut buffer = Vec::with_capacity(8);
         let mut next = 0u64;
         read_source_chunk(&mut file, 0, 8, &mut next, &mut buffer).unwrap();
