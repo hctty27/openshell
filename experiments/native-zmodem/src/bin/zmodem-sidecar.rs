@@ -16,6 +16,17 @@ use zmodem2::{Action, Event, FileInfo, Position, Receiver, Sender};
 const MAX_SIZE: u64 = 128 * 1024 * 1024;
 const SESSION_TIMEOUT: Duration = Duration::from_secs(90);
 const READ_TIMEOUT: Duration = Duration::from_millis(150);
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
+
+// Diagnostics only: stdout remains exclusively binary ZMODEM protocol.
+// Upload progress is bytes read from the source, not proof of remote persistence.
+fn report_progress(processed: u64, total: u64, last: &mut Instant, force: bool) {
+    if force || last.elapsed() >= PROGRESS_INTERVAL {
+        eprintln!("OSZP\t{processed}\t{total}");
+        *last = Instant::now();
+    }
+}
+
 
 fn incoming_wire() -> ChannelReceiver<io::Result<Vec<u8>>> {
     let (tx, rx) = mpsc::channel();
@@ -77,6 +88,9 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut sender = Sender::new()?;
     sender.start_file(FileInfo::new(name.as_bytes(), Some(Position::new(size as u32))))?;
+    let mut processed = 0u64;
+    let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
+    report_progress(0, size, &mut progress_at, true);
     let rx = incoming_wire();
     let mut waiting = VecDeque::<u8>::new();
     let mut output = io::stdout().lock();
@@ -103,8 +117,13 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 let mut data = vec![0u8; max];
                 file.read_exact(&mut data)?;
                 sender.submit_file(&data)?;
+                processed = processed.max(start + max as u64);
+                report_progress(processed, size, &mut progress_at, false);
             }
-            Action::Event(Event::FileCompleted) => done_file = true,
+            Action::Event(Event::FileCompleted) => {
+                done_file = true;
+                report_progress(size, size, &mut progress_at, true);
+            },
             Action::Event(Event::SessionCompleted) => {
                 if !done_file {
                     return Err("session ended without file completion".into());
@@ -164,6 +183,8 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut open_file: Option<(File, PathBuf, PathBuf, u64, Option<u32>)> = None;
     let mut completed = false;
     let mut session_completed = false;
+    let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
+    let mut received_total = 0u64;
     let deadline = Instant::now() + SESSION_TIMEOUT;
 
     while Instant::now() < deadline {
@@ -183,6 +204,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 file.write_all(&data)?;
                 receiver.file_written(data.len())?;
+                report_progress(*bytes, received_total, &mut progress_at, false);
             }
             Action::Event(Event::FileStarted(info)) => {
                 if open_file.is_some() || completed {
@@ -199,6 +221,8 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 let suffix = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
                 let temp = dir.join(format!(".openshell-zmodem-{}-{suffix}.part", std::process::id()));
                 let file = OpenOptions::new().write(true).create_new(true).open(&temp)?;
+                received_total = info.size.map_or(0, |size| u64::from(size.get()));
+                report_progress(0, received_total, &mut progress_at, true);
                 open_file = Some((file, temp, target, 0, info.size.map(|size| size.get())));
             }
             Action::Event(Event::FileCompleted) => {
@@ -211,6 +235,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 file.sync_all()?;
                 drop(file);
                 fs::rename(temp, target)?;
+                report_progress(size, received_total, &mut progress_at, true);
                 completed = true;
             }
             Action::Event(Event::SessionCompleted) => {
