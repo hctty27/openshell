@@ -18,10 +18,11 @@ type nativeZmodemActivityKey struct{}
 // A transfer that keeps exchanging bytes can run longer than the idle window.
 // Parent cancellation remains authoritative, including disconnect and manual cancel.
 func newNativeZmodemIdleContext(parent context.Context, idle time.Duration) (context.Context, context.CancelFunc, func()) {
-	ctx, cancel := context.WithCancelCause(parent)
+	watchCtx, cancel := context.WithCancelCause(parent)
 	var lastActivity atomic.Int64
 	lastActivity.Store(time.Now().UnixNano())
 	touch := func() { lastActivity.Store(time.Now().UnixNano()) }
+	ctx := context.WithValue(watchCtx, nativeZmodemActivityKey{}, touch)
 
 	interval := idle / 4
 	if interval > time.Second { interval = time.Second }
@@ -41,7 +42,6 @@ func newNativeZmodemIdleContext(parent context.Context, idle time.Duration) (con
 			}
 		}
 	}()
-	ctx = context.WithValue(ctx, nativeZmodemActivityKey{}, touch)
 	return ctx, func() { cancel(context.Canceled) }, touch
 }
 
