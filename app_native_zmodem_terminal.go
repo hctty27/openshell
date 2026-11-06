@@ -73,7 +73,7 @@ func (a *App) CancelNativeZmodemInteractiveTransfer(ref domain.ConnectionRef) er
 }
 
 func (a *App) NativeZmodemChooseUploadFile() (string, error) {
-	if !a.NativeZmodemExperimentEnabled() {
+	if !a.nativeZmodemPreferred() {
 		return "", errors.New("当前平台未启用原生 ZMODEM")
 	}
 	if a.pickNativeZmodemFile == nil {
@@ -85,7 +85,7 @@ func (a *App) NativeZmodemChooseUploadFile() (string, error) {
 // NativeZmodemChooseUploadFiles uses the OS picker for a single batch session.
 // An empty selection means the user cancelled, not an implicit transfer.
 func (a *App) NativeZmodemChooseUploadFiles() ([]string, error) {
-	if !a.NativeZmodemExperimentEnabled() {
+	if !a.nativeZmodemPreferred() {
 		return nil, errors.New("当前平台未启用原生 ZMODEM")
 	}
 	if a.pickNativeZmodemFiles == nil {
