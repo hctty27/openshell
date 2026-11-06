@@ -1,24 +1,22 @@
 package main
 
-import "runtime"
+import (
+	"os"
+	"runtime"
+)
 
 const (
 	zmodemModeNative = "native"
 	zmodemModeLegacy = "legacy"
 )
 
-// 默认仅在 Windows 优先原生单文件 ZMODEM，其余平台保持原实现。
-// 用户明确保存的设置总是覆盖默认值。
-func resolveZmodemTransferMode(raw string) string {
-	switch raw {
-	case zmodemModeNative, zmodemModeLegacy:
-		return raw
-	default:
-		if runtime.GOOS == "windows" {
-			return zmodemModeNative
-		}
-		return zmodemModeLegacy
+// Windows 固定使用 Rust 原生引擎；其他平台保持各自支持的兼容实现。
+// 旧版本保存的 zmodemTransferMode 仅作为历史数据，不再影响运行策略。
+func resolveZmodemTransferMode(_ string) string {
+	if runtime.GOOS == "windows" || os.Getenv("OPENSHELL_NATIVE_ZMODEM_SIDECAR") != "" {
+		return zmodemModeNative
 	}
+	return zmodemModeLegacy
 }
 
 func (a *App) currentZmodemTransferMode() string {
