@@ -8,6 +8,8 @@ import ModalSurface from "./ModalSurface";
 interface Props {
   refID: Ref;
   sessionName: string;
+  initialDirection?: Direction;
+  initialRemotePath?: string;
   onDismiss(): void;
   onError(error: unknown): void;
 }
@@ -29,12 +31,12 @@ function fileName(path: string): string {
 // The backend owns the opt-in gate and PTY lease. This view never sends
 // shell commands, passes secrets, or changes the existing rz/sz default.
 export default function NativeZmodemExperimentDialog({
-  refID, sessionName, onDismiss, onError,
+  refID, sessionName, initialDirection, initialRemotePath, onDismiss, onError,
 }: Props) {
   const [readiness, setReadiness] = useState<NativeZmodemReadiness | null>(null);
-  const [direction, setDirection] = useState<Direction>("upload");
+  const [direction, setDirection] = useState<Direction>(initialDirection ?? "upload");
   const [localPath, setLocalPath] = useState("");
-  const [remotePath, setRemotePath] = useState("");
+  const [remotePath, setRemotePath] = useState(initialRemotePath ?? "");
   const [acknowledged, setAcknowledged] = useState(false);
   const [running, setRunning] = useState(false);
   const [cancelling, setCancelling] = useState(false);
