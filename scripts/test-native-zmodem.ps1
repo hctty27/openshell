@@ -35,6 +35,11 @@ param(
     [ValidateRange(1, 10)]
     [int]$StressLargeABRounds = 5,
 
+    [switch]$StressNetemAB,
+
+    [ValidateRange(1, 5)]
+    [int]$StressNetemRounds = 2,
+
     [switch]$SkipBaseline
 )
 
@@ -128,7 +133,12 @@ $variableNames = @(
     "OPENSHELL_ZMODEM_LARGE_AB",
     "OPENSHELL_ZMODEM_LARGE_AB_ROUNDS",
     "OPENSHELL_ZMODEM_LARGE_AB_REPORT",
-    "OPENSHELL_ZMODEM_RX_DIAG"
+    "OPENSHELL_ZMODEM_RX_DIAG",
+    "OPENSHELL_ZMODEM_NETEM_AB",
+    "OPENSHELL_ZMODEM_NETEM_PROFILE",
+    "OPENSHELL_ZMODEM_NETEM_QDISC",
+    "OPENSHELL_ZMODEM_NETEM_ROUNDS",
+    "OPENSHELL_ZMODEM_NETEM_REPORT"
 )
 $previous = @{}
 foreach ($name in $variableNames) {
@@ -173,7 +183,13 @@ try {
     # Keep an exited container long enough to inspect its status and logs.
     # It is removed in finally whether the test succeeds or fails.
     $containerAttempted = $true
-    & docker run --detach --name $container -p '127.0.0.1::22' $image | Out-Null
+    if ($StressNetemAB) {
+        # NET_ADMIN applies to this temporary container, not the host.
+        & docker run --detach --cap-add NET_ADMIN --name $container -p '127.0.0.1::22' $image | Out-Null
+    }
+    else {
+        & docker run --detach --name $container -p '127.0.0.1::22' $image | Out-Null
+    }
     if ($LASTEXITCODE -ne 0) { throw "Docker Linux SSH fixture failed to start" }
     $started = $true
 
@@ -386,7 +402,7 @@ try {
         Write-Host "PASS: large A/B report written to $largeFile"
     }
 
-    Write-Host "PASS: native Windows sidecar and real Linux OpenSSH/SFTP ZMODEM tests"
+()=>block+marker
 }
 catch {
     $originalError = $_
