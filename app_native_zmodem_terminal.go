@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/hctty27/openshell/internal/domain"
 	sshclient "github.com/hctty27/openshell/internal/ssh"
@@ -50,15 +51,47 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 // and download remotePaths lists each file to fetch.
 func (a *App) StartNativeZmodemInteractiveBatchTransfer(
 	ref domain.ConnectionRef, direction string, localPaths, remotePaths []string,
-) error {
+) (err error) {
 	if status := a.NativeZmodemInteractiveReadiness(ref); !status.Ready {
 		return errors.New(status.Message)
 	}
+	batchID := domain.NewID()
+	files := make([]map[string]any, 0)
+	if direction == "upload" {
+		for _, name := range localPaths {
+			entry := map[string]any{"name": filepath.Base(name)}
+			if info, statErr := os.Stat(name); statErr == nil && info.Mode().IsRegular() {
+				entry["total"] = info.Size()
+			}
+			files = append(files, entry)
+		}
+	} else {
+		for _, name := range remotePaths {
+			if strings.TrimSpace(name) != "" {
+				files = append(files, map[string]any{"name": filepath.Base(name)})
+			}
+		}
+	}
+	a.emit("ssh:native-zmodem-batch", map[string]any{
+		"ref": ref, "id": batchID, "direction": direction, "active": true, "files": files,
+	})
+	defer func() {
+		payload := map[string]any{"ref": ref, "id": batchID, "direction": direction, "active": false}
+		if err != nil { payload["error"] = err.Error() }
+		a.emit("ssh:native-zmodem-batch", payload)
+	}()
+	ctx := sshclient.WithNativeZmodemFileObserver(a.ctx, func(event sshclient.NativeZmodemFileProgress) {
+		a.emit("ssh:native-zmodem-file", map[string]any{
+			"ref": ref, "batchId": batchID, "kind": event.Kind,
+			"index": event.Index, "name": event.Name,
+			"total": event.Total, "processed": event.Processed,
+		})
+	})
 	return a.ssh.RunExperimentalNativeTerminalBatchTransferWithProgress(
-		a.ctx, ref, nativeZmodemDesktopSidecarPath(), direction, localPaths, remotePaths,
+		ctx, ref, nativeZmodemDesktopSidecarPath(), direction, localPaths, remotePaths,
 		func(processed, total uint64) {
 			a.emit("ssh:native-zmodem-progress", map[string]any{
-				"ref": ref, "direction": direction, "processed": processed, "total": total,
+				"ref": ref, "batchId": batchID, "direction": direction, "processed": processed, "total": total,
 			})
 		},
 	)
