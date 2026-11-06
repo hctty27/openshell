@@ -45,6 +45,27 @@
 
 这些测试实际使用当前交互式 SSH PTY 和原生 Rust sidecar，**不是简单模拟协议响应**；验证后会清理文件。若一轮失败，结果应视为验收不通过，不能因为其他轮成功而忽略失败。
 
+## 原生写入合并 A/B 实验（默认关闭）
+
+Rust sidecar 增加 **仅实验模式使用** 的有界 `Action::WriteWire` 缓冲。默认 `0 KiB`，与先前逐帧 `write_all + flush` 完全一致；可在独立压力测试中设置为 `4`、`8`、`16` 或 `32 KiB`。
+
+连续小帧只做字节级拼接，帧内容和顺序不改。缓冲达到上限、遇到大帧、进入 `Action::Idle`（等待远端输入）或收到文件/会话完成事件时立即强制 `flush`。所有模式都保留握手完成及终端失败后必须重连的安全策略。
+
+```powershell
+# 不加速的原始行为，对照组
+.\scripts\test-native-zmodem-stress.ps1 -Profile latency -WireBatchKiB 0
+
+# 实验组：最多缓存 16 KiB
+.\scripts\test-native-zmodem-stress.ps1 -Profile latency -WireBatchKiB 16
+
+# 通过弱链路对照后，再执行完整回归
+.\scripts\test-native-zmodem-stress.ps1 -Profile all -WireBatchKiB 16
+```
+
+`-WireBatchKiB` 由测试脚本临时注入 `OPENSHELL_ZMODEM_WIRE_BATCH_BYTES`，结束或异常退出后会恢复原环境变量。无需改动 OpenShell 正式设置、用户终端、SSH 配置或安装包默认行为。
+
+A/B 测试必须对照 JSON `io.toRemoteCalls`、`io.toRemoteWriteNs`、`miBPerSecond`、SHA-256；推荐每个延迟条件至少重复 5 次，并交替执行两组，以减少环境波动。**减少写入次数不代表一定能提高速度**：当 ZMODEM 协议当前流程必须等待远端 ACK 时，将始终在等待前 flush，不跨协议反馈边界强行拼接。缓冲不会改变模拟器的 3ms TCP 读写延迟语义；它也不模拟真实丢包。
+
 ## Windows 本机 Go Vet 与协议测试隔离
 
 Windows PowerShell 5.1 上的测试日志曾出现 `vet.exe: expected 'package', found '%'`，涉及多个第三方模块，尽管真实跨系统 PTY 的 8 次传输及 SHA-256 验证全部通过。该报错不等同于协议失败，也不能直接排除本机模块缓存被修改。
