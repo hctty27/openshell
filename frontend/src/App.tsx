@@ -167,7 +167,26 @@ function Workspace({ initialState }: { initialState: AppState }) {
   };
   const { hasActiveTransfers } = useTransferActivity();
   const [nativeZmodemEnabled, setNativeZmodemEnabled] = useState(false);
-  const [nativeZmodemDialog, setNativeZmodemDialog] = useState<{ ref: Ref; sessionName: string } | null>(null);
+  const [nativeZmodemDialog, setNativeZmodemDialog] = useState<{
+    ref: Ref;
+    sessionName: string;
+    direction?: "upload" | "download";
+    remotePath?: string;
+  } | null>(null);
+  useEffect(() => listen("ssh:native-zmodem-auto-intent", (event: {
+    ref?: Ref;
+    sessionName?: string;
+    direction?: "upload" | "download";
+    remotePath?: string;
+  }) => {
+    if (!event?.ref || !["upload", "download"].includes(event.direction ?? "")) return;
+    setNativeZmodemDialog({
+      ref: event.ref,
+      sessionName: event.sessionName || event.ref.sessionId,
+      direction: event.direction,
+      remotePath: event.remotePath ?? "",
+    });
+  }), []);
   useEffect(() => {
     if (!desktop || typeof api.NativeZmodemExperimentEnabled !== "function") return;
     let current = true;
@@ -1774,6 +1793,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
           key={nativeZmodemDialog.ref.tabId + ":" + nativeZmodemDialog.ref.generation}
           refID={nativeZmodemDialog.ref}
           sessionName={nativeZmodemDialog.sessionName}
+          initialDirection={nativeZmodemDialog.direction}
+          initialRemotePath={nativeZmodemDialog.remotePath}
           onDismiss={() => setNativeZmodemDialog(null)}
           onError={notify}
         />
