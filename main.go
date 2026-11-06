@@ -61,6 +61,11 @@ func main() {
     service.pickNativeZmodemFile = func() (string, error) {
       return desktop.Dialog.OpenFile().SetTitle(service.dialogTitle("Select file for experimental native ZMODEM upload", "选择原生 ZMODEM 上传文件")).PromptForSingleSelection()
     }
+    service.pickNativeZmodemFiles = func() ([]string, error) {
+      return desktop.Dialog.OpenFile().
+        SetTitle(service.dialogTitle("Select files for native ZMODEM upload", "选择多个原生 ZMODEM 上传文件")).
+        PromptForMultipleSelection()
+    }
     service.pickDirectory = func() (string, error) {
       return desktop.Dialog.OpenFile().SetTitle(service.dialogTitle("Select local folder", "选择本地文件夹")).
         CanChooseDirectories(true).CanChooseFiles(false).PromptForSingleSelection()
