@@ -23,6 +23,8 @@ param(
 
     [string]$StressReportDir = "",
 
+    [switch]$StressDiagnostics,
+
     [switch]$SkipBaseline
 )
 
@@ -35,7 +37,8 @@ function Invoke-NativeZmodemGoTest {
         [Parameter(Mandatory = $true)][string]$Pattern,
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][string]$LogDirectory,
-        [string]$Timeout = "10m"
+        [string]$Timeout = "10m",
+        [switch]$CaptureProfile
     )
 
     [void][IO.Directory]::CreateDirectory($LogDirectory)
@@ -49,8 +52,13 @@ function Invoke-NativeZmodemGoTest {
         $ErrorActionPreference = "Continue"
         # Protocol/PTY integration tests run independently of Go Vet. This is
         # not a permanent disable: CI still runs "go vet ./..." separately.
-        & go test -vet=off -count=1 "-timeout=$Timeout" -v ./internal/ssh -run $Pattern 2>&1 |
-            Tee-Object -FilePath $logPath
+        $goArguments = @("test", "-vet=off", "-count=1", "-timeout=$Timeout", "-v", "./internal/ssh", "-run", $Pattern)
+        if ($CaptureProfile) {
+            $cpuProfile = Join-Path $LogDirectory "$safeName.cpu.pprof"
+            $traceFile = Join-Path $LogDirectory "$safeName.trace"
+            $goArguments += @("-cpuprofile", $cpuProfile, "-trace", $traceFile)
+        }
+        & go @goArguments 2>&1 | Tee-Object -FilePath $logPath
         $exitCode = $LASTEXITCODE
     }
     finally {
@@ -229,7 +237,10 @@ try {
         [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_REPORT", $reportFile, "Process")
 
         Write-Host "[stress] Windows native Rust vs real Linux PTY: $StressProfile"
-        Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemStressInteractivePTY$' -Name "stress-$StressProfile" -LogDirectory $diagnosticsDir -Timeout "60m"
+        Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemStressInteractivePTY$' -Name "stress-$StressProfile" -LogDirectory $diagnosticsDir -Timeout "60m" -CaptureProfile:$StressDiagnostics
+        if ($StressDiagnostics) {
+            Write-Host "Go CPU/Trace profiles: $diagnosticsDir"
+        }
         if (-not (Test-Path -LiteralPath $reportFile -PathType Leaf)) {
             throw "Native ZMODEM stress report was not generated: $reportFile"
         }
@@ -250,6 +261,24 @@ try {
                 MaxMiBps = [math]::Round($statistics.Maximum, 2)
             }
         } | Format-Table -AutoSize | Out-Host
+        $nativeStageRecords = @($records | Where-Object {
+            $_.protocol -eq "native" -and $_.checksumOK -and $null -ne $_.stagesMs
+        })
+        if ($nativeStageRecords.Count -gt 0) {
+            Write-Host "Native ZMODEM stage timing (average ms, test-only instrumentation):"
+            $nativeStageRecords | Group-Object profile, direction | ForEach-Object {
+                $group = $_.Group
+                [PSCustomObject]@{
+                    Profile = $group[0].profile
+                    Direction = $group[0].direction
+                    Samples = $group.Count
+                    Prepare = [math]::Round(($group | ForEach-Object { [double]$_.stagesMs.prepare } | Measure-Object -Average).Average, 1)
+                    Protocol = [math]::Round(($group | ForEach-Object { [double]$_.stagesMs.protocol } | Measure-Object -Average).Average, 1)
+                    RemoteConfirm = [math]::Round(($group | ForEach-Object { [double]$_.stagesMs.remoteConfirm } | Measure-Object -Average).Average, 1)
+                    RestorePublish = [math]::Round(($group | ForEach-Object { [double]$_.stagesMs.restorePublish } | Measure-Object -Average).Average, 1)
+                }
+            } | Format-Table -AutoSize | Out-Host
+        }
         Write-Host "PASS: stress report written to $reportFile"
     }
 

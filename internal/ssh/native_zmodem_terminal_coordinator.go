@@ -167,6 +167,7 @@ func (c *nativeTerminalCoordinator) run(
 	if err := parent.Err(); err != nil {
 		return err
 	}
+	preparationStarted := time.Now()
 	token, err := newNativeRemoteBoundaryToken()
 	if err != nil { return fmt.Errorf("远端传输结束令牌创建失败：%w", err) }
 	command, action, err := nativeInteractiveFencedCommand(direction, remotePath, token)
@@ -241,6 +242,8 @@ func (c *nativeTerminalCoordinator) run(
 		return fmt.Errorf("启动远端原生 ZMODEM 失败（需要重连终端）：%w", err)
 	}
 
+	observeNativeZmodemStage(parent, "prepare", preparationStarted)
+	protocolStarted := time.Now()
 	select {
 	case err = <-sidecarDone:
 		// Any sidecar error is fail-closed; the remote shell may still be
@@ -252,6 +255,7 @@ func (c *nativeTerminalCoordinator) run(
 		stopSidecar()
 		return fmt.Errorf("原生 ZMODEM 已取消或超时（需要重连终端）：%w", ctx.Err())
 	}
+	observeNativeZmodemStage(parent, "protocol", protocolStarted)
 	sink.finish(reader)
 	if err != nil {
 		return fmt.Errorf("原生 ZMODEM sidecar 执行失败（需要重连终端）：%w", err)
@@ -260,6 +264,7 @@ func (c *nativeTerminalCoordinator) run(
 		return errors.New("未收到远程 ZMODEM 启动帧，终端状态不可确认（需要重连）")
 	}
 
+	confirmationStarted := time.Now()
 	// Local sidecar exit alone never grants permission to resume the terminal.
 	// The remote shell emits a nonce-scoped OSC control marker *after* rz/sz
 	// exits; the marker and following shell output do not reach the sidecar.
@@ -272,6 +277,8 @@ func (c *nativeTerminalCoordinator) run(
 		return fmt.Errorf("等待远端传输结束标记超时（需要重连终端）：%w", ctx.Err())
 	}
 
+	observeNativeZmodemStage(parent, "remoteConfirm", confirmationStarted)
+	restoreStarted := time.Now()
 	// Replay bytes received after the completion marker while holding the
 	// output gate lock, before admitting any new ordinary SSH output.
 	if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil {
@@ -285,6 +292,7 @@ func (c *nativeTerminalCoordinator) run(
 			return fmt.Errorf("原生 ZMODEM 接收成功，但保存文件失败：%w", err)
 		}
 	}
+	observeNativeZmodemStage(parent, "restorePublish", restoreStarted)
 	return nil
 }
 
