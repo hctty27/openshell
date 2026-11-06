@@ -157,6 +157,9 @@ func (r *terminalShellReadiness) checkReady() error {
 	if r.alternate {
 		return errors.New("当前终端正在使用全屏程序，无法交给 AI 操作")
 	}
+	if r.program == "mysql" && (r.manualInput || !r.prompt) {
+		return errors.New("MySQL 当前存在未完成的 SQL 或正在执行查询，请等待空白 MySQL 主提示符后重试")
+	}
 	if r.manualInput {
 		return errors.New("终端存在未确认的交互输入，请返回空白 Shell 提示符后重试")
 	}
