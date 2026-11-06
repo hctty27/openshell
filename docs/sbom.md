@@ -18,7 +18,19 @@ GitHub Actions workflow: [Generate third-party SBOM](../.github/workflows/sbom.y
 - Tool-detected license names are candidates for review rather than completed legal determinations. Components with missing license metadata are left visible in `license-review.json`, not silently approved.
 - To reproduce, run the workflow manually or execute its pinned Go CLI and the npm commands with the project's current locked dependencies.
 
-## Bundled ZMODEM components
+## Windows ZMODEM components — native Rust release
+
+The current Windows release packaging bundles exactly three ZMODEM executables: first-party `zmodem/rz.exe` and `zmodem/sz.exe` GUI-subsystem launchers, and `zmodem/native/zmodem-sidecar.exe` built from the Rust sources in this repository. Both launchers forward stdin/stdout to the Rust protocol engine. The terminal detector from `trzsz-go` remains to support `trz/tsz` and remote-initiated `rz/sz`, but **neither lrzsz-win32 executables nor MSYS2 DLLs are distributed**.
+
+`scripts/prepare_native_zmodem_windows.ps1` clears the release staging folder, builds the two launchers and copies the verified Rust sidecar. `scripts/generate_native_zmodem_manifest.py` records SHA-256, origin and size of the three binaries in `zmodem/BUNDLED_COMPONENTS.json`. `scripts/verify_native_only_zmodem_windows.ps1` rejects any unexpected files, including old DLLs/source archives. The installer removes old `zmodem` helpers during an upgrade.
+
+The manifest is a file inventory, **not** a comprehensive Rust/Go/npm license clearance. Those dependencies still require their own review.
+
+## Historical ZMODEM components (previous MSYS2/lrzsz releases)
+
+The following information documents **prior** Windows packages only; it does not describe the native-only packages built by the current release workflow.
+
+
 
 The Windows release workflow already pins the [lrzsz-win32](https://github.com/trzsz/lrzsz-win32/releases/tag/v0.12.21rc) source commit and archive checksum and verifies the downloaded ZIP. It also pins the exact MSYS2 3.4.9 DLL SHA-256 and bundles the [historical candidate's licensing reference texts and 3.4.9-3 build recipe](../third_party/msys2-runtime-3.4.9/README.md). The historical recipe points at the upstream Cygwin source tag and MSYS2 patches but is **not** evidence of a binary/source hash match. It now also runs `scripts/generate_zmodem_manifest.py`, which:
 
