@@ -47,7 +47,9 @@ function Invoke-NativeZmodemGoTest {
         # On Windows PowerShell 5.1 redirected native stderr is surfaced as
         # error records; do not let Stop abort the test before saving output.
         $ErrorActionPreference = "Continue"
-        & go test -count=1 "-timeout=$Timeout" -v ./internal/ssh -run $Pattern 2>&1 |
+        # Protocol/PTY integration tests run independently of Go Vet. This is
+        # not a permanent disable: CI still runs "go vet ./..." separately.
+        & go test -vet=off -count=1 "-timeout=$Timeout" -v ./internal/ssh -run $Pattern 2>&1 |
             Tee-Object -FilePath $logPath
         $exitCode = $LASTEXITCODE
     }
@@ -111,6 +113,12 @@ foreach ($name in $variableNames) {
 [void][IO.Directory]::CreateDirectory($tempDir)
 Push-Location $repoRoot
 try {
+    Write-Host "[preflight] Verify downloaded Go module integrity"
+    & go mod verify
+    if ($LASTEXITCODE -ne 0) {
+        throw "Go module integrity check failed. Inspect local GOMODCACHE; do not treat any previous cached test PASS as a clean environment."
+    }
+
     Write-Host "[1/5] Build native Windows Rust sidecar"
     Push-Location (Join-Path $repoRoot "experiments\native-zmodem")
     try {
