@@ -45,6 +45,23 @@
 
 这些测试实际使用当前交互式 SSH PTY 和原生 Rust sidecar，**不是简单模拟协议响应**；验证后会清理文件。若一轮失败，结果应视为验收不通过，不能因为其他轮成功而忽略失败。
 
+## Windows 本机 Go Vet 与协议测试隔离
+
+Windows PowerShell 5.1 上的测试日志曾出现 `vet.exe: expected 'package', found '%'`，涉及多个第三方模块，尽管真实跨系统 PTY 的 8 次传输及 SHA-256 验证全部通过。该报错不等同于协议失败，也不能直接排除本机模块缓存被修改。
+
+脚本在启动测试环境前先执行 `go mod verify`，对已经下载的依赖源码做完整性检查；失败时中止，**不自动清理或覆盖模块缓存**。通过后，专用 Go PTY 集成测试使用 `go test -vet=off`，避免本机 Vet 的独立异常误判协议验收。Go 静态分析并没有全局关闭：正式 CI 继续独立运行 `go vet ./...` 和 `go test -race ./...`。
+
+如本机希望恢复 Vet，请先运行：
+
+```powershell
+go version
+go env GOMODCACHE GOCACHE GOFLAGS
+go mod verify
+go vet ./internal/ssh
+```
+
+只有确认确有模块缓存损坏时，才考虑 `go clean -modcache` 与 `go mod download` 重新下载依赖；该操作会清除**所有** Go 项目共享的模块缓存，而不只是 OpenShell。
+
 ## 失败日志定位（Windows PowerShell 5.1）
 
 如果基础联调第 4 步或压力阶段退出非零状态，脚本会保留单独的原生 Go 测试输出：
