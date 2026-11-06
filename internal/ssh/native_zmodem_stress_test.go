@@ -148,8 +148,7 @@ type nativeStressReport struct {
  Results []nativeStressRecord `json:"results"`
 }
 
-func (r *nativeStressReport) add(profile, protocol, direction string, size int64, started time.Time, err error) {
- elapsed := time.Since(started)
+func (r *nativeStressReport) add(profile, protocol, direction string, size int64, elapsed time.Duration, err error) {
  record := nativeStressRecord{Profile: profile, Protocol: protocol, Direction: direction,
   SizeBytes: size, DurationMS: elapsed.Milliseconds(), ChecksumOK: err == nil}
  if elapsed > 0 { record.MiBPerSecond = float64(size) / (1024*1024) / elapsed.Seconds() }
@@ -288,8 +287,9 @@ func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, pro
  ctx, cancel := context.WithTimeout(context.Background(), 88*time.Second)
  err = peer.manager.runNativeTerminalExperiment(ctx, peer.ref, sidecar, "upload", source, "")
  cancel()
+ elapsed := time.Since(started)
  if err == nil { err = nativeStressCompareSFTP(peer.sftp, remoteUpload, expected) }
- report.add(profile, "native", "upload", int64(size), started, err)
+ report.add(profile, "native", "upload", int64(size), elapsed, err)
  if err != nil { return fmt.Errorf("native upload: %w", err) }
 
  remoteSource := path.Join(peer.home, "source-"+name)
@@ -311,8 +311,9 @@ func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, pro
  ctx, cancel = context.WithTimeout(context.Background(), 88*time.Second)
  err = peer.manager.runNativeTerminalExperiment(ctx, peer.ref, sidecar, "download", destination, remoteSource)
  cancel()
+ elapsed = time.Since(started)
  if err == nil { err = nativeStressCompareFile(filepath.Join(destination, "source-"+name), expected) }
- report.add(profile, "native", "download", int64(size), started, err)
+ report.add(profile, "native", "download", int64(size), elapsed, err)
  if err != nil { return fmt.Errorf("native download: %w", err) }
 
  if !sftpBaseline { return nil }
@@ -320,28 +321,30 @@ func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, pro
  peer.remoteFiles = append(peer.remoteFiles, baselineRemote)
  started = time.Now()
  upload, err := peer.sftp.Create(baselineRemote)
- if err != nil { report.add(profile, "sftp", "upload", int64(size), started, err); return err }
+ if err != nil { report.add(profile, "sftp", "upload", int64(size), time.Since(started), err); return err }
  local, err = os.Open(source)
  if err != nil { _ = upload.Close(); return err }
  _, copyErr = io.Copy(upload, local)
  closeLocalErr = local.Close()
  closeRemoteErr = upload.Close()
  if copyErr != nil { err = copyErr } else if closeLocalErr != nil { err = closeLocalErr } else { err = closeRemoteErr }
+ elapsed = time.Since(started)
  if err == nil { err = nativeStressCompareSFTP(peer.sftp, baselineRemote, expected) }
- report.add(profile, "sftp", "upload", int64(size), started, err)
+ report.add(profile, "sftp", "upload", int64(size), elapsed, err)
  if err != nil { return fmt.Errorf("SFTP upload baseline: %w", err) }
 
  started = time.Now()
  download, err := peer.sftp.Open(baselineRemote)
- if err != nil { report.add(profile, "sftp", "download", int64(size), started, err); return err }
+ if err != nil { report.add(profile, "sftp", "download", int64(size), time.Since(started), err); return err }
  target, err := os.CreateTemp(peer.localDir, "sftp-download-")
  if err != nil { _ = download.Close(); return err }
  _, copyErr = io.Copy(target, download)
  closeLocalErr = target.Close()
  closeRemoteErr = download.Close()
  if copyErr != nil { err = copyErr } else if closeLocalErr != nil { err = closeLocalErr } else { err = closeRemoteErr }
+ elapsed = time.Since(started)
  if err == nil { err = nativeStressCompareFile(target.Name(), expected) }
- report.add(profile, "sftp", "download", int64(size), started, err)
+ report.add(profile, "sftp", "download", int64(size), elapsed, err)
  if err != nil { return fmt.Errorf("SFTP download baseline: %w", err) }
  return nil
 }
