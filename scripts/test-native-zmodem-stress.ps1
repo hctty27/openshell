@@ -13,7 +13,7 @@ param(
     [ValidateRange(1, 4)]
     [int]$Workers = 3,
 
-    [ValidateRange(1, 10)]
+    [ValidateRange(0, 10)]
     [int]$LatencyMS = 3,
 
     [string]$ReportDir = "",
