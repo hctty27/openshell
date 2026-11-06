@@ -34,13 +34,17 @@ func nativeInteractiveCommand(direction, remotePath string) (string, string, err
 		// independent SSH exec bridge, we must not exec away the login shell.
 		return "rz -q\r", "send", nil
 	case "download":
-		if remotePath == "" || strings.IndexFunc(remotePath, func(r rune) bool {
-			return r < 32 || r == 127
-		}) >= 0 {
-			return "", "", errors.New("下载文件的远程路径无效")
+		if remotePath == "" { return "", "", errors.New("缺少远程文件路径") }
+		paths := strings.Split(remotePath, "\n")
+		if len(paths) < 1 || len(paths) > 100 { return "", "", errors.New("每次仅支持 1–100 个远程文件") }
+		quoted := make([]string, 0, len(paths))
+		for _, path := range paths {
+			if path == "" || strings.IndexFunc(path, func(r rune) bool { return r < 32 || r == 127 }) >= 0 {
+				return "", "", errors.New("下载文件的远程路径无效")
+			}
+			quoted = append(quoted, "'" + strings.ReplaceAll(path, "'", "'\\''") + "'")
 		}
-		quoted := "'" + strings.ReplaceAll(remotePath, "'", "'\\''") + "'"
-		return "sz -q -- " + quoted + "\r", "receive", nil
+		return "sz -q -- " + strings.Join(quoted, " ") + "\r", "receive", nil
 	default:
 		return "", "", fmt.Errorf("不支持的原生 ZMODEM 方向：%s", direction)
 	}
