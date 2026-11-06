@@ -70,7 +70,7 @@ func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination
 // starting any worker. A failed batch creates no partial transfer tasks.
 func (m *Manager) StartBatch(ref domain.ConnectionRef, requests []TransferRequest) ([]Task, error) {
     if len(requests) == 0 || len(requests) > 4000 {
-        return nil, errors.New("SFTP 批次文件数量必须在 1–4000 之间")
+        return nil, apperror.New("sftpInvalidBatchSize", nil)
     }
     if _, err := m.lookup(ref); err != nil { return nil, err }
     type prepared struct {

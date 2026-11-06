@@ -66,7 +66,7 @@ func (m *Manager) SetConcurrency(value int) error {
     switch value {
     case 1, 2, 3, 4, 6:
     default:
-        return errors.New("SFTP 并发数只支持 1、2、3、4 或 6")
+        return apperror.New("sftpInvalidConcurrentTransferLimit", nil)
     }
     m.mu.Lock()
     m.maxConcurrent = value
