@@ -55,10 +55,21 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
   const [terminalJobs, setTerminalJobs] = useState<Record<string, TerminalTransfer>>({});
   const [nativeBatches, setNativeBatches] = useState<Record<string, NativeBatch>>({});
   const [sftpJobs, setSftpJobs] = useState<Record<string, SFTPTask>>({});
+  const [sftpConcurrency, setSftpConcurrency] = useState(3);
+  const [savingConcurrency, setSavingConcurrency] = useState(false);
   const finished = useRef(new Set<string>());
   const panel = useRef<HTMLDivElement>(null);
   const liveRefs = tabs.filter(tab => tab.ref).map(tab => tab.ref!);
   const refIDs = liveRefs.map(refKey).sort().join("|");
+
+  useEffect(() => {
+    if (!desktop) return;
+    let active = true;
+    void api.SFTPConcurrency().then(value => {
+      if (active && [1, 2, 3, 4, 6].includes(value)) setSftpConcurrency(value);
+    }).catch(onNotice);
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const offDetails = listen("ssh:transfer-details", (event: {
@@ -284,7 +295,36 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     job.status === "cancelling").length + native.filter(({ batch }) =>
     batch.status === "running" || batch.status === "cancelling").length +
     sftp.filter(activeSftp).length;
-  const visibleSftp = [...sftp.filter(activeSftp), ...sftp.filter(task => !activeSftp(task))].slice(0, 15);
+  const visibleSftp = [...sftp.filter(activeSftp), ...sftp.filter(task => !activeSftp(task))].slice(0, 30);
+  const sftpGroupKey = (task: SFTPTask) => task.batchId
+    ? refKey(task.ref) + ":batch:" + task.batchId : "single:" + task.id;
+  const allByGroup = new Map<string, SFTPTask[]>();
+  for (const task of sftp) {
+    const key = sftpGroupKey(task);
+    const group = allByGroup.get(key) ?? [];
+    group.push(task);
+    allByGroup.set(key, group);
+  }
+  const visibleByGroup = new Map<string, SFTPTask[]>();
+  for (const task of visibleSftp) {
+    const key = sftpGroupKey(task);
+    const group = visibleByGroup.get(key) ?? [];
+    group.push(task);
+    visibleByGroup.set(key, group);
+  }
+  const groupedSftp = [...visibleByGroup].map(([key, tasks]) => ({
+    key, tasks, allTasks: allByGroup.get(key) ?? tasks,
+    batchId: tasks[0].batchId, ref: tasks[0].ref, direction: tasks[0].direction,
+  }));
+  const changeConcurrency = (next: number) => {
+    const previous = sftpConcurrency;
+    setSftpConcurrency(next);
+    setSavingConcurrency(true);
+    void api.SetSFTPConcurrency(next).catch(error => {
+      setSftpConcurrency(previous);
+      onNotice(error);
+    }).finally(() => setSavingConcurrency(false));
+  };
   const sessionName = (ref: Ref) =>
     tabs.find(tab => tab.ref && refKey(tab.ref) === refKey(ref))?.session.name ?? ref.sessionId;
 
@@ -419,7 +459,39 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                 </div>
               </article>
             ))}
-            {visibleSftp.map(task => {
+            {groupedSftp.map(group => {
+              const active = group.allTasks.filter(activeSftp).length;
+              const completed = group.allTasks.filter(task => task.status === "completed").length;
+              const totalKnown = group.allTasks.every(task => task.total > 0 || task.status === "completed");
+              const totalBytes = group.allTasks.reduce((sum, task) => sum + task.total, 0);
+              const doneBytes = group.allTasks.reduce((sum, task) => sum + task.bytes, 0);
+              const percent = totalKnown && totalBytes > 0
+                ? Math.min(100, Math.round(doneBytes / totalBytes * 100))
+                : totalKnown && active === 0 ? 100 : null;
+              return (
+                <div className="transfer-center-sftp-group" key={group.key}>
+                  {group.batchId && group.allTasks.length > 1 && (
+                    <div className="transfer-center-sftp-batch">
+                      <div className="transfer-center-line">
+                        {group.direction === "upload" ? <ArrowUpFromLine size={15}/> : <ArrowDownToLine size={15}/>}
+                        <strong>SFTP · {group.allTasks.length} {t("sftp:batchFiles")}</strong>
+                        <span className="transfer-center-session" title={sessionName(group.ref)}>{sessionName(group.ref)}</span>
+                        {active > 0 && <button type="button" title={t("sftp:cancelBatch")}
+                          aria-label={t("sftp:cancelBatch")}
+                          onClick={() => void api.SFTPCancelBatch(group.ref, group.batchId!).catch(onNotice)}><X size={14}/></button>}
+                      </div>
+                      <div className={"transfer-center-bar" + (percent == null && active > 0 ? " indeterminate" : "")}
+                        role="progressbar" aria-valuemin={0} aria-valuemax={100}
+                        aria-valuenow={percent == null ? undefined : percent}>
+                        <div style={percent == null ? undefined : {width: percent + "%"}}/>
+                      </div>
+                      <div className="transfer-center-metrics">
+                        <span>{completed} / {group.allTasks.length} {t("sftp:batchCompleted")}</span>
+                        <span>{percent == null ? t("sftp:transferUnknownProgress") : percent + "%"}</span>
+                      </div>
+                    </div>
+                  )}
+                  {group.tasks.map(task => {
               const percent = task.total > 0 ?
                 Math.max(0, Math.min(100, Math.round(task.bytes / task.total * 100))) : null;
               return (
@@ -450,8 +522,21 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                   </div>
                 </article>
               );
+                  })}
+                </div>
+              );
             })}
           </div>
+          <footer className="transfer-center-settings">
+            <label>
+              {t("sftp:concurrencyLabel")}
+              <select aria-label={t("sftp:concurrencyLabel")} value={sftpConcurrency}
+                disabled={savingConcurrency} onChange={event => changeConcurrency(Number(event.target.value))}>
+                {[1,2,3,4,6].map(value => <option value={value} key={value}>{value}</option>)}
+              </select>
+            </label>
+            <span title={t("sftp:concurrencyHint")}>{t("sftp:concurrencyHint")}</span>
+          </footer>
         </section>
       )}
     </div>
