@@ -34,11 +34,17 @@ export function attachImeFocusRecovery(
     if (!composing && !restoring) layoutTimer = window.setTimeout(recover, 160);
   };
 
+  const resume = () => {
+    if (pending && !disposed && !composing && !restoring) schedule();
+  };
+
   function recover() {
     layoutTimer = undefined;
     if (disposed || composing || restoring || !pending) return;
-    pending = false;
+    // Keep the pending repair while the window, tab, or textarea lacks focus.
+    // It will run when the user returns instead of stealing another control's focus.
     if (!textarea || !isActive() || !document.hasFocus() || document.activeElement !== textarea) return;
+    pending = false;
 
     const selectionStart = textarea.selectionStart;
     const selectionEnd = textarea.selectionEnd;
@@ -60,7 +66,8 @@ export function attachImeFocusRecovery(
           textarea.scrollLeft = scrollLeft;
         }
       }
-      if (pending && !disposed) schedule();
+      if (!disposed && !document.hasFocus()) pending = true;
+      resume();
     }, 60);
   }
 
@@ -77,18 +84,23 @@ export function attachImeFocusRecovery(
   };
   const onBlur = () => {
     if (restoring) return;
-    pending = false;
+    // A legitimate blur (search, tab/window switching) must not discard a
+    // layout change; restore only after the terminal receives focus again.
     clearLayoutTimer();
     clearFocusTimer();
   };
+  const onFocus = () => resume();
 
   textarea?.addEventListener("compositionstart", onCompositionStart, true);
   textarea?.addEventListener("compositionend", onCompositionEnd, true);
   textarea?.addEventListener("keydown", onKeyDown, true);
   textarea?.addEventListener("blur", onBlur);
+  textarea?.addEventListener("focus", onFocus);
+  window.addEventListener("focus", onFocus);
 
   return {
     schedule,
+    resume,
     dispose: () => {
       disposed = true;
       clearLayoutTimer();
@@ -97,6 +109,8 @@ export function attachImeFocusRecovery(
       textarea?.removeEventListener("compositionend", onCompositionEnd, true);
       textarea?.removeEventListener("keydown", onKeyDown, true);
       textarea?.removeEventListener("blur", onBlur);
+      textarea?.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", onFocus);
     },
   };
 }

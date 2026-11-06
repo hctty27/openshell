@@ -109,3 +109,48 @@ test("cancels scheduled recovery on unmount", () => {
   vi.advanceTimersByTime(200);
   expect(focusTerminal).not.toHaveBeenCalled();
 });
+
+test("defers a pending layout repair while the user focuses another input", () => {
+  const { textarea, focusTerminal, recovery } = setup();
+  const search = document.createElement("input");
+  document.body.appendChild(search);
+  recovery.schedule();
+  search.focus();
+  vi.advanceTimersByTime(500);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(search);
+
+  textarea.focus();
+  vi.advanceTimersByTime(160);
+  expect(document.activeElement).toBe(document.body);
+  vi.advanceTimersByTime(60);
+  expect(focusTerminal).toHaveBeenCalledOnce();
+  expect(document.activeElement).toBe(textarea);
+  recovery.dispose();
+});
+
+test("keeps pending repair while inactive and resumes when activated", () => {
+  const { focusTerminal, recovery, setActive } = setup();
+  recovery.schedule();
+  setActive(false);
+  vi.advanceTimersByTime(200);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  setActive(true);
+  recovery.resume();
+  vi.advanceTimersByTime(220);
+  expect(focusTerminal).toHaveBeenCalledOnce();
+  recovery.dispose();
+});
+
+test("restores focus after returning to an unfocused window", () => {
+  const { focusTerminal, recovery } = setup();
+  const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+  recovery.schedule();
+  vi.advanceTimersByTime(200);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  hasFocus.mockReturnValue(true);
+  window.dispatchEvent(new FocusEvent("focus"));
+  vi.advanceTimersByTime(220);
+  expect(focusTerminal).toHaveBeenCalledOnce();
+  recovery.dispose();
+});
