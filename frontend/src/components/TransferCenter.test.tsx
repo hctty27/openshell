@@ -98,3 +98,32 @@ test("badge counts only active jobs while failed transfers remain visible", () =
   expect(screen.getByText("file.zip")).toBeTruthy();
   expect(container.querySelector(".transfer-center-line button")).not.toBeNull();
 });
+
+test("native ZMODEM batch renders separate files and real byte progress", () => {
+  render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "batch-1", direction: "upload", active: true,
+    files: [{ name: "a.bin", total: 100 }, { name: "b.bin", total: 200 }],
+  });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "batch-1", kind: "start", index: 0,
+    name: "a.bin", total: 100, processed: 0,
+  });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "batch-1", kind: "completed", index: 0,
+    processed: 100,
+  });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "batch-1", kind: "start", index: 1,
+    name: "b.bin", total: 200,
+  });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "batch-1", kind: "progress", index: 1,
+    processed: 100,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(screen.getByText("a.bin")).toBeTruthy();
+  expect(screen.getByText("b.bin")).toBeTruthy();
+  expect(screen.getByText("ZMODEM · 2 个文件")).toBeTruthy();
+  expect(screen.getByText("67%")).toBeTruthy();
+});
