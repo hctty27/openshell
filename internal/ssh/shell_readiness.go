@@ -14,40 +14,8 @@ import (
 var (
 	shellBoundaryPattern = regexp.MustCompile("\x1b\\](?:133|633);([ABCD])(?:;[^\x07\x1b]*)?(?:\x07|\x1b\\\\)")
 	alternateBufferPattern = regexp.MustCompile("\x1b\\[\\?(?:47|1047|1049)([hl])")
-	mysqlPromptPattern = regexp.MustCompile(`^(?:mysql(?:@[A-Za-z0-9_.:-]+(?:\[[^\r\n\]]{0,120}\])?)?|MariaDB \[[^\r\n\]]{0,120}\])> ?package sshclient
-
-import (
-	"errors"
-	"regexp"
-	"strings"
-	"sync"
-	"time"
-)
-
-// The explicit shell integration markers (OSC 133/633) are preferred.
-// A conservative Bash-style prompt fallback handles basic SSH hosts with no
-// shell integration, but never treats arbitrary "#" / "$" as a prompt.
-var (
-	shellBoundaryPattern = regexp.MustCompile("\x1b\\](?:133|633);([ABCD])(?:;[^\x07\x1b]*)?(?:\x07|\x1b\\\\)")
-	alternateBufferPattern = regexp.MustCompile("\x1b\\[\\?(?:47|1047|1049)([hl])")
-	)
-	mysqlCustomPromptPattern = regexp.MustCompile(`^\([A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+\) \[[^\r\n\]]{0,120}\]> ?package sshclient
-
-import (
-	"errors"
-	"regexp"
-	"strings"
-	"sync"
-	"time"
-)
-
-// The explicit shell integration markers (OSC 133/633) are preferred.
-// A conservative Bash-style prompt fallback handles basic SSH hosts with no
-// shell integration, but never treats arbitrary "#" / "$" as a prompt.
-var (
-	shellBoundaryPattern = regexp.MustCompile("\x1b\\](?:133|633);([ABCD])(?:;[^\x07\x1b]*)?(?:\x07|\x1b\\\\)")
-	alternateBufferPattern = regexp.MustCompile("\x1b\\[\\?(?:47|1047|1049)([hl])")
-	)
+	mysqlPromptPattern = regexp.MustCompile(`^(?:mysql(?:@[A-Za-z0-9_.:-]+(?:\[[^\r\n\]]{0,120}\])?)?|MariaDB \[[^\r\n\]]{0,120}\])> ?$`)
+	mysqlCustomPromptPattern = regexp.MustCompile(`^\([A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+\) \[[^\r\n\]]{0,120}\]> ?$`)
 	shellPromptPattern = regexp.MustCompile("^(?:\\[[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120}\\]|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[^\\r\\n]{0,120}|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120})[#$%] ?$")
 	terminalCSIPattern = regexp.MustCompile("\x1b\\[[0-?]*[ -/]*[@-~]")
 	terminalOSCPattern = regexp.MustCompile("\x1b\\][^\x07\x1b]*(?:\x07|\x1b\\\\)")
@@ -114,8 +82,7 @@ func (r *terminalShellReadiness) observe(p []byte) {
 		r.integration = false
 		r.prompt = false
 	}
-	// A database prompt is not a Shell prompt: it needs its own executor.
-	// Custom user@host prompts are accepted only after a MySQL banner.
+	// Database prompts require a different executor from the Shell marker protocol.
 	if !r.assetMenu && (mysqlPromptPattern.MatchString(visible) ||
 		(r.mysqlObserved && mysqlCustomPromptPattern.MatchString(visible))) {
 		r.program = "mysql"
