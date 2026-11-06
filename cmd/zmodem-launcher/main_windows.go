@@ -22,8 +22,24 @@ func nativeCommand(executable string, arguments []string) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("unsupported ZMODEM helper %q", name)
 	}
 
-	path := filepath.Join(filepath.Dir(executable), "native", name)
-	command := exec.Command(path, arguments...)
+	legacy := filepath.Join(filepath.Dir(executable), "native", name)
+	rust := filepath.Join(filepath.Dir(executable), "native", "zmodem-sidecar.exe")
+
+	var path string
+	var args []string
+	if info, err := os.Stat(legacy); err == nil && info.Mode().IsRegular() {
+		// Keep existing release behavior until real GUI/PTY native-only
+		// acceptance proves the drop-in compatibility path is equivalent.
+		path, args = legacy, arguments
+	} else if info, err := os.Stat(rust); err == nil && info.Mode().IsRegular() {
+		action := "compat-rz"
+		if name == "sz.exe" { action = "compat-sz" }
+		path = rust
+		args = append([]string{action}, arguments...)
+	} else {
+		return nil, fmt.Errorf("no ZMODEM backend found for %s", name)
+	}
+	command := exec.Command(path, args...)
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
