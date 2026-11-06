@@ -94,7 +94,6 @@ type AppState struct {
 	FontSize              string              `json:"fontSize"`
 	Theme                 string              `json:"theme"`
 	TerminalTheme         string              `json:"terminalTheme"`
-	ZmodemTransferMode string `json:"zmodemTransferMode"`
 	Version               string              `json:"version"`
 }
 
@@ -146,12 +145,7 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 	keepAliveSeconds, err := strconv.Atoi(interval)
 	if err != nil || keepAliveSeconds < 0 || keepAliveSeconds > 300 { keepAliveSeconds = 30 }
 	a.ssh.SetKeepAliveInterval(time.Duration(keepAliveSeconds) * time.Second)
-	transferMode, err := db.GetPreference(a.ctx, "zmodemTransferMode")
-	if err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	a.zmodemTransferMode = resolveZmodemTransferMode(transferMode)
+	a.zmodemTransferMode = resolveZmodemTransferMode("")
 	sidecar := ""
 	if a.zmodemTransferMode == zmodemModeNative {
 		sidecar = nativeZmodemDesktopSidecarPath()
@@ -325,7 +319,6 @@ func (a *App) State() (AppState, error) {
 		Language: language,
 		Sessions: sessions, Groups: groups,
 		FontSize: font, Theme: theme, TerminalTheme: terminalTheme,
-		ZmodemTransferMode: a.currentZmodemTransferMode(),
 		QuickCommands: commands, QuickCommandLayout: layout,
 		AutoCopySelection: autoCopySelection == "true", RightClickPaste: rightClickPaste == "true",
 		ConfirmMultilinePaste: confirmMultilinePaste != "false",
@@ -482,10 +475,6 @@ func (a *App) SavePreference(key, value string) error {
 		if value != "follow" && value != "classic" && value != "dark" && value != "light" {
 			return apperror.New("unsupportedTheme", nil)
 		}
-	case "zmodemTransferMode":
-		if value != zmodemModeNative && value != zmodemModeLegacy {
-			return apperror.New("unsupportedPreference", nil)
-		}
 	case "disconnectBehavior":
 		if value != "local" && value != "retain" && value != "close" { return apperror.New("unsupportedPreference", nil) }
 	case "localShell":
@@ -532,16 +521,6 @@ func (a *App) SavePreference(key, value string) error {
 	if key == "keepAliveSeconds" {
 		seconds, _ := strconv.Atoi(value)
 		a.ssh.SetKeepAliveInterval(time.Duration(seconds) * time.Second)
-	}
-	if key == "zmodemTransferMode" {
-		a.mu.Lock()
-		a.zmodemTransferMode = value
-		a.mu.Unlock()
-		sidecar := ""
-		if value == zmodemModeNative {
-			sidecar = nativeZmodemDesktopSidecarPath()
-		}
-		a.ssh.ConfigureNativeZmodemAuto(sidecar)
 	}
 	return nil
 }
