@@ -80,6 +80,12 @@ type Backend = {
   WriteTerminal(ref: Ref, data: string): Promise<void>;
   AcknowledgeTerminalOutput(ref: Ref, sequence: number): Promise<void>;
   CancelZmodem(ref: Ref): Promise<void>;
+  NativeZmodemExperimentEnabled(): Promise<boolean>;
+  NativeZmodemInteractiveReadiness(ref: Ref): Promise<import("./types").NativeZmodemReadiness>;
+  StartNativeZmodemInteractiveTransfer(ref: Ref, direction: "upload" | "download", localPath: string, remotePath: string): Promise<void>;
+  CancelNativeZmodemInteractiveTransfer(ref: Ref): Promise<void>;
+  NativeZmodemChooseUploadFile(): Promise<string>;
+
   ZmodemLocalPlaces(): Promise<{ home: string; roots: string[] }>;
   SubmitZmodemSelection(ref: Ref, id: number, paths: string[]): Promise<void>;
   ResizeTerminal(ref: Ref, cols: number, rows: number): Promise<void>;

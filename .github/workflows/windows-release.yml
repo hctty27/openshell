@@ -181,6 +181,21 @@ jobs:
       - name: Verify ZMODEM console-free launchers
         shell: pwsh
         run: ./scripts/verify_zmodem_windows.ps1
+      - name: Build bundled experimental native ZMODEM sidecar
+        shell: pwsh
+        run: |
+          Push-Location experiments/native-zmodem
+          try {
+            cargo generate-lockfile
+            if ($LASTEXITCODE -ne 0) { throw "Rust lock resolution failed" }
+            cargo build --locked --release --bin zmodem-sidecar
+            if ($LASTEXITCODE -ne 0) { throw "Native ZMODEM sidecar release build failed" }
+          } finally { Pop-Location }
+          $source = "experiments/native-zmodem/target/release/zmodem-sidecar.exe"
+          $destination = "build/bin/zmodem/native/zmodem-sidecar.exe"
+          if (!(Test-Path $source)) { throw "Native ZMODEM sidecar missing after build" }
+          Copy-Item $source $destination -Force
+          if ((Get-Item $destination).Length -le 0) { throw "Bundled native ZMODEM sidecar is empty" }
       - name: Record bundled third-party file hashes and provenance
         shell: pwsh
         run: |

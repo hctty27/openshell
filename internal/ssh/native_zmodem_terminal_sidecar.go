@@ -41,6 +41,7 @@ func runNativeZmodemTerminalSidecar(
 	}
 
 	cmd := exec.CommandContext(ctx, executable, direction, path)
+	configureNativeZmodemSidecar(cmd)
 	cmd.WaitDelay = nativeZmodemShutdownTimeout
 	stderr := &nativeZmodemLog{}
 	cmd.Stderr = stderr

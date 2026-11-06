@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Ref } from "../../types";
+// The dispatcher tests inject their own event bus. Avoid loading the real
+// Wails bridge, whose drag runtime schedules timers in the jsdom environment.
+vi.mock("../../bridge", () => ({ listen: vi.fn(() => () => {}) }));
+
 import { TerminalOutputDispatcher } from "./terminalOutputDispatcher";
 
 function eventBus() {

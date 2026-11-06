@@ -75,5 +75,21 @@
   "searchCommands": "Search commands...",
   "noMatchingCommands": "No matching commands",
   "reorderCommand": "Reorder {{name}}",
-  "reorderHint": "Drag to reorder, or press Alt + Up/Down"
+  "reorderHint": "Drag to reorder, or press Alt + Up/Down",
+  "nativeZmodemTitle": "Native ZMODEM · experimental",
+  "nativeZmodemSession": "Current SSH terminal: {{name}}",
+  "nativeZmodemWarning": "Use only in an idle Linux shell (exit vim, top, and other interactive programs first). This operation temporarily owns the PTY. Cancellation, timeouts, or failures require reconnecting. Legacy rz/sz remains unchanged.",
+  "nativeZmodemUpload": "Upload file",
+  "nativeZmodemDownload": "Download file",
+  "nativeZmodemRemoteFile": "Remote file path",
+  "nativeZmodemLocalFile": "Local file to upload",
+  "nativeZmodemLocalFolder": "Local destination folder",
+  "nativeZmodemChoosePath": "Enter an absolute path or browse",
+  "nativeZmodemBrowse": "Browse local file or folder",
+  "nativeZmodemUploadDirectory": "Uploads are saved in the remote shell's current working directory. Existing files are not overwritten.",
+  "nativeZmodemConfirm": "I understand this is experimental and any failure requires reconnecting the SSH terminal",
+  "nativeZmodemStart": "Start experimental transfer",
+  "nativeZmodemRunning": "Native ZMODEM transfer in progress. Do not type into this terminal. Percentage progress is not available yet.",
+  "nativeZmodemCancelling": "Cancelling; terminal reconnect required…",
+  "nativeZmodemCompleted": "Native ZMODEM file transfer completed"
 }

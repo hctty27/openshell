@@ -58,6 +58,9 @@ func main() {
     service.pickKey = func() (string, error) {
       return desktop.Dialog.OpenFile().SetTitle(service.dialogTitle("Choose SSH private key", "选择 SSH 私钥")).PromptForSingleSelection()
     }
+    service.pickNativeZmodemFile = func() (string, error) {
+      return desktop.Dialog.OpenFile().SetTitle(service.dialogTitle("Select file for experimental native ZMODEM upload", "选择原生 ZMODEM 上传文件")).PromptForSingleSelection()
+    }
     service.pickDirectory = func() (string, error) {
       return desktop.Dialog.OpenFile().SetTitle(service.dialogTitle("Select local folder", "选择本地文件夹")).
         CanChooseDirectories(true).CanChooseFiles(false).PromptForSingleSelection()

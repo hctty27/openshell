@@ -75,5 +75,21 @@
   "searchCommands": "搜索命令...",
   "noMatchingCommands": "没有匹配的命令",
   "reorderCommand": "调整「{{name}}」顺序",
-  "reorderHint": "拖动排序；Alt + ↑/↓ 调整顺序"
+  "reorderHint": "拖动排序；Alt + ↑/↓ 调整顺序",
+  "nativeZmodemTitle": "原生 ZMODEM · 实验模式",
+  "nativeZmodemSession": "当前 SSH 终端：{{name}}",
+  "nativeZmodemWarning": "仅在普通 Linux Shell 空闲时使用，先退出 vim、top 等交互程序。传输会独占当前终端；取消、超时或失败后必须重新连接。现有 rz/sz 不受影响。",
+  "nativeZmodemUpload": "上传文件",
+  "nativeZmodemDownload": "下载文件",
+  "nativeZmodemRemoteFile": "远程文件路径",
+  "nativeZmodemLocalFile": "本地上传文件",
+  "nativeZmodemLocalFolder": "本地保存目录",
+  "nativeZmodemChoosePath": "填写绝对路径或点击选择",
+  "nativeZmodemBrowse": "浏览本地文件或目录",
+  "nativeZmodemUploadDirectory": "上传文件将保存到远程 Shell 的当前工作目录，不会覆盖已有文件。",
+  "nativeZmodemConfirm": "我理解这是实验功能，出错后需要重新连接 SSH 终端",
+  "nativeZmodemStart": "开始实验传输",
+  "nativeZmodemRunning": "原生 ZMODEM 正在传输，请勿在该终端输入命令。当前版本暂不提供传输百分比。",
+  "nativeZmodemCancelling": "正在取消，终端需要重新连接…",
+  "nativeZmodemCompleted": "原生 ZMODEM 文件传输完成"
 }

@@ -101,3 +101,20 @@ func (m *Manager) runNativeTerminalExperiment(
 	}
 	return nil
 }
+
+
+// RunExperimentalNativeTerminalTransfer is the explicit application-facing
+// entrypoint for the real interactive PTY coordinator. The caller must
+// enforce the developer opt-in flag; this method does not sniff terminal
+// output, switch the default transfer engine or bypass connection ownership.
+func (m *Manager) RunExperimentalNativeTerminalTransfer(
+	ctx context.Context,
+	ref domain.ConnectionRef,
+	sidecar, direction, localPath, remotePath string,
+) error {
+	status := m.NativeZmodemExperimentalReadiness(ref, sidecar, true)
+	if !status.Ready {
+		return errors.New(status.Message)
+	}
+	return m.runNativeTerminalExperiment(ctx, ref, sidecar, direction, localPath, remotePath)
+}

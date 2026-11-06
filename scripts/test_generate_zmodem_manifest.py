@@ -48,6 +48,17 @@ class ZmodemManifestTests(unittest.TestCase):
             )
             manifest = create_manifest(target, pins)
             self.assertEqual(len(manifest["files"]), len(BUNDLED_FILES))
+            self.assertIs(manifest["nativeExperiment"]["included"], False)
+            sidecar = target / "native/zmodem-sidecar.exe"
+            sidecar.write_bytes(b"experimental-sidecar")
+            with_native = create_manifest(target, pins)
+            self.assertIs(with_native["nativeExperiment"]["included"], True)
+            self.assertEqual(len(with_native["files"]), len(BUNDLED_FILES) + 1)
+            self.assertTrue(any(
+                entry["path"] == "native/zmodem-sidecar.exe" and
+                entry["origin"] == "openshell-native-zmodem-experimental"
+                for entry in with_native["files"]
+            ))
             self.assertEqual(manifest["upstream"]["sourceCommit"], revision)
             self.assertEqual(manifest["upstream"]["runtimeSourceCandidateCommit"], MSYS2_SOURCE_CANDIDATE)
             self.assertIs(manifest["upstream"]["runtimeSourceCandidateVerified"], False)
