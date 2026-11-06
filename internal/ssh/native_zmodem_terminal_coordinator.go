@@ -52,6 +52,7 @@ type nativeTerminalInboundSink struct {
 	ready     chan struct{}
 	fail      chan error
 	expected  byte
+	meter     *nativeZmodemIOMeter
 	activated bool
 	finished  bool
 }
@@ -94,7 +95,10 @@ func (s *nativeTerminalInboundSink) Write(p []byte) (int, error) {
 		close(s.ready)
 	}
 	s.mu.Unlock()
+	started := time.Time{}
+	if s.meter != nil { started = time.Now() }
 	n, err := s.pipe.Write(p)
+	if s.meter != nil { s.meter.recordFromRemote(n, time.Since(started)) }
 	if err != nil {
 		s.mu.Lock()
 		finished := s.finished
@@ -135,18 +139,26 @@ type nativeTerminalOutboundBarrier struct {
 	ready <-chan struct{}
 	input *terminalInputGate
 	lease uint64
+	meter *nativeZmodemIOMeter
 }
 
 func (w *nativeTerminalOutboundBarrier) Write(p []byte) (int, error) {
+	readyStarted := time.Time{}
+	if w.meter != nil { readyStarted = time.Now() }
 	select {
 	case <-w.ctx.Done():
 		return 0, w.ctx.Err()
 	case <-w.ready:
 	}
+	if w.meter != nil { w.meter.recordReadyWait(time.Since(readyStarted)) }
 	if err := w.ctx.Err(); err != nil {
 		return 0, err
 	}
-	return w.input.writeNative(w.lease, p)
+	if w.meter == nil { return w.input.writeNative(w.lease, p) }
+	started := time.Now()
+	n, err := w.input.writeNative(w.lease, p)
+	w.meter.recordToRemote(n, time.Since(started))
+	return n, err
 }
 
 // run performs an explicitly initiated, single-file transfer in the existing
@@ -197,12 +209,13 @@ func (c *nativeTerminalCoordinator) run(
 	}
 
 	reader, writer := io.Pipe()
+	meter := nativeZmodemIOMeterFromContext(parent)
 	expected := byte('1') // remote rz starts with ZRINIT
 	if action == "receive" {
 		expected = '0' // remote sz starts with ZRQINIT
 	}
 	sink := &nativeTerminalInboundSink{
-		pipe: writer, ready: make(chan struct{}), fail: make(chan error, 1), expected: expected,
+		pipe: writer, ready: make(chan struct{}), fail: make(chan error, 1), expected: expected, meter: meter,
 	}
 	fence := newNativeRemoteBoundarySink(sink, token)
 	outputLease, err := c.output.armOnZmodemHeaderQuiet(fence)
@@ -216,7 +229,7 @@ func (c *nativeTerminalCoordinator) run(
 	// The child may write its initial handshake immediately; it is held
 	// until a matching *remote* start header has been captured in full.
 	outbound := &nativeTerminalOutboundBarrier{
-		ctx: ctx, ready: sink.ready, input: c.input, lease: inputLease,
+		ctx: ctx, ready: sink.ready, input: c.input, lease: inputLease, meter: meter,
 	}
 	sidecarDone := make(chan error, 1)
 	go func() {
