@@ -6,6 +6,7 @@ import (
     "encoding/hex"
     "bytes"
     "errors"
+    "fmt"
     "io"
     "os"
     "path"
@@ -37,6 +38,7 @@ type job struct {
     ctx context.Context
     cancel context.CancelFunc
     slot chan struct{}
+    slotKey string
     reservation string
     last time.Time
 }
@@ -67,10 +69,11 @@ func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination
     }
     m.reserved[reservation] = struct{}{}
     m.workers.Add(1)
-    m.slotUsers[ref.SessionID]++
-    slot := m.slots[ref.SessionID]
-    if slot == nil { slot = make(chan struct{},2); m.slots[ref.SessionID] = slot }
-    j := &job{task:task,ctx:ctx,cancel:cancel,slot:slot,reservation:reservation}
+    slotKey := fmt.Sprintf("%s:%s:%d", ref.TabID, ref.SessionID, ref.Generation)
+    m.slotUsers[slotKey]++
+    slot := m.slots[slotKey]
+    if slot == nil { slot = make(chan struct{},3); m.slots[slotKey] = slot }
+    j := &job{task:task,ctx:ctx,cancel:cancel,slot:slot,slotKey:slotKey,reservation:reservation}
     m.tasks[task.ID] = j
     m.mu.Unlock()
     m.emit("sftp:transfer", task)
@@ -181,15 +184,16 @@ func (m *Manager) progress(j *job,n int64) {
 }
 func (m *Manager) run(j *job) {
     acquired := false
+    globalAcquired := false
     defer func() {
+        if globalAcquired { <-m.globalSlots }
         if acquired { <-j.slot }
         m.mu.Lock()
         delete(m.reserved, j.reservation)
-        sessionID := j.task.Ref.SessionID
-        m.slotUsers[sessionID]--
-        if m.slotUsers[sessionID] == 0 {
-            delete(m.slotUsers, sessionID)
-            delete(m.slots, sessionID)
+        m.slotUsers[j.slotKey]--
+        if m.slotUsers[j.slotKey] == 0 {
+            delete(m.slotUsers, j.slotKey)
+            delete(m.slots, j.slotKey)
         }
         m.pruneHistoryLocked()
         m.mu.Unlock()
@@ -198,6 +202,13 @@ func (m *Manager) run(j *job) {
     select {
     case j.slot<-struct{}{}:
         acquired = true
+    case <-j.ctx.Done():
+        m.update(j,func(t *Task){t.Status="cancelled"})
+        return
+    }
+    select {
+    case m.globalSlots <- struct{}{}:
+        globalAcquired = true
     case <-j.ctx.Done():
         m.update(j,func(t *Task){t.Status="cancelled"})
         return
