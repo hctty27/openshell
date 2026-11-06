@@ -41,6 +41,7 @@ type App struct {
 	quit         func()
 	pickDirectory func() (string, error)
 	pickNativeZmodemFile func() (string, error)
+	pickNativeZmodemFiles func() ([]string, error)
 	pickKey      func() (string, error)
 	pickImport func() (string, error)
 	pickBackupRead func() (string, error)
