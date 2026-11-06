@@ -330,6 +330,31 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 			"Execute one read-only SQL query in the user's existing authenticated MySQL terminal. No new SSH or database login.",
 			"在用户已经登录的当前 MySQL 终端执行一条只读 SQL，不新建 SSH 或数据库连接。")
 	}
+	if terminalLease != nil {
+		switch terminalLease.Program() {
+		case "redis":
+			system += aiPromptText(language,
+				"\nThe visible terminal is already running redis-cli. ssh_exec executes ONE read-only redis-cli command in this authenticated client. Supported examples: PING, INFO, DBSIZE, SCAN, GET, HGETALL, LRANGE, ZRANGE, TTL. Do not run a Shell command, SELECT, CONFIG, KEYS, MONITOR, blocking operations or any writes.",
+				"\n当前终端已经进入 redis-cli。ssh_exec 只能在当前已登录的 Redis 客户端执行一条只读 Redis 命令，例如 PING、INFO、DBSIZE、SCAN、GET、HGETALL、LRANGE、ZRANGE、TTL。不要执行 Shell 命令、SELECT、CONFIG、KEYS、MONITOR、阻塞命令或写入命令。")
+			toolDescription = aiPromptText(language,
+				"Execute one approved read-only Redis command in the existing redis-cli PTY; no new connection.",
+				"在当前 redis-cli 交互终端执行一条允许的只读 Redis 命令，无需重新连接。")
+		case "psql":
+			system += aiPromptText(language,
+				"\nThe visible terminal is already running psql. Use ssh_exec for ONE read-only PostgreSQL SQL statement (SELECT, SHOW, EXPLAIN, TABLE or VALUES) or one allowed psql metadata command (\\d, \\dt, \\di, \\dn, \\dv, \\df, \\l, \\conninfo). No shell commands, psql login or database writes; the current DB and transaction are preserved.",
+				"\n当前终端已经进入 PostgreSQL psql。ssh_exec 每次仅执行一条只读 SQL（SELECT、SHOW、EXPLAIN、TABLE、VALUES），或者一条允许的只读元命令（\\d、\\dt、\\di、\\dn、\\dv、\\df、\\l、\\conninfo）。不要执行 Shell 命令、psql 登录或修改数据库；保留当前数据库和事务。")
+			toolDescription = aiPromptText(language,
+				"Execute one read-only SQL or psql metadata command in the existing authenticated psql PTY.",
+				"在当前已登录的 psql 交互终端执行一条只读 SQL 或元命令。")
+		case "python":
+			system += aiPromptText(language,
+				"\nThe visible terminal is an existing Python REPL. ssh_exec executes one Python snippet in its current globals; expressions are printed as in the interpreter. No new interpreter or SSH connection. Avoid input(), interactive prompts, exit(), quit(), blocking operations and untrusted code. In review mode, request approval before code with side effects or external calls.",
+				"\n当前终端已经进入 Python REPL。ssh_exec 在同一个解释器的全局环境中执行 Python 代码，表达式按交互模式展示结果；不启动新解释器、不创建新 SSH。避免 input()、人工交互、exit()、quit()、阻塞操作和不可信代码；审查模式下有副作用或外部调用的代码必须申请确认。")
+			toolDescription = aiPromptText(language,
+				"Execute one Python snippet inside the existing interactive Python interpreter.",
+				"在当前已打开的 Python 解释器中执行一段 Python 代码。")
+		}
+	}
 	toolSpec := []map[string]any{{
 		"type": "function",
 		"function": map[string]any{
