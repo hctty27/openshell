@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, X } from "lucide-react";
-import { api, errorText } from "../bridge";
+import { api, errorText, listen } from "../bridge";
 import { t } from "../i18n";
 import type { NativeZmodemReadiness, Ref } from "../types";
 import ModalSurface from "./ModalSurface";
@@ -13,6 +13,18 @@ interface Props {
 }
 
 type Direction = "upload" | "download";
+
+type TransferProgress = { processed: number; total: number };
+
+function formatBytes(size: number): string {
+  if (size < 1024) return `${Math.round(size)} B`;
+  const unit = Math.min(3, Math.floor(Math.log(size) / Math.log(1024)));
+  return `${(size / 1024 ** unit).toFixed(1)} ${["B", "KiB", "MiB", "GiB"][unit]}`;
+}
+
+function fileName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+}
 
 // The backend owns the opt-in gate and PTY lease. This view never sends
 // shell commands, passes secrets, or changes the existing rz/sz default.
@@ -28,6 +40,9 @@ export default function NativeZmodemExperimentDialog({
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState("");
   const [completed, setCompleted] = useState(false);
+  const [progress, setProgress] = useState<TransferProgress | null>(null);
+  const [startedAt, setStartedAt] = useState(0);
+  const cancelRequested = useRef(false);
 
   useEffect(() => {
     let current = true;
@@ -38,6 +53,21 @@ export default function NativeZmodemExperimentDialog({
     });
     return () => { current = false; };
   }, [refID.tabId, refID.sessionId, refID.generation]);
+
+  useEffect(() => {
+    if (!running) return;
+    return listen("ssh:native-zmodem-progress", (event: {
+      ref?: Ref; direction?: Direction; processed?: number; total?: number;
+    }) => {
+      if (event.ref?.tabId !== refID.tabId || event.ref?.sessionId !== refID.sessionId ||
+        event.ref?.generation !== refID.generation || event.direction !== direction) return;
+      const { processed, total } = event;
+      if (typeof processed !== "number" || !Number.isFinite(processed) || processed < 0 ||
+        typeof total !== "number" || !Number.isFinite(total) || total < 0 ||
+        (total > 0 && processed > total)) return;
+      setProgress({ processed, total });
+    });
+  }, [running, direction, refID.tabId, refID.sessionId, refID.generation]);
 
   const chooseLocal = async () => {
     try {
@@ -55,14 +85,21 @@ export default function NativeZmodemExperimentDialog({
       (direction === "download" && !remotePath.trim())) return;
     setRunning(true);
     setCancelling(false);
+    cancelRequested.current = false;
     setCompleted(false);
+    setProgress(null);
+    setStartedAt(Date.now());
     setError("");
     try {
       await api.StartNativeZmodemInteractiveTransfer(
         refID, direction, localPath.trim(), direction === "download" ? remotePath.trim() : "",
       );
-      setCompleted(true);
-      onNotice(t("terminal:nativeZmodemCompleted"));
+      if (cancelRequested.current) {
+        setError(t("terminal:nativeZmodemCancelUnconfirmed"));
+      } else {
+        setCompleted(true);
+        onNotice(t("terminal:nativeZmodemCompleted"));
+      }
     } catch (reason) {
       setError(errorText(reason));
       onNotice(reason);
@@ -76,6 +113,7 @@ export default function NativeZmodemExperimentDialog({
   const cancel = async () => {
     if (!running || cancelling) return;
     setCancelling(true);
+    cancelRequested.current = true;
     try {
       await api.CancelNativeZmodemInteractiveTransfer(refID);
     } catch (reason) {
@@ -84,8 +122,15 @@ export default function NativeZmodemExperimentDialog({
     }
   };
 
-  const canStart = readiness?.ready && acknowledged && localPath.trim() &&
+  const canStart = !completed && readiness?.ready && acknowledged && localPath.trim() &&
     (direction !== "download" || remotePath.trim());
+
+  const elapsedSeconds = Math.max(0.1, (Date.now() - startedAt) / 1000);
+  const speed = progress ? progress.processed / elapsedSeconds : 0;
+  const percent = progress && progress.total > 0
+    ? Math.min(99, Math.floor((progress.processed / progress.total) * 100)) : null;
+  const remaining = progress && progress.total > progress.processed && speed > 0
+    ? Math.ceil((progress.total - progress.processed) / speed) : null;
 
   return (
     <ModalSurface
@@ -151,18 +196,48 @@ export default function NativeZmodemExperimentDialog({
           {t("terminal:nativeZmodemConfirm")}
         </label>
         {running && <p role="status">{t(cancelling ? "terminal:nativeZmodemCancelling" : "terminal:nativeZmodemRunning")}</p>}
-        {completed && <p role="status">{t("terminal:nativeZmodemCompleted")}</p>}
+        {running && progress && (
+          <div className="native-zmodem-dialog__progress" role="status">
+            {percent !== null && (
+              <>
+                <div className="native-zmodem-dialog__progress-top">
+                  <span>{t("terminal:nativeZmodemProgress")}</span>
+                  <strong>{percent}%</strong>
+                </div>
+                <progress max={100} value={percent} aria-label={t("terminal:nativeZmodemProgress")} />
+              </>
+            )}
+            <div className="native-zmodem-dialog__progress-details">
+              {formatBytes(progress.processed)}{progress.total > 0 ? ` / ${formatBytes(progress.total)}` : ""}
+              {" · "}{formatBytes(speed)}/s
+              {remaining !== null ? ` · ${t("terminal:nativeZmodemETA", { seconds: remaining })}` : ""}
+            </div>
+            <small>{t("terminal:nativeZmodemProgressHint")}</small>
+          </div>
+        )}
+        {completed && (
+          <div className="native-zmodem-dialog__success" role="status">
+            {t("terminal:nativeZmodemCompleted")}
+            <small>{fileName(direction === "upload" ? localPath : remotePath)}</small>
+          </div>
+        )}
         {error && <p role="alert" className="native-zmodem-dialog__error">{error}</p>}
       </div>
       <div className="app-dialog__actions">
-        {running ? (
+        {completed ? null : running ? (
           <button type="button" className="app-dialog__secondary" disabled={cancelling}
             onClick={() => void cancel()}>{t(cancelling ? "terminal:nativeZmodemCancelling" : "terminal:cancelZmodem")}</button>
         ) : (
           <button type="button" className="app-dialog__secondary" onClick={onDismiss}>{t("common:closeDialog")}</button>
         )}
-        <button type="button" className="app-dialog__primary" disabled={running || !canStart}
-          onClick={() => void start()}>{t("terminal:nativeZmodemStart")}</button>
+        {completed ? (
+          <button type="button" className="app-dialog__primary" onClick={onDismiss}>
+            {t("terminal:nativeZmodemDone")}
+          </button>
+        ) : (
+          <button type="button" className="app-dialog__primary" disabled={running || !canStart}
+            onClick={() => void start()}>{t("terminal:nativeZmodemStart")}</button>
+        )}
       </div>
     </ModalSurface>
   );
