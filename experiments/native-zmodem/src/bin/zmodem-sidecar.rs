@@ -206,6 +206,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut session_completed = false;
     let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
     let mut received_total = 0u64;
+    let mut file_write_scratch = Vec::<u8>::new();
     let deadline = Instant::now() + SESSION_TIMEOUT;
 
     while Instant::now() < deadline {
@@ -217,16 +218,18 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 receiver.wire_written(count);
             }
             Action::WriteFile(data) => {
-                // poll() lends us a slice from receiver; file_written()
-                // requires another mutable borrow, so retain this copy.
-                let data = data.to_vec();
+                // poll() borrows receiver; copy into one reusable owned buffer
+                // before file_written() mutably borrows receiver again.
+                file_write_scratch.clear();
+                file_write_scratch.extend_from_slice(data);
+                let received = file_write_scratch.len();
                 let (file, _, _, bytes, max) = open_file.as_mut().ok_or("unexpected file data")?;
-                *bytes += data.len() as u64;
+                *bytes += received as u64;
                 if *bytes > MAX_SIZE || max.is_some_and(|size| *bytes > u64::from(size)) {
                     return Err("received file larger than advertised/allowed".into());
                 }
-                file.write_all(&data)?;
-                receiver.file_written(data.len())?;
+                file.write_all(&file_write_scratch)?;
+                receiver.file_written(received)?;
                 report_progress(*bytes, received_total, &mut progress_at, false);
             }
             Action::Event(Event::FileStarted(info)) => {
