@@ -10,6 +10,9 @@ vi.mock("../bridge", () => ({
   desktop: true,
   api: {
     SFTPTransfers: vi.fn(async () => []),
+    SFTPConcurrency: vi.fn(async () => 3),
+    SetSFTPConcurrency: vi.fn(async () => {}),
+    SFTPCancelBatch: vi.fn(async () => {}),
     SFTPCancel: vi.fn(async () => {}),
     SFTPTransfer: vi.fn(async () => {}),
     CancelZmodem: vi.fn(async () => {}),
@@ -148,4 +151,26 @@ test("skip queued rz upload file without cancelling the entire batch", async () 
     ref: refA, batchId: "skip-batch", kind: "skipped", index: 1, processed: 0,
   });
   expect(screen.getByText("已跳过")).toBeTruthy();
+});
+
+test("SFTP batch cancellation is scoped and concurrency is saved", async () => {
+  render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  const task = {
+    id: "sftp-batch-job-1", batchId: "batch-99", ref: refA,
+    direction: "upload" as const, source: "C:/a.txt", destination: "/tmp/a.txt",
+    name: "a.txt", bytes: 50, total: 100, status: "running" as const,
+    overwrite: false, resume: true, error: "", created: 20,
+  };
+  emit("sftp:transfer", task);
+  emit("sftp:transfer", {
+    ...task, id: "sftp-batch-job-2", source: "C:/b.txt", destination: "/tmp/b.txt",
+    name: "b.txt", bytes: 0, status: "queued",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(screen.getByText("SFTP · 2 个文件")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "取消整批" }));
+  await waitFor(() => expect(api.SFTPCancelBatch).toHaveBeenCalledWith(refA, "batch-99"));
+  const selector = screen.getByRole("combobox", { name: "SFTP 并发数" });
+  fireEvent.change(selector, { target: { value: "4" } });
+  await waitFor(() => expect(api.SetSFTPConcurrency).toHaveBeenCalledWith(4));
 });
