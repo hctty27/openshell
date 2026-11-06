@@ -478,7 +478,7 @@ try {
                 $savedBatch = [Environment]::GetEnvironmentVariable("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES", "Process")
                 try {
                     [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES", "16384", "Process")
-                    Write-Host "[netem] $netemProfile: interrupt, timeout and disconnect at 16 KiB"
+                    Write-Host "[netem] ${netemProfile}: interrupt, timeout and disconnect at 16 KiB"
                     Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemLiveInterruptedInteractivePTY$' -Name "netem-faults-$netemProfile" -LogDirectory $diagnosticsDir -Timeout '20m'
                 }
                 finally {
