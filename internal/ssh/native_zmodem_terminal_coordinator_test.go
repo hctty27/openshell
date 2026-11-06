@@ -231,7 +231,7 @@ func TestNativeZmodemInteractiveCoordinatorCancelBeforeHeaderKeepsTerminalIsolat
 
 func TestNativeZmodemInteractiveCoordinatorValidationRejectsUnsafeCommands(t *testing.T) {
 	for _, item := range []struct{ direction, remote string }{
-		{"download", ""}, {"download", "/tmp/new\nline"}, {"invalid", "x"},
+		{"download", ""}, {"download", "/tmp/new\n"}, {"invalid", "x"},
 	} {
 		if _, _, err := nativeInteractiveCommand(item.direction, item.remote); err == nil {
 			t.Fatalf("accepted invalid remote command: %+v", item)
@@ -240,6 +240,7 @@ func TestNativeZmodemInteractiveCoordinatorValidationRejectsUnsafeCommands(t *te
 	for _, item := range []struct{ direction, remote, command, action string }{
 		{"upload", "", "rz -q\r", "send"},
 		{"download", "x y", "sz -q -- 'x y'\r", "receive"},
+		{"download", "/tmp/a\n/tmp/b c", "sz -q -- '/tmp/a' '/tmp/b c'\r", "receive"},
 	} {
 		cmd, action, err := nativeInteractiveCommand(item.direction, item.remote)
 		if err != nil || cmd != item.command || action != item.action {
