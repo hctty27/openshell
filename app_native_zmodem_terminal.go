@@ -82,7 +82,7 @@ func (a *App) StartNativeZmodemInteractiveBatchTransfer(
 		}
 	}
 	var skipPath string
-	if direction == "upload" && len(localPaths) > 1 {
+	if (direction == "upload" && len(localPaths) > 1) || (direction == "download" && len(remotePaths) > 1) {
 		dir, tempErr := os.MkdirTemp("", "openshell-zmodem-skip-")
 		if tempErr != nil { return tempErr }
 		defer os.RemoveAll(dir)
@@ -90,7 +90,7 @@ func (a *App) StartNativeZmodemInteractiveBatchTransfer(
 		if err = os.WriteFile(skipPath, nil, 0600); err != nil { return err }
 		control := &nativeZmodemSkipControl{
 			batchID: batchID, path: skipPath, activeIndex: 0,
-			fileCount: len(localPaths), requested: make(map[int]bool),
+			fileCount: len(files), requested: make(map[int]bool),
 		}
 		a.mu.Lock()
 		if a.nativeZmodemSkips == nil {
