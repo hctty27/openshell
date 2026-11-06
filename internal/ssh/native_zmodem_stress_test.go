@@ -112,6 +112,7 @@ type nativeStressOptions struct {
  Rounds int `json:"rounds"`
  Workers int `json:"workers"`
  LatencyMS int `json:"latencyMs"`
+ WireBatchBytes int `json:"wireBatchBytes"`
 }
 
 func readNativeStressOptions(t *testing.T) nativeStressOptions {
@@ -133,6 +134,7 @@ func readNativeStressOptions(t *testing.T) nativeStressOptions {
  opts.Rounds = number("OPENSHELL_ZMODEM_STRESS_ROUNDS", 30, 1, 50)
  opts.Workers = number("OPENSHELL_ZMODEM_STRESS_WORKERS", 3, 1, 4)
  opts.LatencyMS = number("OPENSHELL_ZMODEM_STRESS_LATENCY_MS", 3, 0, 10)
+ opts.WireBatchBytes = number("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES", 0, 0, 32*1024)
  return opts
 }
 
