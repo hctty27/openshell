@@ -49,6 +49,26 @@ func TestThemePreferencePersistsAcrossRestart(t *testing.T) {
 }
 
 
+func TestSFTPConcurrencyPreferencePersistsAcrossRestart(t *testing.T) {
+    path := filepath.Join(t.TempDir(), "state.db")
+    a, err := newApp(path, &vault{m: map[string]string{}}, nil)
+    if err != nil { t.Fatal(err) }
+    if a.SFTPConcurrency() != 3 { t.Fatalf("unexpected SFTP default: %d", a.SFTPConcurrency()) }
+    if err := a.SetSFTPConcurrency(4); err != nil { t.Fatal(err) }
+    if err := a.SetSFTPConcurrency(5); err == nil {
+        t.Fatal("unsupported SFTP concurrency accepted")
+    }
+    if a.SFTPConcurrency() != 4 { t.Fatalf("invalid update changed concurrency: %d", a.SFTPConcurrency()) }
+    a.shutdown(context.Background())
+
+    b, err := newApp(path, &vault{m: map[string]string{}}, nil)
+    if err != nil { t.Fatal(err) }
+    defer b.shutdown(context.Background())
+    if b.SFTPConcurrency() != 4 {
+        t.Fatalf("SFTP concurrency not restored: %d", b.SFTPConcurrency())
+    }
+}
+
 func TestSessionSidebarPreferences(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.db")
 	a, err := newApp(path, &vault{m: map[string]string{}}, nil)
