@@ -10,11 +10,6 @@ import (
 	sshclient "github.com/hctty27/openshell/internal/ssh"
 )
 
-// 原生优先策略只对简单命令生效，不替换旧版 ZMODEM 处理器。
-func (a *App) NativeZmodemExperimentEnabled() bool {
-	return a.nativeZmodemPreferred()
-}
-
 func nativeZmodemDesktopSidecarPath() string {
 	if explicit := os.Getenv("OPENSHELL_NATIVE_ZMODEM_SIDECAR"); explicit != "" {
 		return explicit
@@ -32,17 +27,16 @@ func nativeZmodemDesktopSidecarPath() string {
 // NativeZmodemInteractiveReadiness is read-only. Its result cannot start or
 // authorize a transfer; each start is separately checked by the backend.
 func (a *App) NativeZmodemInteractiveReadiness(ref domain.ConnectionRef) sshclient.NativeZmodemExperimentReadiness {
-	if !a.NativeZmodemExperimentEnabled() {
+	if !a.nativeZmodemPreferred() {
 		return sshclient.NativeZmodemExperimentReadiness{
-			Code: "disabled", Message: "原生 ZMODEM 实验未启用",
+			Code: "disabled", Message: "当前平台未启用原生 ZMODEM",
 		}
 	}
 	return a.ssh.NativeZmodemExperimentalReadiness(ref, nativeZmodemDesktopSidecarPath(), true)
 }
 
 // StartNativeZmodemInteractiveTransfer uses the tested, existing interactive
-// SSH PTY. It does not start an independent SSH exec session or intercept
-// legacy rz/sz auto-detection.
+// SSH PTY and keeps the transfer bound to the exact active connection.
 func (a *App) StartNativeZmodemInteractiveTransfer(
 	ref domain.ConnectionRef, direction, localPath, remotePath string,
 ) error {
@@ -71,7 +65,7 @@ func (a *App) StartNativeZmodemInteractiveBatchTransfer(
 }
 
 func (a *App) CancelNativeZmodemInteractiveTransfer(ref domain.ConnectionRef) error {
-	// 切换成兼容模式只影响新传输，必须允许取消当前已运行的原生任务。
+	// 必须允许取消当前已运行的原生任务。
 	if !a.ssh.CancelExperimentalNativeTerminalTransfer(ref) {
 		return errors.New("没有可取消的原生 ZMODEM 传输")
 	}
@@ -80,7 +74,7 @@ func (a *App) CancelNativeZmodemInteractiveTransfer(ref domain.ConnectionRef) er
 
 func (a *App) NativeZmodemChooseUploadFile() (string, error) {
 	if !a.NativeZmodemExperimentEnabled() {
-		return "", errors.New("原生 ZMODEM 实验未启用")
+		return "", errors.New("当前平台未启用原生 ZMODEM")
 	}
 	if a.pickNativeZmodemFile == nil {
 		return "", errors.New("当前环境没有可用的文件选择对话框")
@@ -92,7 +86,7 @@ func (a *App) NativeZmodemChooseUploadFile() (string, error) {
 // An empty selection means the user cancelled, not an implicit transfer.
 func (a *App) NativeZmodemChooseUploadFiles() ([]string, error) {
 	if !a.NativeZmodemExperimentEnabled() {
-		return nil, errors.New("原生 ZMODEM 未启用")
+		return nil, errors.New("当前平台未启用原生 ZMODEM")
 	}
 	if a.pickNativeZmodemFiles == nil {
 		return nil, errors.New("当前环境没有可用的多文件选择对话框")
