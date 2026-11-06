@@ -68,6 +68,30 @@ Rust sidecar 增加 **仅实验模式使用** 的有界 `Action::WriteWire` 缓�
 
 报告 `options.wireBatchBytes` 会记录本次使用的缓冲大小（0 表示原始模式）。A/B 测试必须对照 JSON `io.toRemoteCalls`、`io.toRemoteWriteNs`、`miBPerSecond`、SHA-256；推荐每个延迟条件至少重复 5 次，并交替执行两组，以减少环境波动。**减少写入次数不代表一定能提高速度**：当 ZMODEM 协议当前流程必须等待远端 ACK 时，将始终在等待前 flush，不跨协议反馈边界强行拼接。缓冲不会改变模拟器的 3ms TCP 读写延迟语义；它也不模拟真实丢包。
 
+## 自动 A/B 矩阵测试
+
+矩阵测试专用入口会在**同一个临时 Docker Linux SSH 测试环境**中交替运行 0、4、8、16、32 KiB 的原生传输缓冲。默认测试 TCP 额外延迟 0、1、3、5 ms，每个组合重复 5 次，分别验证原生与 SFTP 上传、下载的 SHA-256，并记录完整样本。不修改默认传输配置。
+
+```powershell
+# 首次建议先用短矩阵验证环境和脚本
+.\scripts\test-native-zmodem-batch-matrix.ps1 -Rounds 1
+
+# 完整矩阵，4 个延迟 × 5 种缓冲 × 5 轮
+.\scripts\test-native-zmodem-batch-matrix.ps1 -Rounds 5
+```
+
+矩阵依次运行各延迟条件，并按奇偶轮改变缓冲大小的测试顺序，避免始终由同一方案占据第一或最后一次样本。默认共 100 个组合样本，**每个样本有 4 条传输记录**（原生上传/下载、SFTP 上传/下载），共 400 次有 SHA-256 校验的文件传输。
+
+JSON 文件写入 `tmp/native-zmodem-stress/native-zmodem-matrix-*.json`，包含：
+
+- `cases[]`：每次样本的 `latencyMs`、`wireBatchKiB`、`round` 和四条原始传输记录。
+- `summaries[]`：按延迟、缓冲、协议和方向聚合，记录 `count`、`medianMiBPerSecond`、`p95DurationMs`、`allChecksumsOK`。
+- `p95DurationMs` 采用 nearest-rank 方法；样本不足时 P95 与最大值接近，因此正式决策应结合中位数、极端值和多轮复测。
+
+失败会保留已经完成的报告，整轮仍判为失败；绝不通过丢弃异常轮次得到“通过”结论。
+
+**注意**：同一延迟下连续使用一个 SSH 连接减少了环境切换，但仍可能存在系统缓存、CPU 调度和 Docker 资源波动。实际 `0/1/3/5 ms` 是 TCP 读写附加延迟，不代表真实公网延迟或丢包率。选择默认值之前，还应检查 128 MiB 大文件多次重复、取消/断线以及实际 GUI。
+
 ## Windows 本机 Go Vet 与协议测试隔离
 
 Windows PowerShell 5.1 上的测试日志曾出现 `vet.exe: expected 'package', found '%'`，涉及多个第三方模块，尽管真实跨系统 PTY 的 8 次传输及 SHA-256 验证全部通过。该报错不等同于协议失败，也不能直接排除本机模块缓存被修改。

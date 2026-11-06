@@ -25,6 +25,11 @@ param(
 
     [switch]$StressDiagnostics,
 
+    [switch]$StressBatchMatrix,
+
+    [ValidateRange(1, 10)]
+    [int]$StressMatrixRounds = 5,
+
     [switch]$SkipBaseline
 )
 
@@ -111,7 +116,10 @@ $variableNames = @(
     "OPENSHELL_ZMODEM_STRESS_ROUNDS",
     "OPENSHELL_ZMODEM_STRESS_WORKERS",
     "OPENSHELL_ZMODEM_STRESS_LATENCY_MS",
-    "OPENSHELL_ZMODEM_STRESS_REPORT"
+    "OPENSHELL_ZMODEM_STRESS_REPORT",
+    "OPENSHELL_ZMODEM_BATCH_MATRIX",
+    "OPENSHELL_ZMODEM_MATRIX_ROUNDS",
+    "OPENSHELL_ZMODEM_MATRIX_REPORT"
 )
 $previous = @{}
 foreach ($name in $variableNames) {
@@ -280,6 +288,47 @@ try {
             } | Format-Table -AutoSize | Out-Host
         }
         Write-Host "PASS: stress report written to $reportFile"
+    }
+
+    if ($StressBatchMatrix) {
+        if ($StressReportDir -eq "") {
+            $StressReportDir = Join-Path $repoRoot 'tmp/native-zmodem-stress'
+        }
+        $matrixDir = [IO.Path]::GetFullPath($StressReportDir)
+        [void][IO.Directory]::CreateDirectory($matrixDir)
+        $matrixFile = Join-Path $matrixDir "native-zmodem-matrix-$(Get-Date -Format 'yyyyMMdd-HHmmss')-$unique.json"
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_BATCH_MATRIX", "1", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_MATRIX_ROUNDS", "$StressMatrixRounds", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_MATRIX_REPORT", $matrixFile, "Process")
+
+        Write-Host "[matrix] Alternating 0/4/8/16/32 KiB across 0/1/3/5 ms ($StressMatrixRounds rounds each)"
+        Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemBatchMatrixInteractivePTY$' -Name 'batch-matrix' -LogDirectory $diagnosticsDir -Timeout '60m'
+
+        if (-not (Test-Path -LiteralPath $matrixFile -PathType Leaf)) {
+            throw "Native ZMODEM batch matrix JSON missing: $matrixFile"
+        }
+        $matrixResult = Get-Content -LiteralPath $matrixFile -Raw | ConvertFrom-Json
+        $cases = @($matrixResult.cases)
+        $expectedCases = 4 * 5 * $StressMatrixRounds
+        if ($cases.Count -ne $expectedCases) {
+            throw "Matrix incomplete: $($cases.Count)/$expectedCases test cases (report: $matrixFile)"
+        }
+        if (@($cases | Where-Object {
+            $null -ne $_.error -or @($_.results).Count -ne 4 -or
+            @($_.results | Where-Object { -not $_.checksumOK -or $_.error }).Count -ne 0
+        }).Count -ne 0) {
+            throw "Batch matrix has failed or incomplete transfers: $matrixFile"
+        }
+
+        Write-Host "Native upload A/B summary (median MiB/s, P95 elapsed ms):"
+        $matrixResult.summaries |
+            Where-Object { $_.protocol -eq 'native' -and $_.direction -eq 'upload' } |
+            Select-Object latencyMs, wireBatchKiB, count,
+                @{Name='MedianMiBps';Expression={[math]::Round($_.medianMiBPerSecond, 3)}},
+                @{Name='P95ms';Expression={$_.p95DurationMs}},
+                allChecksumsOK |
+            Format-Table -AutoSize | Out-Host
+        Write-Host "PASS: batch matrix JSON written to $matrixFile"
     }
 
     Write-Host "PASS: native Windows sidecar and real Linux OpenSSH/SFTP ZMODEM tests"
