@@ -1,6 +1,6 @@
 # OpenShell 原生 ZMODEM 交互式终端实验入口
 
-> 该功能是**开发者手动开启**的试验功能，不替换现有 `rz/sz`、`trzsz-go` 或 MSYS2，不自动识别/拦截终端流量。初次使用请连接隔离 Linux 测试机或 Docker SSH Lab，勿先用于生产会话。
+> 该功能是**开发者手动开启**的试验功能，不替换现有 `trzsz-go` 或 MSYS2。默认不接管终端直接输入的 `rz/sz`；可通过独立双开关启用受限的命令意图识别（见下文），不是纯协议帧自动接管。初次使用请连接隔离 Linux 测试机或 Docker SSH Lab，勿先用于生产会话。
 
 ## 启用
 
@@ -23,6 +23,8 @@ $env:OPENSHELL_NATIVE_ZMODEM_SIDECAR = (Resolve-Path "experiments/native-zmodem/
 
 之后正常启动开发版 OpenShell。仅当环境变量明确为 `1` 时，已连接 SSH 终端工具栏才会出现“**原生 ZMODEM · 实验模式**”按钮；未启用时不渲染入口。
 
+如需在普通 Bash Shell 中直接输入 `rz` / `sz /绝对路径` 后打开原生实验窗口，另设 `$env:OPENSHELL_NATIVE_ZMODEM_AUTO = "1"`；两项变量缺一不可。参见 [原生自动命令实验与回退边界](native-zmodem-auto-command.md)。
+
 ## 操作
 
 1. 在隔离 Linux OpenSSH/SFTP 服务器安装 `lrzsz`，打开普通交互式 SSH Shell，确认当前 Shell 空闲，没有 `vim`、`top` 等前台程序，未连接 JumpServer。
@@ -35,7 +37,7 @@ $env:OPENSHELL_NATIVE_ZMODEM_SIDECAR = (Resolve-Path "experiments/native-zmodem/
 
 - 已接入实验性字节进度、百分比、处理速率与 ETA：数据来自 Rust sidecar 的文件读/写回调，不能视为远端持久化确认；界面会将运行中百分比限定在 99%，必须等待远端 `rz/sz` 结束标记和成功退出才报告完成。
 - 批量文件传输、目录传输、断点续传、覆盖已有文件。
-- 自动检测/切换、JumpServer 支持、传输中自动恢复或无损降级回传统协议。
+- 任意命令/复杂 Shell 的自动接管、JumpServer 支持、传输中自动恢复或无损降级回传统协议；新增双开关仅识别有限的 Bash 简单命令。
 - 正式发布前的安装版/便携包 sidecar 在 Windows 实机上的 GUI 联动验收及第三方依赖许可证复核。
 - 128 MiB 大文件、真实公网高丢包、持续多轮长测、边缘 Shell 兼容性。
 
