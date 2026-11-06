@@ -1,10 +1,10 @@
 package sshclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -61,7 +61,7 @@ func TestNativeZmodemInboundPipeMeterPreservesPayload(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("inbound pipe stalled")
 	}
-	if !strings.EqualFold(string(got), string(payload)) {
+	if !bytes.Equal(got, payload) {
 		t.Fatalf("inbound bytes changed: %x != %x", got, payload)
 	}
 	snapshot := meter.snapshot()
