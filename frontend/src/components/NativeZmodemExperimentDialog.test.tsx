@@ -9,6 +9,7 @@ const actions = vi.hoisted(() => ({
   downloadFolder: vi.fn(async () => "C:\\downloads"),
   start: vi.fn(async () => {}),
   cancel: vi.fn(async () => {}),
+  progressCallback: null as ((event: unknown) => void) | null,
 }));
 vi.mock("../bridge", () => ({
   api: {
@@ -19,6 +20,10 @@ vi.mock("../bridge", () => ({
     CancelNativeZmodemInteractiveTransfer: actions.cancel,
   },
   errorText: (error: unknown) => String(error),
+  listen: vi.fn((_name: string, callback: (event: unknown) => void) => {
+    actions.progressCallback = callback;
+    return () => { actions.progressCallback = null; };
+  }),
 }));
 
 const ref = { tabId: "native-tab", sessionId: "session-1", generation: 3 };
@@ -27,6 +32,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   actions.readiness.mockResolvedValue({ ready: true, code: "ready", message: "ok" });
   actions.start.mockResolvedValue(undefined);
+  actions.progressCallback = null;
 });
 afterEach(cleanup);
 
