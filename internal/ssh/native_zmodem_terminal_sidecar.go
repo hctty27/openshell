@@ -52,8 +52,8 @@ func runNativeZmodemTerminalSidecarWithProgress(
 	cmd.WaitDelay = nativeZmodemShutdownTimeout
 	stderr := &nativeZmodemLog{}
 	cmd.Stderr = stderr
-	if onProgress != nil {
-		cmd.Stderr = &nativeTerminalProgressLog{log: stderr, onProgress: onProgress}
+	if fileObserver := nativeZmodemFileObserver(ctx); onProgress != nil || fileObserver != nil {
+		cmd.Stderr = &nativeTerminalProgressLog{log: stderr, onProgress: onProgress, onFile: fileObserver}
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil { return err }
