@@ -3,6 +3,7 @@ package sshclient
 import (
 	"context"
 	"errors"
+	"io"
 	"sync/atomic"
 	"time"
 )
@@ -59,11 +60,9 @@ func nativeZmodemContextError(ctx context.Context) error {
 }
 
 type nativeZmodemActivityWriter struct {
-	target ioWriter
+	target io.Writer
 	touch func()
 }
-
-type ioWriter interface { Write([]byte) (int, error) }
 
 func (w nativeZmodemActivityWriter) Write(p []byte) (int, error) {
 	n, err := w.target.Write(p)
