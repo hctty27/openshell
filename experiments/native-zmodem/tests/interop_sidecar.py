@@ -80,6 +80,45 @@ def main() -> None:
             target = manifest_dir / source.name
             assert target.exists() and sha256(target) == sha256(source)
 
+        # Native-to-native skip protocol coverage also runs on Windows.
+        skip_files = []
+        for name, content in [
+            ("selected-first.bin", b"a" * 4096),
+            ("selected-skip.bin", b"b" * 4096),
+            ("selected-last.bin", b"c" * 4096),
+        ]:
+            source = source_dir / name
+            source.write_bytes(content)
+            skip_files.append(source)
+        control_path = root / "skip-request.txt"
+        control_path.write_text("1\n", encoding="ascii")
+
+        sender_skipped = root / "sender-skipped"
+        sender_skipped.mkdir()
+        transfer_pair(
+            [sidecar, "send", *(str(p) for p in skip_files)],
+            [sidecar, "receive", str(sender_skipped)],
+            source_dir, sender_skipped, 97,
+            left_env={"OPENSHELL_ZMODEM_SKIP_FILE": str(control_path)},
+        )
+        assert not (sender_skipped / skip_files[1].name).exists()
+        for source in (skip_files[0], skip_files[2]):
+            assert (sender_skipped / source.name).is_file()
+            assert sha256(sender_skipped / source.name) == sha256(source)
+
+        receiver_skipped = root / "receiver-skipped"
+        receiver_skipped.mkdir()
+        transfer_pair(
+            [sidecar, "send", *(str(p) for p in skip_files)],
+            [sidecar, "receive", str(receiver_skipped)],
+            source_dir, receiver_skipped, 97,
+            right_env={"OPENSHELL_ZMODEM_SKIP_FILE": str(control_path)},
+        )
+        assert not (receiver_skipped / skip_files[1].name).exists()
+        for source in (skip_files[0], skip_files[2]):
+            assert (receiver_skipped / source.name).is_file()
+            assert sha256(receiver_skipped / source.name) == sha256(source)
+
     print(f"Passed: {len(cases) + 6} native-sidecar SHA-256 file checks, including batch and manifest sessions")
 
 
