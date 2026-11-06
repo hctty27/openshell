@@ -45,6 +45,18 @@
 
 这些测试实际使用当前交互式 SSH PTY 和原生 Rust sidecar，**不是简单模拟协议响应**；验证后会清理文件。若一轮失败，结果应视为验收不通过，不能因为其他轮成功而忽略失败。
 
+## 失败日志定位（Windows PowerShell 5.1）
+
+如果基础联调第 4 步或压力阶段退出非零状态，脚本会保留单独的原生 Go 测试输出：
+
+```text
+tmp/native-zmodem-stress/logs/<run-id>/cross-os-pty.log
+tmp/native-zmodem-stress/logs/<run-id>/interruptions.log
+tmp/native-zmodem-stress/logs/<run-id>/stress-<profile>.log
+```
+
+这些日志独立于 `Start-Transcript`，包含原始 `go test -v` 的 stdout/stderr 和 `--- FAIL:` 行。发生失败时直接查看脚本报出的路径；无须根据 Docker 容器退出码猜测协议故障。临时 SSH 容器与密钥仍会清理，但本地诊断日志会保留在已被 Git 忽略的 `tmp/` 下。
+
 ## 结果与判读
 
 在 `tmp/native-zmodem-stress/` 生成一次运行对应的 `.json` 报告：
