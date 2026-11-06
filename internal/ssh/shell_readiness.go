@@ -14,6 +14,40 @@ import (
 var (
 	shellBoundaryPattern = regexp.MustCompile("\x1b\\](?:133|633);([ABCD])(?:;[^\x07\x1b]*)?(?:\x07|\x1b\\\\)")
 	alternateBufferPattern = regexp.MustCompile("\x1b\\[\\?(?:47|1047|1049)([hl])")
+	mysqlPromptPattern = regexp.MustCompile(`^(?:mysql(?:@[A-Za-z0-9_.:-]+(?:\[[^\r\n\]]{0,120}\])?)?|MariaDB \[[^\r\n\]]{0,120}\])> ?package sshclient
+
+import (
+	"errors"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+)
+
+// The explicit shell integration markers (OSC 133/633) are preferred.
+// A conservative Bash-style prompt fallback handles basic SSH hosts with no
+// shell integration, but never treats arbitrary "#" / "$" as a prompt.
+var (
+	shellBoundaryPattern = regexp.MustCompile("\x1b\\](?:133|633);([ABCD])(?:;[^\x07\x1b]*)?(?:\x07|\x1b\\\\)")
+	alternateBufferPattern = regexp.MustCompile("\x1b\\[\\?(?:47|1047|1049)([hl])")
+	)
+	mysqlCustomPromptPattern = regexp.MustCompile(`^\([A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+\) \[[^\r\n\]]{0,120}\]> ?package sshclient
+
+import (
+	"errors"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+)
+
+// The explicit shell integration markers (OSC 133/633) are preferred.
+// A conservative Bash-style prompt fallback handles basic SSH hosts with no
+// shell integration, but never treats arbitrary "#" / "$" as a prompt.
+var (
+	shellBoundaryPattern = regexp.MustCompile("\x1b\\](?:133|633);([ABCD])(?:;[^\x07\x1b]*)?(?:\x07|\x1b\\\\)")
+	alternateBufferPattern = regexp.MustCompile("\x1b\\[\\?(?:47|1047|1049)([hl])")
+	)
 	shellPromptPattern = regexp.MustCompile("^(?:\\[[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120}\\]|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[^\\r\\n]{0,120}|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120})[#$%] ?$")
 	terminalCSIPattern = regexp.MustCompile("\x1b\\[[0-?]*[ -/]*[@-~]")
 	terminalOSCPattern = regexp.MustCompile("\x1b\\][^\x07\x1b]*(?:\x07|\x1b\\\\)")
@@ -26,6 +60,8 @@ type terminalShellReadiness struct {
 	prompt bool
 	alternate bool
 	manualInput bool
+	program string
+	mysqlObserved bool
 	jumpServer bool
 	assetMenu bool
 	lastOutput time.Time
@@ -63,6 +99,7 @@ func (r *terminalShellReadiness) observe(p []byte) {
 	// For plain shells without integration, infer readiness only from a
 	// recognizable full prompt at the end of the current output.
 	if strings.Contains(strings.ToLower(string(combined)), "jumpserver") { r.jumpServer = true }
+	if strings.Contains(string(combined), "Welcome to the MySQL monitor") || strings.Contains(string(combined), "Welcome to the MariaDB monitor") { r.mysqlObserved = true }
 	stripped := terminalOSCPattern.ReplaceAll(combined, nil)
 	stripped = terminalCSIPattern.ReplaceAll(stripped, nil)
 	visible := strings.TrimRight(string(stripped), "\x00")
@@ -77,13 +114,22 @@ func (r *terminalShellReadiness) observe(p []byte) {
 		r.integration = false
 		r.prompt = false
 	}
-	if !r.integration && !r.assetMenu {
-		r.prompt = shellPromptPattern.MatchString(visible)
-		if r.prompt { r.manualInput = false }
-	} else if r.assetMenu && shellPromptPattern.MatchString(visible) {
+	// A database prompt is not a Shell prompt: it needs its own executor.
+	// Custom user@host prompts are accepted only after a MySQL banner.
+	if !r.assetMenu && (mysqlPromptPattern.MatchString(visible) ||
+		(r.mysqlObserved && mysqlCustomPromptPattern.MatchString(visible))) {
+		r.program = "mysql"
 		r.prompt = true
-		r.assetMenu = false
 		r.manualInput = false
+	} else if shellPromptPattern.MatchString(visible) {
+		if !r.integration || r.assetMenu || r.program == "mysql" {
+			r.program = "shell"
+			r.prompt = true
+			r.manualInput = false
+		}
+		if r.assetMenu { r.assetMenu = false }
+	} else if r.program == "mysql" || (!r.integration && !r.assetMenu) {
+		r.prompt = false
 	}
 
 	r.lastOutput = time.Now()
@@ -99,6 +145,14 @@ func (r *terminalShellReadiness) userInput(p []byte) {
 	r.manualInput = true
 	r.prompt = false
 	r.mu.Unlock()
+}
+
+// readyProgram must only be read after checkReady succeeds.
+func (r *terminalShellReadiness) readyProgram() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.program == "mysql" { return "mysql" }
+	return "shell"
 }
 
 func (r *terminalShellReadiness) isJumpServer() bool {
@@ -122,7 +176,7 @@ func (r *terminalShellReadiness) checkReady() error {
 	if !r.prompt {
 		return errors.New("无法确认当前 Shell 已就绪。请退出交互程序，返回普通 Bash/Zsh 提示符；支持 OSC 133/633 Shell Integration 的终端可自动识别")
 	}
-	if !r.integration && time.Since(r.lastOutput) < 250*time.Millisecond {
+	if (r.program == "mysql" || !r.integration) && time.Since(r.lastOutput) < 250*time.Millisecond {
 		return errors.New("终端提示符仍在更新，请稍后重试")
 	}
 	return nil
