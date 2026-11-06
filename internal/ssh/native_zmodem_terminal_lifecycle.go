@@ -51,6 +51,17 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 	sidecar, direction, localPath, remotePath string,
 	progress func(uint64, uint64),
 ) error {
+	return m.runNativeTerminalBatchExperimentWithProgress(
+		parent, ref, sidecar, direction, []string{localPath}, []string{remotePath}, progress,
+	)
+}
+
+func (m *Manager) runNativeTerminalBatchExperimentWithProgress(
+	parent context.Context,
+	ref domain.ConnectionRef,
+	sidecar, direction string, localPaths, remotePaths []string,
+	progress func(uint64, uint64),
+) error {
 	if parent == nil {
 		return errors.New("缺少原生终端传输上下文")
 	}
@@ -93,7 +104,7 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 		input: input, output: output,
 		runner: nativeTerminalExecutableRunnerWithProgress(sidecar, progress),
 	}
-	result := coordinator.run(ctx, direction, localPath, remotePath)
+	result := coordinator.runBatch(ctx, direction, localPaths, remotePaths)
 	// Reading the gate before taking Manager.mu avoids lock inversion with
 	// user-input writes. A stuck lease means the terminal is unsafe to reuse.
 	input.mu.Lock()
@@ -130,9 +141,21 @@ func (m *Manager) RunExperimentalNativeTerminalTransferWithProgress(
 	sidecar, direction, localPath, remotePath string,
 	progress func(uint64, uint64),
 ) error {
+	return m.RunExperimentalNativeTerminalBatchTransferWithProgress(
+		ctx, ref, sidecar, direction, []string{localPath}, []string{remotePath}, progress,
+	)
+}
+
+// One transfer lease, one Rust protocol process and one remote rz/sz session.
+// Each source and remote target is independently validated before the PTY
+// is taken over; the sidecar receives a private manifest for multi-upload.
+func (m *Manager) RunExperimentalNativeTerminalBatchTransferWithProgress(
+	ctx context.Context,
+	ref domain.ConnectionRef,
+	sidecar, direction string, localPaths, remotePaths []string,
+	progress func(uint64, uint64),
+) error {
 	status := m.NativeZmodemExperimentalReadiness(ref, sidecar, true)
-	if !status.Ready {
-		return errors.New(status.Message)
-	}
-	return m.runNativeTerminalExperimentWithProgress(ctx, ref, sidecar, direction, localPath, remotePath, progress)
+	if !status.Ready { return errors.New(status.Message) }
+	return m.runNativeTerminalBatchExperimentWithProgress(ctx, ref, sidecar, direction, localPaths, remotePaths, progress)
 }
