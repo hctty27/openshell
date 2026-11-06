@@ -92,7 +92,7 @@ try {
     while ((Get-Date) -lt $deadline) {
         $stateLine = & docker inspect --format '{{.State.Status}}|{{.State.Health.Status}}' $container 2>$null
         if ($LASTEXITCODE -ne 0) { throw "Linux SSH container disappeared before becoming ready" }
-        $parts = "$stateLine".Trim() -split '\\|', 2
+        $parts = "$stateLine".Trim().Split([char]'|')
         if ($parts.Count -ne 2) { throw "Invalid Docker container health response: $stateLine" }
         if ($parts[0] -ne "running") { throw "Linux SSH container stopped before becoming ready (status=$($parts[0]))" }
         if ($parts[1] -eq "healthy") {
