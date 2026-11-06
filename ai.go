@@ -318,7 +318,7 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 	system += strings.Join(targets, "\n")
 	system += aiPromptText(language, "\nReply in English by default unless the user explicitly requests another language. Keep answers concise and specific. Do not narrate routine tool actions. Summarize findings, errors, actions and next steps without duplicating raw logs already visible in the tool cards. Explicitly communicate uncertainty, risks and needed confirmations.", "\n默认使用简体中文回答，除非用户明确要求其他语言。回答应简洁、具体。调用工具前通常无需输出“我先检查”“正在执行”等无信息量的说明，直接调用工具。用户已经能通过执行卡片查看命令与原始输出，所以最终答复只概括关键发现、异常、是否处理成功和必要的下一步，不重复粘贴长日志或逐条复述全部命令。遇到失败、风险或重要不确定性必须明确说明，不得省略；不得因为简洁而省略必需的用户确认。")
 	toolDescription := aiPromptText(language, "Run a non-interactive command through an independent SSH channel on the authorized session, leaving the visible terminal unchanged. Request approval when needed.", "在已授权的 SSH 会话中使用独立 SSH channel 执行非交互命令，不影响用户当前终端。请审慎决定是否需要确认。")
-	if terminalLease != nil {
+	if terminalLease != nil && terminalLease.Program() == "shell" {
 		system += aiPromptText(language, "\nVisible-terminal mode: ssh_exec runs in the user's existing shell and preserves its directory and environment. Do not run interactive TUIs, password prompts, background output streams, long-running commands, or exit. The terminal is temporarily locked; never assume a command succeeded without a reliable result.", "\n当前是可见终端操作模式：所有 ssh_exec 命令会在用户已打开的同一 Shell 中执行并显示在终端，工作目录和 Shell 环境可持续保留。不要运行交互式 TUI、需要密码交互的命令、后台持续输出或长时间不结束的命令；不要调用 exit。终端会被临时独占，失败时不得猜测命令完成。")
 		toolDescription = aiPromptText(language, "Run a non-interactive command in the authorized visible SSH PTY, preserving the current working directory and shell environment. Never use vim, top or tail -f.", "在用户正在查看的已授权 SSH PTY 终端中执行一条非交互命令，保留当前目录和 Shell 环境。不要使用 vim、top、tail -f 等交互程序。")
 	}
@@ -330,6 +330,31 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 			"Execute one read-only SQL query in the user's existing authenticated MySQL terminal. No new SSH or database login.",
 			"在用户已经登录的当前 MySQL 终端执行一条只读 SQL，不新建 SSH 或数据库连接。")
 	}
+	if terminalLease != nil {
+		switch terminalLease.Program() {
+		case "redis":
+			system += aiPromptText(language,
+				"\nThe visible terminal is already running redis-cli. ssh_exec executes ONE read-only redis-cli command in this authenticated client. Supported examples: PING, INFO, DBSIZE, SCAN, GET, HGETALL, LRANGE, ZRANGE, TTL. Do not run a Shell command, SELECT, CONFIG, KEYS, MONITOR, blocking operations or any writes.",
+				"\n当前终端已经进入 redis-cli。ssh_exec 只能在当前已登录的 Redis 客户端执行一条只读 Redis 命令，例如 PING、INFO、DBSIZE、SCAN、GET、HGETALL、LRANGE、ZRANGE、TTL。不要执行 Shell 命令、SELECT、CONFIG、KEYS、MONITOR、阻塞命令或写入命令。")
+			toolDescription = aiPromptText(language,
+				"Execute one approved read-only Redis command in the existing redis-cli PTY; no new connection.",
+				"在当前 redis-cli 交互终端执行一条允许的只读 Redis 命令，无需重新连接。")
+		case "psql":
+			system += aiPromptText(language,
+				"\nThe visible terminal is already running psql. Use ssh_exec for ONE read-only PostgreSQL SQL statement (SELECT, SHOW, EXPLAIN, TABLE or VALUES) or one allowed psql metadata command (\\d, \\dt, \\di, \\dn, \\dv, \\df, \\l, \\conninfo). No shell commands, psql login or database writes; the current DB and transaction are preserved.",
+				"\n当前终端已经进入 PostgreSQL psql。ssh_exec 每次仅执行一条只读 SQL（SELECT、SHOW、EXPLAIN、TABLE、VALUES），或者一条允许的只读元命令（\\d、\\dt、\\di、\\dn、\\dv、\\df、\\l、\\conninfo）。不要执行 Shell 命令、psql 登录或修改数据库；保留当前数据库和事务。")
+			toolDescription = aiPromptText(language,
+				"Execute one read-only SQL or psql metadata command in the existing authenticated psql PTY.",
+				"在当前已登录的 psql 交互终端执行一条只读 SQL 或元命令。")
+		case "python":
+			system += aiPromptText(language,
+				"\nThe visible terminal is an existing Python REPL. ssh_exec executes one Python snippet in its current globals; expressions are printed as in the interpreter. No new interpreter or SSH connection. Avoid input(), interactive prompts, exit(), quit(), blocking operations and untrusted code. In review mode, request approval before code with side effects or external calls.",
+				"\n当前终端已经进入 Python REPL。ssh_exec 在同一个解释器的全局环境中执行 Python 代码，表达式按交互模式展示结果；不启动新解释器、不创建新 SSH。避免 input()、人工交互、exit()、quit()、阻塞操作和不可信代码；审查模式下有副作用或外部调用的代码必须申请确认。")
+			toolDescription = aiPromptText(language,
+				"Execute one Python snippet inside the existing interactive Python interpreter.",
+				"在当前已打开的 Python 解释器中执行一段 Python 代码。")
+		}
+	}
 	toolSpec := []map[string]any{{
 		"type": "function",
 		"function": map[string]any{
@@ -338,7 +363,7 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 				"type": "object",
 				"properties": map[string]any{
 					"target": map[string]any{"type":"string", "description":aiPromptText(language, "Current-task target alias", "本次任务的 target 别名")},
-					"command": map[string]any{"type":"string", "description":aiPromptText(language, "Shell command", "执行的 shell 命令")},
+					"command": map[string]any{"type":"string", "description":aiPromptText(language, "Command, SQL or code for the current terminal", "当前终端执行的命令、SQL 或代码")},
 					"needs_confirmation": map[string]any{"type":"boolean", "description":aiPromptText(language, "Whether user approval is needed in review mode", "自动审查模式下，模型判断是否需要用户确认")},
 					"reason": map[string]any{"type":"string", "description":aiPromptText(language, "Command purpose or approval rationale", "执行目的或确认理由")},
 				},
@@ -441,7 +466,13 @@ func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToo
 	needsReview := call.Function.Name == "ssh_exec" || call.Function.Name == "sftp_write"
 	summary := args.Command
 	if summary == "" { summary = call.Function.Name + ": " + args.Path }
-	if mode == "review" && needsReview && args.NeedsConfirmation {
+	// Python source can have side effects even when it looks like an expression.
+	// In review mode always require approval before sending it to the current REPL.
+	mustConfirm := args.NeedsConfirmation
+	if terminalLease != nil && terminalLease.Program() == "python" && call.Function.Name == "ssh_exec" {
+		mustConfirm = true
+	}
+	if mode == "review" && needsReview && mustConfirm {
 		approvalID := domain.NewID()
 		ch := make(chan bool, 1)
 		a.aiMu.Lock()
