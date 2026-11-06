@@ -149,3 +149,17 @@ func TestNativeAutoCommandBlocksInProgramAndAfterEditing(t *testing.T) {
 		t.Fatal("edited command must stay on legacy path")
 	}
 }
+
+func TestNativeAutoCommandDoesNotInterceptMySQLPrompt(t *testing.T) {
+	m, ref, input, events := nativeAutoTestManager(t, false, true)
+	c := m.connections[ref.TabID]
+	c.readiness.observe([]byte("Welcome to the MySQL monitor\r\nmysql> "))
+	c.readiness.mu.Lock()
+	c.readiness.lastOutput = time.Now().Add(-time.Second)
+	c.readiness.mu.Unlock()
+	if c.readiness.readyProgram() != "mysql" { t.Fatal("fixture was not recognized as MySQL") }
+	nativeAutoType(t, m, ref, "rz\r")
+	if input.String() != "rz\r" || len(events) != 0 {
+		t.Fatalf("MySQL command was incorrectly treated as shell ZMODEM: %q", input.String())
+	}
+}
