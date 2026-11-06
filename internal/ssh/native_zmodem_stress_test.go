@@ -31,8 +31,15 @@ func TestNativeZmodemStressInteractivePTY(t *testing.T) {
  if os.Getenv("OPENSHELL_ZMODEM_STRESS") != "1" {
   t.Skip("opt-in Windows to Docker Linux SSH PTY stress suite")
  }
+ if runtime.GOOS != "windows" {
+  t.Skip("Windows-native stress evidence must run on Windows")
+ }
  if os.Getenv("OPENSHELL_ZMODEM_CROSS_OS_PTY") != "1" {
   t.Fatal("stress requires the isolated cross-OS SSH lab")
+ }
+ host, _, err := net.SplitHostPort(os.Getenv("OPENSHELL_ZMODEM_LIVE_SSH_ADDR"))
+ if err != nil || net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback() {
+  t.Fatal("stress requires an IP loopback-only Docker SSH target")
  }
  opts := readNativeStressOptions(t)
  report := &nativeStressReport{Version: 1, StartedAt: time.Now().UTC(), ClientOS: runtime.GOOS, Options: opts}
