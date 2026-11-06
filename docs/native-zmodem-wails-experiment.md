@@ -39,6 +39,8 @@ $env:OPENSHELL_NATIVE_ZMODEM_SIDECAR = (Resolve-Path "experiments/native-zmodem/
 - 正式发布前的安装版/便携包 sidecar 在 Windows 实机上的 GUI 联动验收及第三方依赖许可证复核。
 - 128 MiB 大文件、真实公网高丢包、持续多轮长测、边缘 Shell 兼容性。
 
+Windows GUI 实机验收矩阵与记录门槛参见 [native-zmodem-gui-acceptance.md](native-zmodem-gui-acceptance.md)。CI 无法代替真实 WebView2、Win32 文件选择器和交互式 SSH 的人工验收。
+
 ## 开发和回归
 
 - 核心协调：`internal/ssh/native_zmodem_terminal_lifecycle.go` + `native_zmodem_terminal_coordinator.go`。

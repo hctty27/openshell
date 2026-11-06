@@ -32,6 +32,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   actions.readiness.mockResolvedValue({ ready: true, code: "ready", message: "ok" });
   actions.start.mockResolvedValue(undefined);
+  actions.cancel.mockResolvedValue(undefined);
   actions.progressCallback = null;
 });
 afterEach(cleanup);
@@ -140,4 +141,81 @@ test("native transfer failure reaches error channel without showing success", as
   expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
   expect(screen.queryByText("原生 ZMODEM 文件传输完成")).toBeNull();
   expect(screen.getByRole("alert").textContent).toContain("mock transfer rejected");
+});
+
+test("failed transfer cannot retry while terminal readiness is still being checked", async () => {
+  let resolveReadiness!: (status: { ready: boolean; code: string; message: string }) => void;
+  actions.readiness.mockResolvedValueOnce({ ready: true, code: "ready", message: "ok" });
+  actions.readiness.mockImplementationOnce(() => new Promise(resolve => { resolveReadiness = resolve; }));
+  actions.start.mockRejectedValueOnce(new Error("模拟断线"));
+
+  const { onError } = showDialog();
+  await waitFor(() => expect(actions.readiness).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
+  await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("checkbox"));
+  const start = screen.getByRole("button", { name: "开始实验传输" }) as HTMLButtonElement;
+  fireEvent.click(start);
+  await waitFor(() => expect(onError).toHaveBeenCalledOnce());
+  expect(start.disabled).toBe(true);
+  expect(actions.start).toHaveBeenCalledTimes(1);
+
+  resolveReadiness({ ready: false, code: "needs_reconnect", message: "需要重新连接 SSH" });
+  await waitFor(() => expect(screen.getByText("需要重新连接 SSH")).toBeTruthy());
+  expect(start.disabled).toBe(true);
+});
+
+test("a failed readiness refresh never re-enables a second PTY takeover", async () => {
+  actions.readiness.mockResolvedValueOnce({ ready: true, code: "ready", message: "ok" });
+  actions.readiness.mockRejectedValueOnce(new Error("连接状态查询失败"));
+  actions.start.mockRejectedValueOnce(new Error("传输失败"));
+  showDialog();
+  await waitFor(() => expect(actions.readiness).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
+  await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("checkbox"));
+  const start = screen.getByRole("button", { name: "开始实验传输" }) as HTMLButtonElement;
+  fireEvent.click(start);
+  await waitFor(() => expect(actions.readiness).toHaveBeenCalledTimes(2));
+  expect(start.disabled).toBe(true);
+  fireEvent.click(start);
+  expect(actions.start).toHaveBeenCalledTimes(1);
+});
+
+test("a rejected cancellation is not mistaken for a confirmed cancellation", async () => {
+  let finish!: () => void;
+  actions.start.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+  actions.cancel.mockRejectedValueOnce(new Error("取消请求未送达"));
+  showDialog();
+  await waitFor(() => expect(actions.readiness).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
+  await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  await waitFor(() => expect(actions.start).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
+  await waitFor(() => expect(screen.getByText(/取消请求未送达/)).toBeTruthy());
+  finish();
+  await waitFor(() => expect(screen.getByText("原生 ZMODEM 文件传输完成")).toBeTruthy());
+  expect(screen.queryByText(/已请求取消/)).toBeNull();
+});
+
+test("progress events from other terminals or directions never affect this dialog", async () => {
+  let finish!: () => void;
+  actions.start.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+  showDialog();
+  await waitFor(() => expect(actions.readiness).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
+  await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  await waitFor(() => expect(actions.progressCallback).not.toBeNull());
+  actions.progressCallback?.({ ref: { ...ref, tabId: "different" }, direction: "upload", processed: 42, total: 100 });
+  actions.progressCallback?.({ ref, direction: "download", processed: 72, total: 100 });
+  expect(screen.queryByText("42%")).toBeNull();
+  expect(screen.queryByText("72%")).toBeNull();
+  actions.progressCallback?.({ ref, direction: "upload", processed: 30, total: 100 });
+  await waitFor(() => expect(screen.getByText("30%")).toBeTruthy());
+  finish();
+  await waitFor(() => expect(screen.getByText("原生 ZMODEM 文件传输完成")).toBeTruthy());
 });

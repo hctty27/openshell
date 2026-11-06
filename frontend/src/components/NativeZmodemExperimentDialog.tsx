@@ -83,6 +83,9 @@ export default function NativeZmodemExperimentDialog({
   const start = async () => {
     if (running || !readiness?.ready || !acknowledged || !localPath.trim() ||
       (direction === "download" && !remotePath.trim())) return;
+    // A previous ready status is invalid as soon as a new PTY takeover starts.
+    // Keep retry disabled until the backend has checked the terminal again.
+    setReadiness(null);
     setRunning(true);
     setCancelling(false);
     cancelRequested.current = false;
@@ -105,7 +108,12 @@ export default function NativeZmodemExperimentDialog({
     } finally {
       setRunning(false);
       setCancelling(false);
-      void api.NativeZmodemInteractiveReadiness(refID).then(setReadiness).catch(() => {});
+      try {
+        setReadiness(await api.NativeZmodemInteractiveReadiness(refID));
+      } catch (reason) {
+        // Fail closed: an unverified terminal must not offer another takeover.
+        setError(current => current || errorText(reason));
+      }
     }
   };
 
@@ -116,6 +124,7 @@ export default function NativeZmodemExperimentDialog({
     try {
       await api.CancelNativeZmodemInteractiveTransfer(refID);
     } catch (reason) {
+      cancelRequested.current = false;
       setError(errorText(reason));
       setCancelling(false);
     }
