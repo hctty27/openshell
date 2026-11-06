@@ -74,6 +74,24 @@ fn receive_wire(
     }
 }
 
+// Reuse one source buffer across sequential ZMODEM block requests. A backward
+// retransmission only seeks if the remote peer requests an earlier offset.
+fn read_source_chunk(
+    file: &mut File,
+    offset: u64,
+    len: usize,
+    next_offset: &mut u64,
+    scratch: &mut Vec<u8>,
+) -> io::Result<()> {
+    if offset != *next_offset {
+        file.seek(SeekFrom::Start(offset))?;
+    }
+    scratch.resize(len, 0);
+    file.read_exact(scratch)?;
+    *next_offset = offset + len as u64;
+    Ok(())
+}
+
 fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::open(path)?;
     let size = file.metadata()?.len();
@@ -93,7 +111,10 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     report_progress(0, size, &mut progress_at, true);
     let rx = incoming_wire();
     let mut waiting = VecDeque::<u8>::new();
+    let mut wire_scratch = Vec::<u8>::with_capacity(2048);
     let mut output = io::stdout().lock();
+    let mut file_scratch = Vec::<u8>::new();
+    let mut next_file_offset = 0u64;
     let mut done_file = false;
     let mut finish_requested = false;
     let mut session_completed = false;
@@ -112,11 +133,9 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 if start >= size {
                     return Err("sender read outside source data".into());
                 }
-                file.seek(SeekFrom::Start(start))?;
                 let max = usize::try_from((size - start).min(max_len as u64))?;
-                let mut data = vec![0u8; max];
-                file.read_exact(&mut data)?;
-                sender.submit_file(&data)?;
+                read_source_chunk(&mut file, start, max, &mut next_file_offset, &mut file_scratch)?;
+                sender.submit_file(&file_scratch)?;
                 processed = processed.max(start + max as u64);
                 report_progress(processed, size, &mut progress_at, false);
             }
@@ -137,8 +156,9 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     return Ok(());
                 }
                 if receive_wire(&rx, &mut waiting)? {
-                    let input: Vec<u8> = waiting.iter().take(2048).copied().collect();
-                    let used = sender.submit_wire(&input)?;
+                    wire_scratch.clear();
+                    wire_scratch.extend(waiting.iter().take(2048).copied());
+                    let used = sender.submit_wire(&wire_scratch)?;
                     waiting.drain(..used);
                 }
             }
@@ -179,6 +199,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut receiver = Receiver::with_flow_control(0, true)?;
     let rx = incoming_wire();
     let mut waiting = VecDeque::<u8>::new();
+    let mut wire_scratch = Vec::<u8>::with_capacity(2048);
     let mut output = io::stdout().lock();
     let mut open_file: Option<(File, PathBuf, PathBuf, u64, Option<u32>)> = None;
     let mut completed = false;
@@ -196,7 +217,6 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 receiver.wire_written(count);
             }
             Action::WriteFile(data) => {
-                let data = data.to_vec();
                 let (file, _, _, bytes, max) = open_file.as_mut().ok_or("unexpected file data")?;
                 *bytes += data.len() as u64;
                 if *bytes > MAX_SIZE || max.is_some_and(|size| *bytes > u64::from(size)) {
@@ -252,8 +272,9 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     return Ok(());
                 }
                 if receive_wire(&rx, &mut waiting)? {
-                    let input: Vec<u8> = waiting.iter().take(2048).copied().collect();
-                    let used = receiver.submit_wire(&input)?;
+                    wire_scratch.clear();
+                    wire_scratch.extend(waiting.iter().take(2048).copied());
+                    let used = receiver.submit_wire(&wire_scratch)?;
                     waiting.drain(..used);
                 }
             }
@@ -281,7 +302,31 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::safe_name;
+    use super::{read_source_chunk, safe_name};
+    use std::fs::{self, OpenOptions};
+    use std::io::Write;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn source_chunks_reuse_storage_and_support_retransmission() {
+        let suffix = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("openshell-source-chunk-{}-{suffix}", std::process::id()));
+        let mut file = OpenOptions::new().read(true).write(true).create_new(true).open(&path).unwrap();
+        file.write_all(b"abcdefghijklmnopqrstuvwxyz").unwrap();
+        let mut buffer = Vec::with_capacity(8);
+        let mut next = 0u64;
+        read_source_chunk(&mut file, 0, 8, &mut next, &mut buffer).unwrap();
+        assert_eq!(&buffer, b"abcdefgh");
+        let pointer = buffer.as_ptr();
+        read_source_chunk(&mut file, 8, 8, &mut next, &mut buffer).unwrap();
+        assert_eq!(&buffer, b"ijklmnop");
+        assert_eq!(pointer, buffer.as_ptr(), "sequential blocks should reuse the allocation");
+        read_source_chunk(&mut file, 4, 8, &mut next, &mut buffer).unwrap();
+        assert_eq!(&buffer, b"efghijkl", "remote retransmission must seek correctly");
+        assert_eq!(next, 12);
+        drop(file);
+        fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn reject_traversal_device_names_and_separators() {
