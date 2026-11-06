@@ -39,6 +39,7 @@ func TestMySQLReadOnlyQuery(t *testing.T) {
 func TestAITerminalMySQLUsesCurrentPTYAndIgnoresEchoedMarker(t *testing.T) {
 	_,lease,input:=newAITestLease()
 	lease.program="mysql"
+	lease.connection.readiness.observe([]byte("Welcome to the MySQL monitor.\r\nmysql> "))
 	input.onWrite=func(p []byte){
 		source:=string(p)
 		if strings.Contains(source,"printf") || !strings.HasPrefix(source,"SHOW CREATE TABLE t_user\\G\r") {
@@ -133,6 +134,7 @@ func TestMySQLPromptOverridesStaleShellIntegrationMarker(t *testing.T) {
 func TestMySQLTerminalTimeoutInterruptsAndPreventsReuse(t *testing.T) {
 	_,lease,input:=newAITestLease()
 	lease.program="mysql"
+	lease.connection.readiness.observe([]byte("Welcome to the MySQL monitor.\r\nmysql> "))
 	ctx,cancel:=context.WithTimeout(context.Background(),20*time.Millisecond)
 	defer cancel()
 	if _,err:=lease.Run(ctx,"SELECT 1");err==nil { t.Fatal("expected timeout") }
@@ -148,6 +150,7 @@ func TestMySQLTerminalTimeoutInterruptsAndPreventsReuse(t *testing.T) {
 func TestMySQLRejectedQueryNeverTouchesPTY(t *testing.T) {
 	_,lease,input:=newAITestLease()
 	lease.program="mysql"
+	lease.connection.readiness.observe([]byte("Welcome to the MySQL monitor.\r\nmysql> "))
 	if _,err:=lease.Run(context.Background(),"DROP TABLE t_user");err==nil {
 		t.Fatal("DROP TABLE must be blocked")
 	}
