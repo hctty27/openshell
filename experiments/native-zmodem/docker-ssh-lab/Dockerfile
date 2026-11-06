@@ -12,7 +12,9 @@ RUN apt-get update \
 COPY sshd_config /etc/ssh/sshd_config
 COPY entrypoint.sh /usr/local/bin/openshell-zmodem-lab.sh
 
-RUN chmod 0755 /usr/local/bin/openshell-zmodem-lab.sh
+# Windows checkouts may contain CRLF; normalize before invoking /bin/sh.
+RUN sed -i 's/\r$//' /usr/local/bin/openshell-zmodem-lab.sh \
+    && chmod 0755 /usr/local/bin/openshell-zmodem-lab.sh
 
 EXPOSE 22
 
