@@ -85,8 +85,16 @@ jobs:
           set -euo pipefail
           cargo install cargo-cyclonedx --version 0.5.9 --locked
           cargo cyclonedx --manifest-path experiments/native-zmodem/Cargo.toml --format json --target x86_64-pc-windows-msvc --spec-version 1.5 --override-filename rust-zmodem.cdx.json
-          test -s experiments/native-zmodem/rust-zmodem.cdx.json
-          mv experiments/native-zmodem/rust-zmodem.cdx.json build/sbom/rust-zmodem.cdx.json
+          # cargo-cyclonedx may write relative to the current directory, not the manifest path.
+          # Locate its sole requested output instead of assuming a fixed location.
+          mapfile -t files < <(find . -maxdepth 4 -type f -name 'rust-zmodem*json' -print)
+          printf 'Rust SBOM candidates: %s\n' "${files[*]:-<none>}"
+          if [[ "${#files[@]}" -ne 1 || ! -s "${files[0]:-}" ]]; then
+            echo "::error::Expected exactly one nonempty Rust CycloneDX JSON file."
+            exit 1
+          fi
+          python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d.get("bomFormat") == "CycloneDX" and d.get("components"), "Invalid Rust SBOM"' "${files[0]}"
+          cp "${files[0]}" build/sbom/rust-zmodem.cdx.json
 
       - name: Validate the inventories and report unresolved licenses
         run: |
