@@ -44,6 +44,21 @@ class SBOMAuditTests(unittest.TestCase):
         )
         self.assertEqual(report["inventories"]["frontendAll"]["componentCount"], 2)
 
+    def test_includes_rust_dependencies_when_provided(self):
+        go = self.bom("go.json", [{"name": "go"}])
+        runtime = self.bom("runtime.json", [{"name": "react"}])
+        full = self.bom("all.json", [{"name": "react"}, {"name": "vite"}])
+        rust = self.bom("rust.json", [
+            {"name": "zmodem2", "version": "0.7.3", "licenses": [{"license": {"id": "MIT"}}]},
+            {"name": "unknown-rust-crate", "version": "1"},
+        ])
+        report = create_report(go, runtime, full, rust)
+        self.assertEqual(report["inventories"]["rustWindowsAmd64"]["componentCount"], 2)
+        self.assertEqual(
+            report["inventories"]["rustWindowsAmd64"]["missingLicenseMetadata"][0]["name"],
+            "unknown-rust-crate",
+        )
+
     def test_fails_when_components_are_empty(self):
         path = self.bom("empty.json", [])
         with self.assertRaisesRegex(ValueError, "no dependency components"):
