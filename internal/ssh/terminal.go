@@ -441,7 +441,8 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	wire := p
 	direction, remotePath := "", ""
 	if autoSidecar != "" {
-		ready := c.readiness.checkReady() == nil
+		// MySQL may also have a verified prompt; it is not a POSIX Shell.
+		ready := c.readiness.readyProgram() == "shell" && c.readiness.checkReady() == nil
 		wire, direction, remotePath = c.nativeAutoInput.prepare(p, ready)
 		if direction != "" {
 			// Never intercept Enter unless a real sidecar and the exact SSH
