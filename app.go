@@ -39,6 +39,7 @@ type App struct {
 	emit         sshclient.EmitFunc
 	quit         func()
 	pickDirectory func() (string, error)
+	pickNativeZmodemFile func() (string, error)
 	pickKey      func() (string, error)
 	pickImport func() (string, error)
 	pickBackupRead func() (string, error)
