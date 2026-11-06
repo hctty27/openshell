@@ -219,18 +219,9 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 // Do not wait for remote control input while frames are buffered.
                 output.flush_pending()?;
                 if session_completed {
-                    diag.completed = true;
                     return Ok(());
                 }
-                let started = if diag.enabled { Some(Instant::now()) } else { None };
-                let have_wire = receive_wire(&rx, &mut waiting)?;
-                if let Some(started) = started {
-                    let elapsed = started.elapsed().as_nanos();
-                    diag.idle_calls += 1;
-                    diag.wait_ns += elapsed;
-                    diag.wait_max_ns = diag.wait_max_ns.max(elapsed);
-                }
-                if have_wire {
+                if receive_wire(&rx, &mut waiting)? {
                     wire_scratch.clear();
                     wire_scratch.extend(waiting.iter().take(2048).copied());
                     let used = sender.submit_wire(&wire_scratch)?;
@@ -413,9 +404,18 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 // Always send pending acknowledgements before waiting.
                 output.flush_pending()?;
                 if session_completed {
+                    diag.completed = true;
                     return Ok(());
                 }
-                if receive_wire(&rx, &mut waiting)? {
+                let started = if diag.enabled { Some(Instant::now()) } else { None };
+                let have_wire = receive_wire(&rx, &mut waiting)?;
+                if let Some(started) = started {
+                    let elapsed = started.elapsed().as_nanos();
+                    diag.idle_calls += 1;
+                    diag.wait_ns += elapsed;
+                    diag.wait_max_ns = diag.wait_max_ns.max(elapsed);
+                }
+                if have_wire {
                     wire_scratch.clear();
                     wire_scratch.extend(waiting.iter().take(2048).copied());
                     let used = receiver.submit_wire(&wire_scratch)?;
