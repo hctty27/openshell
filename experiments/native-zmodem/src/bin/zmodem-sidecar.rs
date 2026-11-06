@@ -109,11 +109,23 @@ impl<W: Write> ExperimentalWireWriter<W> {
 
 // Diagnostics only: stdout remains exclusively binary ZMODEM protocol.
 // Upload progress is bytes read from the source, not proof of remote persistence.
-fn report_progress(processed: u64, total: u64, last: &mut Instant, force: bool) {
+fn report_progress(processed: u64, total: u64, last: &mut Instant, force: bool) -> bool {
     if force || last.elapsed() >= PROGRESS_INTERVAL {
         eprintln!("OSZP\t{processed}\t{total}");
         *last = Instant::now();
+        return true;
     }
+    false
+}
+
+fn report_file_start(index: usize, name: &str, size: Option<u64>) {
+    let hex_name = name.as_bytes().iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let advertised = size.map_or_else(|| "-1".to_owned(), |size| size.to_string());
+    eprintln!("OSZF\tstart\t{index}\t{advertised}\t{hex_name}");
+}
+
+fn report_file_bytes(kind: &str, index: usize, processed: u64) {
+    eprintln!("OSZF\t{kind}\t{index}\t{processed}");
 }
 
 
@@ -249,6 +261,7 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
     let mut activity = ActivityClock::new();
     report_progress(0, total, &mut progress_at, true);
+    report_file_start(0, &files[0].name, Some(files[0].size));
 
     while !activity.expired() {
         match sender.poll() {
@@ -269,11 +282,14 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
                 sender.submit_file(&file_scratch)?;
                 if max > 0 { activity.touch(); }
                 processed_in_file = processed_in_file.max(start + max as u64);
-                report_progress(completed_bytes + processed_in_file, total, &mut progress_at, false);
+                if report_progress(completed_bytes + processed_in_file, total, &mut progress_at, false) {
+                    report_file_bytes("progress", active_index, processed_in_file);
+                }
             }
             Action::Event(Event::FileCompleted) => {
                 output.flush_pending()?;
                 completed_bytes += files[active_index].size;
+                report_file_bytes("completed", active_index, files[active_index].size);
                 completed_files += 1;
                 report_progress(completed_bytes, total, &mut progress_at, true);
                 activity.touch();
@@ -311,6 +327,7 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
             let source = &files[active_index];
             match sender.start_file(FileInfo::new(source.name.as_bytes(), Some(Position::new(source.size as u32)))) {
                 Ok(()) => {
+                    report_file_start(active_index, &source.name, Some(source.size));
                     pending_next = false;
                     activity.touch();
                 }
@@ -443,7 +460,9 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 }
                 receiver.file_written(received)?;
                 if received > 0 { activity.touch(); }
-                report_progress(*bytes, received_total, &mut progress_at, false);
+                if report_progress(*bytes, received_total, &mut progress_at, false) {
+                    report_file_bytes("progress", completed_files, *bytes);
+                }
             }
             Action::Event(Event::FileStarted(info)) => {
                 // The sender can be waiting for an acknowledgement at this edge.
@@ -483,6 +502,7 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 let advertised = info.size.map(|size| size.get());
                 received_total = advertised.map_or(0, u64::from);
                 report_progress(0, received_total, &mut progress_at, true);
+                report_file_start(completed_files, &name, advertised.map(u64::from));
                 open_file = Some((file, temp, target, 0, advertised));
                 activity.touch();
             }
@@ -505,6 +525,7 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 fs::hard_link(&temp, &target)?;
                 fs::remove_file(&temp)?;
                 report_progress(size, received_total, &mut progress_at, true);
+                report_file_bytes("completed", completed_files, size);
                 completed_files += 1;
                 activity.touch();
             }
