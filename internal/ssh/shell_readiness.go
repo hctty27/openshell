@@ -83,8 +83,8 @@ func (r *terminalShellReadiness) observe(p []byte) {
 		r.prompt = false
 	}
 	// Database prompts require a different executor from the Shell marker protocol.
-	if !r.assetMenu && (mysqlPromptPattern.MatchString(visible) ||
-		(r.mysqlObserved && mysqlCustomPromptPattern.MatchString(visible))) {
+	if !r.assetMenu && r.mysqlObserved && (mysqlPromptPattern.MatchString(visible) ||
+		mysqlCustomPromptPattern.MatchString(visible)) {
 		r.program = "mysql"
 		r.prompt = true
 		r.manualInput = false
@@ -93,6 +93,7 @@ func (r *terminalShellReadiness) observe(p []byte) {
 			r.program = "shell"
 			r.prompt = true
 			r.manualInput = false
+			r.mysqlObserved = false
 		}
 		if r.assetMenu { r.assetMenu = false }
 	} else if r.program == "mysql" || (!r.integration && !r.assetMenu) {
