@@ -193,6 +193,23 @@ try {
         Write-Host "[stress] Windows native Rust vs real Linux PTY: $StressProfile"
         & go test -count=1 -timeout=60m -v ./internal/ssh -run '^TestNativeZmodemStressInteractivePTY$'
         if ($LASTEXITCODE -ne 0) { throw "Native ZMODEM stress failed; inspect partial JSON report: $reportFile" }
+        $report = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
+        $records = @($report.results)
+        if ($records.Count -eq 0) { throw "Stress report contains no transfer results: $reportFile" }
+        Write-Host "Native ZMODEM stress throughput summary (MiB/s):"
+        $records | Group-Object profile, protocol, direction | ForEach-Object {
+            $speeds = @($_.Group | Where-Object { $_.checksumOK })
+            $statistics = $speeds | Measure-Object -Property miBPerSecond -Average -Minimum -Maximum
+            [PSCustomObject]@{
+                Profile = $_.Group[0].profile
+                Protocol = $_.Group[0].protocol
+                Direction = $_.Group[0].direction
+                Passed = "$($speeds.Count)/$($_.Count)"
+                AvgMiBps = [math]::Round($statistics.Average, 2)
+                MinMiBps = [math]::Round($statistics.Minimum, 2)
+                MaxMiBps = [math]::Round($statistics.Maximum, 2)
+            }
+        } | Format-Table -AutoSize | Out-Host
         Write-Host "PASS: stress report written to $reportFile"
     }
 
