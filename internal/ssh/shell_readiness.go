@@ -158,7 +158,11 @@ func replLaunchFromShellEcho(line string) string {
 	for i := 0; i < len(line); i++ {
 		if line[i] != '#' && line[i] != '$' && line[i] != '%' { continue }
 		if !shellPromptPattern.MatchString(line[:i+1]) { continue }
-		return replLaunchCommand(strings.TrimSpace(line[i+1:]))
+		// Old trailing prompts may be joined with a freshly echoed command.
+		// Keep looking for the last valid prompt, not just the first '#'.
+		if launched := replLaunchCommand(strings.TrimSpace(line[i+1:])); launched != "" {
+			return launched
+		}
 	}
 	return ""
 }
