@@ -41,6 +41,7 @@ type AITerminalLease struct {
 type terminalAICommand struct {
     marker []byte
     mysql *mysqlAIState
+    repl *replAIState
     pending []byte
     output []byte
     truncated bool
@@ -187,6 +188,7 @@ func (lease *AITerminalLease) Run(ctx context.Context, command string) (string,e
         return "",errors.New("终端命令长度或内容无效")
     }
     if lease.program == "mysql" { return lease.runMySQL(ctx,command) }
+    if lease.program == "redis" || lease.program == "python" || lease.program == "psql" { return lease.runREPL(ctx,command) }
     if !lease.ready {
         probeCtx,cancel := context.WithTimeout(ctx,4*time.Second)
         _,err := lease.runMarker(probeCtx,"",true)
@@ -212,6 +214,10 @@ func (lease *AITerminalLease) Observe(p []byte) {
     if current == nil || current.finished {return}
     if current.mysql != nil {
         current.consumeMySQL(p)
+        return
+    }
+    if current.repl != nil {
+        current.consumeREPL(p)
         return
     }
     current.consume(p)
