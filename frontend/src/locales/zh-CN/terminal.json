@@ -89,7 +89,12 @@
   "nativeZmodemUploadDirectory": "上传文件将保存到远程 Shell 的当前工作目录，不会覆盖已有文件。",
   "nativeZmodemConfirm": "我理解这是实验功能，出错后需要重新连接 SSH 终端",
   "nativeZmodemStart": "开始实验传输",
-  "nativeZmodemRunning": "原生 ZMODEM 正在传输，请勿在该终端输入命令。当前版本暂不提供传输百分比。",
+  "nativeZmodemRunning": "原生 ZMODEM 正在传输，请勿在当前终端输入命令。",
   "nativeZmodemCancelling": "正在取消，终端需要重新连接…",
-  "nativeZmodemCompleted": "原生 ZMODEM 文件传输完成"
+  "nativeZmodemCompleted": "原生 ZMODEM 文件传输完成",
+  "nativeZmodemProgress": "传输处理进度",
+  "nativeZmodemProgressHint": "显示已处理的文件字节，只有远端确认结束后才算传输成功。",
+  "nativeZmodemETA": "预计剩余 {{seconds}} 秒",
+  "nativeZmodemDone": "完成",
+  "nativeZmodemCancelUnconfirmed": "已请求取消，传输结果未确认，请重新连接 SSH 终端。"
 }

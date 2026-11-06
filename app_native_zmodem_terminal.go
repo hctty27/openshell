@@ -49,8 +49,13 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	if status := a.NativeZmodemInteractiveReadiness(ref); !status.Ready {
 		return errors.New(status.Message)
 	}
-	return a.ssh.RunExperimentalNativeTerminalTransfer(
+	return a.ssh.RunExperimentalNativeTerminalTransferWithProgress(
 		a.ctx, ref, nativeZmodemDesktopSidecarPath(), direction, localPath, remotePath,
+		func(processed, total uint64) {
+			a.emit("ssh:native-zmodem-progress", map[string]any{
+				"ref": ref, "direction": direction, "processed": processed, "total": total,
+			})
+		},
 	)
 }
 

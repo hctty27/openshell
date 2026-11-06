@@ -141,3 +141,35 @@
 }
 .native-zmodem-dialog__hint { font-size: 11px; color: var(--text-secondary); margin: 0; }
 .native-zmodem-dialog__acknowledge { margin-top: 4px; }
+
+.native-zmodem-dialog__progress,
+.native-zmodem-dialog__success {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px 12px;
+  font-size: 12px;
+  background: var(--field-bg);
+}
+.native-zmodem-dialog__progress-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.native-zmodem-dialog__progress progress {
+  width: 100%;
+  height: 7px;
+  accent-color: var(--accent);
+}
+.native-zmodem-dialog__progress-details {
+  font-variant-numeric: tabular-nums;
+}
+.native-zmodem-dialog__progress small,
+.native-zmodem-dialog__success small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.native-zmodem-dialog__success { border-color: var(--accent); }

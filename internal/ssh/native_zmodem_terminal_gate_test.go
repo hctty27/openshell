@@ -188,3 +188,38 @@ func TestNativeZmodemTerminalGateCloseRejectsAllWrites(t *testing.T) {
 		t.Fatalf("closed terminal allowed restore: %v", err)
 	}
 }
+
+// The command echo and shell chatter before the remote ZMODEM header are
+// experiment-private. Normal terminal output resumes only after verified restore.
+func TestNativeZmodemTerminalGateQuietPreludeAcrossChunks(t *testing.T) {
+	var legacy, native bytes.Buffer
+	gate := newTerminalOutputGate(&legacy)
+	lease, err := gate.armOnZmodemHeaderQuiet(&native)
+	if err != nil { t.Fatal(err) }
+	header := nativeZmodemHeaderTestStream()
+	for _, chunk := range [][]byte{
+		[]byte("{ rz -q; __openshell_native_zmodem_rc=$?; printf '...\\r\\n"),
+		[]byte("shell echo\\r\\n"),
+		header[:6],
+		header[6:],
+		[]byte("native-payload"),
+	} {
+		if _, err := gate.Write(chunk); err != nil { t.Fatal(err) }
+	}
+	if legacy.Len() != 0 { t.Fatalf("experimental command echo leaked: %q", legacy.String()) }
+	if got := native.Bytes(); !bytes.Equal(got, append(append([]byte(nil), header...), []byte("native-payload")...)) {
+		t.Fatalf("native bytes corrupted: %x", got)
+	}
+	if err := gate.restoreWithReplay(lease, func() []byte { return []byte("shell restored") }); err != nil { t.Fatal(err) }
+	if _, err := gate.Write([]byte(" prompt")); err != nil { t.Fatal(err) }
+	if got := legacy.String(); got != "shell restored prompt" { t.Fatalf("normal output not restored: %q", got) }
+}
+
+func TestNativeZmodemTerminalGateNormalPreludeStillVisible(t *testing.T) {
+	var legacy, native bytes.Buffer
+	gate := newTerminalOutputGate(&legacy)
+	_, err := gate.armOnZmodemHeader(&native)
+	if err != nil { t.Fatal(err) }
+	if _, err := gate.Write([]byte("visible shell output")); err != nil { t.Fatal(err) }
+	if got := legacy.String(); got != "visible shell output" { t.Fatalf("default routing changed: %q", got) }
+}

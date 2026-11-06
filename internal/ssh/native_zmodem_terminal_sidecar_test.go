@@ -123,3 +123,23 @@ func TestNativeZmodemTerminalProtocolWriterRequiresCurrentInputLease(t *testing.
 		t.Fatalf("unleased protocol bytes reached SSH PTY: %x", remote.Bytes())
 	}
 }
+
+func TestNativeZmodemProgressDiagnosticsStayIsolated(t *testing.T) {
+    var values [][2]uint64
+    log := &nativeZmodemLog{}
+    writer := &nativeTerminalProgressLog{
+        log: log,
+        onProgress: func(done, total uint64) {
+            values = append(values, [2]uint64{done, total})
+        },
+    }
+    for _, part := range []string{"OSZP\t12", "8\t256\n", "failure details\n", "OSZP\t256\t256\n"} {
+        if _, err := writer.Write([]byte(part)); err != nil { t.Fatal(err) }
+    }
+    if len(values) != 2 || values[0] != [2]uint64{128, 256} || values[1] != [2]uint64{256, 256} {
+        t.Fatalf("wrong progress frames: %+v", values)
+    }
+    if got := log.String(); !strings.Contains(got, "failure details") || strings.Contains(got, "OSZP") {
+        t.Fatalf("telemetry contaminated diagnostics: %q", got)
+    }
+}

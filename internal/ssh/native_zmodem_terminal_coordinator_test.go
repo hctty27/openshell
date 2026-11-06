@@ -107,7 +107,7 @@ func TestNativeZmodemInteractiveCoordinatorUploadHandoffAndRecovery(t *testing.T
 	case <-time.After(3*time.Second):
 		t.Fatal("sidecar never received full frame")
 	}
-	if legacy.String() != "shell>" { t.Fatalf("binary bytes leaked into legacy: %q", legacy.String()) }
+	if legacy.Len() != 0 { t.Fatalf("experimental shell echo leaked into legacy: %q", legacy.String()) }
 	select {
 	case err := <-done:
 		t.Fatalf("restored terminal without verified remote boundary: %v", err)
@@ -122,7 +122,7 @@ func TestNativeZmodemInteractiveCoordinatorUploadHandoffAndRecovery(t *testing.T
 	}
 	if _, err := input.Write([]byte("normal")); err != nil { t.Fatal(err) }
 	if _, err := output.Write([]byte("prompt")); err != nil { t.Fatal(err) }
-	if got := legacy.String(); got != "shell>shell-readyprompt" {
+	if got := legacy.String(); got != "shell-readyprompt" {
 		t.Fatalf("legacy output not restored: %q", got)
 	}
 }

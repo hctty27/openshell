@@ -1775,7 +1775,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           refID={nativeZmodemDialog.ref}
           sessionName={nativeZmodemDialog.sessionName}
           onDismiss={() => setNativeZmodemDialog(null)}
-          onNotice={notify}
+          onError={notify}
         />
       )}
       <ZmodemFilePicker activeRef={active?.ref ?? undefined} onNotice={notify}

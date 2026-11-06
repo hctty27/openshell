@@ -89,7 +89,12 @@
   "nativeZmodemUploadDirectory": "Uploads are saved in the remote shell's current working directory. Existing files are not overwritten.",
   "nativeZmodemConfirm": "I understand this is experimental and any failure requires reconnecting the SSH terminal",
   "nativeZmodemStart": "Start experimental transfer",
-  "nativeZmodemRunning": "Native ZMODEM transfer in progress. Do not type into this terminal. Percentage progress is not available yet.",
+  "nativeZmodemRunning": "Native ZMODEM is transferring. Do not type into this terminal.",
   "nativeZmodemCancelling": "Cancelling; terminal reconnect required…",
-  "nativeZmodemCompleted": "Native ZMODEM file transfer completed"
+  "nativeZmodemCompleted": "Native ZMODEM file transfer completed",
+  "nativeZmodemProgress": "Transfer processing progress",
+  "nativeZmodemProgressHint": "Processed file bytes; success is only confirmed after the remote command exits.",
+  "nativeZmodemETA": "{{seconds}} s remaining",
+  "nativeZmodemDone": "Done",
+  "nativeZmodemCancelUnconfirmed": "Cancellation requested; outcome is unconfirmed. Reconnect the SSH terminal."
 }
