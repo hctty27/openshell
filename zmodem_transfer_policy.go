@@ -21,8 +21,12 @@ func resolveZmodemTransferMode(raw string) string {
 	}
 }
 
-func (a *App) nativeZmodemPreferred() bool {
+func (a *App) currentZmodemTransferMode() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.zmodemTransferMode == zmodemModeNative
+	return a.zmodemTransferMode
+}
+
+func (a *App) nativeZmodemPreferred() bool {
+	return a.currentZmodemTransferMode() == zmodemModeNative
 }
