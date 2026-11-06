@@ -18,22 +18,27 @@ const SESSION_TIMEOUT: Duration = Duration::from_secs(90);
 const READ_TIMEOUT: Duration = Duration::from_millis(150);
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
 const MAX_EXPERIMENT_BATCH: usize = 32 * 1024;
+const DEFAULT_EXPERIMENT_BATCH: usize = 16 * 1024;
 
-// Explicitly opt-in, inherited only by the local experimental sidecar.
-// Zero preserves the existing write_all + flush for each protocol frame.
+// The native sidecar remains explicitly experimental. The batching strategy
+// defaults to 16 KiB only when this sidecar is invoked; it never enables native
+// rz/sz takeover in the application. An explicit zero restores per-frame flush.
+fn parse_wire_batch_bytes(raw: Option<&str>) -> io::Result<usize> {
+    let Some(raw) = raw else { return Ok(DEFAULT_EXPERIMENT_BATCH) };
+    let bytes = raw.parse::<usize>().map_err(|_| {
+        io::Error::new(io::ErrorKind::InvalidInput, "invalid wire batch size")
+    })?;
+    if bytes != 0 && (bytes < 1024 || bytes > MAX_EXPERIMENT_BATCH) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "wire batch size must be 0 or 1024..32768 bytes"));
+    }
+    Ok(bytes)
+}
+
 fn experimental_wire_batch_bytes() -> io::Result<usize> {
     match env::var("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES") {
-        Err(env::VarError::NotPresent) => Ok(0),
+        Err(env::VarError::NotPresent) => parse_wire_batch_bytes(None),
         Err(err) => Err(io::Error::new(io::ErrorKind::InvalidInput, err)),
-        Ok(raw) => {
-            let bytes = raw.parse::<usize>().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidInput, "invalid wire batch size")
-            })?;
-            if bytes != 0 && (bytes < 1024 || bytes > MAX_EXPERIMENT_BATCH) {
-                return Err(io::Error::new(io::ErrorKind::InvalidInput, "wire batch size must be 0 or 1024..32768 bytes"));
-            }
-            Ok(bytes)
-        }
+        Ok(raw) => parse_wire_batch_bytes(Some(&raw)),
     }
 }
 
@@ -446,7 +451,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_source_chunk, safe_name, ExperimentalWireWriter};
+    use super::{parse_wire_batch_bytes, read_source_chunk, safe_name, ExperimentalWireWriter};
     use std::fs::{self, OpenOptions};
     use std::io::{Seek, SeekFrom, Write};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -473,6 +478,17 @@ mod tests {
         fs::remove_file(path).unwrap();
     }
 
+
+    #[test]
+    fn native_experiment_defaults_to_16_kib_and_allows_zero_fallback() {
+        assert_eq!(parse_wire_batch_bytes(None).unwrap(), 16 * 1024);
+        assert_eq!(parse_wire_batch_bytes(Some("0")).unwrap(), 0);
+        assert_eq!(parse_wire_batch_bytes(Some("16384")).unwrap(), 16 * 1024);
+        assert_eq!(parse_wire_batch_bytes(Some("32768")).unwrap(), 32 * 1024);
+        for invalid in ["", "-1", "1", "999", "32769", "invalid"] {
+            assert!(parse_wire_batch_bytes(Some(invalid)).is_err());
+        }
+    }
 
     #[test]
     fn default_wire_writer_flushes_every_frame_without_changes() {
