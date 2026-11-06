@@ -118,7 +118,7 @@ Reconnect to apply the change. Each new prompt reports the current directory; op
 
 ### ZMODEM: `rz` / `sz`
 
-Run `rz` on the remote host to choose local files to upload, or `sz /path/to/file` to choose a local destination for downloads. The remote host must have `lrzsz` installed. Official Windows packages include headless `rz.exe` / `sz.exe` launchers, with unmodified lrzsz binaries and `msys-2.0.dll` in `zmodem/native/`, as well as the original source and license notices. No Windows PATH setup is needed; the bundled launchers avoid opening an extra console window.
+Run `rz` on the remote host to choose local files to upload, or `sz /path/to/file` to choose a local destination for downloads. The remote host must have `lrzsz` installed. Official Windows installer and portable packages use **native Rust ZMODEM**: `zmodem/native/zmodem-sidecar.exe` is the sole local Windows ZMODEM engine. `zmodem/rz.exe` and `sz.exe` are first-party GUI-subsystem launchers that forward the protocol stream to Rust. No `lrzsz-win32` binaries or `msys-2.0.dll` are bundled; remote Linux hosts still require `lrzsz`. No Windows PATH setup or additional console window is needed.
 
 OpenShell's compact embedded picker handles local file and destination selection without opening Windows Explorer. Progress appears in a non-modal transfer center in the workspace header; switch tabs freely while transfers continue, or cancel through the transfer center or Ctrl+C. The bundled launcher avoids a separate CMD window. Downloads use the `rz -E` rename strategy for existing filenames. Protocol payloads are filtered before terminal history and AI context. ZMODEM can be unreliable inside tmux/screen; use SFTP for directories and resumable transfers.
 
@@ -169,7 +169,7 @@ wails3 generate syso -manifest build/windows/wails.exe.manifest -icon build/wind
 go build -tags production -trimpath -ldflags="-H windowsgui -s -w" -o build/bin/OpenShell.exe .
 ```
 
-Output: `build/bin/OpenShell.exe`. Ensure `build/windows/icon.ico` has been generated before building. This build does not package the ZMODEM helpers. For the bundled utilities, run [scripts/prepare_zmodem_windows.ps1](scripts/prepare_zmodem_windows.ps1) in PowerShell after building. The [Windows release workflow](.github/workflows/windows-release.yml) contains the full icon-generation, installer, and portable-package steps.
+Output: `build/bin/OpenShell.exe`. Ensure `build/windows/icon.ico` has been generated before building. This build does not package the ZMODEM helpers. For the bundled utilities, run [scripts/prepare_native_zmodem_windows.ps1](scripts/prepare_native_zmodem_windows.ps1) in PowerShell after building. The [Windows release workflow](.github/workflows/windows-release.yml) contains the full icon-generation, installer, and portable-package steps.
 
 <details>
 <summary>Validation and release workflow</summary>
@@ -211,7 +211,7 @@ Bug reports and focused pull requests are welcome. Include the OpenShell version
 
 ## License and code signing
 
-OpenShell is licensed under the **[MIT License](LICENSE)**. Bundled third-party components retain their own licenses; Windows ZMODEM utilities include GPL notices and corresponding source archives.
+OpenShell is licensed under the **[MIT License](LICENSE)**. Bundled third-party components retain their own licenses; The Windows ZMODEM distribution includes only first-party launchers and the native Rust sidecar, not legacy lrzsz/MSYS2 binaries. Go, Rust and npm dependencies retain their respective third-party licenses; see the [SBOM](docs/sbom.md).
 
 Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). This is the intended provider attribution **if the application is approved and signing is enabled**. The published v1.0.0 Windows downloads are unsigned; no acceptance or signature is being claimed.
 
