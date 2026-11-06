@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -17,8 +16,9 @@ import (
 )
 
 const (
-	nativeZmodemMaxFileSize = 128 << 20
-	nativeZmodemTransferTimeout = 90 * time.Second
+	// Legacy ZMODEM transports use 32-bit positions; stay below 2 GiB for
+	// compatibility with older and 32-bit lrzsz peers.
+	nativeZmodemMaxFileSize = (2 << 30) - 1
 )
 
 type NativeZmodemRequest struct {
@@ -69,7 +69,7 @@ func (n *NativeZmodemManager) Run(ctx context.Context, req NativeZmodemRequest) 
 	client, err := n.ssh.nativeZmodemClient(req.Ref)
 	if err != nil { return err }
 
-	transferCtx, cancel := context.WithTimeout(ctx, nativeZmodemTransferTimeout)
+	transferCtx, cancel, _ := newNativeZmodemIdleContext(ctx, nativeZmodemTransferIdleTimeout)
 	task := &nativeZmodemTask{ref: req.Ref, cancel: cancel}
 	n.mu.Lock()
 	if n.closed {
@@ -101,11 +101,16 @@ func (n *NativeZmodemManager) Run(ctx context.Context, req NativeZmodemRequest) 
 		stage, stageErr := os.MkdirTemp(path, ".openshell-zmodem-native-")
 		if stageErr != nil { return stageErr }
 		defer os.RemoveAll(stage)
-		if err = n.transport(transferCtx, client, n.sidecar, direction, stage, command); err != nil { return err }
-		if err = transferCtx.Err(); err != nil { return err }
+		if err = n.transport(transferCtx, client, n.sidecar, direction, stage, command); err != nil {
+			if cause := nativeZmodemContextError(transferCtx); cause != nil { return cause }
+			return err
+		}
+		if err = nativeZmodemContextError(transferCtx); err != nil { return err }
 		return nativeZmodemPublish(stage, path)
 	}
-	return n.transport(transferCtx, client, n.sidecar, direction, path, command)
+	err = n.transport(transferCtx, client, n.sidecar, direction, path, command)
+	if cause := nativeZmodemContextError(transferCtx); cause != nil { return cause }
+	return err
 }
 
 func (m *Manager) nativeZmodemClient(ref domain.ConnectionRef) (*ssh.Client, error) {
@@ -173,7 +178,7 @@ func nativeZmodemLocalPath(direction, localPath string) (string, error) {
 	switch direction {
 	case "upload":
 		if !info.Mode().IsRegular() { return "", errors.New("上传仅支持普通文件") }
-		if info.Size() > nativeZmodemMaxFileSize { return "", errors.New("实验最大支持 128 MiB 文件") }
+		if info.Size() > nativeZmodemMaxFileSize { return "", errors.New("原生 ZMODEM 单文件最大支持 2 GiB 以下") }
 		if !utf8.ValidString(filepath.Base(absolute)) { return "", errors.New("文件名必须是 UTF-8") }
 	case "download":
 		if !info.IsDir() { return "", errors.New("下载目标必须是目录") }
