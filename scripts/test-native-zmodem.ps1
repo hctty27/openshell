@@ -30,6 +30,11 @@ param(
     [ValidateRange(1, 10)]
     [int]$StressMatrixRounds = 5,
 
+    [switch]$StressLargeAB,
+
+    [ValidateRange(1, 10)]
+    [int]$StressLargeABRounds = 5,
+
     [switch]$SkipBaseline
 )
 
