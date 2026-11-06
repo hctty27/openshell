@@ -35,6 +35,11 @@ param(
     [ValidateRange(1, 10)]
     [int]$StressLargeABRounds = 5,
 
+    [switch]$StressGiB,
+
+    [ValidateSet(256, 512, 1024)]
+    [int]$StressGiBMiB = 1024,
+
     [switch]$StressNetemAB,
 
     [ValidateRange(1, 5)]
@@ -406,6 +411,136 @@ try {
                 allChecksumsOK |
             Format-Table -AutoSize | Out-Host
         Write-Host "PASS: large A/B report written to $largeFile"
+    }
+
+    if ($StressGiB) {
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_GIB", "1", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_GIB_SIZE_MIB", "$StressGiBMiB", "Process")
+        Write-Host "[large native] $StressGiBMiB MiB upload + download with SHA-256; requires several GiB free local and Docker storage"
+        Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemGiBInteractivePTY
+            $StressReportDir = Join-Path $repoRoot 'tmp/native-zmodem-stress'
+        }
+        $netemDir = [IO.Path]::GetFullPath($StressReportDir)
+        [void][IO.Directory]::CreateDirectory($netemDir)
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_AB", "1", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_CONTAINER", $container, "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_ROUNDS", "$StressNetemRounds", "Process")
+        foreach ($netemProfile in @("clean", "jitter", "loss")) {
+            if ($netemProfile -eq "jitter") {
+                & docker exec $container tc qdisc replace dev eth0 root netem delay 20ms 8ms distribution normal
+                if ($LASTEXITCODE -ne 0) { throw "Failed to apply netem jitter on isolated eth0" }
+            }
+            elseif ($netemProfile -eq "loss") {
+                & docker exec $container tc qdisc replace dev eth0 root netem delay 20ms 8ms loss "${StressNetemLossPercent}%"
+                if ($LASTEXITCODE -ne 0) { throw "Failed to apply netem loss on isolated eth0" }
+            }
+            $qdisc = @(& docker exec $container tc qdisc show dev eth0)
+            if ($LASTEXITCODE -ne 0 -or $qdisc.Count -eq 0) {
+                throw "Could not inspect Docker eth0 qdisc"
+            }
+            $actualQdisc = ($qdisc -join " ").Trim()
+            if ($netemProfile -eq "clean" -and $actualQdisc -match 'netem') {
+                throw "Clean profile unexpectedly has an active netem qdisc"
+            }
+            if ($netemProfile -ne "clean" -and $actualQdisc -notmatch 'netem') {
+                throw "Netem profile was not actually installed on Docker eth0"
+            }
+            [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_PROFILE", $netemProfile, "Process")
+            [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_QDISC", $actualQdisc, "Process")
+            $netemFile = Join-Path $netemDir "native-zmodem-netem-$netemProfile-$(Get-Date -Format 'yyyyMMdd-HHmmss')-$unique.json"
+            [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_REPORT", $netemFile, "Process")
+            Write-Host "[netem] $netemProfile; qdisc=$actualQdisc; 0/16 KiB x $StressNetemRounds rounds"
+            Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemNetemABInteractivePTY$' -Name "netem-$netemProfile" -LogDirectory $diagnosticsDir -Timeout '60m'
+            if (-not (Test-Path -LiteralPath $netemFile -PathType Leaf)) {
+                throw "Netem report missing: $netemFile"
+            }
+            $netemReport = Get-Content -LiteralPath $netemFile -Raw | ConvertFrom-Json
+            if ($netemProfile -ne "clean" -and -not $netemReport.qdiscStats.countersAvailable) {
+                throw "Netem egress packet/drop counters missing: $netemFile"
+            }
+            if ($netemReport.qdiscStats.countersAvailable) {
+                Write-Host "[netem] Actual egress sent=$($netemReport.qdiscStats.sentPackets), dropped=$($netemReport.qdiscStats.droppedPackets)"
+                if ($netemProfile -eq "loss" -and -not $netemReport.qdiscStats.observedDrops) {
+                    Write-Warning "Loss configured, but no actual dropped packets observed; do not claim loss was exercised."
+                }
+            }
+            $netemCases = @($netemReport.cases)
+            if ($netemCases.Count -ne 2 * $StressNetemRounds) {
+                throw "Incomplete netem A/B: $($netemCases.Count) cases; $netemFile"
+            }
+            foreach ($sample in $netemCases) {
+                if ($sample.error -or @($sample.results).Count -ne 4 -or
+                    @($sample.results | Where-Object { -not $_.checksumOK -or $_.error }).Count -ne 0) {
+                    throw "Failed netem A/B or SHA-256 mismatch: $netemFile"
+                }
+            }
+            $netemReport.summaries |
+                Where-Object { $_.protocol -eq 'native' } |
+                Select-Object wireBatchKiB, direction, count,
+                    @{Name='MedianMiBps';Expression={[math]::Round($_.medianMiBPerSecond, 3)}},
+                    @{Name='P95ms';Expression={$_.p95DurationMs}},
+                    allChecksumsOK |
+                Format-Table -AutoSize | Out-Host
+            Write-Host "PASS: netem report written to $netemFile"
+            if ($StressNetemFaults -and $netemProfile -ne "clean") {
+                $savedBatch = [Environment]::GetEnvironmentVariable("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES", "Process")
+                try {
+                    [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES", "16384", "Process")
+                    Write-Host "[netem] ${netemProfile}: interrupt, timeout and disconnect at 16 KiB"
+                    Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemLiveInterruptedInteractivePTY$' -Name "netem-faults-$netemProfile" -LogDirectory $diagnosticsDir -Timeout '20m'
+                }
+                finally {
+                    [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES", $savedBatch, "Process")
+                }
+            }
+        }
+    }
+
+    Write-Host "PASS: native Windows sidecar and real Linux OpenSSH/SFTP ZMODEM tests"
+}
+catch {
+    $originalError = $_
+    if ($containerAttempted) {
+        Write-Warning "Docker Linux SSH fixture diagnostics:"
+        try {
+            & docker inspect --format '{{.State.Status}} | {{.State.ExitCode}} | {{.State.Error}}' $container 2>&1 | Out-Host
+        }
+        catch {
+            Write-Warning "Docker inspect unavailable: $($_.Exception.Message)"
+        }
+        try {
+            & docker logs $container 2>&1 | Out-Host
+        }
+        catch {
+            Write-Warning "Docker logs unavailable: $($_.Exception.Message)"
+        }
+    }
+    throw $originalError
+}
+finally {
+    if ($containerAttempted) {
+        try {
+            & docker rm --force $container 2>$null | Out-Null
+            if ($started -and $LASTEXITCODE -ne 0) {
+                Write-Warning "Could not automatically remove test container: $container"
+            }
+        }
+        catch {
+            if ($started) {
+                Write-Warning "Could not automatically remove test container: $container ($($_.Exception.Message))"
+            }
+        }
+    }
+    foreach ($name in $variableNames) {
+        [Environment]::SetEnvironmentVariable($name, $previous[$name], "Process")
+    }
+    if (Test-Path -LiteralPath $tempDir) {
+        Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Pop-Location
+}
+ -Name "gib-$StressGiBMiB" -LogDirectory $diagnosticsDir -Timeout '120m'
+        Write-Host "PASS: $StressGiBMiB MiB native upload/download test; detailed output: $diagnosticsDir"
     }
 
     if ($StressNetemAB) {
