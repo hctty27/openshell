@@ -23,6 +23,7 @@ func initREPLState(t *testing.T,r *terminalShellReadiness,launch,prompt,program 
 func TestREPLPromptTransitions(t *testing.T) {
 	cases:=[]struct{launch,prompt,program,continuation,next string}{
 		{"redis-cli","127.0.0.1:6379> ","redis","(empty)","127.0.0.1:6379[2]> "},
+		{"redis-cli","redis> ","redis","(empty)","redis> "},
 		{"redis-cli -h 192.0.2.1 -p 6380","192.0.2.1:6380> ","redis","(empty)","192.0.2.1:6380[2]> "},
 		{"python3 -q",">>> ","python","... ",">>> "},
 		{"sudo -u postgres psql","postgres=> ","psql","postgres-> ","postgres=*> "},
@@ -75,6 +76,7 @@ func TestREPLSourceValidation(t *testing.T) {
 		{"psql","\\d+ users",true},
 		{"psql","\\conninfo",true},
 		{"psql","\\! ls",false},
+		{"psql","\\dt \\! ls",false},
 		{"psql","DELETE FROM users",false},
 		{"psql","SELECT 1; DROP TABLE users;",false},
 		{"python","1+2",true},
