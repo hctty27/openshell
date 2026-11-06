@@ -339,6 +339,9 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 receiver.wire_written(count);
             }
             Action::WriteFile(data) => {
+                // Flush any pending acknowledgement before handling more data.
+                // lrzsz-win32 may stop sending until the control frame arrives.
+                output.flush_pending()?;
                 // poll() borrows receiver; copy into one reusable owned buffer
                 // before file_written() mutably borrows receiver again.
                 file_write_scratch.clear();
@@ -359,6 +362,8 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 report_progress(*bytes, received_total, &mut progress_at, false);
             }
             Action::Event(Event::FileStarted(info)) => {
+                // The sender can be waiting for an acknowledgement at this edge.
+                output.flush_pending()?;
                 if open_file.is_some() || completed {
                     return Err("prototype supports one file per session".into());
                 }
