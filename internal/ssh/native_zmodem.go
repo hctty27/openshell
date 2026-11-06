@@ -195,24 +195,83 @@ func nativeZmodemLocalPath(direction, localPath string) (string, error) {
 	return absolute, nil
 }
 
+// Publish only after every ZMODEM file and the remote shell boundary have
+// been confirmed. Link each verified file without overwriting existing files;
+// if any link fails, roll back the links created by this invocation.
 func nativeZmodemPublish(stage, destination string) error {
-	entries, err := os.ReadDir(stage)
-	if err != nil { return err }
-	if len(entries) != 1 { return fmt.Errorf("原生 ZMODEM 仅支持单文件，实际收到 %d 项", len(entries)) }
-	entry := entries[0]
-	name := entry.Name()
-	if name == "." || name == ".." || filepath.Base(name) != name || !utf8.ValidString(name) {
-		return errors.New("远程文件名无效")
-	}
-	source := filepath.Join(stage, name)
-	info, err := os.Lstat(source)
-	if err != nil { return err }
-	if !info.Mode().IsRegular() { return errors.New("接收对象不是普通文件") }
-	target := filepath.Join(destination, name)
-	// Hard link is atomic and fails when target already exists, unlike
-	// os.Rename on Unix. Staging and target are on the same filesystem.
-	if err := os.Link(source, target); err != nil {
-		return fmt.Errorf("无法安全保存文件（不允许覆盖已有文件）：%w", err)
-	}
-	return nil
+    entries, err := os.ReadDir(stage)
+    if err != nil { return err }
+    if len(entries) < 1 || len(entries) > 100 {
+        return fmt.Errorf("原生 ZMODEM 每次需要 1–100 个普通文件，实际收到 %d 项", len(entries))
+    }
+    type item struct{ source, target string }
+    checked := make([]item, 0, len(entries))
+    names := make(map[string]bool, len(entries))
+    for _, entry := range entries {
+        name := entry.Name()
+        if name == "." || name == ".." || filepath.Base(name) != name || !utf8.ValidString(name) {
+            return errors.New("远程文件名无效")
+        }
+        key := strings.ToLower(name)
+        if names[key] { return fmt.Errorf("批量文件名冲突：%s", name) }
+        names[key] = true
+        source := filepath.Join(stage, name)
+        info, err := os.Lstat(source)
+        if err != nil { return err }
+        if !info.Mode().IsRegular() { return errors.New("接收对象不是普通文件") }
+        target := filepath.Join(destination, name)
+        if _, err := os.Lstat(target); err == nil {
+            return fmt.Errorf("目标文件已存在，不允许覆盖：%s", name)
+        } else if !errors.Is(err, os.ErrNotExist) {
+            return err
+        }
+        checked = append(checked, item{source, target})
+    }
+    published := make([]string, 0, len(checked))
+    for _, file := range checked {
+        // Staging and target are siblings on the same filesystem.
+        if err := os.Link(file.source, file.target); err != nil {
+            for _, target := range published { _ = os.Remove(target) }
+            return fmt.Errorf("批量文件保存失败，已回滚（不允许覆盖）：%w", err)
+        }
+        published = append(published, file.target)
+    }
+    return nil
 }
+
+// Validate before acquiring the interactive PTY. The Rust sidecar rechecks
+// each source independently, preventing a stale/changed path from bypassing
+// its own filesystem and filename rules.
+func nativeZmodemUploadPaths(paths []string) ([]string, error) {
+    if len(paths) < 1 || len(paths) > 100 {
+        return nil, errors.New("原生 ZMODEM 每次支持 1–100 个上传文件")
+    }
+    clean := make([]string, 0, len(paths))
+    names := make(map[string]bool, len(paths))
+    for _, path := range paths {
+        if strings.ContainsRune(path, '\x00') { return nil, errors.New("文件路径包含非法 NUL 字符") }
+        absolute, err := nativeZmodemLocalPath("upload", path)
+        if err != nil { return nil, err }
+        name := strings.ToLower(filepath.Base(absolute))
+        if names[name] { return nil, fmt.Errorf("存在相同文件名，无法上传到同一目录：%s", name) }
+        names[name] = true
+        clean = append(clean, absolute)
+    }
+    return clean, nil
+}
+
+// Keep the existing one-path sidecar runner API. A protected NUL-separated
+// manifest avoids command-line quoting, command length limits and file copying.
+func nativeZmodemUploadManifest(paths []string) (path string, action string, cleanup func(), err error) {
+    if len(paths) == 1 { return paths[0], "send", func() {}, nil }
+    file, err := os.CreateTemp("", "openshell-native-zmodem-batch-*.list")
+    if err != nil { return "", "", nil, err }
+    cleanup = func() { _ = os.Remove(file.Name()) }
+    for _, path := range paths {
+        if _, err = file.Write(append([]byte(path), 0)); err != nil { break }
+    }
+    if closeErr := file.Close(); err == nil { err = closeErr }
+    if err != nil { cleanup(); return "", "", nil, err }
+    return file.Name(), "send-list", cleanup, nil
+}
+
