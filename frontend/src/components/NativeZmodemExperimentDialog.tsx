@@ -32,8 +32,8 @@ function fileName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 }
 
-// The backend owns the opt-in gate and PTY lease. This view never sends
-// shell commands, passes secrets, or changes the existing rz/sz default.
+// The backend owns platform policy and the PTY lease. This view never sends
+// shell commands or passes secrets; it is opened by a recognized rz/sz intent.
 export default function NativeZmodemExperimentDialog({
   refID, sessionName, initialDirection, initialRemotePath, onDismiss, onError,
 }: Props) {
