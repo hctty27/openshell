@@ -19,6 +19,7 @@ import {
   AlertCircle,
   Check,
   FolderOpen,
+  FileUp,
   Search,
   Columns2,
   Rows2,
@@ -51,6 +52,7 @@ import AISidebar from "./components/AISidebar";
 import { assignTerminalHistoryScopes } from "./features/ai/terminalScope";
 import WindowTitleBar from "./components/WindowTitleBar";
 import ZmodemFilePicker from "./components/ZmodemFilePicker";
+import NativeZmodemExperimentDialog from "./components/NativeZmodemExperimentDialog";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
 import { useTabActivity } from "./features/sessions/useTabActivity";
 import { useAutoReconnect } from "./features/sessions/useAutoReconnect";
@@ -164,6 +166,16 @@ function Workspace({ initialState }: { initialState: AppState }) {
         ? { ...tab, hasExecutedAction: true } : tab);
   };
   const { hasActiveTransfers } = useTransferActivity();
+  const [nativeZmodemEnabled, setNativeZmodemEnabled] = useState(false);
+  const [nativeZmodemDialog, setNativeZmodemDialog] = useState<{ ref: Ref; sessionName: string } | null>(null);
+  useEffect(() => {
+    if (!desktop) return;
+    let current = true;
+    void api.NativeZmodemExperimentEnabled().then(enabled => {
+      if (current) setNativeZmodemEnabled(enabled);
+    }).catch(() => {});
+    return () => { current = false; };
+  }, []);
   const [transferFocusRequest, setTransferFocusRequest] = useState<{ ref: Ref } | null>(null);
   useEffect(() => {
     const offFinished = listen("ssh:transfer-finished", (event: { ref: Ref }) => {
@@ -1240,6 +1252,16 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 >
                   <Search size={14} />
                 </button>
+                {nativeZmodemEnabled && active?.status === "connected" && active.ref && (
+                  <button type="button" className="workspace-panel-toggle"
+                    title={tr("terminal:nativeZmodemTitle")}
+                    aria-label={tr("terminal:nativeZmodemTitle")}
+                    onClick={() => setNativeZmodemDialog({
+                      ref: active.ref!, sessionName: active.session.name,
+                    })}>
+                    <FileUp size={14} />
+                  </button>
+                )}
                 <button
                   className="workspace-panel-toggle"
                   title={tr("ai:terminalAIButton")}
@@ -1746,6 +1768,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
               )}
             </footer>
         </ModalSurface>
+      )}
+      {nativeZmodemDialog && (
+        <NativeZmodemExperimentDialog
+          key={nativeZmodemDialog.ref.tabId + ":" + nativeZmodemDialog.ref.generation}
+          refID={nativeZmodemDialog.ref}
+          sessionName={nativeZmodemDialog.sessionName}
+          onDismiss={() => setNativeZmodemDialog(null)}
+          onNotice={notify}
+        />
       )}
       <ZmodemFilePicker activeRef={active?.ref ?? undefined} onNotice={notify}
         onClosed={ref => setTransferFocusRequest({ ref })} />
