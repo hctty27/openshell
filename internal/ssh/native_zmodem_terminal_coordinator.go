@@ -53,6 +53,7 @@ type nativeTerminalInboundSink struct {
 	fail      chan error
 	expected  byte
 	meter     *nativeZmodemIOMeter
+	activity func()
 	activated bool
 	finished  bool
 }
@@ -99,6 +100,7 @@ func (s *nativeTerminalInboundSink) Write(p []byte) (int, error) {
 	if s.meter != nil { started = time.Now() }
 	n, err := s.pipe.Write(p)
 	if s.meter != nil { s.meter.recordFromRemote(n, time.Since(started)) }
+	if n > 0 && s.activity != nil { s.activity() }
 	if err != nil {
 		s.mu.Lock()
 		finished := s.finished
@@ -140,6 +142,7 @@ type nativeTerminalOutboundBarrier struct {
 	input *terminalInputGate
 	lease uint64
 	meter *nativeZmodemIOMeter
+	activity func()
 }
 
 func (w *nativeTerminalOutboundBarrier) Write(p []byte) (int, error) {
@@ -154,10 +157,11 @@ func (w *nativeTerminalOutboundBarrier) Write(p []byte) (int, error) {
 	if err := w.ctx.Err(); err != nil {
 		return 0, err
 	}
-	if w.meter == nil { return w.input.writeNative(w.lease, p) }
-	started := time.Now()
+	started := time.Time{}
+	if w.meter != nil { started = time.Now() }
 	n, err := w.input.writeNative(w.lease, p)
-	w.meter.recordToRemote(n, time.Since(started))
+	if n > 0 && w.activity != nil { w.activity() }
+	if w.meter != nil { w.meter.recordToRemote(n, time.Since(started)) }
 	return n, err
 }
 
@@ -201,7 +205,7 @@ func (c *nativeTerminalCoordinator) run(
 		path = stage
 	}
 
-	ctx, cancel := context.WithTimeout(parent, nativeZmodemTransferTimeout)
+	ctx, cancel, activity := newNativeZmodemIdleContext(parent, nativeZmodemTransferIdleTimeout)
 	defer cancel()
 	inputLease, err := c.input.takeover()
 	if err != nil {
@@ -215,7 +219,7 @@ func (c *nativeTerminalCoordinator) run(
 		expected = '0' // remote sz starts with ZRQINIT
 	}
 	sink := &nativeTerminalInboundSink{
-		pipe: writer, ready: make(chan struct{}), fail: make(chan error, 1), expected: expected, meter: meter,
+		pipe: writer, ready: make(chan struct{}), fail: make(chan error, 1), expected: expected, meter: meter, activity: activity,
 	}
 	fence := newNativeRemoteBoundarySink(sink, token)
 	outputLease, err := c.output.armOnZmodemHeaderQuiet(fence)
@@ -229,7 +233,7 @@ func (c *nativeTerminalCoordinator) run(
 	// The child may write its initial handshake immediately; it is held
 	// until a matching *remote* start header has been captured in full.
 	outbound := &nativeTerminalOutboundBarrier{
-		ctx: ctx, ready: sink.ready, input: c.input, lease: inputLease, meter: meter,
+		ctx: ctx, ready: sink.ready, input: c.input, lease: inputLease, meter: meter, activity: activity,
 	}
 	sidecarDone := make(chan error, 1)
 	go func() {
@@ -247,6 +251,7 @@ func (c *nativeTerminalCoordinator) run(
 	// Start the remote command only after both ownership leases are held
 	// and the local sidecar reader has been launched.
 	n, err := c.input.writeNative(inputLease, []byte(command))
+	if n > 0 { activity() }
 	if err != nil || n != len(command) {
 		stopSidecar()
 		if err == nil {
@@ -266,11 +271,12 @@ func (c *nativeTerminalCoordinator) run(
 		return fmt.Errorf("原生 ZMODEM 启动或转发失败（需要重连终端）：%w", err)
 	case <-ctx.Done():
 		stopSidecar()
-		return fmt.Errorf("原生 ZMODEM 已取消或超时（需要重连终端）：%w", ctx.Err())
+		return fmt.Errorf("原生 ZMODEM 已取消或无活动超时（需要重连终端）：%w", nativeZmodemContextError(ctx))
 	}
 	observeNativeZmodemStage(parent, "protocol", protocolStarted)
 	sink.finish(reader)
 	if err != nil {
+		if cause := nativeZmodemContextError(ctx); cause != nil { err = cause }
 		return fmt.Errorf("原生 ZMODEM sidecar 执行失败（需要重连终端）：%w", err)
 	}
 	if !sink.seenHeader() {
@@ -285,9 +291,9 @@ func (c *nativeTerminalCoordinator) run(
 	case remote := <-fence.completion:
 		if remote.err != nil { return fmt.Errorf("远端 ZMODEM 结束标记异常（需要重连）：%w", remote.err) }
 		if remote.code != 0 { return fmt.Errorf("远端 rz/sz 退出状态为 %d，终端需要重连", remote.code) }
-		if ctxErr := ctx.Err(); ctxErr != nil { return ctxErr }
+		if ctxErr := nativeZmodemContextError(ctx); ctxErr != nil { return ctxErr }
 	case <-ctx.Done():
-		return fmt.Errorf("等待远端传输结束标记超时（需要重连终端）：%w", ctx.Err())
+		return fmt.Errorf("等待远端传输结束标记无活动超时（需要重连终端）：%w", nativeZmodemContextError(ctx))
 	}
 
 	observeNativeZmodemStage(parent, "remoteConfirm", confirmationStarted)

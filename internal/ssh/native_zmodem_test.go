@@ -46,12 +46,14 @@ func TestNativeZmodemLocalPathAndSize(t *testing.T) {
 	if _, err := nativeZmodemLocalPath("download", file); err == nil { t.Fatal("file destination accepted") }
 	if _, err := nativeZmodemLocalPath("invalid", file); err == nil { t.Fatal("unknown direction accepted") }
 
-	large := filepath.Join(dir, "too-large.bin")
-	out, err := os.Create(large)
-	if err != nil { t.Fatal(err) }
-	if err = out.Truncate(nativeZmodemMaxFileSize + 1); err != nil { t.Fatal(err) }
-	if err = out.Close(); err != nil { t.Fatal(err) }
-	if _, err = nativeZmodemLocalPath("upload", large); err == nil { t.Fatal("oversized upload accepted") }
+	for _, size := range []int64{128 << 20, 1024 << 20, nativeZmodemMaxFileSize} {
+		if err := nativeZmodemCheckFileSize(size); err != nil {
+			t.Fatalf("valid size %d rejected: %v", size, err)
+		}
+	}
+	if err := nativeZmodemCheckFileSize(nativeZmodemMaxFileSize + 1); err == nil {
+		t.Fatal("oversized upload accepted")
+	}
 }
 
 func TestNativeZmodemPublishDoesNotOverwriteExistingFiles(t *testing.T) {

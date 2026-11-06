@@ -302,6 +302,13 @@ func nativeStressCompareSFTP(client *sftp.Client, filename string, expected [32]
  return nil
 }
 
+// The original short stress runs keep their test deadline. The explicit GiB
+// suite needs longer to accommodate real Windows/Linux host and disk speeds.
+func nativeStressTransferTimeout(size int) time.Duration {
+	if size > 128<<20 { return 45 * time.Minute }
+	return 88 * time.Second
+}
+
 func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, profile string, size int, round int, sftpBaseline bool) error {
  name := fmt.Sprintf("openshell-stress-%s-%02d.bin", peer.id, round)
  source := filepath.Join(peer.localDir, name)
@@ -313,7 +320,7 @@ func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, pro
  remoteUpload := path.Join(peer.home, name)
  peer.remoteFiles = append(peer.remoteFiles, remoteUpload)
  started := time.Now()
- ctx, cancel := context.WithTimeout(context.Background(), 88*time.Second)
+ ctx, cancel := context.WithTimeout(context.Background(), nativeStressTransferTimeout(size))
  uploadStages := make(map[string]int64, 4)
  uploadMeter := &nativeZmodemIOMeter{}
  ctx = withNativeZmodemIOMeter(ctx, uploadMeter)
@@ -347,7 +354,7 @@ func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, pro
  destination := filepath.Join(peer.localDir, "down-"+name)
  if err := os.Mkdir(destination, 0700); err != nil { return err }
  started = time.Now()
- ctx, cancel = context.WithTimeout(context.Background(), 88*time.Second)
+ ctx, cancel = context.WithTimeout(context.Background(), nativeStressTransferTimeout(size))
  downloadStages := make(map[string]int64, 4)
  downloadMeter := &nativeZmodemIOMeter{}
  ctx = withNativeZmodemIOMeter(ctx, downloadMeter)

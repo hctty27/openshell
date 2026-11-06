@@ -106,15 +106,16 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 	copied := make(chan error, 2)
 	remoteOutputDone := make(chan struct{})
 	localOutputDone := make(chan struct{})
+	activity := nativeZmodemActivity(ctx)
 	go func() {
 		defer close(remoteOutputDone)
-		_, copyErr := io.Copy(localIn, remoteOut)
+		_, copyErr := io.Copy(nativeZmodemActivityWriter{target: localIn, touch: activity}, remoteOut)
 		_ = localIn.Close()
 		copied <- copyErr
 	}()
 	go func() {
 		defer close(localOutputDone)
-		_, copyErr := io.Copy(remoteIn, localOut)
+		_, copyErr := io.Copy(nativeZmodemActivityWriter{target: remoteIn, touch: activity}, localOut)
 		_ = remoteIn.Close()
 		copied <- copyErr
 	}()
@@ -133,7 +134,7 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 			_ = session.Close()
 			_ = process.Process.Kill()
 			waitForNativeZmodemShutdown(localFinished, remoteFinished, localDone, remoteDone)
-			return fmt.Errorf("原生 ZMODEM 已取消或超时：%w", ctx.Err())
+			return fmt.Errorf("原生 ZMODEM 已取消或无活动超时：%w", nativeZmodemContextError(ctx))
 		case localErr = <-localFinished:
 			localDone = true
 			localFinished = nil
@@ -148,7 +149,7 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 			}
 		}
 	}
-	if ctx.Err() != nil { return ctx.Err() }
+	if ctx.Err() != nil { return nativeZmodemContextError(ctx) }
 	if localErr != nil { return fmt.Errorf("原生 ZMODEM 进程异常：%w；%s", localErr, log.String()) }
 	if remoteErr != nil { return fmt.Errorf("远程 rz/sz 执行失败：%w", remoteErr) }
 

@@ -35,6 +35,11 @@ param(
     [ValidateRange(1, 10)]
     [int]$StressLargeABRounds = 5,
 
+    [switch]$StressGiB,
+
+    [ValidateSet(256, 512, 1024)]
+    [int]$StressGiBMiB = 1024,
+
     [switch]$StressNetemAB,
 
     [ValidateRange(1, 5)]
@@ -406,6 +411,14 @@ try {
                 allChecksumsOK |
             Format-Table -AutoSize | Out-Host
         Write-Host "PASS: large A/B report written to $largeFile"
+    }
+
+    if ($StressGiB) {
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_GIB", "1", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_GIB_SIZE_MIB", "$StressGiBMiB", "Process")
+        Write-Host "[large native] $StressGiBMiB MiB upload + download with SHA-256; requires several GiB free local and Docker storage"
+        Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemGiBInteractivePTY$' -Name "gib-$StressGiBMiB" -LogDirectory $diagnosticsDir -Timeout '120m'
+        Write-Host "PASS: $StressGiBMiB MiB native upload/download test; detailed output: $diagnosticsDir"
     }
 
     if ($StressNetemAB) {
