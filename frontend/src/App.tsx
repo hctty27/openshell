@@ -19,7 +19,6 @@ import {
   AlertCircle,
   Check,
   FolderOpen,
-  FileUp,
   Search,
   Columns2,
   Rows2,
@@ -166,7 +165,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
         ? { ...tab, hasExecutedAction: true } : tab);
   };
   const { hasActiveTransfers } = useTransferActivity();
-  const [nativeZmodemEnabled, setNativeZmodemEnabled] = useState(false);
   const [nativeZmodemDialog, setNativeZmodemDialog] = useState<{
     ref: Ref;
     sessionName: string;
@@ -187,14 +185,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
       remotePath: event.remotePath ?? "",
     });
   }), []);
-  useEffect(() => {
-    if (!desktop || typeof api.NativeZmodemExperimentEnabled !== "function") return;
-    let current = true;
-    void api.NativeZmodemExperimentEnabled().then(enabled => {
-      if (current) setNativeZmodemEnabled(enabled);
-    }).catch(() => {});
-    return () => { current = false; };
-  }, []);
   const [transferFocusRequest, setTransferFocusRequest] = useState<{ ref: Ref } | null>(null);
   useEffect(() => {
     const offFinished = listen("ssh:transfer-finished", (event: { ref: Ref }) => {
@@ -495,7 +485,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
     try {
       const data = await api.State();
       setState(data);
-      setNativeZmodemEnabled(data.zmodemTransferMode === "native");
       setTheme(data.theme === "light" ? "light" : "dark");
       setTerminalTheme(normalizeTerminalTheme(data.terminalTheme));
       setAutoCopySelection(data.autoCopySelection === true);
@@ -1272,16 +1261,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 >
                   <Search size={14} />
                 </button>
-                {nativeZmodemEnabled && active?.status === "connected" && active.ref && (
-                  <button type="button" className="workspace-panel-toggle"
-                    title={tr("terminal:nativeZmodemTitle")}
-                    aria-label={tr("terminal:nativeZmodemTitle")}
-                    onClick={() => setNativeZmodemDialog({
-                      ref: active.ref!, sessionName: active.session.name,
-                    })}>
-                    <FileUp size={14} />
-                  </button>
-                )}
                 <button
                   className="workspace-panel-toggle"
                   title={tr("ai:terminalAIButton")}
@@ -1643,7 +1622,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onRightClickPaste={setRightClickPaste}
           logHighlights={logHighlights}
           onLogHighlights={setLogHighlights}
-          zmodemTransferMode={state.zmodemTransferMode}
           confirmMultilinePaste={confirmMultilinePaste}
           onConfirmMultilinePaste={setConfirmMultilinePaste}
           onClose={() => setDialog(null)}
