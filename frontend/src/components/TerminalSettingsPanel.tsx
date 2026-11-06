@@ -1,8 +1,11 @@
 import { t } from "../i18n";
+import type { ZmodemTransferMode } from "../types";
 
 interface Props {
   logHighlights: boolean;
   onLogHighlights(enabled: boolean): void;
+  zmodemTransferMode: ZmodemTransferMode;
+  onZmodemTransferMode(mode: ZmodemTransferMode): void;
   autoCopySelection: boolean;
   onAutoCopySelection(enabled: boolean): void;
   rightClickPaste: boolean;
@@ -29,6 +32,21 @@ export default function TerminalSettingsPanel(p: Props) {
                     checked={p.logHighlights}
                     onChange={(e) => p.onLogHighlights(e.target.checked)} />
                 </label>
+              </div>
+              <div className="settings-control-row">
+                <div className="settings-control-copy">
+                  <label htmlFor="settings-zmodem-transfer-mode">{t("settings:zmodemTransferMode")}</label>
+                  <p>{t("settings:zmodemTransferModeDescription")}</p>
+                </div>
+                <select
+                  id="settings-zmodem-transfer-mode"
+                  className="settings-control-select"
+                  value={p.zmodemTransferMode}
+                  onChange={(event) => p.onZmodemTransferMode(event.target.value as ZmodemTransferMode)}
+                >
+                  <option value="native">{t("settings:zmodemNativeFirst")}</option>
+                  <option value="legacy">{t("settings:zmodemLegacy")}</option>
+                </select>
               </div>
               <div className="settings-terminal-group">
                 <h4>{t("settings:terminalMouseActions")}</h4>
