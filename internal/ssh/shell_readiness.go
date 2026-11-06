@@ -14,6 +14,8 @@ import (
 var (
 	shellBoundaryPattern = regexp.MustCompile("\x1b\\](?:133|633);([ABCD])(?:;[^\x07\x1b]*)?(?:\x07|\x1b\\\\)")
 	alternateBufferPattern = regexp.MustCompile("\x1b\\[\\?(?:47|1047|1049)([hl])")
+	mysqlPromptPattern = regexp.MustCompile(`^(?:mysql(?:@[A-Za-z0-9_.:-]+(?:\[[^\r\n\]]{0,120}\])?)?|MariaDB \[[^\r\n\]]{0,120}\])> ?$`)
+	mysqlCustomPromptPattern = regexp.MustCompile(`^\([A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+\) \[[^\r\n\]]{0,120}\]> ?$`)
 	shellPromptPattern = regexp.MustCompile("^(?:\\[[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120}\\]|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[^\\r\\n]{0,120}|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120})[#$%] ?$")
 	terminalCSIPattern = regexp.MustCompile("\x1b\\[[0-?]*[ -/]*[@-~]")
 	terminalOSCPattern = regexp.MustCompile("\x1b\\][^\x07\x1b]*(?:\x07|\x1b\\\\)")
@@ -26,6 +28,8 @@ type terminalShellReadiness struct {
 	prompt bool
 	alternate bool
 	manualInput bool
+	program string
+	mysqlObserved bool
 	jumpServer bool
 	assetMenu bool
 	lastOutput time.Time
@@ -63,6 +67,11 @@ func (r *terminalShellReadiness) observe(p []byte) {
 	// For plain shells without integration, infer readiness only from a
 	// recognizable full prompt at the end of the current output.
 	if strings.Contains(strings.ToLower(string(combined)), "jumpserver") { r.jumpServer = true }
+	for _, banner := range []string{"Welcome to the MySQL monitor", "Welcome to the MariaDB monitor"} {
+		if index := strings.LastIndex(string(combined), banner); index >= 0 && index+len(banner) > previousBytes {
+			r.mysqlObserved = true
+		}
+	}
 	stripped := terminalOSCPattern.ReplaceAll(combined, nil)
 	stripped = terminalCSIPattern.ReplaceAll(stripped, nil)
 	visible := strings.TrimRight(string(stripped), "\x00")
@@ -77,13 +86,22 @@ func (r *terminalShellReadiness) observe(p []byte) {
 		r.integration = false
 		r.prompt = false
 	}
-	if !r.integration && !r.assetMenu {
-		r.prompt = shellPromptPattern.MatchString(visible)
-		if r.prompt { r.manualInput = false }
-	} else if r.assetMenu && shellPromptPattern.MatchString(visible) {
+	// Database prompts require a different executor from the Shell marker protocol.
+	if !r.assetMenu && r.mysqlObserved && (mysqlPromptPattern.MatchString(visible) ||
+		mysqlCustomPromptPattern.MatchString(visible)) {
+		r.program = "mysql"
 		r.prompt = true
-		r.assetMenu = false
 		r.manualInput = false
+	} else if shellPromptPattern.MatchString(visible) {
+		if !r.integration || r.assetMenu || r.program == "mysql" {
+			r.program = "shell"
+			r.prompt = true
+			r.manualInput = false
+			r.mysqlObserved = false
+		}
+		if r.assetMenu { r.assetMenu = false }
+	} else if r.program == "mysql" || (!r.integration && !r.assetMenu) {
+		r.prompt = false
 	}
 
 	r.lastOutput = time.Now()
@@ -101,6 +119,29 @@ func (r *terminalShellReadiness) userInput(p []byte) {
 	r.mu.Unlock()
 }
 
+// mysqlReady is used within an acquired PTY lease. It does not impose the
+// initial prompt stabilization delay again between sequential AI queries.
+func (r *terminalShellReadiness) mysqlReady() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.program == "mysql" && r.prompt && !r.manualInput && !r.alternate && !r.assetMenu
+}
+
+func (r *terminalShellReadiness) aiMySQLInputStarted() {
+	r.mu.Lock()
+	r.manualInput = true
+	r.prompt = false
+	r.mu.Unlock()
+}
+
+// readyProgram must only be read after checkReady succeeds.
+func (r *terminalShellReadiness) readyProgram() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.program == "mysql" { return "mysql" }
+	return "shell"
+}
+
 func (r *terminalShellReadiness) isJumpServer() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -116,13 +157,16 @@ func (r *terminalShellReadiness) checkReady() error {
 	if r.alternate {
 		return errors.New("当前终端正在使用全屏程序，无法交给 AI 操作")
 	}
+	if r.program == "mysql" && (r.manualInput || !r.prompt) {
+		return errors.New("MySQL 当前存在未完成的 SQL 或正在执行查询，请等待空白 MySQL 主提示符后重试")
+	}
 	if r.manualInput {
 		return errors.New("终端存在未确认的交互输入，请返回空白 Shell 提示符后重试")
 	}
 	if !r.prompt {
 		return errors.New("无法确认当前 Shell 已就绪。请退出交互程序，返回普通 Bash/Zsh 提示符；支持 OSC 133/633 Shell Integration 的终端可自动识别")
 	}
-	if !r.integration && time.Since(r.lastOutput) < 250*time.Millisecond {
+	if (r.program == "mysql" || !r.integration) && time.Since(r.lastOutput) < 250*time.Millisecond {
 		return errors.New("终端提示符仍在更新，请稍后重试")
 	}
 	return nil
