@@ -54,7 +54,11 @@ def sha256_file(path: Path) -> str:
 def create_manifest(directory: Path, preparation_script: Path) -> dict:
     pins = extract_pinned_release(preparation_script.read_text(encoding="utf-8"))
     items = []
-    for relative_path, origin in sorted(BUNDLED_FILES.items()):
+    optional_native_sidecar = "native/zmodem-sidecar.exe"
+    all_files = dict(BUNDLED_FILES)
+    if (directory / optional_native_sidecar).is_file():
+        all_files[optional_native_sidecar] = "openshell-native-zmodem-experimental"
+    for relative_path, origin in sorted(all_files.items()):
         path = directory / relative_path
         if not path.is_file() or path.stat().st_size == 0:
             raise ValueError(f"Required ZMODEM bundle file missing or empty: {relative_path}")
@@ -91,6 +95,13 @@ def create_manifest(directory: Path, preparation_script: Path) -> dict:
     return {
         "schemaVersion": 1,
         "component": "OpenShell Windows ZMODEM helpers",
+        "nativeExperiment": {
+            "sidecar": optional_native_sidecar,
+            "included": (directory / optional_native_sidecar).is_file(),
+            "enabledByDefault": False,
+            "source": "experiments/native-zmodem/src/bin/zmodem-sidecar.rs",
+            "protocolCrate": "zmodem2 = 0.7.3",
+        },
         "reviewStatus": "pending-msys2-runtime-identification-and-license-review",
         "upstream": {
             "repository": "https://github.com/trzsz/lrzsz-win32",
