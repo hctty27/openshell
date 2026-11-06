@@ -31,6 +31,13 @@ func runNativeZmodemTerminalSidecar(
 	ctx context.Context, executable, direction, path string,
 	inbound io.ReadCloser, outbound io.Writer,
 ) error {
+	return runNativeZmodemTerminalSidecarWithProgress(ctx, executable, direction, path, inbound, outbound, nil)
+}
+
+func runNativeZmodemTerminalSidecarWithProgress(
+	ctx context.Context, executable, direction, path string,
+	inbound io.ReadCloser, outbound io.Writer, onProgress func(uint64, uint64),
+) error {
 	if ctx == nil { return errors.New("缺少原生 ZMODEM 进程上下文") }
 	if err := ctx.Err(); err != nil { return err }
 	if executable == "" || path == "" || inbound == nil || outbound == nil {
@@ -45,6 +52,9 @@ func runNativeZmodemTerminalSidecar(
 	cmd.WaitDelay = nativeZmodemShutdownTimeout
 	stderr := &nativeZmodemLog{}
 	cmd.Stderr = stderr
+	if onProgress != nil {
+		cmd.Stderr = &nativeTerminalProgressLog{log: stderr, onProgress: onProgress}
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil { return err }
 	stdout, err := cmd.StdoutPipe()
