@@ -149,7 +149,7 @@ JSON 文件写入 `tmp/native-zmodem-stress/native-zmodem-matrix-*.json`，包�
 
 各 Profile 在同一个临时容器内顺序运行；每轮交替 0/16 KiB，并校验原生上传、下载及 SFTP 上传、下载的 SHA-256。失败即终止，不忽略损坏或超时。配置失败时不会悄悄退回“无丢包”测试。每个 JSON 位于 `tmp/native-zmodem-stress/native-zmodem-netem-<profile>-*.json`，记录实际 `tc qdisc show dev eth0` 输出、每轮原始 I/O 数据和中位吞吐/P95 耗时。
 
-**重要局限**：容器 `eth0` 的 netem 影响的是**服务器→Windows 客户端**方向的出站数据，反向 ACK/控制反馈也受影响，但不等于同时对 Windows→服务器数据包施加丢包。Linux netem 手册指出 TCP 的 TSQ 等机制还会影响模拟准确性；未来若需要完整双向 RTT/丢包验收，应使用独立 Linux 网络命名空间、代理或接收侧 ingress 配置。<Link url="https://man7.org/linux/man-pages/man8/tc-netem.8.html" title="tc-netem 官方手册"/>。
+**重要局限**：容器 `eth0` 的 netem 影响的是**服务器→Windows 客户端**方向的出站数据，反向 ACK/控制反馈也受影响，但不等于同时对 Windows→服务器数据包施加丢包。Linux netem 手册指出 TCP 的 TSQ 等机制还会影响模拟准确性；未来若需要完整双向 RTT/丢包验收，应使用独立 Linux 网络命名空间、代理或接收侧 ingress 配置。[tc-netem 手册](https://man7.org/linux/man-pages/man8/tc-netem.8.html)。
 
 ## Windows 本机 Go Vet 与协议测试隔离
 
