@@ -1,0 +1,4 @@
+# Keep Unix entrypoints and the isolated Linux SSH fixture portable on Windows.
+*.sh text eol=lf
+experiments/native-zmodem/docker-ssh-lab/sshd_config text eol=lf
+experiments/native-zmodem/docker-ssh-lab/Dockerfile text eol=lf
