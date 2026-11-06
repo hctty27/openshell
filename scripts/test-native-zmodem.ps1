@@ -4,7 +4,26 @@ param(
     [ValidateRange(0, 10)]
     [int]$LatencyMS = 2,
 
-    [switch]$SkipFaultTests
+    [switch]$SkipFaultTests,
+
+    [ValidateSet("none", "all", "large", "repeat", "parallel", "latency")]
+    [string]$StressProfile = "none",
+
+    [ValidateRange(1, 128)]
+    [int]$StressLargeMiB = 128,
+
+    [ValidateRange(1, 50)]
+    [int]$StressRounds = 30,
+
+    [ValidateRange(1, 4)]
+    [int]$StressWorkers = 3,
+
+    [ValidateRange(1, 10)]
+    [int]$StressLatencyMS = 3,
+
+    [string]$StressReportDir = "",
+
+    [switch]$SkipBaseline
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,7 +63,14 @@ $variableNames = @(
     "OPENSHELL_ZMODEM_LIVE_SSH_KEY",
     "OPENSHELL_ZMODEM_LIVE_SSH_HOSTKEY",
     "OPENSHELL_ZMODEM_LIVE_SIDECAR",
-    "OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS"
+    "OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS",
+    "OPENSHELL_ZMODEM_STRESS",
+    "OPENSHELL_ZMODEM_STRESS_PROFILE",
+    "OPENSHELL_ZMODEM_STRESS_LARGE_MIB",
+    "OPENSHELL_ZMODEM_STRESS_ROUNDS",
+    "OPENSHELL_ZMODEM_STRESS_WORKERS",
+    "OPENSHELL_ZMODEM_STRESS_LATENCY_MS",
+    "OPENSHELL_ZMODEM_STRESS_REPORT"
 )
 $previous = @{}
 foreach ($name in $variableNames) {
@@ -130,9 +156,192 @@ try {
     [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_LIVE_SIDECAR", $sidecar, "Process")
     [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS", "$LatencyMS", "Process")
 
-    Write-Host "[4/5] Real Windows Go + Rust to Linux SSH PTY: 8 SHA-256 transfers"
-    & go test -count=1 -timeout=10m -v ./internal/ssh -run '^TestNativeZmodemCrossOSInteractivePTY$'
-    if ($LASTEXITCODE -ne 0) { throw "Windows to Linux native ZMODEM interop failed" }
+    if (-not $SkipBaseline) {
+        Write-Host "[4/5] Real Windows Go + Rust to Linux SSH PTY: 8 SHA-256 transfers"
+        & go test -count=1 -timeout=10m -v ./internal/ssh -run '^TestNativeZmodemCrossOSInteractivePTY
+
+    if (-not $SkipFaultTests) {
+        Write-Host "[5/5] Live SSH cancellation, deadline and disconnect: 3 scenarios"
+        & go test -count=1 -timeout=10m -v ./internal/ssh -run '^TestNativeZmodemLiveInterruptedInteractivePTY$'
+        if ($LASTEXITCODE -ne 0) { throw "Windows to Linux live fault-injection failed" }
+    }
+    else {
+        Write-Host "[5/5] Fault-injection skipped by explicit request"
+    }
+
+    if ($StressProfile -ne "none") {
+        if ($StressReportDir -eq "") {
+            $StressReportDir = Join-Path $repoRoot "tmp\native-zmodem-stress"
+        }
+        $reportDirectory = [IO.Path]::GetFullPath($StressReportDir)
+        [void][IO.Directory]::CreateDirectory($reportDirectory)
+        $reportFile = Join-Path $reportDirectory "native-zmodem-$(Get-Date -Format 'yyyyMMdd-HHmmss')-$unique.json"
+
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS", "1", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_PROFILE", $StressProfile, "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_LARGE_MIB", "$StressLargeMiB", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_ROUNDS", "$StressRounds", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_WORKERS", "$StressWorkers", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_LATENCY_MS", "$StressLatencyMS", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_REPORT", $reportFile, "Process")
+
+        Write-Host "[stress] Windows native Rust vs real Linux PTY: $StressProfile"
+        & go test -count=1 -timeout=60m -v ./internal/ssh -run '^TestNativeZmodemStressInteractivePTY
+}
+catch {
+    $originalError = $_
+    if ($containerAttempted) {
+        Write-Warning "Docker Linux SSH fixture diagnostics:"
+        try {
+            & docker inspect --format '{{.State.Status}} | {{.State.ExitCode}} | {{.State.Error}}' $container 2>&1 | Out-Host
+        }
+        catch {
+            Write-Warning "Docker inspect unavailable: $($_.Exception.Message)"
+        }
+        try {
+            & docker logs $container 2>&1 | Out-Host
+        }
+        catch {
+            Write-Warning "Docker logs unavailable: $($_.Exception.Message)"
+        }
+    }
+    throw $originalError
+}
+finally {
+    if ($containerAttempted) {
+        try {
+            & docker rm --force $container 2>$null | Out-Null
+            if ($started -and $LASTEXITCODE -ne 0) {
+                Write-Warning "Could not automatically remove test container: $container"
+            }
+        }
+        catch {
+            if ($started) {
+                Write-Warning "Could not automatically remove test container: $container ($($_.Exception.Message))"
+            }
+        }
+    }
+    foreach ($name in $variableNames) {
+        [Environment]::SetEnvironmentVariable($name, $previous[$name], "Process")
+    }
+    if (Test-Path -LiteralPath $tempDir) {
+        Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Pop-Location
+}
+
+        if ($LASTEXITCODE -ne 0) { throw "Windows to Linux native ZMODEM interop failed" }
+    }
+    else {
+        Write-Host "[4/5] Baseline SHA-256 roundtrips skipped by explicit request"
+    }
+
+    if (-not $SkipFaultTests) {
+        Write-Host "[5/5] Live SSH cancellation, deadline and disconnect: 3 scenarios"
+        & go test -count=1 -timeout=10m -v ./internal/ssh -run '^TestNativeZmodemLiveInterruptedInteractivePTY$'
+        if ($LASTEXITCODE -ne 0) { throw "Windows to Linux live fault-injection failed" }
+    }
+    else {
+        Write-Host "[5/5] Fault-injection skipped by explicit request"
+    }
+
+    Write-Host "PASS: native Windows sidecar and real Linux OpenSSH/SFTP ZMODEM tests"
+}
+catch {
+    $originalError = $_
+    if ($containerAttempted) {
+        Write-Warning "Docker Linux SSH fixture diagnostics:"
+        try {
+            & docker inspect --format '{{.State.Status}} | {{.State.ExitCode}} | {{.State.Error}}' $container 2>&1 | Out-Host
+        }
+        catch {
+            Write-Warning "Docker inspect unavailable: $($_.Exception.Message)"
+        }
+        try {
+            & docker logs $container 2>&1 | Out-Host
+        }
+        catch {
+            Write-Warning "Docker logs unavailable: $($_.Exception.Message)"
+        }
+    }
+    throw $originalError
+}
+finally {
+    if ($containerAttempted) {
+        try {
+            & docker rm --force $container 2>$null | Out-Null
+            if ($started -and $LASTEXITCODE -ne 0) {
+                Write-Warning "Could not automatically remove test container: $container"
+            }
+        }
+        catch {
+            if ($started) {
+                Write-Warning "Could not automatically remove test container: $container ($($_.Exception.Message))"
+            }
+        }
+    }
+    foreach ($name in $variableNames) {
+        [Environment]::SetEnvironmentVariable($name, $previous[$name], "Process")
+    }
+    if (Test-Path -LiteralPath $tempDir) {
+        Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Pop-Location
+}
+
+        if ($LASTEXITCODE -ne 0) { throw "Native ZMODEM stress failed; inspect partial JSON report: $reportFile" }
+        Write-Host "PASS: stress report written to $reportFile"
+    }
+
+    Write-Host "PASS: native Windows sidecar and real Linux OpenSSH/SFTP ZMODEM tests"
+}
+catch {
+    $originalError = $_
+    if ($containerAttempted) {
+        Write-Warning "Docker Linux SSH fixture diagnostics:"
+        try {
+            & docker inspect --format '{{.State.Status}} | {{.State.ExitCode}} | {{.State.Error}}' $container 2>&1 | Out-Host
+        }
+        catch {
+            Write-Warning "Docker inspect unavailable: $($_.Exception.Message)"
+        }
+        try {
+            & docker logs $container 2>&1 | Out-Host
+        }
+        catch {
+            Write-Warning "Docker logs unavailable: $($_.Exception.Message)"
+        }
+    }
+    throw $originalError
+}
+finally {
+    if ($containerAttempted) {
+        try {
+            & docker rm --force $container 2>$null | Out-Null
+            if ($started -and $LASTEXITCODE -ne 0) {
+                Write-Warning "Could not automatically remove test container: $container"
+            }
+        }
+        catch {
+            if ($started) {
+                Write-Warning "Could not automatically remove test container: $container ($($_.Exception.Message))"
+            }
+        }
+    }
+    foreach ($name in $variableNames) {
+        [Environment]::SetEnvironmentVariable($name, $previous[$name], "Process")
+    }
+    if (Test-Path -LiteralPath $tempDir) {
+        Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Pop-Location
+}
+
+        if ($LASTEXITCODE -ne 0) { throw "Windows to Linux native ZMODEM interop failed" }
+    }
+    else {
+        Write-Host "[4/5] Baseline SHA-256 roundtrips skipped by explicit request"
+    }
 
     if (-not $SkipFaultTests) {
         Write-Host "[5/5] Live SSH cancellation, deadline and disconnect: 3 scenarios"
