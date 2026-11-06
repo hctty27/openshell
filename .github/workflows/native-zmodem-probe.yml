@@ -83,8 +83,13 @@ jobs:
           $env:OPENSHELL_ZMODEM_WINDOWS_E2E = "1"
           $env:OPENSHELL_ZMODEM_SIDECAR_PATH = (Resolve-Path "experiments/native-zmodem/target/release/zmodem-sidecar.exe").Path
           $env:PYTHONIOENCODING = "utf-8"
+          $env:OPENSHELL_ZMODEM_WIRE_BATCH_BYTES = "0"
           go test -count=1 -timeout=7m -v ./internal/ssh -run '^TestWindowsNativeZmodemSSHInterop$'
-          if ($LASTEXITCODE -ne 0) { throw "Windows Go+Rust native SSH ZMODEM interop failed" }
+          if ($LASTEXITCODE -ne 0) { throw "Windows native lrzsz-win32 interop failed for 0 KiB fallback" }
+          $env:OPENSHELL_ZMODEM_WIRE_BATCH_BYTES = "16384"
+          go test -count=1 -timeout=7m -v ./internal/ssh -run '^TestWindowsNativeZmodemSSHInterop$'
+          if ($LASTEXITCODE -ne 0) { throw "Windows native lrzsz-win32 interop failed for default 16 KiB" }
+          Remove-Item Env:OPENSHELL_ZMODEM_WIRE_BATCH_BYTES
       - name: Preserve dependency graph for manual license review
         shell: pwsh
         run: |
