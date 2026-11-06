@@ -98,7 +98,6 @@ export default function NativeZmodemExperimentDialog({
         setError(t("terminal:nativeZmodemCancelUnconfirmed"));
       } else {
         setCompleted(true);
-        onNotice(t("terminal:nativeZmodemCompleted"));
       }
     } catch (reason) {
       setError(errorText(reason));
