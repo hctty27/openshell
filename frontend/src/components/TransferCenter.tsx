@@ -363,7 +363,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                             file.status === "skipped" ? t("sftp:zmodemSkipped") :
                             file.status === "completed" ? t("sftp:completed") :
                             file.status === "failed" ? t("sftp:failed") : t("sftp:cancelled")}</span>
-                          {batch.direction === "upload" && batch.status === "running" && file.status === "queued" && index > 0 &&
+                          {batch.status === "running" && file.status === "queued" && index > 0 &&
                             <button type="button" aria-label={t("sftp:zmodemSkipFile", { name: file.name })}
                               title={t("sftp:zmodemSkipFile", { name: file.name })}
                               onClick={() => void api.SkipNativeZmodemPendingFile(batch.ref, batch.id, index).catch(onNotice)}>
