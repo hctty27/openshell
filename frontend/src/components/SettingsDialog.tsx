@@ -60,7 +60,6 @@ interface Props {
   onRightClickPaste(enabled: boolean): void;
   confirmMultilinePaste: boolean;
   logHighlights: boolean;
-  zmodemTransferMode?: import("../types").ZmodemTransferMode;
   keepAliveSeconds?: number;
   autoReconnect?: boolean;
   maxReconnectAttempts?: number;
@@ -110,8 +109,6 @@ export default function SettingsDialog(p: Props) {
   const [disconnectBehavior, setDisconnectBehavior] = useState(p.disconnectBehavior ?? "local");
   const [localShell, setLocalShell] = useState(p.localShell ?? "powershell");
   const [preserveTerminalHistory, setPreserveTerminalHistory] = useState(p.preserveTerminalHistory !== false);
-  const [zmodemTransferMode, setZmodemTransferMode] =
-    useState<import("../types").ZmodemTransferMode>(p.zmodemTransferMode ?? "native");
   const [secret, setSecret] = useState("");
   const [saveSecret, setSaveSecret] = useState(!!p.session?.credentialRef);
   const [error, setError] = useState<unknown>("");
@@ -548,11 +545,6 @@ export default function SettingsDialog(p: Props) {
           )}
           {tab === "terminal" && (
             <TerminalSettingsPanel
-              zmodemTransferMode={zmodemTransferMode}
-              onZmodemTransferMode={(mode) => {
-                setZmodemTransferMode(mode);
-                persistPreference("zmodemTransferMode", mode, true);
-              }}
               logHighlights={p.logHighlights}
               onLogHighlights={(value) => { p.onLogHighlights(value); persistPreference("logHighlights", String(value)); }}
               autoCopySelection={p.autoCopySelection}
