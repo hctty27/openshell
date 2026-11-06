@@ -261,6 +261,46 @@ fn safe_name(raw: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
     Ok(name.to_owned())
 }
 
+// Opt-in receiver metrics are emitted to stderr, never to binary stdout.
+// No filenames, payload bytes or credentials are included.
+#[derive(Default)]
+struct ReceiverDiagnostics {
+    enabled: bool,
+    completed: bool,
+    poll_calls: u64,
+    poll_ns: u128,
+    idle_calls: u64,
+    wait_ns: u128,
+    wait_max_ns: u128,
+    file_write_ns: u128,
+    file_sync_ns: u128,
+    wire_write_ns: u128,
+    file_bytes: u64,
+}
+
+impl ReceiverDiagnostics {
+    fn new() -> Self {
+        Self {
+            enabled: env::var("OPENSHELL_ZMODEM_RX_DIAG").as_deref() == Ok("1"),
+            ..Self::default()
+        }
+    }
+}
+
+impl Drop for ReceiverDiagnostics {
+    fn drop(&mut self) {
+        if self.enabled {
+            eprintln!(
+                "OSZD\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                u8::from(self.completed),
+                self.poll_calls, self.poll_ns, self.idle_calls,
+                self.wait_ns, self.wait_max_ns, self.file_write_ns,
+                self.file_sync_ns, self.wire_write_ns, self.file_bytes
+            );
+        }
+    }
+}
+
 fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut receiver = Receiver::with_flow_control(0, true)?;
     let rx = incoming_wire();
