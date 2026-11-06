@@ -9,6 +9,7 @@ on:
       - "scripts/test-native-zmodem-stress.ps1"
       - "scripts/test-native-zmodem-batch-matrix.ps1"
       - "scripts/test-native-zmodem-large-ab.ps1"
+      - "scripts/test-native-zmodem-netem.ps1"
       - ".gitattributes"
       - ".github/workflows/native-zmodem-docker-lab.yml"
   push:
@@ -19,6 +20,7 @@ on:
       - "scripts/test-native-zmodem-stress.ps1"
       - "scripts/test-native-zmodem-batch-matrix.ps1"
       - "scripts/test-native-zmodem-large-ab.ps1"
+      - "scripts/test-native-zmodem-netem.ps1"
       - ".gitattributes"
       - ".github/workflows/native-zmodem-docker-lab.yml"
   workflow_dispatch:
@@ -123,7 +125,7 @@ jobs:
         run: |
           $tokens = $null
           $errors = $null
-          foreach ($file in @('scripts/test-native-zmodem.ps1', 'scripts/test-native-zmodem-stress.ps1', 'scripts/test-native-zmodem-batch-matrix.ps1', 'scripts/test-native-zmodem-large-ab.ps1')) {
+          foreach ($file in @('scripts/test-native-zmodem.ps1', 'scripts/test-native-zmodem-stress.ps1', 'scripts/test-native-zmodem-batch-matrix.ps1', 'scripts/test-native-zmodem-large-ab.ps1', 'scripts/test-native-zmodem-netem.ps1')) {
             $tokens = $null
             $errors = $null
             $script = (Resolve-Path $file).Path
