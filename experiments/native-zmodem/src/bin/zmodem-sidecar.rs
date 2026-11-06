@@ -436,12 +436,17 @@ impl Drop for ReceiverDiagnostics {
 
 fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Error>> {
     let mut receiver = Receiver::with_flow_control(0, true)?;
+    let manual_accept = env::var_os("OPENSHELL_ZMODEM_SKIP_FILE").is_some();
+    if manual_accept { receiver.set_manual_file_accept(true); }
     let rx = incoming_wire();
     let mut waiting = VecDeque::<u8>::new();
     let mut wire_scratch = Vec::<u8>::with_capacity(2048);
     let mut output = ExperimentalWireWriter::new(io::stdout().lock(), experimental_wire_batch_bytes()?);
     let mut open_file: Option<(File, PathBuf, PathBuf, u64, Option<u32>)> = None;
     let mut completed_files = 0usize;
+    let mut seen_files = 0usize;
+    let mut skipped_files = 0usize;
+    let mut pending_decision: Option<bool> = None;
     let mut session_completed = false;
     let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
     let mut received_total = 0u64;
@@ -490,16 +495,23 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 receiver.file_written(received)?;
                 if received > 0 { activity.touch(); }
                 if report_progress(*bytes, received_total, &mut progress_at, false) {
-                    report_file_bytes("progress", completed_files, *bytes);
+                    report_file_bytes("progress", seen_files - 1, *bytes);
                 }
             }
             Action::Event(Event::FileStarted(info)) => {
                 // The sender can be waiting for an acknowledgement at this edge.
                 output.flush_pending()?;
-                if open_file.is_some() || completed_files >= MAX_FILES_PER_SESSION {
+                if open_file.is_some() || pending_decision.is_some() || seen_files >= MAX_FILES_PER_SESSION {
                     return Err("native receiver accepts at most 100 files per session".into());
                 }
+                let index = seen_files;
+                seen_files += 1;
                 let name = safe_name(info.name)?;
+                if manual_accept && skip_requested(index) {
+                    pending_decision = Some(true);
+                    activity.touch();
+                    continue;
+                }
                 let mut target = dir.join(&name);
                 if target.exists() && auto_rename {
                     let original = Path::new(&name);
@@ -531,8 +543,9 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 let advertised = info.size.map(|size| size.get());
                 received_total = advertised.map_or(0, u64::from);
                 report_progress(0, received_total, &mut progress_at, true);
-                report_file_start(completed_files, &name, advertised.map(u64::from));
+                report_file_start(index, &name, advertised.map(u64::from));
                 open_file = Some((file, temp, target, 0, advertised));
+                if manual_accept { pending_decision = Some(false); }
                 activity.touch();
             }
             Action::Event(Event::FileCompleted) => {
@@ -554,13 +567,14 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 fs::hard_link(&temp, &target)?;
                 fs::remove_file(&temp)?;
                 report_progress(size, received_total, &mut progress_at, true);
-                report_file_bytes("completed", completed_files, size);
+                report_file_bytes("completed", seen_files - 1, size);
                 completed_files += 1;
                 activity.touch();
             }
             Action::Event(Event::SessionCompleted) => {
                 output.flush_pending()?;
-                if completed_files == 0 || open_file.is_some() {
+                if seen_files == 0 || completed_files + skipped_files != seen_files ||
+                    open_file.is_some() || pending_decision.is_some() {
                     return Err("session ended without completing all files".into());
                 }
                 session_completed = true;
@@ -592,6 +606,21 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 }
             }
             _ => return Err("unsupported receiver action".into()),
+        }
+        if let Some(skip) = pending_decision {
+            let outcome = if skip { receiver.skip_file() } else { receiver.accept_file_at(0) };
+            match outcome {
+                Ok(()) => {
+                    if skip {
+                        report_file_bytes("skipped", seen_files - 1, 0);
+                        skipped_files += 1;
+                    }
+                    pending_decision = None;
+                    activity.touch();
+                }
+                Err(zmodem2::Error::Backpressure) => {}
+                Err(err) => return Err(err.into()),
+            }
         }
     }
     Err("ZMODEM receiver inactive for 90 seconds".into())
