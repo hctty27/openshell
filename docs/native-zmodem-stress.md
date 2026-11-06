@@ -97,6 +97,30 @@ tmp/native-zmodem-stress/logs/<run-id>/stress-<profile>.log
 
 `-Diagnostics` **默认关闭**，因为 CPU 和 Trace 采样本身可能影响耗时；做严格的前后吞吐量比较时应保持关闭。Go 的 Profile 只覆盖 Go 测试进程，不覆盖独立 Rust sidecar 的 CPU 占比。
 
+## Go→Rust→SSH 写入与等待诊断
+
+仅在显式开启 Windows 原生压力测试时，每条原生传输记录会增加 `io` 对象（SFTP 参照记录不会有该字段）：
+
+| JSON 字段 | 单位 | 含义 |
+|---|---|---|
+| `toRemoteCalls` | 次 | Rust sidecar 经 Go 终端独占写入器发往 SSH PTY 的实际写入次数 |
+| `toRemoteBytes` | 字节 | 以上写入器成功写出的原生协议字节（包含控制帧和必要的转义；不是文件净荷大小） |
+| `toRemoteWriteNs` | 纳秒 | 写入 SSH PTY 的调用墙钟时间总和，包含 Go/SSH 写入阻塞 |
+| `readyWaitNs` | 纳秒 | 每次待远端 ZMODEM 握手就绪的选择等待累计值；就绪后的立即选择也会有极小开销 |
+| `fromRemoteCalls` | 次 | SSH PTY 输出转发进入 Rust sidecar 专用管道的写入次数 |
+| `fromRemoteBytes` | 字节 | 通过专用管道转发的数据量（协议字节数，非文件净荷） |
+| `toSidecarPipeNs` | 纳秒 | 写入 Rust sidecar stdin 专用 `io.Pipe` 时的累计阻塞/消费耗时 |
+
+这些字段是**聚合调用耗时**，不能直接相加推算总传输时间；多个方向可以重叠，`io.Pipe.Write` 的时间也包含等待对端读取。运行时是否形成网络小包、远端窗口大小和 Rust 内部的 `poll` 开销，仍需下一轮独立验证。
+
+本次不会修改 Rust sidecar 的协议帧格式或默认缓冲策略，避免在完成瓶颈定位之前改变对照基线。测试命令：
+
+```powershell
+.\scripts\test-native-zmodem-stress.ps1 -Profile latency -Diagnostics
+```
+
+报告仍在 `tmp/native-zmodem-stress/`；`-Diagnostics` 会另外保存 Go Profile/Trace，仅用于排查，不适合作为无扰动吞吐量基准。
+
 ## 结果与判读
 
 在 `tmp/native-zmodem-stress/` 生成一次运行对应的 `.json` 报告：
