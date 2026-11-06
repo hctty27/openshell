@@ -190,3 +190,63 @@ func TestMySQLGreetingIsNotReplayedAfterExit(t *testing.T) {
 		t.Fatal("old greeting authorized MySQL prompt after client exited")
 	}
 }
+
+
+func TestMySQLCustomPromptAfterUseDatabase(t *testing.T) {
+	prompts:=[]string{
+		"mysql@localhost]db_xlogin_xcwhf_08083> ",
+		"mysql@localhost|db_xlogin_xcwhf_08083> ",
+		"root@localhost[db_xlogin_xcwhf_08083]> ",
+		"(root@localhost) [db_xlogin_xcwhf_08083]> ",
+	}
+	for _, prompt := range prompts {
+		t.Run(prompt,func(t *testing.T){
+			var state terminalShellReadiness
+			state.observe([]byte("Welcome to the MySQL monitor. Commands end with ; or \\g.\r\n"+prompt))
+			state.mu.Lock()
+			state.lastOutput=time.Now().Add(-time.Second)
+			state.mu.Unlock()
+			if err:=state.checkReady();err!=nil || state.readyProgram()!="mysql" {
+				t.Fatalf("custom prompt was not recognized: %v",err)
+			}
+			state.userInput([]byte("use db_xlogin_xcwhf_08083\r"))
+			if err:=state.checkReady();err==nil {
+				t.Fatal("pending MySQL input must reject AI takeover")
+			}
+			state.observe([]byte("Reading table information for completion of table and column names\r\nDatabase changed\r\n"+prompt))
+			state.mu.Lock()
+			state.lastOutput=time.Now().Add(-time.Second)
+			state.mu.Unlock()
+			if err:=state.checkReady();err!=nil || state.readyProgram()!="mysql" {
+				t.Fatalf("MySQL prompt after USE failed to clear manual input: %v",err)
+			}
+		})
+	}
+}
+
+func TestMySQLCustomPromptCannotAuthorizeWithoutGreeting(t *testing.T) {
+	var state terminalShellReadiness
+	state.observe([]byte("root@localhost]db_xlogin_xcwhf_08083> "))
+	state.mu.Lock()
+	state.lastOutput=time.Now().Add(-time.Second)
+	state.mu.Unlock()
+	if err:=state.checkReady();err==nil {t.Fatal("custom MySQL prompt without welcome banner must not grant AI control")}
+}
+
+func TestMySQLCustomPromptCompletesCommand(t *testing.T) {
+	marker:="OPEN_SHELL_AI_MYSQL_12345"
+	for _,prompt:=range []string{"mysql@localhost]db_xlogin_xcwhf_08083> ","root@localhost|db_xlogin_xcwhf_08083> "} {
+		cmd:=&terminalAICommand{done:make(chan terminalAIResult,1),mysql:&mysqlAIState{marker:marker}}
+		cmd.consumeMySQL([]byte("SHOW CREATE TABLE t_user\\G\r\nCreate Table: CREATE TABLE t_user (id BIGINT)\r\n"))
+		cmd.consumeMySQL([]byte("SELECT '"+marker+"' AS __openshell_ai_done;\r\n| "+marker+" |\r\n1 row in set (0.00 sec)\r\n"))
+		select { case <-cmd.done: t.Fatal("query finished before MySQL primary prompt returned"); default: }
+		cmd.consumeMySQL([]byte(prompt))
+		select {
+		case result:=<-cmd.done:
+			if result.code!=0 || !strings.Contains(result.output,"CREATE TABLE t_user"){
+				t.Fatalf("unexpected MySQL completion: %+v",result)
+			}
+		default: t.Fatal("custom prompt did not complete MySQL query")
+		}
+	}
+}
