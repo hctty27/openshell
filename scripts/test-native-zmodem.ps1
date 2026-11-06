@@ -30,6 +30,11 @@ param(
     [ValidateRange(1, 10)]
     [int]$StressMatrixRounds = 5,
 
+    [switch]$StressLargeAB,
+
+    [ValidateRange(1, 10)]
+    [int]$StressLargeABRounds = 5,
+
     [switch]$SkipBaseline
 )
 
@@ -119,7 +124,11 @@ $variableNames = @(
     "OPENSHELL_ZMODEM_STRESS_REPORT",
     "OPENSHELL_ZMODEM_BATCH_MATRIX",
     "OPENSHELL_ZMODEM_MATRIX_ROUNDS",
-    "OPENSHELL_ZMODEM_MATRIX_REPORT"
+    "OPENSHELL_ZMODEM_MATRIX_REPORT",
+    "OPENSHELL_ZMODEM_LARGE_AB",
+    "OPENSHELL_ZMODEM_LARGE_AB_ROUNDS",
+    "OPENSHELL_ZMODEM_LARGE_AB_REPORT",
+    "OPENSHELL_ZMODEM_RX_DIAG"
 )
 $previous = @{}
 foreach ($name in $variableNames) {
@@ -329,6 +338,52 @@ try {
                 allChecksumsOK |
             Format-Table -AutoSize | Out-Host
         Write-Host "PASS: batch matrix JSON written to $matrixFile"
+    }
+
+    if ($StressLargeAB) {
+        if ($StressReportDir -eq "") {
+            $StressReportDir = Join-Path $repoRoot 'tmp/native-zmodem-stress'
+        }
+        $largeDir = [IO.Path]::GetFullPath($StressReportDir)
+        [void][IO.Directory]::CreateDirectory($largeDir)
+        $largeFile = Join-Path $largeDir "native-zmodem-large-ab-$(Get-Date -Format 'yyyyMMdd-HHmmss')-$unique.json"
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_LARGE_AB", "1", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_LARGE_AB_ROUNDS", "$StressLargeABRounds", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_LARGE_AB_REPORT", $largeFile, "Process")
+
+        Write-Host "[large AB] 128 MiB 0/16/32 KiB, $StressLargeABRounds rounds"
+        Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemLargeABInteractivePTY$' -Name 'large-ab' -LogDirectory $diagnosticsDir -Timeout '60m' -CaptureProfile:$StressDiagnostics
+        if (-not (Test-Path -LiteralPath $largeFile -PathType Leaf)) {
+            throw "Large-file A/B report missing: $largeFile"
+        }
+        $large = Get-Content -LiteralPath $largeFile -Raw | ConvertFrom-Json
+        $cases = @($large.cases)
+        if ($cases.Count -ne 3 * $StressLargeABRounds) {
+            throw "Incomplete large A/B test: $($cases.Count) cases; $largeFile"
+        }
+        foreach ($sample in $cases) {
+            if ($sample.error -or @($sample.results).Count -ne 4) {
+                throw "Incomplete or failed 128 MiB sample: $largeFile"
+            }
+            if (@($sample.results | Where-Object { -not $_.checksumOK -or $_.error }).Count -ne 0) {
+                throw "SHA-256 failed in large A/B sample: $largeFile"
+            }
+            $download = @($sample.results | Where-Object {
+                $_.protocol -eq 'native' -and $_.direction -eq 'download'
+            })
+            if ($download.Count -ne 1 -or -not $download[0].io.rustRx.completed -or
+                $download[0].io.rustRx.fileBytes -ne 128 * 1024 * 1024) {
+                throw "Missing Rust receiver diagnostics: $largeFile"
+            }
+        }
+        $large.summaries |
+            Where-Object { $_.protocol -eq 'native' } |
+            Select-Object wireBatchKiB, direction, count,
+                @{Name='MedianMiBps';Expression={[math]::Round($_.medianMiBPerSecond, 3)}},
+                @{Name='P95ms';Expression={$_.p95DurationMs}},
+                allChecksumsOK |
+            Format-Table -AutoSize | Out-Host
+        Write-Host "PASS: large A/B report written to $largeFile"
     }
 
     Write-Host "PASS: native Windows sidecar and real Linux OpenSSH/SFTP ZMODEM tests"

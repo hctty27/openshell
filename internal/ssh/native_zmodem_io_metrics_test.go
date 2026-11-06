@@ -90,3 +90,27 @@ func TestNativeZmodemIOStatsIncludedOnlyWhenRequested(t *testing.T) {
 		t.Fatalf("invalid IO stats in JSON: %s", encoded)
 	}
 }
+
+func TestNativeZmodemReceiverDiagnosticsStrictParsing(t *testing.T) {
+	diag := parseNativeZmodemRXStats("OSZP\t1\t128\nOSZD\t1\t100\t200\t30\t400\t50\t60\t70\t80\t1048576\n")
+	if diag == nil || !diag.Completed || diag.PollCalls != 100 || diag.WaitNS != 400 ||
+		diag.FileSyncNS != 70 || diag.FileBytes != 1048576 {
+		t.Fatalf("unexpected receiver diagnostic: %+v", diag)
+	}
+	if got := parseNativeZmodemRXStats("OSZD\t2\t100\t200\t30\t400\t50\t60\t70\t80\t1048576\n"); got != nil {
+		t.Fatalf("accepted invalid completion status: %+v", got)
+	}
+	if got := parseNativeZmodemRXStats("OSZD\t1\tbad\t200\t30\t400\t50\t60\t70\t80\t1048576\n"); got != nil {
+		t.Fatalf("accepted invalid counter: %+v", got)
+	}
+	meter := &nativeZmodemIOMeter{}
+	meter.recordReceiverDiagnostics("OSZD\t1\t100\t200\t30\t400\t50\t60\t70\t80\t1048576\n")
+	before := meter.snapshot()
+	if before.RustRX == nil || before.RustRX.FileBytes != 1048576 {
+		t.Fatalf("receiver stats not captured: %+v", before)
+	}
+	before.RustRX.FileBytes = 0
+	if meter.snapshot().RustRX.FileBytes != 1048576 {
+		t.Fatal("snapshot must not share mutable receiver diagnostic state")
+	}
+}

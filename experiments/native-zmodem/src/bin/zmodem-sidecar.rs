@@ -261,6 +261,46 @@ fn safe_name(raw: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
     Ok(name.to_owned())
 }
 
+// Opt-in receiver metrics are emitted to stderr, never to binary stdout.
+// No filenames, payload bytes or credentials are included.
+#[derive(Default)]
+struct ReceiverDiagnostics {
+    enabled: bool,
+    completed: bool,
+    poll_calls: u64,
+    poll_ns: u128,
+    idle_calls: u64,
+    wait_ns: u128,
+    wait_max_ns: u128,
+    file_write_ns: u128,
+    file_sync_ns: u128,
+    wire_write_ns: u128,
+    file_bytes: u64,
+}
+
+impl ReceiverDiagnostics {
+    fn new() -> Self {
+        Self {
+            enabled: env::var("OPENSHELL_ZMODEM_RX_DIAG").as_deref() == Ok("1"),
+            ..Self::default()
+        }
+    }
+}
+
+impl Drop for ReceiverDiagnostics {
+    fn drop(&mut self) {
+        if self.enabled {
+            eprintln!(
+                "OSZD\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                u8::from(self.completed),
+                self.poll_calls, self.poll_ns, self.idle_calls,
+                self.wait_ns, self.wait_max_ns, self.file_write_ns,
+                self.file_sync_ns, self.wire_write_ns, self.file_bytes
+            );
+        }
+    }
+}
+
 fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut receiver = Receiver::with_flow_control(0, true)?;
     let rx = incoming_wire();
@@ -273,12 +313,23 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
     let mut received_total = 0u64;
     let mut file_write_scratch = Vec::<u8>::new();
+    let mut diag = ReceiverDiagnostics::new();
     let deadline = Instant::now() + SESSION_TIMEOUT;
 
     while Instant::now() < deadline {
-        match receiver.poll() {
+        let poll_started = if diag.enabled { Some(Instant::now()) } else { None };
+        let action = receiver.poll();
+        if let Some(started) = poll_started {
+            diag.poll_calls += 1;
+            diag.poll_ns += started.elapsed().as_nanos();
+        }
+        match action {
             Action::WriteWire(data) => {
+                let started = if diag.enabled { Some(Instant::now()) } else { None };
                 output.write_wire(data)?;
+                if let Some(started) = started {
+                    diag.wire_write_ns += started.elapsed().as_nanos();
+                }
                 let count = data.len();
                 receiver.wire_written(count);
             }
@@ -293,7 +344,12 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 if *bytes > MAX_SIZE || max.is_some_and(|size| *bytes > u64::from(size)) {
                     return Err("received file larger than advertised/allowed".into());
                 }
+                let started = if diag.enabled { Some(Instant::now()) } else { None };
                 file.write_all(&file_write_scratch)?;
+                if let Some(started) = started {
+                    diag.file_write_ns += started.elapsed().as_nanos();
+                    diag.file_bytes += received as u64;
+                }
                 receiver.file_written(received)?;
                 report_progress(*bytes, received_total, &mut progress_at, false);
             }
@@ -325,7 +381,11 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     return Err("received length differs from advertised length".into());
                 }
                 file.flush()?;
+                let started = if diag.enabled { Some(Instant::now()) } else { None };
                 file.sync_all()?;
+                if let Some(started) = started {
+                    diag.file_sync_ns += started.elapsed().as_nanos();
+                }
                 drop(file);
                 fs::rename(temp, target)?;
                 report_progress(size, received_total, &mut progress_at, true);
@@ -344,9 +404,18 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 // Always send pending acknowledgements before waiting.
                 output.flush_pending()?;
                 if session_completed {
+                    diag.completed = true;
                     return Ok(());
                 }
-                if receive_wire(&rx, &mut waiting)? {
+                let started = if diag.enabled { Some(Instant::now()) } else { None };
+                let have_wire = receive_wire(&rx, &mut waiting)?;
+                if let Some(started) = started {
+                    let elapsed = started.elapsed().as_nanos();
+                    diag.idle_calls += 1;
+                    diag.wait_ns += elapsed;
+                    diag.wait_max_ns = diag.wait_max_ns.max(elapsed);
+                }
+                if have_wire {
                     wire_scratch.clear();
                     wire_scratch.extend(waiting.iter().take(2048).copied());
                     let used = receiver.submit_wire(&wire_scratch)?;
