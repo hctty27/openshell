@@ -103,14 +103,14 @@ func (r *terminalShellReadiness) observe(p []byte) {
 		r.manualInput = false
 		r.startedProgram = ""
 	} else if shellPromptPattern.MatchString(visible) {
-		if !r.integration || r.assetMenu || r.program == "mysql" {
+		if !r.integration || r.assetMenu || (r.program != "" && r.program != "shell") {
 			r.program = "shell"
 			r.prompt = true
 			r.manualInput = false
 			r.mysqlObserved = false
-			r.startedProgram = ""
-			r.launchInput = nil
 		}
+		r.startedProgram = ""
+		r.launchInput = nil
 		if r.assetMenu { r.assetMenu = false }
 	} else if r.program == "mysql" || r.program == "redis" || r.program == "python" ||
 		r.program == "psql" || (!r.integration && !r.assetMenu) {
