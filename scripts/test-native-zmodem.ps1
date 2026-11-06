@@ -38,7 +38,12 @@ param(
     [switch]$StressNetemAB,
 
     [ValidateRange(1, 5)]
-    [int]$StressNetemRounds = 2,
+    [int]$StressNetemRounds = 5,
+
+    [ValidateSet("0.1", "1")]
+    [string]$StressNetemLossPercent = "0.1",
+
+    [switch]$StressNetemFaults,
 
     [switch]$SkipBaseline
 )
@@ -137,6 +142,7 @@ $variableNames = @(
     "OPENSHELL_ZMODEM_NETEM_AB",
     "OPENSHELL_ZMODEM_NETEM_PROFILE",
     "OPENSHELL_ZMODEM_NETEM_QDISC",
+    "OPENSHELL_ZMODEM_NETEM_CONTAINER",
     "OPENSHELL_ZMODEM_NETEM_ROUNDS",
     "OPENSHELL_ZMODEM_NETEM_REPORT"
 )
@@ -409,6 +415,7 @@ try {
         $netemDir = [IO.Path]::GetFullPath($StressReportDir)
         [void][IO.Directory]::CreateDirectory($netemDir)
         [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_AB", "1", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_CONTAINER", $container, "Process")
         [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_ROUNDS", "$StressNetemRounds", "Process")
         foreach ($netemProfile in @("clean", "jitter", "loss")) {
             if ($netemProfile -eq "jitter") {
@@ -416,7 +423,7 @@ try {
                 if ($LASTEXITCODE -ne 0) { throw "Failed to apply netem jitter on isolated eth0" }
             }
             elseif ($netemProfile -eq "loss") {
-                & docker exec $container tc qdisc replace dev eth0 root netem delay 20ms 8ms loss 0.1%
+                & docker exec $container tc qdisc replace dev eth0 root netem delay 20ms 8ms loss "${StressNetemLossPercent}%"
                 if ($LASTEXITCODE -ne 0) { throw "Failed to apply netem loss on isolated eth0" }
             }
             $qdisc = @(& docker exec $container tc qdisc show dev eth0)
@@ -440,6 +447,15 @@ try {
                 throw "Netem report missing: $netemFile"
             }
             $netemReport = Get-Content -LiteralPath $netemFile -Raw | ConvertFrom-Json
+            if ($netemProfile -ne "clean" -and -not $netemReport.qdiscStats.countersAvailable) {
+                throw "Netem egress packet/drop counters missing: $netemFile"
+            }
+            if ($netemReport.qdiscStats.countersAvailable) {
+                Write-Host "[netem] Actual egress sent=$($netemReport.qdiscStats.sentPackets), dropped=$($netemReport.qdiscStats.droppedPackets)"
+                if ($netemProfile -eq "loss" -and -not $netemReport.qdiscStats.observedDrops) {
+                    Write-Warning "Loss configured, but no actual dropped packets observed; do not claim loss was exercised."
+                }
+            }
             $netemCases = @($netemReport.cases)
             if ($netemCases.Count -ne 2 * $StressNetemRounds) {
                 throw "Incomplete netem A/B: $($netemCases.Count) cases; $netemFile"
@@ -458,6 +474,17 @@ try {
                     allChecksumsOK |
                 Format-Table -AutoSize | Out-Host
             Write-Host "PASS: netem report written to $netemFile"
+            if ($StressNetemFaults -and $netemProfile -ne "clean") {
+                $savedBatch = [Environment]::GetEnvironmentVariable("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES", "Process")
+                try {
+                    [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES", "16384", "Process")
+                    Write-Host "[netem] ${netemProfile}: interrupt, timeout and disconnect at 16 KiB"
+                    Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemLiveInterruptedInteractivePTY$' -Name "netem-faults-$netemProfile" -LogDirectory $diagnosticsDir -Timeout '20m'
+                }
+                finally {
+                    [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES", $savedBatch, "Process")
+                }
+            }
         }
     }
 

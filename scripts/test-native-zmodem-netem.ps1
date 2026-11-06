@@ -2,7 +2,12 @@
 [CmdletBinding()]
 param(
     [ValidateRange(1, 5)]
-    [int]$Rounds = 2,
+    [int]$Rounds = 5,
+
+    [ValidateSet("0.1", "1")]
+    [string]$LossPercent = "0.1",
+
+    [switch]$IncludeFaults,
 
     [string]$ReportDir = "",
 
@@ -18,6 +23,8 @@ $ErrorActionPreference = "Stop"
     -SkipFaultTests `
     -StressNetemAB `
     -StressNetemRounds $Rounds `
+    -StressNetemLossPercent $LossPercent `
+    -StressNetemFaults:$IncludeFaults `
     -StressReportDir $ReportDir `
     -SkipBaseline:$SkipBaseline
 

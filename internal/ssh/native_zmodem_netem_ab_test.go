@@ -32,6 +32,8 @@ func TestNativeZmodemNetemABInteractivePTY(t *testing.T) {
 	default:
 		t.Fatalf("invalid netem profile: %q", profile)
 	}
+	container := os.Getenv("OPENSHELL_ZMODEM_NETEM_CONTAINER")
+	if !nativeNetemFixtureNamePattern.MatchString(container) { t.Fatal("invalid Docker lab target") }
 	actualQdisc := os.Getenv("OPENSHELL_ZMODEM_NETEM_QDISC")
 	if actualQdisc == "" || (profile != "clean" && !strings.Contains(actualQdisc, "netem")) {
 		t.Fatal("missing verified Docker container qdisc state")
@@ -44,11 +46,16 @@ func TestNativeZmodemNetemABInteractivePTY(t *testing.T) {
 		}
 	}
 	report := nativeNetemABReport{
-		Version: 1, StartedAt: time.Now().UTC(), ClientOS: runtime.GOOS,
+		Version: 2, StartedAt: time.Now().UTC(), ClientOS: runtime.GOOS,
 		Profile: profile, ActualQdisc: actualQdisc, Rounds: rounds, SizeMiB: 1,
 		DirectionNote: "tc netem affects Docker Linux server eth0 egress only",
 	}
 	t.Cleanup(func() {
+		stats, statsErr := readNativeNetemQdiscStats(container)
+		if statsErr != nil {
+			if profile == "clean" { t.Logf("clean qdisc may not expose counters: %v", statsErr) } else { t.Errorf("netem counters unavailable: %v", statsErr) }
+		}
+		report.QdiscStats = &stats
 		report.Summaries = summarizeNativeBatchMatrix(report.Cases)
 		destination := os.Getenv("OPENSHELL_ZMODEM_NETEM_REPORT")
 		if destination == "" {
@@ -108,6 +115,7 @@ type nativeNetemABReport struct {
 	ClientOS string `json:"clientOS"`
 	Profile string `json:"profile"`
 	ActualQdisc string `json:"actualQdisc"`
+	QdiscStats *nativeNetemQdiscStats `json:"qdiscStats,omitempty"`
 	DirectionNote string `json:"directionNote"`
 	Rounds int `json:"rounds"`
 	SizeMiB int `json:"sizeMiB"`
