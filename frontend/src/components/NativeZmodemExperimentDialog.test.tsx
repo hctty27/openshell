@@ -6,8 +6,10 @@ import NativeZmodemExperimentDialog from "./NativeZmodemExperimentDialog";
 const actions = vi.hoisted(() => ({
   readiness: vi.fn(async () => ({ ready: true, code: "ready", message: "ok" })),
   uploadFile: vi.fn(async () => "C:\\test\\example.bin"),
+  uploadFiles: vi.fn(async () => ["C:\\test\\first.bin", "C:\\test\\中文 文件.bin"]),
   downloadFolder: vi.fn(async () => "C:\\downloads"),
   start: vi.fn(async () => {}),
+  startBatch: vi.fn(async () => {}),
   cancel: vi.fn(async () => {}),
   progressCallback: null as ((event: unknown) => void) | null,
 }));
@@ -15,8 +17,10 @@ vi.mock("../bridge", () => ({
   api: {
     NativeZmodemInteractiveReadiness: actions.readiness,
     NativeZmodemChooseUploadFile: actions.uploadFile,
+    NativeZmodemChooseUploadFiles: actions.uploadFiles,
     SFTPChooseDirectory: actions.downloadFolder,
     StartNativeZmodemInteractiveTransfer: actions.start,
+    StartNativeZmodemInteractiveBatchTransfer: actions.startBatch,
     CancelNativeZmodemInteractiveTransfer: actions.cancel,
   },
   errorText: (error: unknown) => String(error),
@@ -32,6 +36,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   actions.readiness.mockResolvedValue({ ready: true, code: "ready", message: "ok" });
   actions.start.mockResolvedValue(undefined);
+  actions.startBatch.mockResolvedValue(undefined);
   actions.cancel.mockResolvedValue(undefined);
   actions.progressCallback = null;
 });
@@ -238,4 +243,49 @@ test("auto-command download preselects the remote file without starting before c
     ref, "download", "C:\\downloads", "/tmp/report.bin",
   ));
   expect(onError).not.toHaveBeenCalled();
+});
+
+test("native upload selects several files in one authorized protocol session", async () => {
+  const { onError } = showDialog();
+  await waitFor(() => expect(actions.readiness).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "选择多个文件" }));
+  await waitFor(() => expect(actions.uploadFiles).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  await waitFor(() => expect(actions.startBatch).toHaveBeenCalledWith(
+    ref, "upload", ["C:\\test\\first.bin", "C:\\test\\中文 文件.bin"], [],
+  ));
+  expect(actions.start).not.toHaveBeenCalled();
+  expect(onError).not.toHaveBeenCalled();
+});
+
+test("native download parses multiple remote paths without shell evaluation", async () => {
+  showDialog();
+  await waitFor(() => expect(actions.readiness).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("radio", { name: "下载文件" }));
+  fireEvent.change(screen.getByPlaceholderText("/home/user/example.bin"), {
+    target: { value: "/tmp/first.bin\n/tmp/中文 文件.bin" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
+  await waitFor(() => expect(actions.downloadFolder).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  await waitFor(() => expect(actions.startBatch).toHaveBeenCalledWith(
+    ref, "download", ["C:\\downloads"], ["/tmp/first.bin", "/tmp/中文 文件.bin"],
+  ));
+});
+
+test("batch larger than 100 is rejected before entering the PTY", async () => {
+  actions.uploadFiles.mockResolvedValueOnce(
+    Array.from({ length: 101 }, (_, i) => "C:\\test\\file" + i + ".bin"),
+  );
+  showDialog();
+  await waitFor(() => expect(actions.readiness).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "选择多个文件" }));
+  await waitFor(() => expect(actions.uploadFiles).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  await waitFor(() => expect(screen.getByText("每次请选择 1–100 个文件或远程路径。")).toBeTruthy());
+  expect(actions.start).not.toHaveBeenCalled();
+  expect(actions.startBatch).not.toHaveBeenCalled();
 });
