@@ -147,6 +147,12 @@ type nativeStressRecord struct {
  ChecksumOK bool `json:"checksumOK"`
  Error string `json:"error,omitempty"`
  StagesMS map[string]int64 `json:"stagesMs,omitempty"`
+ IO *nativeZmodemIOStats `json:"io,omitempty"`
+}
+
+type nativeStressSample struct {
+ StagesMS map[string]int64
+ IO *nativeZmodemIOStats
 }
 
 type nativeStressReport struct {
@@ -158,14 +164,21 @@ type nativeStressReport struct {
  Results []nativeStressRecord `json:"results"`
 }
 
-func (r *nativeStressReport) add(profile, protocol, direction string, attempt int, size int64, elapsed time.Duration, err error, stageSamples ...map[string]int64) {
+func (r *nativeStressReport) add(profile, protocol, direction string, attempt int, size int64, elapsed time.Duration, err error, samples ...nativeStressSample) {
  record := nativeStressRecord{Profile: profile, Attempt: attempt, Protocol: protocol, Direction: direction,
   SizeBytes: size, DurationMS: elapsed.Milliseconds(), ChecksumOK: err == nil}
  if elapsed > 0 { record.MiBPerSecond = float64(size) / (1024*1024) / elapsed.Seconds() }
  if err != nil { record.Error = err.Error() }
- if len(stageSamples) > 0 && stageSamples[0] != nil {
-  record.StagesMS = make(map[string]int64, len(stageSamples[0]))
-  for key, value := range stageSamples[0] { record.StagesMS[key] = value }
+ if len(samples) > 0 {
+  sample := samples[0]
+  if sample.StagesMS != nil {
+   record.StagesMS = make(map[string]int64, len(sample.StagesMS))
+   for key, value := range sample.StagesMS { record.StagesMS[key] = value }
+  }
+  if sample.IO != nil {
+   stats := *sample.IO
+   record.IO = &stats
+  }
  }
  r.mu.Lock()
  r.Results = append(r.Results, record)
@@ -300,6 +313,8 @@ func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, pro
  started := time.Now()
  ctx, cancel := context.WithTimeout(context.Background(), 88*time.Second)
  uploadStages := make(map[string]int64, 4)
+ uploadMeter := &nativeZmodemIOMeter{}
+ ctx = withNativeZmodemIOMeter(ctx, uploadMeter)
  ctx = withNativeZmodemStageObserver(ctx, func(name string, elapsed time.Duration) {
   uploadStages[name] = elapsed.Milliseconds()
  })
@@ -309,7 +324,9 @@ func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, pro
  cancel()
  elapsed := time.Since(started)
  if err == nil { err = nativeStressCompareSFTP(peer.sftp, remoteUpload, expected) }
- report.add(profile, "native", "upload", round, int64(size), elapsed, err, uploadStages)
+ uploadSnapshot := uploadMeter.snapshot()
+ report.add(profile, "native", "upload", round, int64(size), elapsed, err,
+  nativeStressSample{StagesMS: uploadStages, IO: &uploadSnapshot})
  if err != nil { return fmt.Errorf("native upload: %w", err) }
 
  remoteSource := path.Join(peer.home, "source-"+name)
@@ -330,6 +347,8 @@ func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, pro
  started = time.Now()
  ctx, cancel = context.WithTimeout(context.Background(), 88*time.Second)
  downloadStages := make(map[string]int64, 4)
+ downloadMeter := &nativeZmodemIOMeter{}
+ ctx = withNativeZmodemIOMeter(ctx, downloadMeter)
  ctx = withNativeZmodemStageObserver(ctx, func(name string, elapsed time.Duration) {
   downloadStages[name] = elapsed.Milliseconds()
  })
@@ -339,7 +358,9 @@ func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, pro
  cancel()
  elapsed = time.Since(started)
  if err == nil { err = nativeStressCompareFile(filepath.Join(destination, "source-"+name), expected) }
- report.add(profile, "native", "download", round, int64(size), elapsed, err, downloadStages)
+ downloadSnapshot := downloadMeter.snapshot()
+ report.add(profile, "native", "download", round, int64(size), elapsed, err,
+  nativeStressSample{StagesMS: downloadStages, IO: &downloadSnapshot})
  if err != nil { return fmt.Errorf("native download: %w", err) }
 
  if !sftpBaseline { return nil }
@@ -422,7 +443,7 @@ func TestNativeZmodemStageObserverOptIn(t *testing.T) {
     }
     report := &nativeStressReport{}
     stages := map[string]int64{"protocol": 123}
-    report.add("latency", "native", "upload", 0, 1024, time.Second, nil, stages)
+    report.add("latency", "native", "upload", 0, 1024, time.Second, nil, nativeStressSample{StagesMS: stages})
     stages["protocol"] = 999
     if got := report.Results[0].StagesMS["protocol"]; got != 123 {
         t.Fatalf("stage snapshots must be immutable after recording: %d", got)
