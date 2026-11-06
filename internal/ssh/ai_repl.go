@@ -59,11 +59,11 @@ func redisAICommand(command string) (string,error) {
 func psqlAICommand(command string) (string,error) {
 	c:=strings.TrimSpace(command)
 	if err:=validREPLText(c,false);err!=nil { return "",err }
-	if strings.HasPrefix(c,"\") {
+	if strings.HasPrefix(c,`\`) {
 		fields:=strings.Fields(c)
 		if len(fields)==0 { return "",errors.New("psql 元命令为空") }
 		switch fields[0] {
-		case "\d","\d+","\dt","\dt+","\di","\di+","\dn","\dn+","\dv","\dv+","\df","\df+","\l","\l+","\conninfo":
+		case `\d`,`\d+`,`\dt`,`\dt+`,`\di`,`\di+`,`\dn`,`\dn+`,`\dv`,`\dv+`,`\df`,`\df+`,`\l`,`\l+`,`\conninfo`:
 			// Meta-commands cannot run shell commands or write server state.
 			if strings.ContainsAny(c,";|") { return "",errors.New("psql 元命令不支持链式执行") }
 			return c,nil
@@ -71,8 +71,8 @@ func psqlAICommand(command string) (string,error) {
 			return "",errors.New("当前仅支持 psql 只读元命令（如 \\d、\\dt、\\conninfo）")
 		}
 	}
-	if strings.ContainsAny(c,";\") || strings.Contains(c,"--") || strings.Contains(c,"/*") || strings.Contains(c,"*/") {
-		if !strings.HasSuffix(c,";") || strings.ContainsAny(strings.TrimSuffix(c,";"),";\") || strings.Contains(c,"--") || strings.Contains(c,"/*") || strings.Contains(c,"*/") {
+	if (strings.Contains(c,";") || strings.Contains(c,`\`)) || strings.Contains(c,"--") || strings.Contains(c,"/*") || strings.Contains(c,"*/") {
+		if !strings.HasSuffix(c,";") || (strings.Contains(strings.TrimSuffix(c,";"),";") || strings.Contains(strings.TrimSuffix(c,";"),`\`)) || strings.Contains(c,"--") || strings.Contains(c,"/*") || strings.Contains(c,"*/") {
 			return "",errors.New("psql 当前仅支持无注释的单条只读 SQL")
 		}
 		c=strings.TrimSuffix(c,";")
