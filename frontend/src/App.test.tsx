@@ -63,6 +63,7 @@ vi.mock("./bridge", async () => ({
     GetTransferDefaultLocalDir: vi.fn(async () => "C:/Users/test"),
     SavePreference: vi.fn(async () => {}),
     SFTPTransfers: vi.fn(async () => []),
+    SFTPConcurrency: vi.fn(async () => 3),
     CancelZmodem: vi.fn(async () => {}),
     Disconnect: vi.fn(async () => {}),
     Connect: vi.fn(async (tabId: string, sessionId: string) => ({
