@@ -49,7 +49,7 @@ func runNativeZmodemTerminalSidecarWithProgress(
 	}
 
 	cmd := exec.CommandContext(ctx, executable, direction, path)
-	if control := nativeZmodemSkipControl(ctx); control != "" && (direction == "send" || direction == "send-list") {
+	if control := nativeZmodemSkipControl(ctx); control != "" && (direction == "send" || direction == "send-list" || direction == "receive") {
 		cmd.Env = append(os.Environ(), "OPENSHELL_ZMODEM_SKIP_FILE="+control)
 	}
 	configureNativeZmodemSidecar(cmd)
