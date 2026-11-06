@@ -11,9 +11,11 @@ GitHub Actions workflow: [Generate third-party SBOM](../.github/workflows/sbom.y
 | `go-windows-amd64.cdx.json` | Go application modules under Windows amd64 production build constraints; CycloneDX via pinned `cyclonedx-gomod` v1.12.0 |
 | `frontend-runtime.cdx.json` | Installed npm production dependency graph via Node/npm's `npm sbom --omit=dev` |
 | `frontend-all.cdx.json` | Full installed npm graph, including build and development dependencies |
+| `rust-zmodem.cdx.json` | Native Rust ZMODEM Cargo dependency graph for Windows x64 via pinned `cargo-cyclonedx` 0.5.9 |
 | `license-review.json` | Count of components lacking explicit or evidence-only license metadata, with names, versions and package URLs |
 
 - These files are **workflow artifacts**, retained for 30 days; they are not automatically published as long-term GitHub Release assets.
+- The native Rust ZMODEM dependency SBOM is generated from `experiments/native-zmodem/Cargo.toml` for the Windows x64 target. It lists dependency licenses but does **not** by itself prove that Rust redistribution conditions are satisfied.
 - The Go SBOM reflects cross-platform module resolution for `GOOS=windows`, `GOARCH=amd64`, `CGO_ENABLED=0`, `GOFLAGS=-tags=production`. It does not independently attest to a compiled EXE's bytes, nor to the upstream ZMODEM helpers.
 - Tool-detected license names are candidates for review rather than completed legal determinations. Components with missing license metadata are left visible in `license-review.json`, not silently approved.
 - To reproduce, run the workflow manually or execute its pinned Go CLI and the npm commands with the project's current locked dependencies.
@@ -66,4 +68,4 @@ Review procedure:
 
 通过新增工作流，生成 Go Windows 生产依赖以及 npm 运行时/全量依赖的 CycloneDX SBOM，并自动输出**缺少许可证信息的待审核清单**，不会将其判定为已授权。
 
-未来的 Windows 发行包还会内置 `zmodem/BUNDLED_COMPONENTS.json`，记录所有内置 ZMODEM 文件的 SHA-256、大小及已知来源；Release 同时附一份清单。`msys-2.0.dll` 的精确版本、对应源码和授权义务仍待人工确认，不能将当前 MSYS2 包许可证直接套用到 2023 年上传的 DLL。
+当前原生 Windows 发行包内置 `zmodem/BUNDLED_COMPONENTS.json`，记录三个项目自建 ZMODEM 程序的 SHA-256、大小及来源；Release 同时附一份清单。当前包已移除旧版 `msys-2.0.dll`。Rust 传递依赖已纳入 CycloneDX SBOM，但许可证仍待人工审核；历史 DLL 的对应源码与许可问题仅作为旧版本记录继续跟进。

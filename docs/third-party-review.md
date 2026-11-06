@@ -1,10 +1,10 @@
 # Third-party distribution and license review — OpenShell
 
-> Review status: **in progress (2026-11-06)**. This is a source/build-script inventory, **not** a completed software bill of materials (SBOM), a legal opinion, or a statement that all upstream components have passed compliance verification.
+> Review status: **in progress (2026-11-07)**. This is a source/build-script inventory, **not** a completed software bill of materials (SBOM), a legal opinion, or a statement that all upstream components have passed compliance verification.
 
 ## Current Windows native-only ZMODEM distribution
 
-The current release packaging bundles only the OpenShell-built `zmodem/rz.exe`, `zmodem/sz.exe` launchers and the OpenShell Rust `zmodem/native/zmodem-sidecar.exe`. The new strict manifest verifies their SHA-256 and rejects `msys-2.0.dll`, `lrzsz-win32` and other stale files. The installer removes the former helper directory during upgrades. Go/npm/Rust license obligations remain subject to separate review.
+The current release packaging bundles only the OpenShell-built `zmodem/rz.exe`, `zmodem/sz.exe` launchers and the OpenShell Rust `zmodem/native/zmodem-sidecar.exe`. The new strict manifest verifies their SHA-256 and rejects `msys-2.0.dll`, `lrzsz-win32` and other stale files. The installer removes the former helper directory during upgrades. Go/npm/Rust license obligations remain subject to separate review; the automated CycloneDX SBOM now inventories Go/npm/Rust dependencies, but licenses and notices still require human review.
 
 The **historical** inventory below documents earlier MSYS2/lrzsz releases and their unresolved old-binary source attribution. Those binaries are no longer distributed by the current native-only Windows packaging; this does not retroactively settle past redistribution questions.
 
@@ -55,6 +55,6 @@ The **historical** inventory below documents earlier MSYS2/lrzsz releases and th
 
 ## 中文结论
 
-**目前不能宣称所有第三方组件已完成授权审核。** OpenShell 的发布脚本已经锁定 lrzsz 二进制 SHA-256，并附带 lrzsz 的 GPL 许可证、上游源码压缩包和说明。尚需核对 `msys-2.0.dll` 的实际版本、对应源码与许可义务；同时应针对 `go.mod` 和 `frontend/package-lock.json` 生成完整依赖清单。
+**目前不能宣称所有第三方组件已完成授权审核。** 当前 Windows 打包已经不包含旧版 lrzsz/MSYS2 二进制，改为仓库编译的 Rust ZMODEM sidecar 和自研启动器。Go/npm 依赖已有自动 SBOM，但仍需人工核对许可证义务；Rust 传递依赖现已加入自动 SBOM，但仍需人工审核许可证。历史 `msys-2.0.dll` 的对应源码与许可问题保留在历史记录中，不能误认为它仍随当前安装包分发。
 
 SignPath Foundation 证书只能为项目自身构建的二进制签名，不能把原版第三方 `rz.exe`、`sz.exe` 或 `msys-2.0.dll` 作为 OpenShell 自己的程序签名。

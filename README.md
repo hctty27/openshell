@@ -213,8 +213,8 @@ Bug reports and focused pull requests are welcome. Include the OpenShell version
 
 OpenShell is licensed under the **[MIT License](LICENSE)**. Bundled third-party components retain their own licenses; The Windows ZMODEM distribution includes only first-party launchers and the native Rust sidecar, not legacy lrzsz/MSYS2 binaries. Go, Rust and npm dependencies retain their respective third-party licenses; see the [SBOM](docs/sbom.md).
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). This is the intended provider attribution **if the application is approved and signing is enabled**. The published v1.0.0 Windows downloads are unsigned; no acceptance or signature is being claimed.
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). This is the intended provider attribution **if the application is approved and signing is enabled**. The original v1.0.0 Windows downloads are unsigned. Foundation approval and the first signed release have not been confirmed; consult each Release for the actual signing state.
 
-Signing is conditional on the required SignPath configuration and secrets being present. Otherwise, builds are unsigned. Check each Release's notes for its actual signing status. The application executable and installer are built through GitHub Actions; the portable ZIP contains the application executable. Only artifacts built from this repository's source code are submitted for signing.
+Only trusted main-branch releases may be signed. Until the maintainer enables `SIGNPATH_REQUIRED=true`, releases without a signing token remain unsigned; once required, missing signing credentials block release publishing. Check each Release's notes for its actual signing status. The application executable and installer are built through GitHub Actions; the portable ZIP contains the application executable. Only artifacts built from this repository's source code are submitted for signing.
 
 **Committer, reviewer, and signing approver:** [hctty27](https://github.com/hctty27).

@@ -34,6 +34,8 @@ on:
       - "scripts/generate_zmodem_manifest.py"
       - "scripts/test_generate_zmodem_manifest.py"
       - ".github/workflows/windows-release.yml"
+      - "scripts/verify_windows_signature.ps1"
+      - ".signpath/artifact-configurations/**"
 
 permissions:
   contents: read
@@ -46,15 +48,16 @@ concurrency:
 jobs:
   windows-x64:
     runs-on: windows-latest
-    timeout-minutes: 50
+    timeout-minutes: 180
     permissions:
       contents: write
       actions: read
     env:
       RELEASE_REF_SHA: ${{ inputs.ref_sha || github.sha }}
-      # SignPath Foundation code signing. When SIGNPATH_API_TOKEN is not set,
-      # the workflow still builds and publishes unsigned binaries.
-      SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+      # Only a published release from main is eligible to use the signing token.
+      # When SIGNPATH_REQUIRED=true, missing signing credentials fail the release.
+      SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' && inputs.publish && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+      SIGNPATH_REQUIRED: ${{ vars.SIGNPATH_REQUIRED == 'true' }}
       SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
       SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG || 'openshell' }}
       SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
@@ -63,6 +66,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref_sha || github.sha }}
+      - name: Validate code signing release configuration
+        if: inputs.publish && github.event_name != 'pull_request'
+        shell: pwsh
+        run: |
+          if ($env:SIGNPATH_REQUIRED -eq 'true' -and $env:SIGNPATH_ENABLED -ne 'true') {
+            throw "SIGNPATH_REQUIRED=true but this release is not eligible for signing or SIGNPATH_API_TOKEN is missing."
+          }
+          if ($env:SIGNPATH_ENABLED -eq 'true' -and [string]::IsNullOrWhiteSpace($env:SIGNPATH_ORGANIZATION_ID)) {
+            throw "SIGNPATH_API_TOKEN is configured but SIGNPATH_ORGANIZATION_ID is missing."
+          }
       - name: Validate and set build version
         shell: pwsh
         run: |
@@ -225,7 +238,7 @@ jobs:
 
       - name: Sign EXE with SignPath
         if: env.SIGNPATH_ENABLED == 'true'
-        uses: signpath/github-action-submit-signing-request@v2
+        uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
@@ -246,9 +259,7 @@ jobs:
           $signed = Get-ChildItem build/signed-exe -Recurse -Filter OpenShell.exe | Select-Object -First 1
           if (!$signed) { throw "Signed OpenShell.exe not found" }
           Copy-Item $signed.FullName "build/bin/OpenShell.exe" -Force
-          $sig = Get-AuthenticodeSignature "build/bin/OpenShell.exe"
-          Write-Host "Signature status: $($sig.Status) / $($sig.SignerCertificate.Subject)"
-          if ($sig.Status -ne 'Valid') { throw "OpenShell.exe signature is not valid: $($sig.Status)" }
+          ./scripts/verify_windows_signature.ps1 -Path "build/bin/OpenShell.exe" -Version $env:APP_VERSION
 
       - name: Create portable ZIP
         shell: pwsh
@@ -319,7 +330,7 @@ jobs:
 
       - name: Sign installer with SignPath
         if: env.SIGNPATH_ENABLED == 'true'
-        uses: signpath/github-action-submit-signing-request@v2
+        uses: signpath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
@@ -341,9 +352,13 @@ jobs:
           $signed = Get-ChildItem build/signed-setup -Recurse -Filter $name | Select-Object -First 1
           if (!$signed) { throw "Signed $name not found" }
           Copy-Item $signed.FullName "dist/$name" -Force
-          $sig = Get-AuthenticodeSignature "dist/$name"
-          Write-Host "Signature status: $($sig.Status) / $($sig.SignerCertificate.Subject)"
-          if ($sig.Status -ne 'Valid') { throw "Installer signature is not valid: $($sig.Status)" }
+          ./scripts/verify_windows_signature.ps1 -Path "dist/$name" -Version $env:APP_VERSION
+
+      - name: Verify installed executable from signed installer
+        if: env.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          ./scripts/test_native_zmodem_installer_upgrade.ps1 -Installer "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe" -VerifySigned -Version $env:APP_VERSION
 
       - name: Publish build artifacts
         uses: actions/upload-artifact@v7

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'go.mod'
+      - 'experiments/native-zmodem/**'
       - 'go.sum'
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
@@ -18,6 +19,7 @@ on:
     branches: [main]
     paths:
       - 'go.mod'
+      - 'experiments/native-zmodem/**'
       - 'go.sum'
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
@@ -77,12 +79,30 @@ jobs:
           set -euo pipefail
           npm sbom --sbom-format=cyclonedx --sbom-type=application --omit=dev > ../build/sbom/frontend-runtime.cdx.json
           npm sbom --sbom-format=cyclonedx --sbom-type=application > ../build/sbom/frontend-all.cdx.json
+      - name: Generate native Rust ZMODEM CycloneDX SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo install cargo-cyclonedx --version 0.5.9 --locked
+          cargo cyclonedx --manifest-path experiments/native-zmodem/Cargo.toml --format json --target x86_64-pc-windows-msvc --spec-version 1.5 --override-filename rust-zmodem.cdx.json
+          # cargo-cyclonedx may write relative to the current directory, not the manifest path.
+          # Locate its sole requested output instead of assuming a fixed location.
+          mapfile -t files < <(find . -maxdepth 4 -type f -name 'rust-zmodem*json' -print)
+          printf 'Rust SBOM candidates: %s\n' "${files[*]:-<none>}"
+          if [[ "${#files[@]}" -ne 1 || ! -s "${files[0]:-}" ]]; then
+            echo "::error::Expected exactly one nonempty Rust CycloneDX JSON file."
+            exit 1
+          fi
+          python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d.get("bomFormat") == "CycloneDX" and d.get("components"), "Invalid Rust SBOM"' "${files[0]}"
+          cp "${files[0]}" build/sbom/rust-zmodem.cdx.json
+
       - name: Validate the inventories and report unresolved licenses
         run: |
           python3 scripts/audit_sbom.py \
             --go build/sbom/go-windows-amd64.cdx.json \
             --frontend-runtime build/sbom/frontend-runtime.cdx.json \
             --frontend-all build/sbom/frontend-all.cdx.json \
+            --rust build/sbom/rust-zmodem.cdx.json \
             --output build/sbom/license-review.json
       - uses: actions/upload-artifact@v7
         with:

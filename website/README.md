@@ -46,7 +46,7 @@ node --check website/app.js
 - 真实软件截图临时引用仓库公开的 `docs/screenshots/02-ssh-sftp.webp`（`raw.githubusercontent.com`），不额外复制二进制文件到官网目录；若之后需要独立于 GitHub 的资源可用性，应将截图迁移到网站本地。
 - 下载入口优先使用 GitHub 最新**非预发布** Release 的 Windows x64 安装版和便携版文件；GitHub API 请求超时/限流时回退到 `/releases/latest`。网站不处理软件分发文件，也不会上传用户数据。
 - 中/英文内容在 `app.js` 的 `translations` 中维护；首次访问按照浏览器语言选择，也可以手动切换，偏好仅存浏览器本地。
-- 代码签名状态不应根据版本号自行推断。网站明确声明 `v1.0.0` 未签名，最新版本的实际签名状态以其 GitHub Release 说明为准。
+- 代码签名状态不应根据版本号自行推断。网站不再把 `v1.0.0` 的历史状态写成当前最新版本状态；所有版本均以对应 GitHub Release 的签名声明及实际 Authenticode 验证为准。
 - `_headers` 配置安全响应头，部署后请检查 Cloudflare Pages 实际响应包含预期头部。
 - 不使用 cookie banner、Analytics 或第三方统计 SDK。若后续接入分析功能，需要同步核对 [Privacy policy](../PRIVACY.md)。
 
@@ -70,4 +70,4 @@ website/
 
 桌面客户端继续使用仓库根目录下的 `.github/release-version.txt` 触发正式版 Release；官网只读 GitHub Releases 的公开接口。不修改版本标记时，即使官网合并进 `main`，也不会重复发布桌面软件。
 
-**未部署状态说明：** 本目录只提供网站源码与部署步骤。Cloudflare 站点创建、实际部署、DNS 切换以及线上回归测试均需独立确认。
+**线上状态核验：** Pages 项目源配置已记录，但当前自定义域名的实际上线内容、DNS 切换与政策链接应独立核验；不能仅根据此 README 判定线上部署成功。

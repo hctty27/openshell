@@ -11,8 +11,8 @@
   </parameters>
   <zip-file>
     <pe-file-set product-name="OpenShell" product-version="${version}">
-      <include path="OpenShell.exe" min-matches="0" max-matches="1" />
-      <include path="OpenShell-v*-windows-x64-Setup.exe" min-matches="0" max-matches="1" />
+      <!-- Each signing request contains exactly one OpenShell executable or installer. -->
+      <include path="OpenShell*.exe" min-matches="1" max-matches="1" />
       <for-each>
         <authenticode-sign />
       </for-each>

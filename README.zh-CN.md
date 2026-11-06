@@ -213,8 +213,8 @@ npx playwright test
 
 OpenShell 使用 **[MIT 许可证](LICENSE)**。随包分发的第三方组件遵循各自许可证，Windows 本地 ZMODEM 只分发 Rust sidecar 与自研启动器，不再附带旧版 lrzsz/MSYS2 二进制文件。Go、Rust、npm 第三方依赖仍遵循各自许可证，具体清单见 [SBOM](docs/sbom.md)。
 
-免费代码签名由 [SignPath.io](https://about.signpath.io/) 提供，证书由 [SignPath Foundation](https://signpath.org/) 提供。 仅在申请获批且签名功能实际启用后适用；当前发布的 **v1.0.0 Windows 安装包和便携版仍未签名**，不代表已获 SignPath 认证。
+免费代码签名由 [SignPath.io](https://about.signpath.io/) 提供，证书由 [SignPath Foundation](https://signpath.org/) 提供。 仅在申请获批且签名功能实际启用后适用；原始 **v1.0.0 Windows 安装包和便携版未经签名**，后续各版本应查看 Release 的实际签名状态，不能据此认为 SignPath 已批准。
 
-签名仅在所需 SignPath 配置和密钥齐全时启用，否则构建产物不带签名；以每个 Release 的实际说明为准。应用可执行文件与安装程序由 GitHub Actions 构建，便携 ZIP 包含应用可执行文件。仅将本仓库源码构建的产物提交签名。
+仅来自 main 分支的正式发布可提交签名请求。启用 `SIGNPATH_REQUIRED=true` 后，缺少签名配置会阻止正式发布；此前如未配置密钥则明确发布未签名版本。以每个 Release 的实际说明为准。应用可执行文件与安装程序由 GitHub Actions 构建，便携 ZIP 包含应用可执行文件。仅将本仓库源码构建的产物提交签名。
 
 **提交者、审核者及签名审批者：** [hctty27](https://github.com/hctty27)。
