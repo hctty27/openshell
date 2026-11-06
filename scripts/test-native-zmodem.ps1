@@ -356,6 +356,33 @@ try {
         if (-not (Test-Path -LiteralPath $largeFile -PathType Leaf)) {
             throw "Large-file A/B report missing: $largeFile"
         }
+        $large = Get-Content -LiteralPath $largeFile -Raw | ConvertFrom-Json
+        $cases = @($large.cases)
+        if ($cases.Count -ne 3 * $StressLargeABRounds) {
+            throw "Incomplete large A/B test: $($cases.Count) cases; $largeFile"
+        }
+        foreach ($sample in $cases) {
+            if ($sample.error -or @($sample.results).Count -ne 4) {
+                throw "Incomplete or failed 128 MiB sample: $largeFile"
+            }
+            if (@($sample.results | Where-Object { -not $_.checksumOK -or $_.error }).Count -ne 0) {
+                throw "SHA-256 failed in large A/B sample: $largeFile"
+            }
+            $download = @($sample.results | Where-Object {
+                $_.protocol -eq 'native' -and $_.direction -eq 'download'
+            })
+            if ($download.Count -ne 1 -or -not $download[0].io.rustRx.completed -or
+                $download[0].io.rustRx.fileBytes -ne 128 * 1024 * 1024) {
+                throw "Missing Rust receiver diagnostics: $largeFile"
+            }
+        }
+        $large.summaries |
+            Where-Object { $_.protocol -eq 'native' } |
+            Select-Object wireBatchKiB, direction, count,
+                @{Name='MedianMiBps';Expression={[math]::Round($_.medianMiBPerSecond, 3)}},
+                @{Name='P95ms';Expression={$_.p95DurationMs}},
+                allChecksumsOK |
+            Format-Table -AutoSize | Out-Host
         Write-Host "PASS: large A/B report written to $largeFile"
     }
 
