@@ -34,11 +34,13 @@ type AITerminalLease struct {
     closed chan struct{}
     once sync.Once
     ready bool
+    program string
     poisoned bool
 }
 
 type terminalAICommand struct {
     marker []byte
+    mysql *mysqlAIState
     pending []byte
     output []byte
     truncated bool
@@ -67,7 +69,7 @@ func (m *Manager) AcquireAITerminal(ref domain.ConnectionRef) (*AITerminalLease,
     }
     if conn.aiController != nil { return nil, errAITerminalBusy }
     if err := conn.readiness.checkReady(); err != nil { return nil, err }
-    lease := &AITerminalLease{manager:m,connection:conn,ref:ref,closed:make(chan struct{})}
+    lease := &AITerminalLease{manager:m,connection:conn,ref:ref,closed:make(chan struct{}),program:conn.readiness.readyProgram()}
     conn.aiController = lease
     return lease,nil
 }
@@ -184,6 +186,7 @@ func (lease *AITerminalLease) Run(ctx context.Context, command string) (string,e
         strings.ContainsRune(command, 0) {
         return "",errors.New("终端命令长度或内容无效")
     }
+    if lease.program == "mysql" { return lease.runMySQL(ctx,command) }
     if !lease.ready {
         probeCtx,cancel := context.WithTimeout(ctx,4*time.Second)
         _,err := lease.runMarker(probeCtx,"",true)
@@ -207,6 +210,10 @@ func (lease *AITerminalLease) Observe(p []byte) {
     defer lease.mu.Unlock()
     current := lease.current
     if current == nil || current.finished {return}
+    if current.mysql != nil {
+        current.consumeMySQL(p)
+        return
+    }
     current.consume(p)
 }
 
