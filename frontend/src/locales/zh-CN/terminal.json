@@ -96,5 +96,10 @@
   "nativeZmodemProgressHint": "显示已处理的文件字节，只有远端确认结束后才算传输成功。",
   "nativeZmodemETA": "预计剩余 {{seconds}} 秒",
   "nativeZmodemDone": "完成",
-  "nativeZmodemCancelUnconfirmed": "已请求取消，传输结果未确认，请重新连接 SSH 终端。"
+  "nativeZmodemCancelUnconfirmed": "已请求取消，传输结果未确认，请重新连接 SSH 终端。",
+  "nativeZmodemBrowseMultiple": "选择多个文件",
+  "nativeZmodemBatchUploadHint": "可选择多个文件；每行填写一个完整本地路径，最多 100 个。",
+  "nativeZmodemBatchRemoteHint": "每行填写一个远端文件路径；支持空格和中文，最多 100 个。",
+  "nativeZmodemBatchLimit": "每次请选择 1–100 个文件或远程路径。",
+  "nativeZmodemBatchCompleted": "本次已完成 {{count}} 个文件"
 }

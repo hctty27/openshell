@@ -46,11 +46,22 @@ func (a *App) NativeZmodemInteractiveReadiness(ref domain.ConnectionRef) sshclie
 func (a *App) StartNativeZmodemInteractiveTransfer(
 	ref domain.ConnectionRef, direction, localPath, remotePath string,
 ) error {
+	return a.StartNativeZmodemInteractiveBatchTransfer(
+		ref, direction, []string{localPath}, []string{remotePath},
+	)
+}
+
+// Native batch transfers run as one SSH PTY lease and one ZMODEM session.
+// Upload localPaths are files, download localPaths contains one directory,
+// and download remotePaths lists each file to fetch.
+func (a *App) StartNativeZmodemInteractiveBatchTransfer(
+	ref domain.ConnectionRef, direction string, localPaths, remotePaths []string,
+) error {
 	if status := a.NativeZmodemInteractiveReadiness(ref); !status.Ready {
 		return errors.New(status.Message)
 	}
-	return a.ssh.RunExperimentalNativeTerminalTransferWithProgress(
-		a.ctx, ref, nativeZmodemDesktopSidecarPath(), direction, localPath, remotePath,
+	return a.ssh.RunExperimentalNativeTerminalBatchTransferWithProgress(
+		a.ctx, ref, nativeZmodemDesktopSidecarPath(), direction, localPaths, remotePaths,
 		func(processed, total uint64) {
 			a.emit("ssh:native-zmodem-progress", map[string]any{
 				"ref": ref, "direction": direction, "processed": processed, "total": total,
@@ -75,4 +86,16 @@ func (a *App) NativeZmodemChooseUploadFile() (string, error) {
 		return "", errors.New("当前环境没有可用的文件选择对话框")
 	}
 	return a.pickNativeZmodemFile()
+}
+
+// NativeZmodemChooseUploadFiles uses the OS picker for a single batch session.
+// An empty selection means the user cancelled, not an implicit transfer.
+func (a *App) NativeZmodemChooseUploadFiles() ([]string, error) {
+	if !a.NativeZmodemExperimentEnabled() {
+		return nil, errors.New("原生 ZMODEM 未启用")
+	}
+	if a.pickNativeZmodemFiles == nil {
+		return nil, errors.New("当前环境没有可用的多文件选择对话框")
+	}
+	return a.pickNativeZmodemFiles()
 }

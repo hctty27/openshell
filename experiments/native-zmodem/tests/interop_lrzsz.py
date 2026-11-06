@@ -143,7 +143,33 @@ def main() -> None:
             received = lrzsz_output / filename
             assert received.exists() and sha256(received) == sha256(source)
 
-        print(f"Passed: {len(cases) * 2} cross-implementation file transfers, SHA-256 verified", flush=True)
+        # One true ZMODEM session with multiple ZFILE records in each direction.
+        batch = [
+            ("batch-first.bin", b"first" * 1024),
+            ("batch second.bin", b"second" * 1333),
+            ("批量文件.bin", "utf8 batch".encode() * 100),
+        ]
+        sources = []
+        for name, payload in batch:
+            source = src / name
+            source.write_bytes(payload)
+            sources.append(source)
+
+        print("Rust sender -> Linux rz: 3 files in one session", flush=True)
+        transfer_pair([sidecar, "send", *(str(p) for p in sources)], ["rz", "-q"],
+                      src, lrzsz_output)
+        for source in sources:
+            received = lrzsz_output / source.name
+            assert received.is_file() and sha256(received) == sha256(source)
+
+        print("Linux sz -> Rust receiver: 3 files in one session", flush=True)
+        transfer_pair(["sz", "-q", *(str(p) for p in sources)], [sidecar, "receive", str(sidecar_output)],
+                      src, sidecar_output)
+        for source in sources:
+            received = sidecar_output / source.name
+            assert received.is_file() and sha256(received) == sha256(source)
+
+        print(f"Passed: {len(cases) * 2 + 6} cross-implementation SHA-256 file checks (including 2 batch sessions)", flush=True)
 
 
 if __name__ == "__main__":

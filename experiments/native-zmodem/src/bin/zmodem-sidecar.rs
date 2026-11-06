@@ -15,6 +15,7 @@ use zmodem2::{Action, Event, FileInfo, Position, Receiver, Sender};
 
 // Keep old/32-bit lrzsz interoperability by staying below 2 GiB.
 const MAX_SIZE: u64 = (2 * 1024 * 1024 * 1024) - 1;
+const MAX_FILES_PER_SESSION: usize = 100;
 const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
 
 fn checked_file_size(size: u64) -> io::Result<()> {
@@ -180,31 +181,74 @@ fn read_source_chunk(
     Ok(())
 }
 
-fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let mut file = File::open(path)?;
-    let size = file.metadata()?.len();
-    checked_file_size(size)?;
-    let name = path.file_name().and_then(|name| name.to_str())
-        .ok_or("source filename must be UTF-8")?;
-    if name.is_empty() {
-        return Err("empty source filename".into());
+struct SendSource {
+    file: File,
+    name: String,
+    size: u64,
+}
+
+// Private, NUL-delimited UTF-8 path manifest used by the Windows/Go desktop
+// bridge. NUL avoids interpreting quotes, spaces or newlines as shell syntax.
+fn read_send_manifest(manifest: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    let contents = fs::read(manifest)?;
+    if contents.is_empty() || contents.len() > 1024 * 1024 || *contents.last().unwrap() != 0 {
+        return Err("invalid native ZMODEM upload manifest".into());
+    }
+    let records = contents[..contents.len() - 1].split(|b| *b == 0);
+    let mut paths = Vec::new();
+    for record in records {
+        if record.is_empty() {
+            return Err("native upload manifest contains an empty filename".into());
+        }
+        paths.push(PathBuf::from(std::str::from_utf8(record)?));
+        if paths.len() > MAX_FILES_PER_SESSION {
+            return Err("native ZMODEM allows at most 100 files per session".into());
+        }
+    }
+    Ok(paths)
+}
+
+fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
+    if paths.is_empty() || paths.len() > MAX_FILES_PER_SESSION {
+        return Err("native ZMODEM accepts 1..100 files per session".into());
+    }
+    let mut files = Vec::<SendSource>::with_capacity(paths.len());
+    let mut names = std::collections::HashSet::<String>::new();
+    let mut total = 0u64;
+    for path in paths {
+        let meta = fs::symlink_metadata(path)?;
+        if !meta.file_type().is_file() || meta.file_type().is_symlink() {
+            return Err("native ZMODEM only accepts regular files, not links or directories".into());
+        }
+        let name = safe_name(path.file_name().and_then(|n| n.to_str())
+            .ok_or("source filename must be UTF-8")?.as_bytes())?;
+        if !names.insert(name.to_lowercase()) {
+            return Err("multiple files have the same destination filename".into());
+        }
+        let size = meta.len();
+        checked_file_size(size)?;
+        total = total.checked_add(size).ok_or("batch total size overflow")?;
+        files.push(SendSource { file: File::open(path)?, name, size });
     }
 
     let mut sender = Sender::new()?;
-    sender.start_file(FileInfo::new(name.as_bytes(), Some(Position::new(size as u32))))?;
-    let mut processed = 0u64;
-    let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
-    report_progress(0, size, &mut progress_at, true);
+    sender.start_file(FileInfo::new(files[0].name.as_bytes(), Some(Position::new(files[0].size as u32))))?;
     let rx = incoming_wire();
     let mut waiting = VecDeque::<u8>::new();
     let mut wire_scratch = Vec::<u8>::with_capacity(2048);
     let mut output = ExperimentalWireWriter::new(io::stdout().lock(), experimental_wire_batch_bytes()?);
     let mut file_scratch = Vec::<u8>::new();
     let mut next_file_offset = 0u64;
-    let mut done_file = false;
+    let mut active_index = 0usize;
+    let mut completed_files = 0usize;
+    let mut completed_bytes = 0u64;
+    let mut processed_in_file = 0u64;
+    let mut pending_next = false;
     let mut finish_requested = false;
     let mut session_completed = false;
+    let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
     let mut activity = ActivityClock::new();
+    report_progress(0, total, &mut progress_at, true);
 
     while !activity.expired() {
         match sender.poll() {
@@ -215,27 +259,35 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 if count > 0 { activity.touch(); }
             }
             Action::ReadFile { offset, max_len } => {
+                let source = &mut files[active_index];
                 let start = u64::from(offset.get());
-                if start >= size {
+                if start >= source.size {
                     return Err("sender read outside source data".into());
                 }
-                let max = usize::try_from((size - start).min(max_len as u64))?;
-                read_source_chunk(&mut file, start, max, &mut next_file_offset, &mut file_scratch)?;
+                let max = usize::try_from((source.size - start).min(max_len as u64))?;
+                read_source_chunk(&mut source.file, start, max, &mut next_file_offset, &mut file_scratch)?;
                 sender.submit_file(&file_scratch)?;
                 if max > 0 { activity.touch(); }
-                processed = processed.max(start + max as u64);
-                report_progress(processed, size, &mut progress_at, false);
+                processed_in_file = processed_in_file.max(start + max as u64);
+                report_progress(completed_bytes + processed_in_file, total, &mut progress_at, false);
             }
             Action::Event(Event::FileCompleted) => {
                 output.flush_pending()?;
-                done_file = true;
+                completed_bytes += files[active_index].size;
+                completed_files += 1;
+                report_progress(completed_bytes, total, &mut progress_at, true);
                 activity.touch();
-                report_progress(size, size, &mut progress_at, true);
-            },
+                if completed_files < files.len() {
+                    active_index = completed_files;
+                    processed_in_file = 0;
+                    next_file_offset = 0;
+                    pending_next = true;
+                }
+            }
             Action::Event(Event::SessionCompleted) => {
                 output.flush_pending()?;
-                if !done_file {
-                    return Err("session ended without file completion".into());
+                if completed_files != files.len() {
+                    return Err("session ended before every file completed".into());
                 }
                 session_completed = true;
                 activity.touch();
@@ -243,11 +295,8 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             Action::Event(Event::Aborted) => return Err("remote aborted sender".into()),
             Action::Event(_) => {}
             Action::Idle => {
-                // Do not wait for remote control input while frames are buffered.
                 output.flush_pending()?;
-                if session_completed {
-                    return Ok(());
-                }
+                if session_completed { return Ok(()); }
                 if receive_wire(&rx, &mut waiting)? {
                     wire_scratch.clear();
                     wire_scratch.extend(waiting.iter().take(2048).copied());
@@ -258,11 +307,21 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             }
             _ => return Err("unsupported sender action".into()),
         }
-        if done_file && !finish_requested && sender.finish().is_ok() {
+        if pending_next {
+            let source = &files[active_index];
+            match sender.start_file(FileInfo::new(source.name.as_bytes(), Some(Position::new(source.size as u32)))) {
+                Ok(()) => {
+                    pending_next = false;
+                    activity.touch();
+                }
+                Err(zmodem2::Error::Backpressure) => {}
+                Err(err) => return Err(err.into()),
+            }
+        }
+        if completed_files == files.len() && !finish_requested && sender.finish().is_ok() {
             finish_requested = true;
         }
     }
-
     Err("ZMODEM sender inactive for 90 seconds".into())
 }
 
@@ -336,7 +395,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut wire_scratch = Vec::<u8>::with_capacity(2048);
     let mut output = ExperimentalWireWriter::new(io::stdout().lock(), experimental_wire_batch_bytes()?);
     let mut open_file: Option<(File, PathBuf, PathBuf, u64, Option<u32>)> = None;
-    let mut completed = false;
+    let mut completed_files = 0usize;
     let mut session_completed = false;
     let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
     let mut received_total = 0u64;
@@ -389,8 +448,8 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
             Action::Event(Event::FileStarted(info)) => {
                 // The sender can be waiting for an acknowledgement at this edge.
                 output.flush_pending()?;
-                if open_file.is_some() || completed {
-                    return Err("prototype supports one file per session".into());
+                if open_file.is_some() || completed_files >= MAX_FILES_PER_SESSION {
+                    return Err("native receiver accepts at most 100 files per session".into());
                 }
                 let name = safe_name(info.name)?;
                 let target = dir.join(name);
@@ -425,13 +484,13 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 drop(file);
                 fs::rename(temp, target)?;
                 report_progress(size, received_total, &mut progress_at, true);
-                completed = true;
+                completed_files += 1;
                 activity.touch();
             }
             Action::Event(Event::SessionCompleted) => {
                 output.flush_pending()?;
-                if !completed {
-                    return Err("session ended without file completion".into());
+                if completed_files == 0 || open_file.is_some() {
+                    return Err("session ended without completing all files".into());
                 }
                 session_completed = true;
                 activity.touch();
@@ -470,10 +529,13 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
 fn main() {
     let args: Vec<String> = env::args().collect();
     let result = match args.as_slice() {
-        [_, action, path] if action == "send" => send(Path::new(path)),
+        [_, action, paths @ ..] if action == "send" && !paths.is_empty() =>
+            send(&paths.iter().map(PathBuf::from).collect::<Vec<_>>()),
+        [_, action, manifest] if action == "send-list" =>
+            read_send_manifest(Path::new(manifest)).and_then(|paths| send(&paths)),
         [_, action, dir] if action == "receive" => receive(Path::new(dir)),
         _ => {
-            eprintln!("Usage: zmodem-sidecar send FILE | receive EXISTING_DIRECTORY");
+            eprintln!("Usage: zmodem-sidecar send FILE [FILE ...] | send-list MANIFEST | receive EXISTING_DIRECTORY");
             std::process::exit(2);
         }
     };

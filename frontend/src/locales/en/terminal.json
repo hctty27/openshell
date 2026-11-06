@@ -96,5 +96,10 @@
   "nativeZmodemProgressHint": "Processed file bytes; success is only confirmed after the remote command exits.",
   "nativeZmodemETA": "{{seconds}} s remaining",
   "nativeZmodemDone": "Done",
-  "nativeZmodemCancelUnconfirmed": "Cancellation requested; outcome is unconfirmed. Reconnect the SSH terminal."
+  "nativeZmodemCancelUnconfirmed": "Cancellation requested; outcome is unconfirmed. Reconnect the SSH terminal.",
+  "nativeZmodemBrowseMultiple": "Select multiple files",
+  "nativeZmodemBatchUploadHint": "Select multiple files or enter one full local path per line (up to 100).",
+  "nativeZmodemBatchRemoteHint": "Enter one remote file path per line; spaces and Unicode are supported (up to 100).",
+  "nativeZmodemBatchLimit": "Select 1–100 file paths per transfer.",
+  "nativeZmodemBatchCompleted": "{{count}} files completed"
 }

@@ -34,13 +34,17 @@ func nativeInteractiveCommand(direction, remotePath string) (string, string, err
 		// independent SSH exec bridge, we must not exec away the login shell.
 		return "rz -q\r", "send", nil
 	case "download":
-		if remotePath == "" || strings.IndexFunc(remotePath, func(r rune) bool {
-			return r < 32 || r == 127
-		}) >= 0 {
-			return "", "", errors.New("下载文件的远程路径无效")
+		if remotePath == "" { return "", "", errors.New("缺少远程文件路径") }
+		paths := strings.Split(remotePath, "\n")
+		if len(paths) < 1 || len(paths) > 100 { return "", "", errors.New("每次仅支持 1–100 个远程文件") }
+		quoted := make([]string, 0, len(paths))
+		for _, path := range paths {
+			if path == "" || strings.IndexFunc(path, func(r rune) bool { return r < 32 || r == 127 }) >= 0 {
+				return "", "", errors.New("下载文件的远程路径无效")
+			}
+			quoted = append(quoted, "'" + strings.ReplaceAll(path, "'", "'\\''") + "'")
 		}
-		quoted := "'" + strings.ReplaceAll(remotePath, "'", "'\\''") + "'"
-		return "sz -q -- " + quoted + "\r", "receive", nil
+		return "sz -q -- " + strings.Join(quoted, " ") + "\r", "receive", nil
 	default:
 		return "", "", fmt.Errorf("不支持的原生 ZMODEM 方向：%s", direction)
 	}
@@ -177,6 +181,12 @@ func (c *nativeTerminalCoordinator) run(
 	parent context.Context,
 	direction, localPath, remotePath string,
 ) error {
+	return c.runBatch(parent, direction, []string{localPath}, []string{remotePath})
+}
+
+func (c *nativeTerminalCoordinator) runBatch(
+	parent context.Context, direction string, localPaths, remotePaths []string,
+) error {
 	if parent == nil || c == nil || c.input == nil || c.output == nil || c.runner == nil {
 		return errors.New("缺少原生终端传输协调参数")
 	}
@@ -186,21 +196,28 @@ func (c *nativeTerminalCoordinator) run(
 	preparationStarted := time.Now()
 	token, err := newNativeRemoteBoundaryToken()
 	if err != nil { return fmt.Errorf("远端传输结束令牌创建失败：%w", err) }
-	command, action, err := nativeInteractiveFencedCommand(direction, remotePath, token)
-	if err != nil {
-		return err
-	}
-	path, err := nativeZmodemLocalPath(direction, localPath)
-	if err != nil {
-		return err
+	command, action, err := nativeInteractiveFencedCommand(direction, strings.Join(remotePaths, "\n"), token)
+	if err != nil { return err }
+
+	var path string
+	if action == "send" {
+		var paths []string
+		paths, err = nativeZmodemUploadPaths(localPaths)
+		if err != nil { return err }
+		var cleanup func()
+		path, action, cleanup, err = nativeZmodemUploadManifest(paths)
+		if err != nil { return err }
+		defer cleanup()
+	} else {
+		if len(localPaths) != 1 { return errors.New("下载只允许选择一个本地保存目录") }
+		path, err = nativeZmodemLocalPath("download", localPaths[0])
+		if err != nil { return err }
 	}
 	publishDestination := path
 	stage := ""
 	if action == "receive" {
 		stage, err = os.MkdirTemp(path, ".openshell-zmodem-terminal-")
-		if err != nil {
-			return err
-		}
+		if err != nil { return err }
 		defer os.RemoveAll(stage)
 		path = stage
 	}

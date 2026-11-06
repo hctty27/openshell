@@ -120,7 +120,8 @@
   margin: 0;
   font-size: 12px;
 }
-.native-zmodem-dialog .app-dialog__field input {
+.native-zmodem-dialog .app-dialog__field input,
+.native-zmodem-dialog .app-dialog__field textarea {
   min-width: 0;
   width: 100%;
   padding: 9px 10px;
@@ -131,7 +132,16 @@
   font-size: 12px;
 }
 .native-zmodem-dialog__picker { display: flex; gap: 8px; }
-.native-zmodem-dialog__picker input { flex: 1; }
+.native-zmodem-dialog__picker input,
+.native-zmodem-dialog__picker textarea { flex: 1; }
+.native-zmodem-dialog textarea {
+  resize: vertical;
+  min-height: 56px;
+  max-height: 144px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.native-zmodem-dialog__picker button { padding: 0 9px; white-space: nowrap; }
 .native-zmodem-dialog__picker button {
   display: grid;
   place-items: center;

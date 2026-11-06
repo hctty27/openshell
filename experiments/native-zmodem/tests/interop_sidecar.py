@@ -45,7 +45,42 @@ def main() -> None:
             destination = destination_dir / name
             assert destination.exists() and sha256(destination) == sha256(source)
 
-    print(f"Passed: {len(cases)} native-sidecar OS-pipe transfers, SHA-256 verified")
+        # A second pair of native peers must share one batch session and keep
+        # filename boundaries intact, including UTF-8 and spaces.
+        batch = [
+            ("batch-one.bin", b"alpha" * 1000),
+            ("batch space.bin", b"beta" * 2000),
+            ("批量文档.bin", b"gamma" * 300),
+        ]
+        sources = []
+        for filename, payload in batch:
+            path = source_dir / filename
+            path.write_bytes(payload)
+            sources.append(path)
+        transfer_pair(
+            [sidecar, "send", *(str(p) for p in sources)],
+            [sidecar, "receive", str(destination_dir)],
+            source_dir, destination_dir, 97,
+        )
+        for source in sources:
+            target = destination_dir / source.name
+            assert target.exists() and sha256(target) == sha256(source)
+
+        # Verify the exact Go/Wails process invocation: a bounded NUL list.
+        manifest_dir = root / "manifest-output"
+        manifest_dir.mkdir()
+        manifest = root / "upload.list"
+        manifest.write_bytes(b"".join(str(p).encode("utf-8") + b"\x00" for p in sources))
+        transfer_pair(
+            [sidecar, "send-list", str(manifest)],
+            [sidecar, "receive", str(manifest_dir)],
+            source_dir, manifest_dir, 97,
+        )
+        for source in sources:
+            target = manifest_dir / source.name
+            assert target.exists() and sha256(target) == sha256(source)
+
+    print(f"Passed: {len(cases) + 6} native-sidecar SHA-256 file checks, including batch and manifest sessions")
 
 
 if __name__ == "__main__":

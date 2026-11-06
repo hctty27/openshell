@@ -43,7 +43,7 @@ func runNativeZmodemTerminalSidecarWithProgress(
 	if executable == "" || path == "" || inbound == nil || outbound == nil {
 		return errors.New("原生 ZMODEM 进程参数不完整")
 	}
-	if direction != "send" && direction != "receive" {
+	if direction != "send" && direction != "send-list" && direction != "receive" {
 		return fmt.Errorf("不支持的 ZMODEM 传输方向：%s", direction)
 	}
 
