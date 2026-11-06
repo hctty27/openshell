@@ -18,6 +18,40 @@ foreach ($forbidden in @(
     }
 }
 
+# Refuse to distribute even a stray copy of MSYS2 or old lrzsz from a
+# previously reused build directory. Only the two first-party wrappers,
+# Rust sidecar and its optional generated inventory may be present.
+$allowed = @(
+    "rz.exe",
+    "sz.exe",
+    "native/zmodem-sidecar.exe",
+    "BUNDLED_COMPONENTS.json"
+)
+foreach ($file in (Get-ChildItem -LiteralPath $target -File -Recurse)) {
+    $relative = $file.FullName.Substring($target.TrimEnd('\').Length + 1).Replace('\', '/')
+    if ($relative -notin $allowed) {
+        throw "Unexpected ZMODEM file in native-only distribution: $relative"
+    }
+}
+$manifestFile = Join-Path $target "BUNDLED_COMPONENTS.json"
+if (Test-Path -LiteralPath $manifestFile -PathType Leaf) {
+    $manifest = Get-Content -LiteralPath $manifestFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($manifest.bundleMode -ne "rust-native-only" -or $manifest.msys2Bundled -ne $false -or
+        $manifest.lrzszWin32Bundled -ne $false) {
+        throw "Native-only bundle manifest reports an invalid engine"
+    }
+    foreach ($entry in @($manifest.files)) {
+        $file = Join-Path $target $entry.path
+        if ($entry.path -notin $allowed -or !(Test-Path -LiteralPath $file -PathType Leaf)) {
+            throw "Invalid native ZMODEM manifest entry: $($entry.path)"
+        }
+        $sha = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($sha -ne $entry.sha256) {
+            throw "Native ZMODEM bundle manifest SHA-256 mismatch: $($entry.path)"
+        }
+    }
+}
+
 foreach ($name in @("rz.exe", "sz.exe")) {
     $file = Join-Path $target $name
     $start = [Diagnostics.ProcessStartInfo]::new()
