@@ -125,6 +125,9 @@ func runNativeZmodemTerminalSidecarWithProgress(
 	case <-time.After(nativeZmodemShutdownTimeout):
 		return errors.New("原生 ZMODEM sidecar 输入协程未正常退出")
 	}
+	if meter := nativeZmodemIOMeterFromContext(ctx); meter != nil {
+		meter.recordReceiverDiagnostics(stderr.String())
+	}
 	if ctx.Err() != nil { return ctx.Err() }
 	if outputErr != nil { return fmt.Errorf("原生 ZMODEM 响应写入失败：%w", outputErr) }
 	if processErr != nil {
