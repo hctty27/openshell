@@ -42,6 +42,10 @@ type Backend = {
   SFTPList(ref: Ref, side: string, directory: string): Promise<SFTPEntry[]>;
   SFTPOperate(ref: Ref, side: string, operation: string, source: string, argument: string): Promise<void>;
   SFTPTransfer(ref: Ref, direction: string, source: string, destination: string, overwrite: boolean, resume: boolean): Promise<SFTPTask>;
+  SFTPStartBatch(ref: Ref, requests: import("./types").SFTPTransferRequest[]): Promise<SFTPTask[]>;
+  SFTPCancelBatch(ref: Ref, batchID: string): Promise<void>;
+  SFTPConcurrency(): Promise<number>;
+  SetSFTPConcurrency(value: number): Promise<void>;
   SFTPTransfers(ref: Ref): Promise<SFTPTask[]>;
   SFTPCancel(taskID: string): Promise<void>;
   SFTPReadRemoteText(ref: Ref, path: string): Promise<SFTPDocument>;
