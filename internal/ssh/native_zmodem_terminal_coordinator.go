@@ -204,7 +204,7 @@ func (c *nativeTerminalCoordinator) run(
 		pipe: writer, ready: make(chan struct{}), fail: make(chan error, 1), expected: expected,
 	}
 	fence := newNativeRemoteBoundarySink(sink, token)
-	outputLease, err := c.output.armOnZmodemHeader(fence)
+	outputLease, err := c.output.armOnZmodemHeaderQuiet(fence)
 	if err != nil {
 		_ = reader.Close()
 		_ = writer.Close()
