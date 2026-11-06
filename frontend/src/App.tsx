@@ -169,7 +169,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const [nativeZmodemEnabled, setNativeZmodemEnabled] = useState(false);
   const [nativeZmodemDialog, setNativeZmodemDialog] = useState<{ ref: Ref; sessionName: string } | null>(null);
   useEffect(() => {
-    if (!desktop) return;
+    if (!desktop || typeof api.NativeZmodemExperimentEnabled !== "function") return;
     let current = true;
     void api.NativeZmodemExperimentEnabled().then(enabled => {
       if (current) setNativeZmodemEnabled(enabled);
