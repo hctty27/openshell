@@ -217,6 +217,9 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 receiver.wire_written(count);
             }
             Action::WriteFile(data) => {
+                // poll() lends us a slice from receiver; file_written()
+                // requires another mutable borrow, so retain this copy.
+                let data = data.to_vec();
                 let (file, _, _, bytes, max) = open_file.as_mut().ok_or("unexpected file data")?;
                 *bytes += data.len() as u64;
                 if *bytes > MAX_SIZE || max.is_some_and(|size| *bytes > u64::from(size)) {
