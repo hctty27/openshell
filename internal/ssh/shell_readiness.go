@@ -139,19 +139,17 @@ func (r *terminalShellReadiness) observe(p []byte) {
 // from the lookbehind cannot be replayed after a program exits.
 func (r *terminalShellReadiness) observeREPLLaunchEcho(combined []byte, previousBytes int) {
 	start := 0
-	for start < len(combined) {
-		endRel := strings.IndexAny(string(combined[start:]), "\r\n")
-		if endRel < 0 { break }
-		end := start + endRel + 1
-		if end > previousBytes {
-			line := string(combined[start:end-1])
+	for i, b := range combined {
+		if b != '\r' && b != '\n' { continue }
+		if i + 1 > previousBytes {
+			line := string(combined[start:i])
 			line = terminalOSCPattern.ReplaceAllString(line, "")
 			line = terminalCSIPattern.ReplaceAllString(line, "")
 			if launched := replLaunchFromShellEcho(line); launched != "" {
 				r.startedProgram = launched
 			}
 		}
-		start = end
+		start = i + 1
 	}
 }
 
