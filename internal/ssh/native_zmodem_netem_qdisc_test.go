@@ -3,7 +3,6 @@ package sshclient
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -91,5 +90,4 @@ func TestNativeNetemQdiscCountersParse(t *testing.T) {
 func TestNativeNetemQdiscParseInvalidCounters(t *testing.T) {
 	_, err := parseNativeNetemQdiscStats("qdisc netem\n Sent 0 bytes 999999999999999999999999999999999 pkt (dropped 1, overlimits 0 requeues 0)")
 	if err == nil { t.Fatal("overflow must fail") }
-	_ = os.ErrNotExist
 }
