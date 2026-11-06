@@ -127,3 +127,17 @@ test("native progress ignores stale session generations", async () => {
   finish();
   await waitFor(() => expect(screen.getByRole("button", { name: "完成" })).toBeTruthy());
 });
+
+test("native transfer failure reaches error channel without showing success", async () => {
+  actions.start.mockRejectedValueOnce(new Error("mock transfer rejected"));
+  const { onError } = showDialog();
+  await waitFor(() => expect(actions.readiness).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
+  await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  await waitFor(() => expect(onError).toHaveBeenCalledOnce());
+  expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+  expect(screen.queryByText("原生 ZMODEM 文件传输完成")).toBeNull();
+  expect(screen.getByRole("alert").textContent).toContain("mock transfer rejected");
+});
