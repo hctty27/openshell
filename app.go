@@ -143,6 +143,10 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 	keepAliveSeconds, err := strconv.Atoi(interval)
 	if err != nil || keepAliveSeconds < 0 || keepAliveSeconds > 300 { keepAliveSeconds = 30 }
 	a.ssh.SetKeepAliveInterval(time.Duration(keepAliveSeconds) * time.Second)
+	if os.Getenv("OPENSHELL_NATIVE_ZMODEM_EXPERIMENT") == "1" &&
+		os.Getenv("OPENSHELL_NATIVE_ZMODEM_AUTO") == "1" {
+		a.ssh.ConfigureNativeZmodemAuto(nativeZmodemDesktopSidecarPath())
+	}
 	a.sftp = files.NewManager(a.ssh.Client, func(name string, payload any) { a.emit(name, payload) })
 	sidecar := ""
 	if os.Getenv("OPENSHELL_NATIVE_ZMODEM_EXPERIMENT") == "1" {
