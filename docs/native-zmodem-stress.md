@@ -74,6 +74,29 @@ tmp/native-zmodem-stress/logs/<run-id>/stress-<profile>.log
 
 这些日志独立于 `Start-Transcript`，包含原始 `go test -v` 的 stdout/stderr 和 `--- FAIL:` 行。发生失败时直接查看脚本报出的路径；无须根据 Docker 容器退出码猜测协议故障。临时 SSH 容器与密钥仍会清理，但本地诊断日志会保留在已被 Git 忽略的 `tmp/` 下。
 
+## 分阶段耗时和 Go 诊断
+
+原生传输现在在 JSON 每条原生记录中额外输出 `stagesMs`（毫秒），并在 PowerShell 按场景、方向汇总：
+
+| 字段 | 定义 |
+|---|---|
+| `prepare` | 校验本地路径、创建独立 pipe、取得终端独占权，直到远程 Shell 启动命令写入完成 |
+| `protocol` | 远端命令发出后，直到本地 Rust sidecar 退出；**包括**远端启动握手、文件传输、SSH PTY 转发与协议交互 |
+| `remoteConfirm` | 本地 sidecar 完成后等待远端 Shell 的结束状态标记 |
+| `restorePublish` | 恢复终端路由，并在下载场景发布已验证的本地文件 |
+
+这些是四个**串行阶段**，不是 Rust CPU 时间、SSH 写入时间或单独的磁盘 I/O 时间。若一个阶段耗时明显异常，需要结合 Go Trace 和后续 Rust 端采样进一步定位。失败阶段之后的数据可能缺失，不得视为零耗时。
+
+使用下列命令在同一隔离测试环境中收集 Go CPU Profile 与运行时 Trace：
+
+```powershell
+.\scripts\test-native-zmodem-stress.ps1 -Profile latency -Diagnostics
+```
+
+诊断文件会与完整测试日志一起存放在 `tmp/native-zmodem-stress/logs/<run-id>/`，例如 `stress-latency.cpu.pprof`、`stress-latency.trace`。可使用 `go tool pprof -top <cpu.pprof>` 查看热点、`go tool trace <trace-file>` 查看 `native-zmodem:upload/download` 区间。
+
+`-Diagnostics` **默认关闭**，因为 CPU 和 Trace 采样本身可能影响耗时；做严格的前后吞吐量比较时应保持关闭。Go 的 Profile 只覆盖 Go 测试进程，不覆盖独立 Rust sidecar 的 CPU 占比。
+
 ## 结果与判读
 
 在 `tmp/native-zmodem-stress/` 生成一次运行对应的 `.json` 报告：
