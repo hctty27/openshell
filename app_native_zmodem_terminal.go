@@ -60,9 +60,7 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 }
 
 func (a *App) CancelNativeZmodemInteractiveTransfer(ref domain.ConnectionRef) error {
-	if !a.NativeZmodemExperimentEnabled() {
-		return errors.New("原生 ZMODEM 实验未启用")
-	}
+	// 切换成兼容模式只影响新传输，必须允许取消当前已运行的原生任务。
 	if !a.ssh.CancelExperimentalNativeTerminalTransfer(ref) {
 		return errors.New("没有可取消的原生 ZMODEM 传输")
 	}
