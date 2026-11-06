@@ -26,6 +26,7 @@ on:
       - "scripts/verify_windows_gui_subsystem.py"
       - "scripts/prepare_native_zmodem_windows.ps1"
       - "scripts/verify_native_only_zmodem_windows.ps1"
+      - "scripts/test_native_zmodem_installer_upgrade.ps1"
       - "scripts/generate_native_zmodem_manifest.py"
       - "scripts/test_generate_native_zmodem_manifest.py"
       - "cmd/zmodem-launcher/**"
@@ -289,6 +290,11 @@ jobs:
           & $nsis "/DAPP_VERSION=$env:APP_VERSION" "/DAPP_BINARY=$binary" "/DAPP_ICON=$icon" "/DAPP_HELPER_DIR=$helpers" "/DAPP_OUTPUT=$setup" "build/windows/installer/openshell.nsi"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path $setup)) { throw "Installer was not generated" }
+
+      - name: Verify installer upgrades legacy MSYS2 files to Rust only
+        shell: pwsh
+        run: |
+          ./scripts/test_native_zmodem_installer_upgrade.ps1 -Installer "dist/OpenShell-v$env:APP_VERSION-windows-x64-Setup.exe"
 
       - name: Export native-only ZMODEM bundle manifest
         shell: pwsh
