@@ -171,3 +171,22 @@ func TestMySQLExecutionReportsSQLError(t *testing.T) {
 	default: t.Fatal("expected finished error result")
 	}
 }
+
+func TestMySQLGreetingIsNotReplayedAfterExit(t *testing.T) {
+	var state terminalShellReadiness
+	state.observe([]byte("Welcome to the MySQL monitor.\r\nmysql> "))
+	state.observe([]byte("\r\nroot@hk:~# "))
+	state.mu.Lock()
+	state.lastOutput=time.Now().Add(-time.Second)
+	state.mu.Unlock()
+	if err:=state.checkReady();err!=nil || state.readyProgram()!="shell" {
+		t.Fatalf("expected Shell after exiting MySQL: %v",err)
+	}
+	state.observe([]byte("\r\nmysql> "))
+	state.mu.Lock()
+	state.lastOutput=time.Now().Add(-time.Second)
+	state.mu.Unlock()
+	if err:=state.checkReady();err==nil {
+		t.Fatal("old greeting authorized MySQL prompt after client exited")
+	}
+}
