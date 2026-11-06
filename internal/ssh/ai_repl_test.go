@@ -179,3 +179,82 @@ func TestREPLErrorStatus(t *testing.T) {
 		}
 	}
 }
+
+
+func TestRedisClusterLaunchFromEchoWhenInputHistoryIsUnavailable(t *testing.T) {
+	var r terminalShellReadiness
+	r.observe([]byte("root@localhost ~]# "))
+	// Readline's history keys and transformed input paths are not a literal
+	// redis-cli command, so userInput cannot always classify the program.
+	r.userInput([]byte{27, '[', 'A', '\r'})
+	if r.startedProgram != "" { t.Fatal("unexpected program classification") }
+
+	r.observe([]byte("root@localhost ~]# redis-cli -c -p 6380 -h 10.10.10.70"))
+	r.observe([]byte("\r\nWarning: Using a password with '-a' or '-u' option on the command line interface may not be safe.\r\n"))
+	r.observe([]byte("10.10.10.70:6380> "))
+	r.mu.Lock()
+	r.lastOutput = time.Now().Add(-time.Second)
+	r.mu.Unlock()
+	if err := r.checkReady(); err != nil || r.readyProgram() != "redis" {
+		t.Fatalf("expected Redis after launch echo, got %q, %v", r.readyProgram(), err)
+	}
+
+	r.userInput([]byte("get version_temp\r"))
+	r.observe([]byte("-> Redirected to slot [5798] located at 10.10.10.70:6384\r\n(nil)\r\n10.10.10.70:6384> "))
+	r.mu.Lock()
+	r.lastOutput = time.Now().Add(-time.Second)
+	r.mu.Unlock()
+	if err := r.checkReady(); err != nil || !r.programReady("redis") {
+		t.Fatalf("Redis cluster redirected prompt not ready: %v", err)
+	}
+}
+
+func TestRedisLaunchEchoRecognizedWhenSplitAcrossChunks(t *testing.T) {
+	var r terminalShellReadiness
+	r.observe([]byte("root@localhost ~]# "))
+	r.observe([]byte("\r\nroot@localhost ~]# redis-cli -c -p 63"))
+	r.observe([]byte("80 -h 10.10.10.70\r"))
+	r.observe([]byte("\n10.10.10.70:6380> "))
+	r.mu.Lock()
+	r.lastOutput = time.Now().Add(-time.Second)
+	r.mu.Unlock()
+	if err := r.checkReady(); err != nil || r.readyProgram() != "redis" {
+		t.Fatalf("split launch echo was not recognized: %v", err)
+	}
+}
+
+func TestRedisOldLaunchEchoCannotAuthorizeAfterShellRecovery(t *testing.T) {
+	var r terminalShellReadiness
+	r.observe([]byte("root@localhost ~]# redis-cli -h 10.10.10.70\r\n"))
+	r.observe([]byte("10.10.10.70:6380> "))
+	r.observe([]byte("\r\nroot@localhost ~]# "))
+	r.mu.Lock()
+	r.lastOutput = time.Now().Add(-time.Second)
+	r.mu.Unlock()
+	if err := r.checkReady(); err != nil || r.readyProgram() != "shell" {
+		t.Fatalf("Shell recovery failed: %v",err)
+	}
+	r.observe([]byte("\r\n10.10.10.70:6384> "))
+	r.mu.Lock()
+	r.lastOutput = time.Now().Add(-time.Second)
+	r.mu.Unlock()
+	if err := r.checkReady(); err == nil {
+		t.Fatal("stale Redis CLI echo must not authorize a later prompt")
+	}
+}
+
+func TestRedisShellEchoMustHaveRecognizedPrompt(t *testing.T) {
+	for _,line:=range []string{
+		"redis-cli -c -p 6380",
+		"INFO: redis-cli -c -p 6380",
+		"root@localhost ~]# echo redis-cli",
+		"root@localhost ~]# redis-cli-helper",
+	} {
+		if got:=replLaunchFromShellEcho(line);got!="" {
+			t.Fatalf("untrusted launch echo accepted: %q => %s",line,got)
+		}
+	}
+	if got:=replLaunchFromShellEcho("root@localhost ~]# redis-cli -c -p 6380");got!="redis" {
+		t.Fatalf("valid echoed launch rejected: %s",got)
+	}
+}

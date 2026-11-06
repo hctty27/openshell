@@ -50,6 +50,13 @@ func (r *terminalShellReadiness) observe(p []byte) {
 	// Integration events may span SSH data chunks. Process only complete
 	// escapes, keeping just enough lookbehind to recognize split sequences.
 	previousBytes := len(r.tail)
+	// The local editor can submit a shell command through history, a paste or
+	// a transformed input path without a complete userInput launch record.
+	// Recover only from a freshly echoed *recognized Shell prompt* followed
+	// by a direct supported REPL command. Never store the echoed arguments.
+	if r.program == "" || r.program == "shell" {
+		r.observeREPLLaunchEcho(combined, previousBytes)
+	}
 	for _, match := range shellBoundaryPattern.FindAllSubmatchIndex(combined, -1) {
 		// Avoid replaying a marker fully contained in the lookbehind.
 		if match[1] <= previousBytes { continue }
@@ -126,6 +133,40 @@ func (r *terminalShellReadiness) observe(p []byte) {
 
 // REPL identification is tied to a locally observed program launch. Redis and
 // Python prompts alone must never grant AI access to arbitrary terminal output.
+// Detect the prompt + command line echoed by the remote Shell. A CLI prompt
+// alone is not sufficient evidence that the foreground application is Redis.
+// A completed line must include newly received PTY bytes so a stale launch
+// from the lookbehind cannot be replayed after a program exits.
+func (r *terminalShellReadiness) observeREPLLaunchEcho(combined []byte, previousBytes int) {
+	start := 0
+	for i, b := range combined {
+		if b != '\r' && b != '\n' { continue }
+		if i + 1 > previousBytes {
+			line := string(combined[start:i])
+			line = terminalOSCPattern.ReplaceAllString(line, "")
+			line = terminalCSIPattern.ReplaceAllString(line, "")
+			if launched := replLaunchFromShellEcho(line); launched != "" {
+				r.startedProgram = launched
+			}
+		}
+		start = i + 1
+	}
+}
+
+func replLaunchFromShellEcho(line string) string {
+	line = strings.TrimSpace(line)
+	for i := 0; i < len(line); i++ {
+		if line[i] != '#' && line[i] != '$' && line[i] != '%' { continue }
+		if !shellPromptPattern.MatchString(line[:i+1]) { continue }
+		// Old trailing prompts may be joined with a freshly echoed command.
+		// Keep looking for the last valid prompt, not just the first '#'.
+		if launched := replLaunchCommand(strings.TrimSpace(line[i+1:])); launched != "" {
+			return launched
+		}
+	}
+	return ""
+}
+
 func replLaunchCommand(line string) string {
 	fields := strings.Fields(strings.TrimSpace(line))
 	if len(fields) == 0 { return "" }
