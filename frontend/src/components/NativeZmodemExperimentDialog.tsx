@@ -18,6 +18,10 @@ type Direction = "upload" | "download";
 
 type TransferProgress = { processed: number; total: number };
 
+function splitFileLines(raw: string): string[] {
+  return raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+}
+
 function formatBytes(size: number): string {
   if (size < 1024) return `${Math.round(size)} B`;
   const unit = Math.min(3, Math.floor(Math.log(size) / Math.log(1024)));
@@ -71,6 +75,15 @@ export default function NativeZmodemExperimentDialog({
     });
   }, [running, direction, refID.tabId, refID.sessionId, refID.generation]);
 
+  const chooseMultiple = async () => {
+    try {
+      const files = await api.NativeZmodemChooseUploadFiles();
+      if (files?.length) setLocalPath(files.join("\n"));
+    } catch (reason) {
+      setError(errorText(reason));
+    }
+  };
+
   const chooseLocal = async () => {
     try {
       const selected = direction === "upload"
@@ -85,6 +98,13 @@ export default function NativeZmodemExperimentDialog({
   const start = async () => {
     if (running || !readiness?.ready || !acknowledged || !localPath.trim() ||
       (direction === "download" && !remotePath.trim())) return;
+    const selectedLocal = direction === "upload" ? splitFileLines(localPath) : [localPath.trim()];
+    const selectedRemote = direction === "download" ? splitFileLines(remotePath) : [];
+    if (!selectedLocal.length || selectedLocal.length > 100 ||
+      (direction === "download" && (!selectedRemote.length || selectedRemote.length > 100))) {
+      setError(t("terminal:nativeZmodemBatchLimit"));
+      return;
+    }
     // A previous ready status is invalid as soon as a new PTY takeover starts.
     // Keep retry disabled until the backend has checked the terminal again.
     setReadiness(null);
@@ -96,9 +116,15 @@ export default function NativeZmodemExperimentDialog({
     setStartedAt(Date.now());
     setError("");
     try {
-      await api.StartNativeZmodemInteractiveTransfer(
-        refID, direction, localPath.trim(), direction === "download" ? remotePath.trim() : "",
-      );
+      if (selectedLocal.length > 1 || selectedRemote.length > 1) {
+        await api.StartNativeZmodemInteractiveBatchTransfer(
+          refID, direction, selectedLocal, selectedRemote,
+        );
+      } else {
+        await api.StartNativeZmodemInteractiveTransfer(
+          refID, direction, selectedLocal[0], selectedRemote[0] ?? "",
+        );
+      }
       if (cancelRequested.current) {
         setError(t("terminal:nativeZmodemCancelUnconfirmed"));
       } else {
@@ -182,23 +208,36 @@ export default function NativeZmodemExperimentDialog({
         {direction === "download" && (
           <label className="app-dialog__field">
             <span>{t("terminal:nativeZmodemRemoteFile")}</span>
-            <input type="text" value={remotePath} spellCheck={false}
+            <textarea value={remotePath} spellCheck={false} rows={2}
               disabled={running} placeholder="/home/user/example.bin"
               onChange={event => setRemotePath(event.target.value)} />
+            <small className="native-zmodem-dialog__hint">{t("terminal:nativeZmodemBatchRemoteHint")}</small>
           </label>
         )}
         <label className="app-dialog__field">
           <span>{t(direction === "upload" ? "terminal:nativeZmodemLocalFile" : "terminal:nativeZmodemLocalFolder")}</span>
           <div className="native-zmodem-dialog__picker">
-            <input type="text" value={localPath} spellCheck={false} disabled={running}
-              placeholder={t("terminal:nativeZmodemChoosePath")}
-              onChange={event => setLocalPath(event.target.value)} />
+            {direction === "upload" ? (
+              <textarea value={localPath} spellCheck={false} disabled={running} rows={2}
+                placeholder={t("terminal:nativeZmodemChoosePath")}
+                onChange={event => setLocalPath(event.target.value)} />
+            ) : (
+              <input type="text" value={localPath} spellCheck={false} disabled={running}
+                placeholder={t("terminal:nativeZmodemChoosePath")}
+                onChange={event => setLocalPath(event.target.value)} />
+            )}
             <button type="button" onClick={() => void chooseLocal()} disabled={running}
               aria-label={t("terminal:nativeZmodemBrowse")}><FolderOpen size={16} /></button>
+            {direction === "upload" && (
+              <button type="button" onClick={() => void chooseMultiple()} disabled={running}
+                aria-label={t("terminal:nativeZmodemBrowseMultiple")}>
+                {t("terminal:nativeZmodemBrowseMultiple")}
+              </button>
+            )}
           </div>
         </label>
         {direction === "upload" && (
-          <p className="native-zmodem-dialog__hint">{t("terminal:nativeZmodemUploadDirectory")}</p>
+          <p className="native-zmodem-dialog__hint">{t("terminal:nativeZmodemUploadDirectory")} {t("terminal:nativeZmodemBatchUploadHint")}</p>
         )}
         <label className="native-zmodem-dialog__acknowledge">
           <input type="checkbox" checked={acknowledged} disabled={running}
@@ -228,7 +267,11 @@ export default function NativeZmodemExperimentDialog({
         {completed && (
           <div className="native-zmodem-dialog__success" role="status">
             {t("terminal:nativeZmodemCompleted")}
-            <small>{fileName(direction === "upload" ? localPath : remotePath)}</small>
+            <small>{(direction === "upload" ? splitFileLines(localPath) : splitFileLines(remotePath)).length > 1
+              ? t("terminal:nativeZmodemBatchCompleted", {
+                count: (direction === "upload" ? splitFileLines(localPath) : splitFileLines(remotePath)).length,
+              })
+              : fileName(direction === "upload" ? localPath : remotePath)}</small>
           </div>
         )}
         {error && <p role="alert" className="native-zmodem-dialog__error">{error}</p>}
