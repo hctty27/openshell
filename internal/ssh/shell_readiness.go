@@ -67,7 +67,11 @@ func (r *terminalShellReadiness) observe(p []byte) {
 	// For plain shells without integration, infer readiness only from a
 	// recognizable full prompt at the end of the current output.
 	if strings.Contains(strings.ToLower(string(combined)), "jumpserver") { r.jumpServer = true }
-	if strings.Contains(string(combined), "Welcome to the MySQL monitor") || strings.Contains(string(combined), "Welcome to the MariaDB monitor") { r.mysqlObserved = true }
+	for _, banner := range []string{"Welcome to the MySQL monitor", "Welcome to the MariaDB monitor"} {
+		if index := strings.LastIndex(string(combined), banner); index >= 0 && index+len(banner) > previousBytes {
+			r.mysqlObserved = true
+		}
+	}
 	stripped := terminalOSCPattern.ReplaceAll(combined, nil)
 	stripped = terminalCSIPattern.ReplaceAll(stripped, nil)
 	visible := strings.TrimRight(string(stripped), "\x00")
