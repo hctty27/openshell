@@ -42,6 +42,15 @@ func (m *Manager) runNativeTerminalExperiment(
 	ref domain.ConnectionRef,
 	sidecar, direction, localPath, remotePath string,
 ) error {
+	return m.runNativeTerminalExperimentWithProgress(parent, ref, sidecar, direction, localPath, remotePath, nil)
+}
+
+func (m *Manager) runNativeTerminalExperimentWithProgress(
+	parent context.Context,
+	ref domain.ConnectionRef,
+	sidecar, direction, localPath, remotePath string,
+	progress func(uint64, uint64),
+) error {
 	if parent == nil {
 		return errors.New("缺少原生终端传输上下文")
 	}
@@ -82,7 +91,7 @@ func (m *Manager) runNativeTerminalExperiment(
 
 	coordinator := &nativeTerminalCoordinator{
 		input: input, output: output,
-		runner: nativeTerminalExecutableRunner(sidecar),
+		runner: nativeTerminalExecutableRunnerWithProgress(sidecar, progress),
 	}
 	result := coordinator.run(ctx, direction, localPath, remotePath)
 	// Reading the gate before taking Manager.mu avoids lock inversion with
