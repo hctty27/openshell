@@ -322,6 +322,14 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 		system += aiPromptText(language, "\nVisible-terminal mode: ssh_exec runs in the user's existing shell and preserves its directory and environment. Do not run interactive TUIs, password prompts, background output streams, long-running commands, or exit. The terminal is temporarily locked; never assume a command succeeded without a reliable result.", "\n当前是可见终端操作模式：所有 ssh_exec 命令会在用户已打开的同一 Shell 中执行并显示在终端，工作目录和 Shell 环境可持续保留。不要运行交互式 TUI、需要密码交互的命令、后台持续输出或长时间不结束的命令；不要调用 exit。终端会被临时独占，失败时不得猜测命令完成。")
 		toolDescription = aiPromptText(language, "Run a non-interactive command in the authorized visible SSH PTY, preserving the current working directory and shell environment. Never use vim, top or tail -f.", "在用户正在查看的已授权 SSH PTY 终端中执行一条非交互命令，保留当前目录和 Shell 环境。不要使用 vim、top、tail -f 等交互程序。")
 	}
+	if terminalLease != nil && terminalLease.Program() == "mysql" {
+		system += aiPromptText(language,
+			"\nCurrent terminal is an already authenticated MySQL client, NOT a shell. Call ssh_exec with exactly one SQL statement per call (SHOW, DESCRIBE, DESC, SELECT or EXPLAIN). Do not send shell commands, mysql login commands, exit, or any writes. The same MySQL session, default database and transaction are retained. Queries ending in ; or \\G are supported.",
+			"\n当前终端已登录 MySQL，而不是 Shell。通过 ssh_exec 每次只提交一条 SQL（SHOW、DESCRIBE、DESC、SELECT 或 EXPLAIN），禁止发送 Linux 命令、mysql 登录命令、exit 或写入语句。直接复用当前 MySQL 会话、数据库及事务；支持分号和 \\G 结尾。")
+		toolDescription = aiPromptText(language,
+			"Execute one read-only SQL query in the user's existing authenticated MySQL terminal. No new SSH or database login.",
+			"在用户已经登录的当前 MySQL 终端执行一条只读 SQL，不新建 SSH 或数据库连接。")
+	}
 	toolSpec := []map[string]any{{
 		"type": "function",
 		"function": map[string]any{
