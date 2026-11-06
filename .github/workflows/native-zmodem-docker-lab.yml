@@ -6,6 +6,7 @@ on:
     paths:
       - "experiments/native-zmodem/docker-ssh-lab/**"
       - "scripts/test-native-zmodem.ps1"
+      - "scripts/test-native-zmodem-stress.ps1"
       - ".gitattributes"
       - ".github/workflows/native-zmodem-docker-lab.yml"
   push:
@@ -13,6 +14,7 @@ on:
     paths:
       - "experiments/native-zmodem/docker-ssh-lab/**"
       - "scripts/test-native-zmodem.ps1"
+      - "scripts/test-native-zmodem-stress.ps1"
       - ".gitattributes"
       - ".github/workflows/native-zmodem-docker-lab.yml"
   workflow_dispatch:
@@ -117,9 +119,13 @@ jobs:
         run: |
           $tokens = $null
           $errors = $null
-          $script = (Resolve-Path 'scripts/test-native-zmodem.ps1').Path
-          [void][System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors)
-          if ($errors.Count -gt 0) {
-            $errors | Format-List | Out-Host
-            throw 'PowerShell test-native-zmodem.ps1 has syntax errors'
+          foreach ($file in @('scripts/test-native-zmodem.ps1', 'scripts/test-native-zmodem-stress.ps1')) {
+            $tokens = $null
+            $errors = $null
+            $script = (Resolve-Path $file).Path
+            [void][System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors)
+            if ($errors.Count -gt 0) {
+              $errors | Format-List | Out-Host
+              throw "PowerShell script has syntax errors: $file"
+            }
           }

@@ -4,10 +4,62 @@ param(
     [ValidateRange(0, 10)]
     [int]$LatencyMS = 2,
 
-    [switch]$SkipFaultTests
+    [switch]$SkipFaultTests,
+
+    [ValidateSet("none", "all", "large", "repeat", "parallel", "latency")]
+    [string]$StressProfile = "none",
+
+    [ValidateRange(1, 128)]
+    [int]$StressLargeMiB = 128,
+
+    [ValidateRange(1, 50)]
+    [int]$StressRounds = 30,
+
+    [ValidateRange(1, 4)]
+    [int]$StressWorkers = 3,
+
+    [ValidateRange(1, 10)]
+    [int]$StressLatencyMS = 3,
+
+    [string]$StressReportDir = "",
+
+    [switch]$SkipBaseline
 )
 
 $ErrorActionPreference = "Stop"
+
+# A PowerShell transcript does not reliably preserve all native go test
+# output on Windows PowerShell 5.1. Keep a separate persistent diagnostic log.
+function Invoke-NativeZmodemGoTest {
+    param(
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$LogDirectory,
+        [string]$Timeout = "10m"
+    )
+
+    [void][IO.Directory]::CreateDirectory($LogDirectory)
+    $safeName = $Name -replace '[^a-zA-Z0-9_-]', '-'
+    $logPath = Join-Path $LogDirectory "$safeName.log"
+    $previousPreference = $ErrorActionPreference
+    $exitCode = 1
+    try {
+        # On Windows PowerShell 5.1 redirected native stderr is surfaced as
+        # error records; do not let Stop abort the test before saving output.
+        $ErrorActionPreference = "Continue"
+        # Protocol/PTY integration tests run independently of Go Vet. This is
+        # not a permanent disable: CI still runs "go vet ./..." separately.
+        & go test -vet=off -count=1 "-timeout=$Timeout" -v ./internal/ssh -run $Pattern 2>&1 |
+            Tee-Object -FilePath $logPath
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    if ($exitCode -ne 0) {
+        throw "$Name failed (go test exit code $exitCode); full output: $logPath"
+    }
+}
 
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw "Run this script in native Windows PowerShell, not WSL or Linux PowerShell."
@@ -44,7 +96,14 @@ $variableNames = @(
     "OPENSHELL_ZMODEM_LIVE_SSH_KEY",
     "OPENSHELL_ZMODEM_LIVE_SSH_HOSTKEY",
     "OPENSHELL_ZMODEM_LIVE_SIDECAR",
-    "OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS"
+    "OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS",
+    "OPENSHELL_ZMODEM_STRESS",
+    "OPENSHELL_ZMODEM_STRESS_PROFILE",
+    "OPENSHELL_ZMODEM_STRESS_LARGE_MIB",
+    "OPENSHELL_ZMODEM_STRESS_ROUNDS",
+    "OPENSHELL_ZMODEM_STRESS_WORKERS",
+    "OPENSHELL_ZMODEM_STRESS_LATENCY_MS",
+    "OPENSHELL_ZMODEM_STRESS_REPORT"
 )
 $previous = @{}
 foreach ($name in $variableNames) {
@@ -54,6 +113,12 @@ foreach ($name in $variableNames) {
 [void][IO.Directory]::CreateDirectory($tempDir)
 Push-Location $repoRoot
 try {
+    Write-Host "[preflight] Verify downloaded Go module integrity"
+    & go mod verify
+    if ($LASTEXITCODE -ne 0) {
+        throw "Go module integrity check failed. Inspect local GOMODCACHE; do not treat any previous cached test PASS as a clean environment."
+    }
+
     Write-Host "[1/5] Build native Windows Rust sidecar"
     Push-Location (Join-Path $repoRoot "experiments\native-zmodem")
     try {
@@ -130,17 +195,62 @@ try {
     [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_LIVE_SIDECAR", $sidecar, "Process")
     [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS", "$LatencyMS", "Process")
 
-    Write-Host "[4/5] Real Windows Go + Rust to Linux SSH PTY: 8 SHA-256 transfers"
-    & go test -count=1 -timeout=10m -v ./internal/ssh -run '^TestNativeZmodemCrossOSInteractivePTY$'
-    if ($LASTEXITCODE -ne 0) { throw "Windows to Linux native ZMODEM interop failed" }
+    $diagnosticsDir = Join-Path $repoRoot "tmp/native-zmodem-stress/logs/$unique"
+    if (-not $SkipBaseline) {
+        Write-Host "[4/5] Real Windows Go + Rust to Linux SSH PTY: 8 SHA-256 transfers"
+        Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemCrossOSInteractivePTY$' -Name 'cross-os-pty' -LogDirectory $diagnosticsDir
+    }
+    else {
+        Write-Host "[4/5] Baseline SHA-256 roundtrips skipped by explicit request"
+    }
 
     if (-not $SkipFaultTests) {
         Write-Host "[5/5] Live SSH cancellation, deadline and disconnect: 3 scenarios"
-        & go test -count=1 -timeout=10m -v ./internal/ssh -run '^TestNativeZmodemLiveInterruptedInteractivePTY$'
-        if ($LASTEXITCODE -ne 0) { throw "Windows to Linux live fault-injection failed" }
+        Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemLiveInterruptedInteractivePTY$' -Name 'interruptions' -LogDirectory $diagnosticsDir
     }
     else {
         Write-Host "[5/5] Fault-injection skipped by explicit request"
+    }
+
+    if ($StressProfile -ne "none") {
+        if ($StressReportDir -eq "") {
+            $StressReportDir = Join-Path $repoRoot 'tmp/native-zmodem-stress'
+        }
+        $reportDirectory = [IO.Path]::GetFullPath($StressReportDir)
+        [void][IO.Directory]::CreateDirectory($reportDirectory)
+        $reportFile = Join-Path $reportDirectory "native-zmodem-$(Get-Date -Format 'yyyyMMdd-HHmmss')-$unique.json"
+
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS", "1", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_PROFILE", $StressProfile, "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_LARGE_MIB", "$StressLargeMiB", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_ROUNDS", "$StressRounds", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_WORKERS", "$StressWorkers", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_LATENCY_MS", "$StressLatencyMS", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_STRESS_REPORT", $reportFile, "Process")
+
+        Write-Host "[stress] Windows native Rust vs real Linux PTY: $StressProfile"
+        Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemStressInteractivePTY$' -Name "stress-$StressProfile" -LogDirectory $diagnosticsDir -Timeout "60m"
+        if (-not (Test-Path -LiteralPath $reportFile -PathType Leaf)) {
+            throw "Native ZMODEM stress report was not generated: $reportFile"
+        }
+        $report = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
+        $records = @($report.results)
+        if ($records.Count -eq 0) { throw "Stress report contains no transfer results: $reportFile" }
+        Write-Host "Native ZMODEM stress throughput summary (MiB/s):"
+        $records | Group-Object profile, protocol, direction | ForEach-Object {
+            $speeds = @($_.Group | Where-Object { $_.checksumOK })
+            $statistics = $speeds | Measure-Object -Property miBPerSecond -Average -Minimum -Maximum
+            [PSCustomObject]@{
+                Profile = $_.Group[0].profile
+                Protocol = $_.Group[0].protocol
+                Direction = $_.Group[0].direction
+                Passed = "$($speeds.Count)/$($_.Count)"
+                AvgMiBps = [math]::Round($statistics.Average, 2)
+                MinMiBps = [math]::Round($statistics.Minimum, 2)
+                MaxMiBps = [math]::Round($statistics.Maximum, 2)
+            }
+        } | Format-Table -AutoSize | Out-Host
+        Write-Host "PASS: stress report written to $reportFile"
     }
 
     Write-Host "PASS: native Windows sidecar and real Linux OpenSSH/SFTP ZMODEM tests"
