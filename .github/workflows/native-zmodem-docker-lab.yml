@@ -114,6 +114,20 @@ jobs:
             -o UserKnownHostsFile="$temp/known_hosts" \
             zmodemlab@127.0.0.1
 
+      - name: Verify tc netem jitter/loss in an isolated NET_ADMIN container
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="openshell-zmodem-netem-${GITHUB_RUN_ID}"
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          docker run --detach --cap-add NET_ADMIN --name "$name" openshell-zmodem-ssh-lab:test
+          docker exec "$name" tc qdisc replace dev eth0 root netem delay 20ms 8ms distribution normal
+          docker exec "$name" tc qdisc show dev eth0 | grep -q netem
+          docker exec "$name" tc qdisc replace dev eth0 root netem delay 20ms 8ms loss 0.1%
+          docker exec "$name" tc qdisc show dev eth0 | grep -q netem
+          docker exec "$name" tc qdisc del dev eth0 root
+
+
   windows-script-syntax:
     name: Windows PowerShell test script syntax
     runs-on: windows-latest
