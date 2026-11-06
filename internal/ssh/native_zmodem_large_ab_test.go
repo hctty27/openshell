@@ -67,7 +67,7 @@ func TestNativeZmodemLargeABInteractivePTY(t *testing.T) {
 			name := fmt.Sprintf("round-%d-batch-%d", round, batch)
 			ok := t.Run(name, func(t *testing.T) {
 				t.Setenv("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES", strconv.Itoa(batch*1024))
-				t.Setenv("OPENSHELL_ZMODEM_RX_DIAG_FILE", filepath.Join(t.TempDir(), "rx.json"))
+				t.Setenv("OPENSHELL_ZMODEM_RX_DIAG", "1")
 				peer := openNativeStressPeer(t, manager, name, 0)
 				individual := &nativeStressReport{}
 				err := runNativeStressPair(peer, individual, "largeAB", sizeMiB*1024*1024, round, true)
@@ -90,7 +90,9 @@ func TestNativeZmodemLargeABInteractivePTY(t *testing.T) {
 						t.Fatalf("missing checksum verification: %+v", result)
 					}
 				}
-				if sample.Results[1].RustRX == nil || !sample.Results[1].RustRX.Completed {
+				if sample.Results[1].IO == nil || sample.Results[1].IO.RustRX == nil ||
+					!sample.Results[1].IO.RustRX.Completed ||
+					sample.Results[1].IO.RustRX.FileBytes != sizeMiB*1024*1024 {
 					t.Fatal("missing completed Rust receiver diagnostics")
 				}
 			})
