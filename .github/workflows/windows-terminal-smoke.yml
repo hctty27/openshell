@@ -28,7 +28,9 @@ on:
       - "frontend/package-lock.json"
       - "internal/ssh/**"
       - "cmd/zmodem-launcher/**"
-      - "scripts/prepare_zmodem_windows.ps1"
+      - "scripts/prepare_native_zmodem_windows.ps1"
+      - "scripts/verify_native_only_zmodem_windows.ps1"
+      - "scripts/generate_native_zmodem_manifest.py"
       - "scripts/verify_zmodem_windows.ps1"
       - "internal/sftp/**"
       - "sftp_ai.go"
@@ -146,15 +148,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/verify_windows_icons.py --icon build/windows/icon.ico --exe build/bin/OpenShell.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Prepare bundled ZMODEM utilities
-        shell: pwsh
-        run: |
-          ./scripts/prepare_zmodem_windows.ps1
-          foreach ($file in @("rz.exe", "sz.exe", "native/rz.exe", "native/sz.exe", "native/msys-2.0.dll", "lrzsz-win32-source.zip", "COPYING-lrzsz.txt")) {
-            if (!(Test-Path "build/bin/zmodem/$file")) { throw "Missing bundled helper: $file" }
-          }
-          ./scripts/verify_zmodem_windows.ps1
-      - name: Build and verify bundled experimental Rust ZMODEM sidecar
+      - name: Build native Rust ZMODEM sidecar
         shell: pwsh
         run: |
           Push-Location experiments/native-zmodem
@@ -162,46 +156,28 @@ jobs:
             cargo generate-lockfile
             if ($LASTEXITCODE -ne 0) { throw "Cargo lock resolution failed" }
             cargo build --locked --release --bin zmodem-sidecar
-            if ($LASTEXITCODE -ne 0) { throw "Native ZMODEM sidecar build failed" }
+            if ($LASTEXITCODE -ne 0) { throw "Native Rust sidecar build failed" }
           } finally { Pop-Location }
-          $source = "experiments/native-zmodem/target/release/zmodem-sidecar.exe"
-          $destination = "build/bin/zmodem/native/zmodem-sidecar.exe"
-          if (!(Test-Path $source)) { throw "Missing experimental native ZMODEM sidecar EXE" }
-          Copy-Item $source $destination -Force
-          if ((Get-Item $destination).Length -le 0) { throw "Bundled experimental sidecar is empty" }
-      - name: Package test executable
+      - name: Stage and verify Rust-only ZMODEM bundle
+        shell: pwsh
+        run: |
+          ./scripts/prepare_native_zmodem_windows.ps1
+          ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir build/bin/zmodem
+          python scripts/generate_native_zmodem_manifest.py --target build/bin/zmodem
+          if ($LASTEXITCODE -ne 0) { throw "Rust-only manifest generation failed" }
+          ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir build/bin/zmodem
+          $env:PYTHONIOENCODING = "utf-8"
+          python experiments/native-zmodem/tests/interop_native_helpers.py "experiments/native-zmodem/target/release/zmodem-sidecar.exe" "build/bin/zmodem"
+          if ($LASTEXITCODE -ne 0) { throw "Rust-only compatibility interop failed" }
+      - name: Package native-only Windows test build
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path build/bin/OpenShell.exe, build/bin/zmodem -DestinationPath dist/OpenShell-windows-x64-smoke.zip -Force
-      - name: Upload Windows test build
+          Compress-Archive -Path build/bin/OpenShell.exe, build/bin/zmodem -DestinationPath dist/OpenShell-windows-x64-native-only.zip -Force
+      - name: Upload native-only Windows test build
         uses: actions/upload-artifact@v7
         with:
-          name: OpenShell-windows-x64-smoke
-          path: dist/OpenShell-windows-x64-smoke.zip
-          if-no-files-found: error
-          retention-days: 7
-      - name: Build native-Rust-only preview without lrzsz/MSYS2
-        shell: pwsh
-        run: |
-          $staging = "dist/native-zmodem-preview"
-          $helpers = Join-Path $staging "zmodem"
-          $native = Join-Path $helpers "native"
-          New-Item -ItemType Directory -Path $native -Force | Out-Null
-          Copy-Item "build/bin/OpenShell.exe" (Join-Path $staging "OpenShell.exe")
-          foreach ($name in @("rz.exe", "sz.exe")) {
-            Copy-Item "build/bin/zmodem/$name" (Join-Path $helpers $name)
-          }
-          Copy-Item "build/bin/zmodem/native/zmodem-sidecar.exe" (Join-Path $native "zmodem-sidecar.exe")
-          ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir $helpers
-          $env:PYTHONIOENCODING = "utf-8"
-          python experiments/native-zmodem/tests/interop_native_helpers.py "experiments/native-zmodem/target/release/zmodem-sidecar.exe" $helpers
-          if ($LASTEXITCODE -ne 0) { throw "Rust-native-only helper interoperability failed" }
-          Compress-Archive -Path (Join-Path $staging "OpenShell.exe"), $helpers -DestinationPath "dist/OpenShell-windows-x64-native-only-preview.zip" -Force
-      - name: Upload native-only ZMODEM preview
-        uses: actions/upload-artifact@v7
-        with:
-          name: OpenShell-windows-x64-native-only-preview
-          path: dist/OpenShell-windows-x64-native-only-preview.zip
+          name: OpenShell-windows-x64-native-only
+          path: dist/OpenShell-windows-x64-native-only.zip
           if-no-files-found: error
           retention-days: 7
