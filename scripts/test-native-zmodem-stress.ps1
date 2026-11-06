@@ -21,7 +21,7 @@ param(
     [switch]$Diagnostics,
 
     [ValidateSet(0, 4, 8, 16, 32)]
-    [int]$WireBatchKiB = 0,
+    [int]$WireBatchKiB = 16,
 
     [switch]$SkipBaseline
 )

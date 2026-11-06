@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends openssh-server lrzsz \
+    && apt-get install -y --no-install-recommends openssh-server lrzsz iproute2 \
     && useradd -m -s /bin/bash -p 'NP' zmodemlab \
     && rm -f /etc/ssh/ssh_host_* \
     && rm -rf /var/lib/apt/lists/*

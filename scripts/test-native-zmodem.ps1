@@ -35,6 +35,11 @@ param(
     [ValidateRange(1, 10)]
     [int]$StressLargeABRounds = 5,
 
+    [switch]$StressNetemAB,
+
+    [ValidateRange(1, 5)]
+    [int]$StressNetemRounds = 2,
+
     [switch]$SkipBaseline
 )
 
@@ -128,7 +133,12 @@ $variableNames = @(
     "OPENSHELL_ZMODEM_LARGE_AB",
     "OPENSHELL_ZMODEM_LARGE_AB_ROUNDS",
     "OPENSHELL_ZMODEM_LARGE_AB_REPORT",
-    "OPENSHELL_ZMODEM_RX_DIAG"
+    "OPENSHELL_ZMODEM_RX_DIAG",
+    "OPENSHELL_ZMODEM_NETEM_AB",
+    "OPENSHELL_ZMODEM_NETEM_PROFILE",
+    "OPENSHELL_ZMODEM_NETEM_QDISC",
+    "OPENSHELL_ZMODEM_NETEM_ROUNDS",
+    "OPENSHELL_ZMODEM_NETEM_REPORT"
 )
 $previous = @{}
 foreach ($name in $variableNames) {
@@ -173,7 +183,13 @@ try {
     # Keep an exited container long enough to inspect its status and logs.
     # It is removed in finally whether the test succeeds or fails.
     $containerAttempted = $true
-    & docker run --detach --name $container -p '127.0.0.1::22' $image | Out-Null
+    if ($StressNetemAB) {
+        # NET_ADMIN applies to this temporary container, not the host.
+        & docker run --detach --cap-add NET_ADMIN --name $container -p '127.0.0.1::22' $image | Out-Null
+    }
+    else {
+        & docker run --detach --name $container -p '127.0.0.1::22' $image | Out-Null
+    }
     if ($LASTEXITCODE -ne 0) { throw "Docker Linux SSH fixture failed to start" }
     $started = $true
 
@@ -384,6 +400,65 @@ try {
                 allChecksumsOK |
             Format-Table -AutoSize | Out-Host
         Write-Host "PASS: large A/B report written to $largeFile"
+    }
+
+    if ($StressNetemAB) {
+        if ($StressReportDir -eq "") {
+            $StressReportDir = Join-Path $repoRoot 'tmp/native-zmodem-stress'
+        }
+        $netemDir = [IO.Path]::GetFullPath($StressReportDir)
+        [void][IO.Directory]::CreateDirectory($netemDir)
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_AB", "1", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_ROUNDS", "$StressNetemRounds", "Process")
+        foreach ($netemProfile in @("clean", "jitter", "loss")) {
+            if ($netemProfile -eq "jitter") {
+                & docker exec $container tc qdisc replace dev eth0 root netem delay 20ms 8ms distribution normal
+                if ($LASTEXITCODE -ne 0) { throw "Failed to apply netem jitter on isolated eth0" }
+            }
+            elseif ($netemProfile -eq "loss") {
+                & docker exec $container tc qdisc replace dev eth0 root netem delay 20ms 8ms loss 0.1%
+                if ($LASTEXITCODE -ne 0) { throw "Failed to apply netem loss on isolated eth0" }
+            }
+            $qdisc = @(& docker exec $container tc qdisc show dev eth0)
+            if ($LASTEXITCODE -ne 0 -or $qdisc.Count -eq 0) {
+                throw "Could not inspect Docker eth0 qdisc"
+            }
+            $actualQdisc = ($qdisc -join " ").Trim()
+            if ($netemProfile -eq "clean" -and $actualQdisc -match 'netem') {
+                throw "Clean profile unexpectedly has an active netem qdisc"
+            }
+            if ($netemProfile -ne "clean" -and $actualQdisc -notmatch 'netem') {
+                throw "Netem profile was not actually installed on Docker eth0"
+            }
+            [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_PROFILE", $netemProfile, "Process")
+            [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_QDISC", $actualQdisc, "Process")
+            $netemFile = Join-Path $netemDir "native-zmodem-netem-$netemProfile-$(Get-Date -Format 'yyyyMMdd-HHmmss')-$unique.json"
+            [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_NETEM_REPORT", $netemFile, "Process")
+            Write-Host "[netem] $netemProfile; qdisc=$actualQdisc; 0/16 KiB x $StressNetemRounds rounds"
+            Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemNetemABInteractivePTY$' -Name "netem-$netemProfile" -LogDirectory $diagnosticsDir -Timeout '60m'
+            if (-not (Test-Path -LiteralPath $netemFile -PathType Leaf)) {
+                throw "Netem report missing: $netemFile"
+            }
+            $netemReport = Get-Content -LiteralPath $netemFile -Raw | ConvertFrom-Json
+            $netemCases = @($netemReport.cases)
+            if ($netemCases.Count -ne 2 * $StressNetemRounds) {
+                throw "Incomplete netem A/B: $($netemCases.Count) cases; $netemFile"
+            }
+            foreach ($sample in $netemCases) {
+                if ($sample.error -or @($sample.results).Count -ne 4 -or
+                    @($sample.results | Where-Object { -not $_.checksumOK -or $_.error }).Count -ne 0) {
+                    throw "Failed netem A/B or SHA-256 mismatch: $netemFile"
+                }
+            }
+            $netemReport.summaries |
+                Where-Object { $_.protocol -eq 'native' } |
+                Select-Object wireBatchKiB, direction, count,
+                    @{Name='MedianMiBps';Expression={[math]::Round($_.medianMiBPerSecond, 3)}},
+                    @{Name='P95ms';Expression={$_.p95DurationMs}},
+                    allChecksumsOK |
+                Format-Table -AutoSize | Out-Host
+            Write-Host "PASS: netem report written to $netemFile"
+        }
     }
 
     Write-Host "PASS: native Windows sidecar and real Linux OpenSSH/SFTP ZMODEM tests"
