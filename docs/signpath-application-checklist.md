@@ -10,7 +10,7 @@ Updated 2026-11-07. **Repository readiness checklist only — not proof of appli
 - [x] Integrate SignPath signing of the first-party `OpenShell.exe` and NSIS installer with publisher, version, Authenticode timestamp, and installed-EXE checks.
 - [x] Restrict signing to real `main` release runs; PR and manual build previews never submit a signing request. Optional `SIGNPATH_REQUIRED=true` prevents an accidentally unsigned official release after signing is enabled.
 - [x] Configure the [artifact XML](../.signpath/artifact-configurations/initial.xml) to require exactly **one** matching OpenShell binary per request.
-- [x] Generate Go/npm CycloneDX inventories and record native Rust ZMODEM release hashes; automated inventories are **not** license clearance.
+- [x] Generate Go/npm/Rust CycloneDX inventories and record native Rust ZMODEM release hashes; automated inventories are **not** license clearance.
 - [x] Current native-only Windows packaging excludes `lrzsz-win32` binaries and `msys-2.0.dll`. Keep any unresolved historical binary/source attribution in the [historical review](third-party-review.md), not as a claim that current installers still bundle MSYS2.
 
 ## Maintainer actions before submitting the application
@@ -19,7 +19,7 @@ Updated 2026-11-07. **Repository readiness checklist only — not proof of appli
 - [ ] Verify team roles and require member review of contributions from outside the trusted committer set.
 - [ ] Read the latest [SignPath Foundation eligibility terms](https://signpath.org/terms). SignPath reviews maintenance/reputation and Foundation approval is discretionary.
 - [ ] Inspect the actual current installer/portable ZIP on Windows, including upgrades from old MSYS2/lrzsz installations, uninstall behavior and third-party notices.
-- [ ] Finish license/notice review for the **current** Go, npm and **Rust** dependencies. The existing SBOM includes Go and npm, but does not yet fully inventory/clear the Rust transitive graph. The historical MSYS2 3.4.9 correspondence issue remains documented for older releases.
+- [ ] Finish license/notice review for the **current** Go, npm and **Rust** dependencies. The automated SBOM now also includes the Rust Windows target graph, but all three ecosystems still require human license/notice clearance. The historical MSYS2 3.4.9 correspondence issue remains documented for older releases.
 - [ ] Verify the [website](https://openshell.testnb.me/) really serves the policies and download links after Cloudflare Pages deployment. Links exist in `website/index.html`, but repository files alone do not prove production deployment.
 - [ ] Review any privacy policy changes arising from website analytics, auto-updaters or new network features.
 - [ ] Submit the application at https://signpath.org/apply. Do not represent the project as approved until SignPath confirms it.
