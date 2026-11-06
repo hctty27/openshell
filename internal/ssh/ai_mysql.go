@@ -22,6 +22,11 @@ func mysqlReadOnlyQuery(command string) (string, error) {
 	if query == "" || len(query) > 8192 || strings.ContainsAny(query, "\r\x00") {
 		return "", errors.New("SQL 内容无效或过长")
 	}
+	for _, ch := range query {
+		if (ch < 0x20 && ch != '\n' && ch != '\t') || ch == 0x7f {
+			return "", errors.New("SQL 包含不允许的终端控制字符")
+		}
+	}
 	// Deliberately conservative: only one statement and no client-side
 	// commands or comments. SQL is not a security boundary: server grants
 	// remain authoritative.
