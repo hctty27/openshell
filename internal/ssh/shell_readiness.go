@@ -115,6 +115,21 @@ func (r *terminalShellReadiness) userInput(p []byte) {
 	r.mu.Unlock()
 }
 
+// mysqlReady is used within an acquired PTY lease. It does not impose the
+// initial prompt stabilization delay again between sequential AI queries.
+func (r *terminalShellReadiness) mysqlReady() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.program == "mysql" && r.prompt && !r.manualInput && !r.alternate && !r.assetMenu
+}
+
+func (r *terminalShellReadiness) aiMySQLInputStarted() {
+	r.mu.Lock()
+	r.manualInput = true
+	r.prompt = false
+	r.mu.Unlock()
+}
+
 // readyProgram must only be read after checkReady succeeds.
 func (r *terminalShellReadiness) readyProgram() string {
 	r.mu.Lock()
