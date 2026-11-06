@@ -68,6 +68,43 @@ Rust sidecar 增加 **仅实验模式使用** 的有界 `Action::WriteWire` 缓�
 
 报告 `options.wireBatchBytes` 会记录本次使用的缓冲大小（0 表示原始模式）。A/B 测试必须对照 JSON `io.toRemoteCalls`、`io.toRemoteWriteNs`、`miBPerSecond`、SHA-256；推荐每个延迟条件至少重复 5 次，并交替执行两组，以减少环境波动。**减少写入次数不代表一定能提高速度**：当 ZMODEM 协议当前流程必须等待远端 ACK 时，将始终在等待前 flush，不跨协议反馈边界强行拼接。缓冲不会改变模拟器的 3ms TCP 读写延迟语义；它也不模拟真实丢包。
 
+## 128 MiB 大文件重复基准与下载异常诊断
+
+之前的 1 MiB A/B 矩阵证明有延迟上传时 8–32 KiB 有收益，但不能据此判定 128 MiB 文件也会提速。大文件重复测试使用同一台 Windows 主机与 Docker Linux OpenSSH，比较 0、16、32 KiB，每组默认重复 5 次，按轮次正反交替，包含真实 Rust sidecar SSH PTY 传输与 SFTP 对照。
+
+```powershell
+# 先执行 1 轮冒烟（3 组，每组原生上传/下载与 SFTP 上传/下载）
+.\scripts\test-native-zmodem-large-ab.ps1 -Rounds 1
+
+# 完整 5 轮：15 组，60 次文件传输，均带 SHA-256
+.\scripts\test-native-zmodem-large-ab.ps1 -Rounds 5
+
+# 如果排查 Go 运行时阻塞，可另外启用 Trace（会产生额外开销）
+.\scripts\test-native-zmodem-large-ab.ps1 -Rounds 1 -Diagnostics
+```
+
+报告保存到 `tmp/native-zmodem-stress/native-zmodem-large-ab-*.json`。按 `wireBatchKiB`、`protocol`、`direction` 输出中位吞吐量和 nearest-rank P95 耗时，所有样本必须成功并且 SHA-256 一致。
+
+每组独立子测试负责清理本地和远端大文件，以免 15 组累计占用大量磁盘空间；端口仅绑定 Windows 本机的 `127.0.0.1`。
+
+### Rust 接收路径的异常慢下载诊断
+
+仅本基准测试将 `OPENSHELL_ZMODEM_RX_DIAG=1` 传给 Rust sidecar，启用只包含数值的 `OSZD` stderr 行（ZMODEM stdout 始终保持二进制协议专用）。测试 Go 端解析为每条原生下载记录中的 `io.rustRx`：
+
+| JSON 字段 | 含义 |
+|---|---|
+| `pollCalls` / `pollNs` | Rust receiver poll 调用次数 / 总耗时 |
+| `idleCalls` | Rust receiver 等待或检查远端输入的次数 |
+| `waitNs` / `waitMaxNs` | 等待/读取远端数据的累计耗时及最长单次耗时 |
+| `fileWriteNs` | 文件写入累计耗时 |
+| `fileSyncNs` | 文件落盘同步调用的耗时 |
+| `wireWriteNs` | Rust 向 stdout 输出协议控制帧的累计耗时 |
+| `fileBytes` / `completed` | 已接收文件净荷字节数及是否正常完成 |
+
+这组指标只覆盖 Rust 本地 receiver，不包含远端 `sz` 内部时间，也不能直接解释任意一次 3 秒长尾。若再次出现异常慢下载，需要把该轮 `io.rustRx` 与 Go `stagesMs`、`io.toSidecarPipeNs` 并列分析。由于计时阶段可能重叠或具有统计开销，不应把它们简单加总为整个传输耗时。
+
+只有大文件多轮基准和实际弱网验收没有显著退化后，才考虑调整原生合并写入默认值；现有旧 `rz/sz` 路径不变。
+
 ## 自动 A/B 矩阵测试
 
 矩阵测试专用入口会在**同一个临时 Docker Linux SSH 测试环境**中交替运行 0、4、8、16、32 KiB 的原生传输缓冲。默认测试 TCP 额外延迟 0、1、3、5 ms，每个组合重复 5 次，分别验证原生与 SFTP 上传、下载的 SHA-256，并记录完整样本。不修改默认传输配置。
