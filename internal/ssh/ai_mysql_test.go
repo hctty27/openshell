@@ -129,3 +129,42 @@ func TestMySQLPromptOverridesStaleShellIntegrationMarker(t *testing.T) {
 	if err:=state.checkReady();err!=nil {t.Fatal(err)}
 	if state.readyProgram()!="mysql" {t.Fatal("Shell integration marker must not force Shell executor")}
 }
+
+func TestMySQLTerminalTimeoutInterruptsAndPreventsReuse(t *testing.T) {
+	_,lease,input:=newAITestLease()
+	lease.program="mysql"
+	ctx,cancel:=context.WithTimeout(context.Background(),20*time.Millisecond)
+	defer cancel()
+	if _,err:=lease.Run(ctx,"SELECT 1");err==nil { t.Fatal("expected timeout") }
+	if !lease.Failed() || !strings.Contains(input.String(),string([]byte{3})) {
+		t.Fatal("timed out query must be interrupted and lease marked failed")
+	}
+	if _,err:=lease.Run(context.Background(),"SELECT 2");err==nil {
+		t.Fatal("poisoned MySQL lease unexpectedly allowed another command")
+	}
+	lease.Release()
+}
+
+func TestMySQLRejectedQueryNeverTouchesPTY(t *testing.T) {
+	_,lease,input:=newAITestLease()
+	lease.program="mysql"
+	if _,err:=lease.Run(context.Background(),"DROP TABLE t_user");err==nil {
+		t.Fatal("DROP TABLE must be blocked")
+	}
+	if got:=input.String();got!="" {
+		t.Fatalf("unsafe query wrote to terminal: %q",got)
+	}
+	lease.Release()
+}
+
+func TestMySQLExecutionReportsSQLError(t *testing.T) {
+	marker:="OPEN_SHELL_AI_MYSQL_err"
+	cmd:=&terminalAICommand{done:make(chan terminalAIResult,1),mysql:&mysqlAIState{marker:marker}}
+	cmd.consumeMySQL([]byte("ERROR 1146 (42S02): Table doesn't exist\r\n"+
+		"| "+marker+" |\r\n1 row in set (0.00 sec)\r\nmysql> "))
+	select {
+	case got:=<-cmd.done:
+		if got.code!=1 { t.Fatalf("SQL failure not reflected in exit code: %+v",got) }
+	default: t.Fatal("expected finished error result")
+	}
+}
