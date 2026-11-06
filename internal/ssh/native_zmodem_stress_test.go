@@ -14,6 +14,7 @@ import (
  "path"
  "path/filepath"
  "runtime"
+ "runtime/trace"
  "strconv"
  "strings"
  "sync"
@@ -145,6 +146,7 @@ type nativeStressRecord struct {
  MiBPerSecond float64 `json:"miBPerSecond"`
  ChecksumOK bool `json:"checksumOK"`
  Error string `json:"error,omitempty"`
+ StagesMS map[string]int64 `json:"stagesMs,omitempty"`
 }
 
 type nativeStressReport struct {
@@ -156,11 +158,15 @@ type nativeStressReport struct {
  Results []nativeStressRecord `json:"results"`
 }
 
-func (r *nativeStressReport) add(profile, protocol, direction string, attempt int, size int64, elapsed time.Duration, err error) {
+func (r *nativeStressReport) add(profile, protocol, direction string, attempt int, size int64, elapsed time.Duration, err error, stageSamples ...map[string]int64) {
  record := nativeStressRecord{Profile: profile, Attempt: attempt, Protocol: protocol, Direction: direction,
   SizeBytes: size, DurationMS: elapsed.Milliseconds(), ChecksumOK: err == nil}
  if elapsed > 0 { record.MiBPerSecond = float64(size) / (1024*1024) / elapsed.Seconds() }
  if err != nil { record.Error = err.Error() }
+ if len(stageSamples) > 0 && stageSamples[0] != nil {
+  record.StagesMS = make(map[string]int64, len(stageSamples[0]))
+  for key, value := range stageSamples[0] { record.StagesMS[key] = value }
+ }
  r.mu.Lock()
  r.Results = append(r.Results, record)
  r.mu.Unlock()
@@ -293,11 +299,17 @@ func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, pro
  peer.remoteFiles = append(peer.remoteFiles, remoteUpload)
  started := time.Now()
  ctx, cancel := context.WithTimeout(context.Background(), 88*time.Second)
- err = peer.manager.runNativeTerminalExperiment(ctx, peer.ref, sidecar, "upload", source, "")
+ uploadStages := make(map[string]int64, 4)
+ ctx = withNativeZmodemStageObserver(ctx, func(name string, elapsed time.Duration) {
+  uploadStages[name] = elapsed.Milliseconds()
+ })
+ trace.WithRegion(ctx, "native-zmodem:upload", func() {
+  err = peer.manager.runNativeTerminalExperiment(ctx, peer.ref, sidecar, "upload", source, "")
+ })
  cancel()
  elapsed := time.Since(started)
  if err == nil { err = nativeStressCompareSFTP(peer.sftp, remoteUpload, expected) }
- report.add(profile, "native", "upload", round, int64(size), elapsed, err)
+ report.add(profile, "native", "upload", round, int64(size), elapsed, err, uploadStages)
  if err != nil { return fmt.Errorf("native upload: %w", err) }
 
  remoteSource := path.Join(peer.home, "source-"+name)
@@ -317,11 +329,17 @@ func runNativeStressPair(peer *nativeStressPeer, report *nativeStressReport, pro
  if err := os.Mkdir(destination, 0700); err != nil { return err }
  started = time.Now()
  ctx, cancel = context.WithTimeout(context.Background(), 88*time.Second)
- err = peer.manager.runNativeTerminalExperiment(ctx, peer.ref, sidecar, "download", destination, remoteSource)
+ downloadStages := make(map[string]int64, 4)
+ ctx = withNativeZmodemStageObserver(ctx, func(name string, elapsed time.Duration) {
+  downloadStages[name] = elapsed.Milliseconds()
+ })
+ trace.WithRegion(ctx, "native-zmodem:download", func() {
+  err = peer.manager.runNativeTerminalExperiment(ctx, peer.ref, sidecar, "download", destination, remoteSource)
+ })
  cancel()
  elapsed = time.Since(started)
  if err == nil { err = nativeStressCompareFile(filepath.Join(destination, "source-"+name), expected) }
- report.add(profile, "native", "download", round, int64(size), elapsed, err)
+ report.add(profile, "native", "download", round, int64(size), elapsed, err, downloadStages)
  if err != nil { return fmt.Errorf("native download: %w", err) }
 
  if !sftpBaseline { return nil }
@@ -388,4 +406,25 @@ func TestNativeZmodemStressMetricsConcurrent(t *testing.T) {
   }
   seen[item.Attempt] = true
  }
+}
+
+func TestNativeZmodemStageObserverOptIn(t *testing.T) {
+    ctx := context.Background()
+    observeNativeZmodemStage(ctx, "prepare", time.Now().Add(-time.Millisecond))
+    var recordedName string
+    var recorded time.Duration
+    ctx = withNativeZmodemStageObserver(ctx, func(name string, elapsed time.Duration) {
+        recordedName, recorded = name, elapsed
+    })
+    observeNativeZmodemStage(ctx, "prepare", time.Now().Add(-time.Millisecond))
+    if recordedName != "prepare" || recorded < time.Millisecond {
+        t.Fatalf("missing opt-in stage marker: %s %s", recordedName, recorded)
+    }
+    report := &nativeStressReport{}
+    stages := map[string]int64{"protocol": 123}
+    report.add("latency", "native", "upload", 0, 1024, time.Second, nil, stages)
+    stages["protocol"] = 999
+    if got := report.Results[0].StagesMS["protocol"]; got != 123 {
+        t.Fatalf("stage snapshots must be immutable after recording: %d", got)
+    }
 }
