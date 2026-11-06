@@ -191,3 +191,14 @@ test("preference write failures remain visible and notify the app", async () => 
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("写入失败"));
   expect(onPreferenceError).toHaveBeenCalledOnce();
 });
+
+test("switching ZMODEM engine saves preference and refreshes the active workspace", async () => {
+  const { onRefresh } = renderPreferences();
+  fireEvent.click(screen.getByRole("button", { name: "终端" }));
+  const select = screen.getByLabelText("ZMODEM 传输引擎") as HTMLSelectElement;
+  expect(select.value).toBe("native");
+  fireEvent.change(select, { target: { value: "legacy" } });
+  await waitFor(() => expect(savePreference).toHaveBeenCalledWith("zmodemTransferMode", "legacy"));
+  await waitFor(() => expect(onRefresh).toHaveBeenCalled());
+  expect(select.value).toBe("legacy");
+});
