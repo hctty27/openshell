@@ -460,7 +460,7 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	if current := m.connections[ref.TabID]; current == c && c.ref == ref {
 		c.readiness.userInput(p)
 		if direction != "" {
-			autoEvent = map[string]any{"ref": ref, "direction": direction, "remotePath": remotePath}
+			autoEvent = map[string]any{"ref": ref, "direction": direction, "remotePath": remotePath, "sessionName": c.session.Name}
 		}
 	}
 	m.mu.Unlock()
