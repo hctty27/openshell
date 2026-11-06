@@ -20,13 +20,16 @@ func main() {
     // Prefer checked-in release helper binaries next to the application.
     if executable, err := os.Executable(); err == nil {
         helperDir := filepath.Join(filepath.Dir(executable), "zmodem")
-        helpers := []string{"rz.exe", "sz.exe", filepath.Join("native", "rz.exe"), filepath.Join("native", "sz.exe"), filepath.Join("native", "msys-2.0.dll")}
-        complete := true
-        for _, name := range helpers {
+        hasFile := func(name string) bool {
             info, err := os.Stat(filepath.Join(helperDir, name))
-            if err != nil || info.IsDir() { complete = false; break }
+            return err == nil && info.Mode().IsRegular()
         }
-        if complete {
+        launchers := hasFile("rz.exe") && hasFile("sz.exe")
+        legacy := hasFile(filepath.Join("native", "rz.exe")) &&
+            hasFile(filepath.Join("native", "sz.exe")) &&
+            hasFile(filepath.Join("native", "msys-2.0.dll"))
+        rust := hasFile(filepath.Join("native", "zmodem-sidecar.exe"))
+        if launchers && (legacy || rust) {
             _ = os.Setenv("PATH", helperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
         }
     }

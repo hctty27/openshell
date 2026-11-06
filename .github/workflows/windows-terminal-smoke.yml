@@ -181,3 +181,27 @@ jobs:
           path: dist/OpenShell-windows-x64-smoke.zip
           if-no-files-found: error
           retention-days: 7
+      - name: Build native-Rust-only preview without lrzsz/MSYS2
+        shell: pwsh
+        run: |
+          $staging = "dist/native-zmodem-preview"
+          $helpers = Join-Path $staging "zmodem"
+          $native = Join-Path $helpers "native"
+          New-Item -ItemType Directory -Path $native -Force | Out-Null
+          Copy-Item "build/bin/OpenShell.exe" (Join-Path $staging "OpenShell.exe")
+          foreach ($name in @("rz.exe", "sz.exe")) {
+            Copy-Item "build/bin/zmodem/$name" (Join-Path $helpers $name)
+          }
+          Copy-Item "build/bin/zmodem/native/zmodem-sidecar.exe" (Join-Path $native "zmodem-sidecar.exe")
+          ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir $helpers
+          $env:PYTHONIOENCODING = "utf-8"
+          python experiments/native-zmodem/tests/interop_native_helpers.py "experiments/native-zmodem/target/release/zmodem-sidecar.exe" $helpers
+          if ($LASTEXITCODE -ne 0) { throw "Rust-native-only helper interoperability failed" }
+          Compress-Archive -Path (Join-Path $staging "OpenShell.exe"), $helpers -DestinationPath "dist/OpenShell-windows-x64-native-only-preview.zip" -Force
+      - name: Upload native-only ZMODEM preview
+        uses: actions/upload-artifact@v7
+        with:
+          name: OpenShell-windows-x64-native-only-preview
+          path: dist/OpenShell-windows-x64-native-only-preview.zip
+          if-no-files-found: error
+          retention-days: 7

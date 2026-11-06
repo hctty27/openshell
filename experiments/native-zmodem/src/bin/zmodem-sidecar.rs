@@ -388,7 +388,7 @@ impl Drop for ReceiverDiagnostics {
     }
 }
 
-fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Error>> {
     let mut receiver = Receiver::with_flow_control(0, true)?;
     let rx = incoming_wire();
     let mut waiting = VecDeque::<u8>::new();
@@ -452,7 +452,25 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     return Err("native receiver accepts at most 100 files per session".into());
                 }
                 let name = safe_name(info.name)?;
-                let target = dir.join(name);
+                let mut target = dir.join(&name);
+                if target.exists() && auto_rename {
+                    let original = Path::new(&name);
+                    let stem = original.file_stem().and_then(|v| v.to_str()).ok_or("invalid filename stem")?;
+                    let ext = original.extension().and_then(|v| v.to_str());
+                    let mut free = None;
+                    for number in 1..=9999 {
+                        let alternative = match ext {
+                            Some(ext) => format!("{stem}.{number}.{ext}"),
+                            None => format!("{stem}.{number}"),
+                        };
+                        let candidate = dir.join(alternative);
+                        if !candidate.exists() {
+                            free = Some(candidate);
+                            break;
+                        }
+                    }
+                    target = free.ok_or("could not allocate a unique download filename")?;
+                }
                 if target.exists() {
                     return Err("destination already exists (no overwrite)".into());
                 }
@@ -482,7 +500,10 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     diag.file_sync_ns += started.elapsed().as_nanos();
                 }
                 drop(file);
-                fs::rename(temp, target)?;
+                // Never overwrite another file created between the earlier
+                // path check and the completion of the transfer.
+                fs::hard_link(&temp, &target)?;
+                fs::remove_file(&temp)?;
                 report_progress(size, received_total, &mut progress_at, true);
                 completed_files += 1;
                 activity.touch();
@@ -526,16 +547,61 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Err("ZMODEM receiver inactive for 90 seconds".into())
 }
 
+// The pinned trzsz-go ZMODEM filter still detects remote-initiated rz/sz,
+// but its local subprocess is now this Rust sidecar rather than MSYS2 lrzsz.
+// Accept only flags that do not alter the protocol/file semantics.
+fn parse_legacy_args(args: &[String], sending: bool) -> Result<(bool, Vec<PathBuf>), Box<dyn std::error::Error>> {
+    let mut rename = false;
+    let mut paths = Vec::new();
+    let mut end_options = false;
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+        if !end_options {
+            match arg.as_str() {
+                "--" => { end_options = true; i += 1; continue; }
+                "-v" | "-e" | "-b" | "-q" => { i += 1; continue; }
+                "-E" => { rename = true; i += 1; continue; }
+                "-B" => {
+                    if i + 1 >= args.len() || args[i + 1].parse::<u32>().ok().filter(|n| *n > 0 && *n <= 65536).is_none() {
+                        return Err("invalid legacy ZMODEM block size".into());
+                    }
+                    i += 2;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        if arg.starts_with('-') && !end_options { return Err("unsupported legacy ZMODEM option".into()); }
+        paths.push(PathBuf::from(arg.as_str()));
+        i += 1;
+    }
+    if (sending && (paths.is_empty() || paths.len() > MAX_FILES_PER_SESSION)) ||
+       (!sending && !paths.is_empty()) {
+        return Err("invalid legacy ZMODEM file arguments".into());
+    }
+    Ok((rename, paths))
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
+    if args.len() == 3 && args[2] == "--version" &&
+        (args[1] == "compat-rz" || args[1] == "compat-sz") {
+        println!("OpenShell native Rust ZMODEM {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
     let result = match args.as_slice() {
         [_, action, paths @ ..] if action == "send" && !paths.is_empty() =>
             send(&paths.iter().map(PathBuf::from).collect::<Vec<_>>()),
         [_, action, manifest] if action == "send-list" =>
             read_send_manifest(Path::new(manifest)).and_then(|paths| send(&paths)),
-        [_, action, dir] if action == "receive" => receive(Path::new(dir)),
+        [_, action, dir] if action == "receive" => receive(Path::new(dir), false),
+        [_, action, args @ ..] if action == "compat-sz" =>
+            parse_legacy_args(args, true).and_then(|(_, paths)| send(&paths)),
+        [_, action, args @ ..] if action == "compat-rz" =>
+            parse_legacy_args(args, false).and_then(|(rename, _)| receive(&env::current_dir()?, rename)),
         _ => {
-            eprintln!("Usage: zmodem-sidecar send FILE [FILE ...] | send-list MANIFEST | receive EXISTING_DIRECTORY");
+            eprintln!("Usage: zmodem-sidecar send FILE [FILE ...] | send-list MANIFEST | receive DIRECTORY | compat-rz [-E -e -b -B 32768] | compat-sz [-e -b -B 32768] FILE...");
             std::process::exit(2);
         }
     };
