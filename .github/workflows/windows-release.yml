@@ -24,10 +24,14 @@ on:
     branches: [main]
     paths:
       - "scripts/verify_windows_gui_subsystem.py"
-      - "scripts/prepare_zmodem_windows.ps1"
+      - "scripts/prepare_native_zmodem_windows.ps1"
+      - "scripts/verify_native_only_zmodem_windows.ps1"
+      - "scripts/generate_native_zmodem_manifest.py"
+      - "scripts/test_generate_native_zmodem_manifest.py"
+      - "cmd/zmodem-launcher/**"
+      - "build/windows/installer/openshell.nsi"
       - "scripts/generate_zmodem_manifest.py"
       - "scripts/test_generate_zmodem_manifest.py"
-      - "third_party/msys2-runtime-3.4.9/**"
       - ".github/workflows/windows-release.yml"
 
 permissions:
@@ -175,33 +179,32 @@ jobs:
           python scripts/verify_windows_gui_subsystem.py build/bin/OpenShell.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Prepare bundled ZMODEM utilities
-        shell: pwsh
-        run: ./scripts/prepare_zmodem_windows.ps1
-      - name: Verify ZMODEM console-free launchers
-        shell: pwsh
-        run: ./scripts/verify_zmodem_windows.ps1
-      - name: Build bundled experimental native ZMODEM sidecar
+      - name: Build native Rust ZMODEM sidecar
         shell: pwsh
         run: |
           Push-Location experiments/native-zmodem
           try {
             cargo generate-lockfile
             if ($LASTEXITCODE -ne 0) { throw "Rust lock resolution failed" }
+            cargo test --locked --bin zmodem-sidecar
+            if ($LASTEXITCODE -ne 0) { throw "Rust ZMODEM protocol tests failed" }
             cargo build --locked --release --bin zmodem-sidecar
-            if ($LASTEXITCODE -ne 0) { throw "Native ZMODEM sidecar release build failed" }
+            if ($LASTEXITCODE -ne 0) { throw "Rust ZMODEM sidecar release build failed" }
           } finally { Pop-Location }
-          $source = "experiments/native-zmodem/target/release/zmodem-sidecar.exe"
-          $destination = "build/bin/zmodem/native/zmodem-sidecar.exe"
-          if (!(Test-Path $source)) { throw "Native ZMODEM sidecar missing after build" }
-          Copy-Item $source $destination -Force
-          if ((Get-Item $destination).Length -le 0) { throw "Bundled native ZMODEM sidecar is empty" }
-      - name: Record bundled third-party file hashes and provenance
+      - name: Stage Rust-only ZMODEM helpers
         shell: pwsh
         run: |
-          python scripts/generate_zmodem_manifest.py --target build/bin/zmodem
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./scripts/record_zmodem_runtime.ps1 -TargetDir build/bin/zmodem
+          ./scripts/prepare_native_zmodem_windows.ps1
+          ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir build/bin/zmodem
+          $env:PYTHONIOENCODING = "utf-8"
+          python experiments/native-zmodem/tests/interop_native_helpers.py "experiments/native-zmodem/target/release/zmodem-sidecar.exe" "build/bin/zmodem"
+          if ($LASTEXITCODE -ne 0) { throw "Rust-only rz/sz wrapper interoperability failed" }
+      - name: Generate and verify native-only bundle manifest
+        shell: pwsh
+        run: |
+          python scripts/generate_native_zmodem_manifest.py --target build/bin/zmodem
+          if ($LASTEXITCODE -ne 0) { throw "Native-only ZMODEM inventory failed" }
+          ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir build/bin/zmodem
 
       - name: Validate OpenShell EXE icon
         shell: pwsh
@@ -287,7 +290,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path $setup)) { throw "Installer was not generated" }
 
-      - name: Export bundled third-party manifest
+      - name: Export native-only ZMODEM bundle manifest
         shell: pwsh
         run: |
           Copy-Item "build/bin/zmodem/BUNDLED_COMPONENTS.json" "dist/OpenShell-v$env:APP_VERSION-windows-x64-zmodem-manifest.json" -Force
@@ -372,6 +375,7 @@ jobs:
             exit 0
           }
           $notes = if ($env:SIGNPATH_ENABLED -eq 'true') { "Windows x64 安装版与便携版；已通过 SignPath 进行代码签名（Free code signing provided by SignPath.io, certificate by SignPath Foundation）。" } else { "Windows x64 安装版与便携版；未经代码签名。" }
+          $notes += "`n`nZMODEM on Windows uses only OpenShell's native Rust sidecar; no lrzsz-win32 or MSYS2 runtime is bundled."
           $notes += "`n`nCode signing policy: https://github.com/hctty27/openshell/blob/main/CODE_SIGNING_POLICY.md`nPrivacy policy: https://github.com/hctty27/openshell/blob/main/PRIVACY.md"
           $releaseArgs = @(
             "release", "create", $tag,
