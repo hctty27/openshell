@@ -129,6 +129,18 @@ fn report_file_bytes(kind: &str, index: usize, processed: u64) {
 }
 
 
+// The sender only checks requests at file boundaries; stdin/stdout remain
+// exclusively ZMODEM protocol streams. Indices are written by the Go app.
+fn skip_requested(index: usize) -> bool {
+    let Some(path) = env::var_os("OPENSHELL_ZMODEM_SKIP_FILE") else { return false };
+    if fs::metadata(&path).is_err_or(|meta| meta.len() > 4096) {
+        return false;
+    }
+    fs::read_to_string(path).is_ok_and(|requests| {
+        requests.lines().any(|line| line.parse::<usize>().ok() == Some(index))
+    })
+}
+
 fn incoming_wire() -> ChannelReceiver<io::Result<Vec<u8>>> {
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
@@ -324,15 +336,28 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
             _ => return Err("unsupported sender action".into()),
         }
         if pending_next {
-            let source = &files[active_index];
-            match sender.start_file(FileInfo::new(source.name.as_bytes(), Some(Position::new(source.size as u32)))) {
-                Ok(()) => {
-                    report_file_start(active_index, &source.name, Some(source.size));
-                    pending_next = false;
-                    activity.touch();
+            while completed_files < files.len() && skip_requested(active_index) {
+                let skipped = &files[active_index];
+                total = total.saturating_sub(skipped.size);
+                report_file_bytes("skipped", active_index, 0);
+                completed_files += 1;
+                active_index = completed_files;
+                report_progress(completed_bytes, total, &mut progress_at, true);
+                activity.touch();
+            }
+            if completed_files == files.len() {
+                pending_next = false;
+            } else {
+                let source = &files[active_index];
+                match sender.start_file(FileInfo::new(source.name.as_bytes(), Some(Position::new(source.size as u32)))) {
+                    Ok(()) => {
+                        report_file_start(active_index, &source.name, Some(source.size));
+                        pending_next = false;
+                        activity.touch();
+                    }
+                    Err(zmodem2::Error::Backpressure) => {}
+                    Err(err) => return Err(err.into()),
                 }
-                Err(zmodem2::Error::Backpressure) => {}
-                Err(err) => return Err(err.into()),
             }
         }
         if completed_files == files.len() && !finish_requested && sender.finish().is_ok() {
