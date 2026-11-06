@@ -132,7 +132,7 @@ fn report_file_bytes(kind: &str, index: usize, processed: u64) {
 // The sender only checks requests at file boundaries; stdin/stdout remain
 // exclusively ZMODEM protocol streams. Indices are written by the Go app.
 fn skip_requested_from_path(path: &Path, index: usize) -> bool {
-    if fs::metadata(path).is_err_or(|meta| meta.len() > 4096) {
+    if fs::metadata(path).map_or(true, |meta| meta.len() > 4096) {
         return false;
     }
     fs::read_to_string(path).is_ok_and(|requests| {
