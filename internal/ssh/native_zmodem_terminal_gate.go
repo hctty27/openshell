@@ -19,6 +19,7 @@ type terminalOutputGate struct {
 	legacy  io.Writer
 	native  io.Writer
 	armed   io.Writer
+	quietPrelude bool
 	scanner nativeZmodemStartScanner
 	lease   uint64
 	closed  bool
@@ -49,8 +50,13 @@ func (g *terminalOutputGate) Write(p []byte) (int, error) {
 		g.native = g.armed
 		g.armed = nil
 	}
-	if err := writeNativeGateBytes(g.legacy, legacy); err != nil {
-		return 0, err
+	if !g.quietPrelude {
+		if err := writeNativeGateBytes(g.legacy, legacy); err != nil {
+			return 0, err
+		}
+	}
+	if matched {
+		g.quietPrelude = false
 	}
 	if matched {
 		if err := writeNativeGateBytes(g.native, native); err != nil {
@@ -104,6 +110,17 @@ func (g *terminalOutputGate) takeover(native io.Writer) (uint64, error) {
 // its Rust receiver and stdin routing ready before arming. Never call it from
 // inside the downstream legacy Write callback (the gate lock is not reentrant).
 func (g *terminalOutputGate) armOnZmodemHeader(native io.Writer) (uint64, error) {
+	return g.armOnZmodemHeaderMode(native, false)
+}
+
+// armOnZmodemHeaderQuiet prevents the experimental shell command echo from
+// entering the visible terminal before ZMODEM owns the output stream.
+// No remote tty mode is changed; ordinary sessions keep legacy routing.
+func (g *terminalOutputGate) armOnZmodemHeaderQuiet(native io.Writer) (uint64, error) {
+	return g.armOnZmodemHeaderMode(native, true)
+}
+
+func (g *terminalOutputGate) armOnZmodemHeaderMode(native io.Writer, quiet bool) (uint64, error) {
 	if native == nil {
 		return 0, errors.New("原生协议输出目标为空")
 	}
@@ -119,6 +136,7 @@ func (g *terminalOutputGate) armOnZmodemHeader(native io.Writer) (uint64, error)
 	g.lease++
 	g.scanner = nativeZmodemStartScanner{}
 	g.armed = native
+	g.quietPrelude = quiet
 	return g.lease, nil
 }
 
@@ -139,6 +157,7 @@ func (g *terminalOutputGate) disarm(lease uint64) error {
 	}
 	g.scanner = nativeZmodemStartScanner{}
 	g.armed = nil
+	g.quietPrelude = false
 	return nil
 }
 
@@ -155,6 +174,7 @@ func (g *terminalOutputGate) restore(lease uint64) error {
 		return errTerminalStreamLease
 	}
 	g.native = nil
+	g.quietPrelude = false
 	g.scanner = nativeZmodemStartScanner{}
 	return nil
 }
@@ -175,6 +195,7 @@ func (g *terminalOutputGate) restoreWithReplay(lease uint64, trailing func() []b
 		return err
 	}
 	g.native = nil
+	g.quietPrelude = false
 	g.scanner = nativeZmodemStartScanner{}
 	return nil
 }
@@ -185,5 +206,6 @@ func (g *terminalOutputGate) close() {
 	g.closed = true
 	g.native = nil
 	g.armed = nil
+	g.quietPrelude = false
 	g.scanner = nativeZmodemStartScanner{}
 }
