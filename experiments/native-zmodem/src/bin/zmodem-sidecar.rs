@@ -409,9 +409,9 @@ mod tests {
     fn default_wire_writer_flushes_every_frame_without_changes() {
         let mut writer = ExperimentalWireWriter::new(std::io::Cursor::new(Vec::new()), 0);
         writer.write_wire(&[0x00, 0x18, 0xff]).unwrap();
-        assert_eq!(writer.writer.get_ref(), &[0x00, 0x18, 0xff]);
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x00, 0x18, 0xff]);
         writer.write_wire(&[0x01, 0x02]).unwrap();
-        assert_eq!(writer.writer.get_ref(), &[0x00, 0x18, 0xff, 0x01, 0x02]);
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x00, 0x18, 0xff, 0x01, 0x02]);
     }
 
     #[test]
@@ -419,14 +419,14 @@ mod tests {
         let mut writer = ExperimentalWireWriter::new(std::io::Cursor::new(Vec::new()), 8);
         writer.write_wire(&[0x18, 0x00, 0xff]).unwrap();
         writer.write_wire(&[0x01, 0x7f]).unwrap();
-        assert!(writer.writer.get_ref().is_empty(), "must coalesce adjacent small frames");
+        assert!(writer.writer.get_ref().as_slice().is_empty(), "must coalesce adjacent small frames");
         writer.flush_pending().unwrap();
-        assert_eq!(writer.writer.get_ref(), &[0x18, 0x00, 0xff, 0x01, 0x7f]);
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x18, 0x00, 0xff, 0x01, 0x7f]);
         writer.write_wire(&[3, 4, 5, 6, 7]).unwrap();
         writer.write_wire(&[8, 9, 10, 11]).unwrap();
-        assert_eq!(writer.writer.get_ref(), &[0x18, 0x00, 0xff, 0x01, 0x7f, 3, 4, 5, 6, 7]);
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x18, 0x00, 0xff, 0x01, 0x7f, 3, 4, 5, 6, 7]);
         writer.flush_pending().unwrap();
-        assert_eq!(writer.writer.get_ref(), &[0x18, 0x00, 0xff, 0x01, 0x7f, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x18, 0x00, 0xff, 0x01, 0x7f, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     }
 
     #[test]
@@ -434,7 +434,7 @@ mod tests {
         let mut writer = ExperimentalWireWriter::new(std::io::Cursor::new(Vec::new()), 4);
         writer.write_wire(&[0x18]).unwrap();
         writer.write_wire(&[1, 2, 3, 4, 5]).unwrap();
-        assert_eq!(writer.writer.get_ref(), &[0x18, 1, 2, 3, 4, 5]);
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x18, 1, 2, 3, 4, 5]);
         assert!(writer.pending.is_empty());
     }
 
