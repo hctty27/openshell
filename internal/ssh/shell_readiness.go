@@ -15,7 +15,7 @@ var (
 	shellBoundaryPattern = regexp.MustCompile("\x1b\\](?:133|633);([ABCD])(?:;[^\x07\x1b]*)?(?:\x07|\x1b\\\\)")
 	alternateBufferPattern = regexp.MustCompile("\x1b\\[\\?(?:47|1047|1049)([hl])")
 	mysqlPromptPattern = regexp.MustCompile(`^(?:mysql(?:@[A-Za-z0-9_.:-]+(?:\[[^\r\n\]]{0,120}\])?)?|MariaDB \[[^\r\n\]]{0,120}\])> ?$`)
-	redisPromptPattern = regexp.MustCompile(`^(?:redis\s+)?(?:[A-Za-z0-9_.-]+|\[[0-9A-Fa-f:]+\]):[0-9]{1,5}(?:\[[0-9]+\])?> ?$`)
+	redisPromptPattern = regexp.MustCompile(`^(?:redis> ?|(?:redis\s+)?(?:[A-Za-z0-9_.-]+|\[[0-9A-Fa-f:]+\]):[0-9]{1,5}(?:\[[0-9]+\])?> ?)$`)
 	psqlPromptPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,80}=[*!]?[>#] ?$`)
 	mysqlCustomPromptPattern = regexp.MustCompile(`^\(?[A-Za-z0-9_.-]+@[A-Za-z0-9_.:-]+\)?[^\r\n>]{0,120}> ?$`)
 	shellPromptPattern = regexp.MustCompile("^(?:\\[[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120}\\]|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[^\\r\\n]{0,120}|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120})[#$%] ?$")
