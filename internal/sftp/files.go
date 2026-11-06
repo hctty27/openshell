@@ -40,6 +40,8 @@ type Manager struct {
     slots map[string]chan struct{}
     slotUsers map[string]int
     workers sync.WaitGroup
+    globalSlots chan struct{}
+    maxConcurrent int
     reserved map[string]struct{}
     closed bool
     poolMu sync.Mutex
@@ -49,7 +51,27 @@ type Manager struct {
 }
 
 func NewManager(lookup Lookup, emit func(string, any)) *Manager {
-    return &Manager{lookup: lookup, emit: emit, tasks: make(map[string]*job), slots: make(map[string]chan struct{}), slotUsers: make(map[string]int), reserved: make(map[string]struct{}), pool: make(map[domain.ConnectionRef]*cachedRemote), poolEpoch: make(map[string]uint64)}
+    return &Manager{lookup: lookup, emit: emit, tasks: make(map[string]*job), slots: make(map[string]chan struct{}), slotUsers: make(map[string]int), globalSlots: make(chan struct{}, 6), maxConcurrent: 3, reserved: make(map[string]struct{}), pool: make(map[domain.ConnectionRef]*cachedRemote), poolEpoch: make(map[string]uint64)}
+}
+
+// The limit is global to OpenShell and applies to newly created per-connection
+// task queues; active queues keep their original capacity until drained.
+func (m *Manager) Concurrency() int {
+    m.mu.Lock()
+    defer m.mu.Unlock()
+    return m.maxConcurrent
+}
+
+func (m *Manager) SetConcurrency(value int) error {
+    switch value {
+    case 1, 2, 3, 4, 6:
+    default:
+        return apperror.New("sftpInvalidConcurrentTransferLimit", nil)
+    }
+    m.mu.Lock()
+    m.maxConcurrent = value
+    m.mu.Unlock()
+    return nil
 }
 
 func (m *Manager) remote(ref domain.ConnectionRef) (*pkg.Client, error) {

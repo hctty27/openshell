@@ -10,9 +10,14 @@ vi.mock("../bridge", () => ({
   desktop: true,
   api: {
     SFTPTransfers: vi.fn(async () => []),
+    SFTPConcurrency: vi.fn(async () => 3),
+    SetSFTPConcurrency: vi.fn(async () => {}),
+    SFTPCancelBatch: vi.fn(async () => {}),
     SFTPCancel: vi.fn(async () => {}),
     SFTPTransfer: vi.fn(async () => {}),
     CancelZmodem: vi.fn(async () => {}),
+    CancelNativeZmodemInteractiveTransfer: vi.fn(async () => {}),
+    SkipNativeZmodemPendingFile: vi.fn(async () => {}),
   },
   listen: (name: string, callback: (value: any) => void) => {
     events.callbacks.set(name, callback);
@@ -97,4 +102,75 @@ test("badge counts only active jobs while failed transfers remain visible", () =
   fireEvent.click(toggle);
   expect(screen.getByText("file.zip")).toBeTruthy();
   expect(container.querySelector(".transfer-center-line button")).not.toBeNull();
+});
+
+test("native ZMODEM batch renders separate files and real byte progress", () => {
+  render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "batch-1", direction: "upload", active: true,
+    files: [{ name: "a.bin", total: 100 }, { name: "b.bin", total: 200 }],
+  });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "batch-1", kind: "start", index: 0,
+    name: "a.bin", total: 100, processed: 0,
+  });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "batch-1", kind: "completed", index: 0,
+    processed: 100,
+  });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "batch-1", kind: "start", index: 1,
+    name: "b.bin", total: 200,
+  });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "batch-1", kind: "progress", index: 1,
+    processed: 100,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(screen.getByText("a.bin")).toBeTruthy();
+  expect(screen.getByText("b.bin")).toBeTruthy();
+  expect(screen.getByText("ZMODEM · 2 个文件")).toBeTruthy();
+  expect(screen.getByText("67%")).toBeTruthy();
+});
+
+test("skip queued rz upload file without cancelling the entire batch", async () => {
+  render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "skip-batch", direction: "upload", active: true,
+    files: [{ name: "first.txt", total: 100 }, { name: "second.txt", total: 200 }],
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  fireEvent.click(screen.getByRole("button", { name: "跳过 second.txt" }));
+  await waitFor(() => expect(api.SkipNativeZmodemPendingFile)
+    .toHaveBeenCalledWith(refA, "skip-batch", 1));
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "skip-batch", kind: "skip-requested", index: 1,
+  });
+  expect(screen.getByText("正在跳过")).toBeTruthy();
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "skip-batch", kind: "skipped", index: 1, processed: 0,
+  });
+  expect(screen.getByText("已跳过")).toBeTruthy();
+});
+
+test("SFTP batch cancellation is scoped and concurrency is saved", async () => {
+  render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  const task = {
+    id: "sftp-batch-job-1", batchId: "batch-99", ref: refA,
+    direction: "upload" as const, source: "C:/a.txt", destination: "/tmp/a.txt",
+    name: "a.txt", bytes: 50, total: 100, status: "running" as const,
+    overwrite: false, resume: true, error: "", created: 20,
+  };
+  emit("sftp:transfer", task);
+  emit("sftp:transfer", {
+    ...task, id: "sftp-batch-job-2", source: "C:/b.txt", destination: "/tmp/b.txt",
+    name: "b.txt", bytes: 0, status: "queued",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(screen.getByText("SFTP · 2 个文件")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "取消整批" }));
+  await waitFor(() => expect(api.SFTPCancelBatch).toHaveBeenCalledWith(refA, "batch-99"));
+  const selector = screen.getByRole("combobox", { name: "SFTP 并发数" });
+  fireEvent.change(selector, { target: { value: "4" } });
+  await waitFor(() => expect(api.SetSFTPConcurrency).toHaveBeenCalledWith(4));
 });

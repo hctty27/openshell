@@ -220,5 +220,7 @@
   "aiConversationRunning": "This conversation already has a running task",
   "aiMissingToolCallID": "AI API returned a tool call without an ID",
   "aiEmptyResponse": "AI API returned an empty response",
-  "aiExecutionProbeFailed": "Could not determine SSH execution capabilities"
+  "aiExecutionProbeFailed": "Could not determine SSH execution capabilities",
+  "sftpInvalidBatchSize": "SFTP batch must contain 1–4000 files",
+  "sftpInvalidConcurrentTransferLimit": "SFTP concurrency must be 1, 2, 3, 4 or 6"
 }

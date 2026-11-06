@@ -2,7 +2,7 @@ import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState, type MouseE
 import { useTranslation } from "react-i18next";
 import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Info, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, ArrowLeftRight } from "lucide-react";
 import { api, listen, errorText } from "../bridge";
-import type { Ref, SFTPEntry, SFTPTask, SFTPDocument } from "../types";
+import type { Ref, SFTPEntry, SFTPTask, SFTPDocument, SFTPTransferRequest } from "../types";
 import { mergeTransferHistory, sameTransferRef } from "../features/transfers/transferHistory";
 import { CoalescedTaskUpdates } from "../features/performance/coalescedTaskUpdates";
 import { useDialogs } from "./DialogProvider";
@@ -277,20 +277,22 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
       // The visible listing may be stale while uploads are queued. Resolve
       // destination conflicts from the current filesystem, not React state.
       const destinationNames = new Set((await api.SFTPList(refID, destSide, dstDir)).map(item => item.name));
+      const requests: SFTPTransferRequest[] = [];
       for(const file of paths) {
         const name = basename(file);
         const existing = destinationNames.has(name);
         let overwrite = false;
         if (existing) {
           overwrite = await dialogs.confirm({
-            title:t("sftp:overwriteTitle"), description:t("sftp:overwriteDescription",{name:basename(file)}),
+            title:t("sftp:overwriteTitle"), description:t("sftp:overwriteDescription",{name}),
             tone:"warning",confirmLabel:t("sftp:overwrite")
           });
           if (!overwrite) continue;
         }
-        await api.SFTPTransfer(refID,direction,file,join(destSide,dstDir,name),overwrite,true);
+        requests.push({direction, source:file, destination:join(destSide,dstDir,name), overwrite, resume:true});
         destinationNames.add(name);
       }
+      if (requests.length) await api.SFTPStartBatch(refID, requests);
     }catch(error){onNotice(error);}
   };
   useEffect(() => {
@@ -510,11 +512,15 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
         preview:lines.join("\n"),tone:"warning",confirmLabel:t("sftp:syncApply")
       });
       if(!ok)return;
-      for(const item of selected){
-        const destSide=direction==="upload"?"remote":"local";
-        await api.SFTPEnsureDirectory(refID,destSide,parent(destSide,item.destination));
-        await api.SFTPTransfer(refID,direction,item.source,item.destination,item.reason==="changed",true);
+      const destSide=direction==="upload"?"remote":"local";
+      const directories=new Set(selected.map(item=>parent(destSide,item.destination)));
+      for(const directory of directories) {
+        await api.SFTPEnsureDirectory(refID,destSide,directory);
       }
+      await api.SFTPStartBatch(refID,selected.map(item=>({
+        direction, source:item.source, destination:item.destination,
+        overwrite:item.reason==="changed", resume:true,
+      })));
       refresh(direction==="upload"?"remote":"local");
     }catch(error){onNotice(error);}
     finally{setSyncBusy(false);}

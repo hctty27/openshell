@@ -199,8 +199,17 @@ export interface SFTPPaths {
   local: string;
   remote: string;
 }
+export interface SFTPTransferRequest {
+  direction: "upload" | "download";
+  source: string;
+  destination: string;
+  overwrite: boolean;
+  resume: boolean;
+}
+
 export interface SFTPTask {
   id: string;
+  batchId?: string;
   ref: Ref;
   direction: "upload" | "download";
   source: string;

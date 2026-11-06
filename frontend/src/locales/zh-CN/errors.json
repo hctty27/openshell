@@ -220,5 +220,7 @@
   "aiConversationRunning": "该对话已有任务正在运行",
   "aiMissingToolCallID": "AI API 返回的工具调用缺少 ID",
   "aiEmptyResponse": "AI API 返回了空响应",
-  "aiExecutionProbeFailed": "检测 SSH 执行能力失败"
+  "aiExecutionProbeFailed": "检测 SSH 执行能力失败",
+  "sftpInvalidBatchSize": "SFTP 批次文件数量必须在 1–4000 之间",
+  "sftpInvalidConcurrentTransferLimit": "SFTP 并发数只支持 1、2、3、4 或 6"
 }

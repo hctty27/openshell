@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"time"
 )
@@ -48,12 +49,15 @@ func runNativeZmodemTerminalSidecarWithProgress(
 	}
 
 	cmd := exec.CommandContext(ctx, executable, direction, path)
+	if control := nativeZmodemSkipControl(ctx); control != "" && (direction == "send" || direction == "send-list" || direction == "receive") {
+		cmd.Env = append(os.Environ(), "OPENSHELL_ZMODEM_SKIP_FILE="+control)
+	}
 	configureNativeZmodemSidecar(cmd)
 	cmd.WaitDelay = nativeZmodemShutdownTimeout
 	stderr := &nativeZmodemLog{}
 	cmd.Stderr = stderr
-	if onProgress != nil {
-		cmd.Stderr = &nativeTerminalProgressLog{log: stderr, onProgress: onProgress}
+	if fileObserver := nativeZmodemFileObserver(ctx); onProgress != nil || fileObserver != nil {
+		cmd.Stderr = &nativeTerminalProgressLog{log: stderr, onProgress: onProgress, onFile: fileObserver}
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil { return err }

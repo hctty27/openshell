@@ -16,6 +16,7 @@ vi.mock("../bridge", () => ({
   api: {
     SFTPHome: vi.fn(async () => ({ local: "C:/temp", remote: "/root" })),
     SFTPTransfers: vi.fn(async () => []),
+    SFTPStartBatch: vi.fn(async () => []),
     SaveTransferLocalDir: vi.fn(async () => {}),
     SFTPReadRemoteText: vi.fn(),
     SFTPReadRemoteTextRequest: vi.fn(),
@@ -494,4 +495,18 @@ test("remote editor keeps the same dialog shell while loading and after content 
   expect(await screen.findByTestId("sftp-edit-draft")).toBeTruthy();
   expect(screen.getByRole("dialog", { name: t("sftp:editText") })).toBe(modal);
   expect(modal.className).toBe(initialClassName);
+});
+
+test("multi-selection submits one atomic SFTP transfer batch", async () => {
+  setupBatchFiles();
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  await screen.findByText("three.txt");
+  fireEvent.click(row("remote", "one.txt"));
+  fireEvent.click(row("remote", "three.txt"), { shiftKey: true });
+  fireEvent.click(within(pane("remote")).getByRole("button", { name: "下载" }));
+  await waitFor(() => expect(api.SFTPStartBatch).toHaveBeenCalledWith(ref, [
+    {direction:"download",source:"/root/one.txt",destination:"C:/temp/one.txt",overwrite:false,resume:true},
+    {direction:"download",source:"/root/two.txt",destination:"C:/temp/two.txt",overwrite:false,resume:true},
+    {direction:"download",source:"/root/three.txt",destination:"C:/temp/three.txt",overwrite:false,resume:true},
+  ]));
 });

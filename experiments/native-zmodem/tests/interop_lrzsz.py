@@ -22,7 +22,9 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def transfer_pair(left: list[str], right: list[str], left_cwd: Path, right_cwd: Path, chunk_size: int = 4096) -> None:
+def transfer_pair(left: list[str], right: list[str], left_cwd: Path, right_cwd: Path,
+                  chunk_size: int = 4096, left_env: dict[str, str] | None = None,
+                  right_env: dict[str, str] | None = None) -> None:
     with tempfile.TemporaryDirectory(prefix="zmodem-test-log-") as logs:
         with (Path(logs) / "left.err").open("wb") as left_log, (
             Path(logs) / "right.err"
@@ -33,6 +35,7 @@ def transfer_pair(left: list[str], right: list[str], left_cwd: Path, right_cwd: 
                 stdout=subprocess.PIPE,
                 stderr=left_log,
                 cwd=left_cwd,
+                env={**os.environ, **(left_env or {})},
                 bufsize=0,
             )
             right_proc = subprocess.Popen(
@@ -41,6 +44,7 @@ def transfer_pair(left: list[str], right: list[str], left_cwd: Path, right_cwd: 
                 stdout=subprocess.PIPE,
                 stderr=right_log,
                 cwd=right_cwd,
+                env={**os.environ, **(right_env or {})},
                 bufsize=0,
             )
             errors = []
@@ -168,6 +172,47 @@ def main() -> None:
         for source in sources:
             received = sidecar_output / source.name
             assert received.is_file() and sha256(received) == sha256(source)
+
+        # File-level skip is an independent control stream. Verify that rz/sz
+        # continue transmitting the remaining files within the same session.
+        skip_dir = root / "skip-control"
+        skip_dir.mkdir()
+        skip_path = skip_dir / "pending"
+        skip_path.write_text("1\n", encoding="ascii")
+        skip_sources = []
+        for name, payload in [
+            ("skip-first.bin", b"first" * 2048),
+            ("skip-middle.bin", b"middle" * 2048),
+            ("skip-last.bin", b"last" * 2048),
+        ]:
+            source = src / name
+            source.write_bytes(payload)
+            skip_sources.append(source)
+
+        skipped_upload = root / "skip-upload"
+        skipped_upload.mkdir()
+        print("Native sender -> Linux rz: skip pending middle file", flush=True)
+        transfer_pair([sidecar, "send", *(str(p) for p in skip_sources)],
+                      ["rz", "-q"], src, skipped_upload,
+                      left_env={"OPENSHELL_ZMODEM_SKIP_FILE": str(skip_path)})
+        assert (skipped_upload / skip_sources[0].name).is_file()
+        assert not (skipped_upload / skip_sources[1].name).exists()
+        assert (skipped_upload / skip_sources[2].name).is_file()
+        for source in (skip_sources[0], skip_sources[2]):
+            assert sha256(skipped_upload / source.name) == sha256(source)
+
+        skipped_download = root / "skip-download"
+        skipped_download.mkdir()
+        print("Linux sz -> native receiver: ZSKIP pending middle file", flush=True)
+        transfer_pair(["sz", "-q", *(str(p) for p in skip_sources)],
+                      [sidecar, "receive", str(skipped_download)],
+                      src, skipped_download,
+                      right_env={"OPENSHELL_ZMODEM_SKIP_FILE": str(skip_path)})
+        assert (skipped_download / skip_sources[0].name).is_file()
+        assert not (skipped_download / skip_sources[1].name).exists()
+        assert (skipped_download / skip_sources[2].name).is_file()
+        for source in (skip_sources[0], skip_sources[2]):
+            assert sha256(skipped_download / source.name) == sha256(source)
 
         print(f"Passed: {len(cases) * 2 + 6} cross-implementation SHA-256 file checks (including 2 batch sessions)", flush=True)
 

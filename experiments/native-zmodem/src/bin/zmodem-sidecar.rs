@@ -109,13 +109,41 @@ impl<W: Write> ExperimentalWireWriter<W> {
 
 // Diagnostics only: stdout remains exclusively binary ZMODEM protocol.
 // Upload progress is bytes read from the source, not proof of remote persistence.
-fn report_progress(processed: u64, total: u64, last: &mut Instant, force: bool) {
+fn report_progress(processed: u64, total: u64, last: &mut Instant, force: bool) -> bool {
     if force || last.elapsed() >= PROGRESS_INTERVAL {
         eprintln!("OSZP\t{processed}\t{total}");
         *last = Instant::now();
+        return true;
     }
+    false
 }
 
+fn report_file_start(index: usize, name: &str, size: Option<u64>) {
+    let hex_name = name.as_bytes().iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let advertised = size.map_or_else(|| "-1".to_owned(), |size| size.to_string());
+    eprintln!("OSZF\tstart\t{index}\t{advertised}\t{hex_name}");
+}
+
+fn report_file_bytes(kind: &str, index: usize, processed: u64) {
+    eprintln!("OSZF\t{kind}\t{index}\t{processed}");
+}
+
+
+// The sender only checks requests at file boundaries; stdin/stdout remain
+// exclusively ZMODEM protocol streams. Indices are written by the Go app.
+fn skip_requested_from_path(path: &Path, index: usize) -> bool {
+    if fs::metadata(path).map_or(true, |meta| meta.len() > 4096) {
+        return false;
+    }
+    fs::read_to_string(path).is_ok_and(|requests| {
+        requests.lines().any(|line| line.parse::<usize>().ok() == Some(index))
+    })
+}
+
+fn skip_requested(index: usize) -> bool {
+    let Some(path) = env::var_os("OPENSHELL_ZMODEM_SKIP_FILE") else { return false };
+    skip_requested_from_path(Path::new(&path), index)
+}
 
 fn incoming_wire() -> ChannelReceiver<io::Result<Vec<u8>>> {
     let (tx, rx) = mpsc::channel();
@@ -249,6 +277,7 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
     let mut activity = ActivityClock::new();
     report_progress(0, total, &mut progress_at, true);
+    report_file_start(0, &files[0].name, Some(files[0].size));
 
     while !activity.expired() {
         match sender.poll() {
@@ -269,11 +298,14 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
                 sender.submit_file(&file_scratch)?;
                 if max > 0 { activity.touch(); }
                 processed_in_file = processed_in_file.max(start + max as u64);
-                report_progress(completed_bytes + processed_in_file, total, &mut progress_at, false);
+                if report_progress(completed_bytes + processed_in_file, total, &mut progress_at, false) {
+                    report_file_bytes("progress", active_index, processed_in_file);
+                }
             }
             Action::Event(Event::FileCompleted) => {
                 output.flush_pending()?;
                 completed_bytes += files[active_index].size;
+                report_file_bytes("completed", active_index, files[active_index].size);
                 completed_files += 1;
                 report_progress(completed_bytes, total, &mut progress_at, true);
                 activity.touch();
@@ -308,14 +340,28 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
             _ => return Err("unsupported sender action".into()),
         }
         if pending_next {
-            let source = &files[active_index];
-            match sender.start_file(FileInfo::new(source.name.as_bytes(), Some(Position::new(source.size as u32)))) {
-                Ok(()) => {
-                    pending_next = false;
-                    activity.touch();
+            while completed_files < files.len() && skip_requested(active_index) {
+                let skipped = &files[active_index];
+                total = total.saturating_sub(skipped.size);
+                report_file_bytes("skipped", active_index, 0);
+                completed_files += 1;
+                active_index = completed_files;
+                report_progress(completed_bytes, total, &mut progress_at, true);
+                activity.touch();
+            }
+            if completed_files == files.len() {
+                pending_next = false;
+            } else {
+                let source = &files[active_index];
+                match sender.start_file(FileInfo::new(source.name.as_bytes(), Some(Position::new(source.size as u32)))) {
+                    Ok(()) => {
+                        report_file_start(active_index, &source.name, Some(source.size));
+                        pending_next = false;
+                        activity.touch();
+                    }
+                    Err(zmodem2::Error::Backpressure) => {}
+                    Err(err) => return Err(err.into()),
                 }
-                Err(zmodem2::Error::Backpressure) => {}
-                Err(err) => return Err(err.into()),
             }
         }
         if completed_files == files.len() && !finish_requested && sender.finish().is_ok() {
@@ -390,12 +436,17 @@ impl Drop for ReceiverDiagnostics {
 
 fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Error>> {
     let mut receiver = Receiver::with_flow_control(0, true)?;
+    let manual_accept = env::var_os("OPENSHELL_ZMODEM_SKIP_FILE").is_some();
+    if manual_accept { receiver.set_manual_file_accept(true); }
     let rx = incoming_wire();
     let mut waiting = VecDeque::<u8>::new();
     let mut wire_scratch = Vec::<u8>::with_capacity(2048);
     let mut output = ExperimentalWireWriter::new(io::stdout().lock(), experimental_wire_batch_bytes()?);
     let mut open_file: Option<(File, PathBuf, PathBuf, u64, Option<u32>)> = None;
     let mut completed_files = 0usize;
+    let mut seen_files = 0usize;
+    let mut skipped_files = 0usize;
+    let mut pending_decision: Option<bool> = None;
     let mut session_completed = false;
     let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
     let mut received_total = 0u64;
@@ -443,15 +494,24 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 }
                 receiver.file_written(received)?;
                 if received > 0 { activity.touch(); }
-                report_progress(*bytes, received_total, &mut progress_at, false);
+                if report_progress(*bytes, received_total, &mut progress_at, false) {
+                    report_file_bytes("progress", seen_files - 1, *bytes);
+                }
             }
             Action::Event(Event::FileStarted(info)) => {
                 // The sender can be waiting for an acknowledgement at this edge.
                 output.flush_pending()?;
-                if open_file.is_some() || completed_files >= MAX_FILES_PER_SESSION {
+                if open_file.is_some() || pending_decision.is_some() || seen_files >= MAX_FILES_PER_SESSION {
                     return Err("native receiver accepts at most 100 files per session".into());
                 }
+                let index = seen_files;
+                seen_files += 1;
                 let name = safe_name(info.name)?;
+                if manual_accept && skip_requested(index) {
+                    pending_decision = Some(true);
+                    activity.touch();
+                    continue;
+                }
                 let mut target = dir.join(&name);
                 if target.exists() && auto_rename {
                     let original = Path::new(&name);
@@ -483,7 +543,9 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 let advertised = info.size.map(|size| size.get());
                 received_total = advertised.map_or(0, u64::from);
                 report_progress(0, received_total, &mut progress_at, true);
+                report_file_start(index, &name, advertised.map(u64::from));
                 open_file = Some((file, temp, target, 0, advertised));
+                if manual_accept { pending_decision = Some(false); }
                 activity.touch();
             }
             Action::Event(Event::FileCompleted) => {
@@ -505,12 +567,14 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 fs::hard_link(&temp, &target)?;
                 fs::remove_file(&temp)?;
                 report_progress(size, received_total, &mut progress_at, true);
+                report_file_bytes("completed", seen_files - 1, size);
                 completed_files += 1;
                 activity.touch();
             }
             Action::Event(Event::SessionCompleted) => {
                 output.flush_pending()?;
-                if completed_files == 0 || open_file.is_some() {
+                if seen_files == 0 || completed_files + skipped_files != seen_files ||
+                    open_file.is_some() || pending_decision.is_some() {
                     return Err("session ended without completing all files".into());
                 }
                 session_completed = true;
@@ -542,6 +606,21 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 }
             }
             _ => return Err("unsupported receiver action".into()),
+        }
+        if let Some(skip) = pending_decision {
+            let outcome = if skip { receiver.skip_file() } else { receiver.accept_file_at(0) };
+            match outcome {
+                Ok(()) => {
+                    if skip {
+                        report_file_bytes("skipped", seen_files - 1, 0);
+                        skipped_files += 1;
+                    }
+                    pending_decision = None;
+                    activity.touch();
+                }
+                Err(zmodem2::Error::Backpressure) => {}
+                Err(err) => return Err(err.into()),
+            }
         }
     }
     Err("ZMODEM receiver inactive for 90 seconds".into())
@@ -613,7 +692,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_file_size, parse_wire_batch_bytes, read_source_chunk, safe_name, ActivityClock, ExperimentalWireWriter, INACTIVITY_TIMEOUT, MAX_SIZE};
+    use super::{checked_file_size, parse_wire_batch_bytes, read_source_chunk, safe_name, skip_requested_from_path, ActivityClock, ExperimentalWireWriter, INACTIVITY_TIMEOUT, MAX_SIZE};
     use std::fs::{self, OpenOptions};
     use std::io::{Seek, SeekFrom, Write};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -640,6 +719,23 @@ mod tests {
         fs::remove_file(path).unwrap();
     }
 
+
+    #[test]
+    fn skips_only_requested_file_indices() {
+        let dir = std::env::temp_dir().join(format!(
+            "openshell-zmodem-skip-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+        ));
+        fs::create_dir(&dir).unwrap();
+        let control = dir.join("pending");
+        fs::write(&control, b"1\n3\n").unwrap();
+        assert!(!skip_requested_from_path(&control, 0));
+        assert!(skip_requested_from_path(&control, 1));
+        assert!(!skip_requested_from_path(&control, 2));
+        assert!(skip_requested_from_path(&control, 3));
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn supports_gib_files_without_overflowing_legacy_zmodem_offsets() {

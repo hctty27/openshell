@@ -143,3 +143,25 @@ func TestNativeZmodemProgressDiagnosticsStayIsolated(t *testing.T) {
         t.Fatalf("telemetry contaminated diagnostics: %q", got)
     }
 }
+
+func TestNativeZmodemFileEventsAreParsedWithoutPollutingWire(t *testing.T) {
+    var events []NativeZmodemFileProgress
+    var totals [][2]uint64
+    log := &nativeZmodemLog{}
+    writer := &nativeTerminalProgressLog{
+        log: log,
+        onProgress: func(done, total uint64) { totals = append(totals, [2]uint64{done, total}) },
+        onFile: func(event NativeZmodemFileProgress) { events = append(events, event) },
+    }
+    input := "OSZF\tstart\t0\t1073741824\te4b8ade69687\n" +
+        "OSZP\t536870912\t1073741824\n" +
+        "OSZF\tprogress\t0\t536870912\n" +
+        "OSZF\tcompleted\t0\t1073741824\n"
+    if _, err := writer.Write([]byte(input)); err != nil { t.Fatal(err) }
+    if len(totals) != 1 || totals[0][1] != 1073741824 { t.Fatalf("1 GiB progress rejected: %+v", totals) }
+    if len(events) != 3 || events[0].Name != "中文" || events[0].Total == nil || *events[0].Total != 1073741824 ||
+        events[1].Processed != 536870912 || events[2].Kind != "completed" {
+        t.Fatalf("file event parse failed: %+v", events)
+    }
+    if log.String() != "" { t.Fatalf("diagnostics leaked: %s", log.String()) }
+}
