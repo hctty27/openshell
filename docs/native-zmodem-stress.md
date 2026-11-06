@@ -32,7 +32,7 @@
 | `-LargeMiB` | `128` | 大文件大小，1–128 MiB（Rust sidecar 上限） |
 | `-Rounds` | `30` | 连续多轮，每轮上传、下载各一次 |
 | `-Workers` | `3` | 并发连接与终端数量，1–4 |
-| `-LatencyMS` | `3` | 弱链路每次 TCP 读写延迟，1–10 ms |
+| `-LatencyMS` | `3` | TCP 读写附加延迟，0–10 ms；0 表示无额外延迟 |
 | `-SkipBaseline` | `false` | 跳过现有 8 次互操作 SHA-256 冒烟（不建议首次跳过） |
 | `-ReportDir` | `tmp/native-zmodem-stress` | JSON 测试记录目录 |
 
@@ -63,6 +63,8 @@ Rust sidecar 增加 **仅实验模式使用** 的有界 `Action::WriteWire` 缓�
 ```
 
 `-WireBatchKiB` 由测试脚本临时注入 `OPENSHELL_ZMODEM_WIRE_BATCH_BYTES`，结束或异常退出后会恢复原环境变量。无需改动 OpenShell 正式设置、用户终端、SSH 配置或安装包默认行为。
+
+可分别选择 `-LatencyMS 0`、`-LatencyMS 1`、`-LatencyMS 3`、`-LatencyMS 5` 做相同配置的比较。
 
 A/B 测试必须对照 JSON `io.toRemoteCalls`、`io.toRemoteWriteNs`、`miBPerSecond`、SHA-256；推荐每个延迟条件至少重复 5 次，并交替执行两组，以减少环境波动。**减少写入次数不代表一定能提高速度**：当 ZMODEM 协议当前流程必须等待远端 ACK 时，将始终在等待前 flush，不跨协议反馈边界强行拼接。缓冲不会改变模拟器的 3ms TCP 读写延迟语义；它也不模拟真实丢包。
 
