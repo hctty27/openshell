@@ -131,25 +131,42 @@ JSON 文件写入 `tmp/native-zmodem-stress/native-zmodem-matrix-*.json`，包�
 
 ## 隔离 Docker tc netem 弱网验收
 
-为避免把 Go 层“每次读写暂停数毫秒”误认为真实网络丢包，新增 Docker Linux 内核 `tc netem` 测试。该测试**只作用于临时容器的 `eth0` 出站流量**，并且只有运行专用入口时才为临时 Docker 容器授予 `NET_ADMIN`；SSH 只绑定到 `127.0.0.1` 随机端口。测试不会修改 Windows 宿主机网卡、正式 SSH 连接或永久 Docker 网络配置。
+本测试**仅作用于临时 Docker Linux SSH 容器 eth0 的出站网络**。测试容器只绑定 `127.0.0.1`，`NET_ADMIN` 权限只授予临时容器；不改动 Windows 主机网卡或生产 SSH。使用真实的 Linux `tc netem`，但并非完整的双向公网弱网模拟。
 
 ```powershell
-# 先确认 Docker Desktop Linux 引擎、Go 和 Cargo 已就绪
+# 单轮冒烟，3 profiles × 2 buffers × 4 transfers = 24 次
 .\scripts\test-native-zmodem-netem.ps1 -Rounds 1
 
-# 3 种网络配置 × 2 种缓冲 × 2 轮 × 4 种协议/方向 = 48 次传输
-.\scripts\test-native-zmodem-netem.ps1 -Rounds 2
+# 推荐验收，5 轮，每种 profile 40 次，共 120 次传输
+.\scripts\test-native-zmodem-netem.ps1 -Rounds 5
+
+# 增强故障测试：在 jitter 和 loss 下再验证取消、超时、断线
+.\scripts\test-native-zmodem-netem.ps1 -Rounds 5 -IncludeFaults
+
+# 若 0.1% 随机丢包未出现实际 drop，可另外跑 1% 压力方案
+.\scripts\test-native-zmodem-netem.ps1 -Rounds 5 -LossPercent 1
 ```
 
-| Profile | Linux 容器出站 `tc qdisc` | 对照内容 |
+| Profile | 容器 eth0 出站配置 | 验收重点 |
 |---|---|---|
-| `clean` | 不添加 netem | 基准 |
-| `jitter` | `delay 20ms 8ms distribution normal` | 单向延迟与抖动 |
-| `loss` | `delay 20ms 8ms loss 0.1%` | 单向延迟、抖动和随机丢包 |
+| `clean` | 原生 noqueue，不附加 netem | 传输基线 |
+| `jitter` | `delay 20ms 8ms distribution normal` | 延迟与抖动 |
+| `loss` | `delay 20ms 8ms loss 0.1%`（可指定 `-LossPercent 1`） | 延迟、抖动、随机丢包 |
 
-各 Profile 在同一个临时容器内顺序运行；每轮交替 0/16 KiB，并校验原生上传、下载及 SFTP 上传、下载的 SHA-256。失败即终止，不忽略损坏或超时。配置失败时不会悄悄退回“无丢包”测试。每个 JSON 位于 `tmp/native-zmodem-stress/native-zmodem-netem-<profile>-*.json`，记录实际 `tc qdisc show dev eth0` 输出、每轮原始 I/O 数据和中位吞吐/P95 耗时。
+每个 Profile 交替使用 0/16 KiB，并执行原生上传、原生下载、SFTP 上传、SFTP 下载与 SHA-256 校验。默认轮次从 2 提升到 5，以便减少对单次偶然波动的依赖。
 
-**重要局限**：容器 `eth0` 的 netem 影响的是**服务器→Windows 客户端**方向的出站数据，反向 ACK/控制反馈也受影响，但不等于同时对 Windows→服务器数据包施加丢包。Linux netem 手册指出 TCP 的 TSQ 等机制还会影响模拟准确性；未来若需要完整双向 RTT/丢包验收，应使用独立 Linux 网络命名空间、代理或接收侧 ingress 配置。[tc-netem 手册](https://man7.org/linux/man-pages/man8/tc-netem.8.html)。
+报告写入 `tmp/native-zmodem-stress/native-zmodem-netem-<profile>-*.json`：
+
+- `cases[]`：所有传输样本、耗时、吞吐率、SHA-256、SSH I/O 统计。
+- `summaries[]`：中位吞吐量、nearest-rank P95 耗时和校验成功率。
+- `actualQdisc`：实际启用的内核 qdisc 配置。
+- `qdiscStats`：来自 `tc -s qdisc show dev eth0` 的 `sentPackets`、`sentBytes`、`droppedPackets`、`overlimits`、`requeues`、`countersAvailable`、`observedDrops` 以及原始文本 `raw`。
+
+**重要：**设置 `loss 0.1%` 并不确保此次传输实际丢了包。如果 `qdiscStats.observedDrops=false`，只能认为配置已经生效、传输完整性通过，**不能认为成功测试过丢包恢复**。要验证实际丢包，需要满足 `droppedPackets > 0`；这些计数覆盖整个测试 Profile 期间容器 eth0 的出站流量，并不专属于某个文件。记录来自内核，不推断具体哪一个 ZMODEM 帧经历过丢包。
+
+`-IncludeFaults` 另在 jitter 和 loss 环境下运行真实 SSH 交互式 PTY 的取消、deadline 和连接断开测试（16 KiB 模式），确保中止后不会错误发布不完整文件、旧终端不会被错误复用；这些故障回归保留 Go 测试日志，且不计入前述 A/B 报告的传输样本。
+
+Linux netem 官方文档强调了接收端 ingress、TCP Small Queues、计时器精度等局限。这一阶段不增加双向 netem 或宿主机网络规则，真正双向弱网应在独立网络命名空间中验证。[tc-netem 手册](https://man7.org/linux/man-pages/man8/tc-netem.8.html)。
 
 ## Windows 本机 Go Vet 与协议测试隔离
 
