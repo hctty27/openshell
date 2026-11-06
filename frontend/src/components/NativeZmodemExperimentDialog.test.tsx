@@ -108,3 +108,21 @@ test("active native transfer can be cancelled from the modal", async () => {
   await waitFor(() => expect(screen.getByText(/已请求取消/)).toBeTruthy());
   expect(screen.queryByText("原生 ZMODEM 文件传输完成")).toBeNull();
 });
+
+test("native progress ignores stale session generations", async () => {
+  let finish!: () => void;
+  actions.start.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+  showDialog();
+  await waitFor(() => expect(actions.readiness).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
+  await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  await waitFor(() => expect(actions.progressCallback).not.toBeNull());
+  actions.progressCallback?.({ ref: { ...ref, generation: 4 }, direction: "upload", processed: 99, total: 100 });
+  expect(screen.queryByText("99%")).toBeNull();
+  actions.progressCallback?.({ ref, direction: "upload", processed: 128, total: 256 });
+  await waitFor(() => expect(screen.getByText("50%")).toBeTruthy());
+  finish();
+  await waitFor(() => expect(screen.getByRole("button", { name: "完成" })).toBeTruthy());
+});
