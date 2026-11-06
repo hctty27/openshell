@@ -12,7 +12,7 @@ import { api, errorText } from "../bridge";
 import { terminalOutputDispatcher } from "../features/terminal/terminalOutputDispatcher";
 import { TerminalOutputAcknowledger } from "../features/terminal/terminalOutputAcknowledger";
 import { recordTerminalWrite } from "../features/diagnostics/collector";
-import { Browser, Clipboard } from "@wailsio/runtime";
+import { Browser, Clipboard, Events } from "@wailsio/runtime";
 import type { Tab, Ref, Theme, TerminalTheme, DisconnectBehavior, LocalShell } from "../types";
 import { resolveTerminalTheme } from "../terminalThemes";
 import { buildRemoteCdCommand, decideCloneDirectoryAction, parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
@@ -231,6 +231,15 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       () => { if (!disposed) term.focus(); },
     );
     imePositionRecovery.current = imeRecovery;
+    const offImeWindowEvents = navigator.userAgent.includes("Windows")
+      ? (["common:WindowDidMove", "common:WindowDPIChanged"] as const).map(eventName =>
+          Events.On(eventName, () => {
+            if (disposed || !callbacks.current.active) return;
+            applyGeometry();
+            imeRecovery.schedule();
+          }),
+        )
+      : [];
     if (scrollbackSnapshot.current && p.preserveHistory !== false) {
       term.write(scrollbackSnapshot.current + "\r\n");
     }
@@ -561,6 +570,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       observer.disconnect();
       window.removeEventListener("resize", onWindowResize);
       imeRecovery.dispose();
+      offImeWindowEvents.forEach(off => off());
       if (imePositionRecovery.current === imeRecovery) imePositionRecovery.current = null;
       off();
       if (local) void api.CloseLocalTerminal(p.tab.id, localID).catch(() => {});
@@ -692,7 +702,10 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
     if (p.active) {
       requestAnimationFrame(() => {
         if (searchOpen) searchInput.current?.focus();
-        else terminal.current?.focus();
+        else {
+          terminal.current?.focus();
+          imePositionRecovery.current?.resume();
+        }
       });
     }
   }, [p.active, searchOpen]);
