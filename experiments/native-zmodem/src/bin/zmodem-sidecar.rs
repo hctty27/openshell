@@ -1,6 +1,6 @@
-//! Non-shipping proof of concept: ZMODEM protocol data over stdin/stdout.
+//! OpenShell native ZMODEM protocol sidecar: binary stdin/stdout only.
 //! stdout is exclusively binary protocol bytes; diagnostics go to stderr.
-//! Not connected to OpenShell's SSH/PTy, filesystem policy or release build.
+//! The Go SSH coordinator owns terminal takeovers, filesystem policy and packaging.
 
 use std::collections::VecDeque;
 use std::env;
@@ -13,8 +13,28 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use zmodem2::{Action, Event, FileInfo, Position, Receiver, Sender};
 
-const MAX_SIZE: u64 = 128 * 1024 * 1024;
-const SESSION_TIMEOUT: Duration = Duration::from_secs(90);
+// Keep old/32-bit lrzsz interoperability by staying below 2 GiB.
+const MAX_SIZE: u64 = (2 * 1024 * 1024 * 1024) - 1;
+const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
+
+fn checked_file_size(size: u64) -> io::Result<()> {
+    if size > MAX_SIZE {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "ZMODEM file exceeds the 2 GiB compatibility limit"));
+    }
+    Ok(())
+}
+
+// Time out only when the protocol stops exchanging meaningful bytes. A large
+// transfer is not limited by elapsed wall-clock duration.
+struct ActivityClock {
+    last: Instant,
+}
+
+impl ActivityClock {
+    fn new() -> Self { Self { last: Instant::now() } }
+    fn touch(&mut self) { self.last = Instant::now(); }
+    fn expired(&self) -> bool { self.last.elapsed() >= INACTIVITY_TIMEOUT }
+}
 const READ_TIMEOUT: Duration = Duration::from_millis(150);
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
 const MAX_EXPERIMENT_BATCH: usize = 32 * 1024;
@@ -163,9 +183,7 @@ fn read_source_chunk(
 fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::open(path)?;
     let size = file.metadata()?.len();
-    if size > MAX_SIZE {
-        return Err("prototype maximum source size is 128 MiB".into());
-    }
+    checked_file_size(size)?;
     let name = path.file_name().and_then(|name| name.to_str())
         .ok_or("source filename must be UTF-8")?;
     if name.is_empty() {
@@ -186,14 +204,15 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut done_file = false;
     let mut finish_requested = false;
     let mut session_completed = false;
-    let deadline = Instant::now() + SESSION_TIMEOUT;
+    let mut activity = ActivityClock::new();
 
-    while Instant::now() < deadline {
+    while !activity.expired() {
         match sender.poll() {
             Action::WriteWire(data) => {
                 output.write_wire(data)?;
                 let count = data.len();
                 sender.wire_written(count);
+                if count > 0 { activity.touch(); }
             }
             Action::ReadFile { offset, max_len } => {
                 let start = u64::from(offset.get());
@@ -203,12 +222,14 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 let max = usize::try_from((size - start).min(max_len as u64))?;
                 read_source_chunk(&mut file, start, max, &mut next_file_offset, &mut file_scratch)?;
                 sender.submit_file(&file_scratch)?;
+                if max > 0 { activity.touch(); }
                 processed = processed.max(start + max as u64);
                 report_progress(processed, size, &mut progress_at, false);
             }
             Action::Event(Event::FileCompleted) => {
                 output.flush_pending()?;
                 done_file = true;
+                activity.touch();
                 report_progress(size, size, &mut progress_at, true);
             },
             Action::Event(Event::SessionCompleted) => {
@@ -217,6 +238,7 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     return Err("session ended without file completion".into());
                 }
                 session_completed = true;
+                activity.touch();
             }
             Action::Event(Event::Aborted) => return Err("remote aborted sender".into()),
             Action::Event(_) => {}
@@ -230,6 +252,7 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     wire_scratch.clear();
                     wire_scratch.extend(waiting.iter().take(2048).copied());
                     let used = sender.submit_wire(&wire_scratch)?;
+                    if used > 0 { activity.touch(); }
                     waiting.drain(..used);
                 }
             }
@@ -240,7 +263,7 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    Err("ZMODEM sender timed out".into())
+    Err("ZMODEM sender inactive for 90 seconds".into())
 }
 
 fn safe_name(raw: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
@@ -319,9 +342,9 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut received_total = 0u64;
     let mut file_write_scratch = Vec::<u8>::new();
     let mut diag = ReceiverDiagnostics::new();
-    let deadline = Instant::now() + SESSION_TIMEOUT;
+    let mut activity = ActivityClock::new();
 
-    while Instant::now() < deadline {
+    while !activity.expired() {
         let poll_started = if diag.enabled { Some(Instant::now()) } else { None };
         let action = receiver.poll();
         if let Some(started) = poll_started {
@@ -337,6 +360,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 let count = data.len();
                 receiver.wire_written(count);
+                if count > 0 { activity.touch(); }
             }
             Action::WriteFile(data) => {
                 // Flush any pending acknowledgement before handling more data.
@@ -359,6 +383,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     diag.file_bytes += received as u64;
                 }
                 receiver.file_written(received)?;
+                if received > 0 { activity.touch(); }
                 report_progress(*bytes, received_total, &mut progress_at, false);
             }
             Action::Event(Event::FileStarted(info)) => {
@@ -372,8 +397,8 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 if target.exists() {
                     return Err("destination already exists (no overwrite)".into());
                 }
-                if info.size.is_some_and(|size| u64::from(size.get()) > MAX_SIZE) {
-                    return Err("incoming file exceeds 128 MiB prototype limit".into());
+                if info.size.is_some_and(|size| checked_file_size(u64::from(size.get())).is_err()) {
+                    return Err("incoming file exceeds the 2 GiB compatibility limit".into());
                 }
                 let suffix = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
                 let temp = dir.join(format!(".openshell-zmodem-{}-{suffix}.part", std::process::id()));
@@ -382,6 +407,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 received_total = advertised.map_or(0, u64::from);
                 report_progress(0, received_total, &mut progress_at, true);
                 open_file = Some((file, temp, target, 0, advertised));
+                activity.touch();
             }
             Action::Event(Event::FileCompleted) => {
                 output.flush_pending()?;
@@ -400,6 +426,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 fs::rename(temp, target)?;
                 report_progress(size, received_total, &mut progress_at, true);
                 completed = true;
+                activity.touch();
             }
             Action::Event(Event::SessionCompleted) => {
                 output.flush_pending()?;
@@ -407,6 +434,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     return Err("session ended without file completion".into());
                 }
                 session_completed = true;
+                activity.touch();
             }
             Action::Event(Event::Aborted) => return Err("remote aborted receiver".into()),
             Action::Event(_) => {}
@@ -429,13 +457,14 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                     wire_scratch.clear();
                     wire_scratch.extend(waiting.iter().take(2048).copied());
                     let used = receiver.submit_wire(&wire_scratch)?;
+                    if used > 0 { activity.touch(); }
                     waiting.drain(..used);
                 }
             }
             _ => return Err("unsupported receiver action".into()),
         }
     }
-    Err("ZMODEM receiver timed out".into())
+    Err("ZMODEM receiver inactive for 90 seconds".into())
 }
 
 fn main() {
@@ -456,7 +485,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_wire_batch_bytes, read_source_chunk, safe_name, ExperimentalWireWriter};
+    use super::{checked_file_size, parse_wire_batch_bytes, read_source_chunk, safe_name, ActivityClock, ExperimentalWireWriter, INACTIVITY_TIMEOUT, MAX_SIZE};
     use std::fs::{self, OpenOptions};
     use std::io::{Seek, SeekFrom, Write};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -483,6 +512,24 @@ mod tests {
         fs::remove_file(path).unwrap();
     }
 
+
+    #[test]
+    fn supports_gib_files_without_overflowing_legacy_zmodem_offsets() {
+        assert!(checked_file_size(128 * 1024 * 1024).is_ok());
+        assert!(checked_file_size(1024 * 1024 * 1024).is_ok());
+        assert!(checked_file_size(MAX_SIZE).is_ok());
+        assert!(checked_file_size(MAX_SIZE + 1).is_err());
+        assert!(checked_file_size(u32::MAX as u64 + 1).is_err());
+    }
+
+    #[test]
+    fn inactivity_clock_renews_after_protocol_progress() {
+        let mut clock = ActivityClock::new();
+        clock.last -= INACTIVITY_TIMEOUT + std::time::Duration::from_secs(1);
+        assert!(clock.expired(), "a stalled peer must time out");
+        clock.touch();
+        assert!(!clock.expired(), "fresh protocol traffic must reset the idle window");
+    }
 
     #[test]
     fn native_experiment_defaults_to_16_kib_and_allows_zero_fallback() {
