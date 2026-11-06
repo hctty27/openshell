@@ -194,7 +194,7 @@ test("a rejected cancellation is not mistaken for a confirmed cancellation", asy
   fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
   await waitFor(() => expect(actions.start).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
-  await waitFor(() => expect(screen.getByText("取消请求未送达")).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(/取消请求未送达/)).toBeTruthy());
   finish();
   await waitFor(() => expect(screen.getByText("原生 ZMODEM 文件传输完成")).toBeTruthy());
   expect(screen.queryByText(/已请求取消/)).toBeNull();
