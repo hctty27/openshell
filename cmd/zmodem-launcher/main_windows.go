@@ -1,7 +1,7 @@
 //go:build windows
 
 // The Windows GUI subsystem avoids creating a console for the launcher.
-// The original, unmodified lrzsz binaries live in the sibling native folder.
+// The only local ZMODEM engine is the sibling native Rust sidecar.
 package main
 
 import (
@@ -22,23 +22,15 @@ func nativeCommand(executable string, arguments []string) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("unsupported ZMODEM helper %q", name)
 	}
 
-	legacy := filepath.Join(filepath.Dir(executable), "native", name)
 	rust := filepath.Join(filepath.Dir(executable), "native", "zmodem-sidecar.exe")
-
-	var path string
-	var args []string
-	if info, err := os.Stat(legacy); err == nil && info.Mode().IsRegular() {
-		// Keep existing release behavior until real GUI/PTY native-only
-		// acceptance proves the drop-in compatibility path is equivalent.
-		path, args = legacy, arguments
-	} else if info, err := os.Stat(rust); err == nil && info.Mode().IsRegular() {
-		action := "compat-rz"
-		if name == "sz.exe" { action = "compat-sz" }
-		path = rust
-		args = append([]string{action}, arguments...)
-	} else {
-		return nil, fmt.Errorf("no ZMODEM backend found for %s", name)
+	info, err := os.Stat(rust)
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("native Rust ZMODEM sidecar missing: %s", rust)
 	}
+	action := "compat-rz"
+	if name == "sz.exe" { action = "compat-sz" }
+	path := rust
+	args := append([]string{action}, arguments...)
 	command := exec.Command(path, args...)
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout

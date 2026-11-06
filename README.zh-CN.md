@@ -118,7 +118,7 @@ fi
 
 ### ZMODEM：`rz` / `sz`
 
-在远程终端运行 `rz`，选择本地文件上传；运行 `sz /path/to/file`，选择本地下载位置。远程服务器需要安装 `lrzsz`。官方 Windows 包已内置 `rz/sz` 的无控制台窗口启动器，原版工具与 `msys-2.0.dll` 存放于 `zmodem/native/`，并附许可证和源码，无需配置 Windows PATH。
+在远程终端运行 `rz`，选择本地文件上传；运行 `sz /path/to/file`，选择本地下载位置。远程服务器需要安装 `lrzsz`。Windows 安装版和便携包均使用 **Rust 原生 ZMODEM**：`zmodem/native/zmodem-sidecar.exe` 为唯一的 Windows 本地 ZMODEM 协议引擎，`zmodem/rz.exe` 和 `sz.exe` 只是自研无控制台启动器。发行包不再附带 `lrzsz-win32` 或 `msys-2.0.dll`；远端 Linux 仍需安装 `lrzsz`。无需配置 Windows PATH。
 
 OpenShell 精简内嵌文件选择器可直接选择上传文件或下载目录，不会弹出 Windows 资源管理器。进度集中显示在工作区顶部的非模态传输中心，A 会话传输时仍可切换 B 会话继续操作；可通过传输中心或 Ctrl+C 取消。内置启动器不会额外弹出 CMD 窗口，下载遇到同名文件时使用 `rz -E` 重命名策略。协议数据在进入终端历史与 AI 上下文前过滤。ZMODEM 在 tmux/screen 中可能不稳定；目录与断点续传请使用 SFTP。
 
@@ -169,7 +169,7 @@ wails3 generate syso -manifest build/windows/wails.exe.manifest -icon build/wind
 go build -tags production -trimpath -ldflags="-H windowsgui -s -w" -o build/bin/OpenShell.exe .
 ```
 
-产物为 `build/bin/OpenShell.exe`，构建前需要生成 `build/windows/icon.ico`。以上命令不打包 ZMODEM 工具；需要时在构建后通过 PowerShell 运行 [scripts/prepare_zmodem_windows.ps1](scripts/prepare_zmodem_windows.ps1)。完整图标生成、安装版与便携版打包流程见 [Windows 发布工作流](.github/workflows/windows-release.yml)。
+产物为 `build/bin/OpenShell.exe`，构建前需要生成 `build/windows/icon.ico`。以上命令不打包 ZMODEM 工具；需要时在构建后通过 PowerShell 运行 [scripts/prepare_native_zmodem_windows.ps1](scripts/prepare_native_zmodem_windows.ps1)。完整图标生成、安装版与便携版打包流程见 [Windows 发布工作流](.github/workflows/windows-release.yml)。
 
 <details>
 <summary>验证与发布流程</summary>
@@ -211,7 +211,7 @@ npx playwright test
 
 ## 许可证与代码签名
 
-OpenShell 使用 **[MIT 许可证](LICENSE)**。随包分发的第三方组件遵循各自许可证，Windows ZMODEM 工具附带 GPL 声明与对应源码包。
+OpenShell 使用 **[MIT 许可证](LICENSE)**。随包分发的第三方组件遵循各自许可证，Windows 本地 ZMODEM 只分发 Rust sidecar 与自研启动器，不再附带旧版 lrzsz/MSYS2 二进制文件。Go、Rust、npm 第三方依赖仍遵循各自许可证，具体清单见 [SBOM](docs/sbom.md)。
 
 免费代码签名由 [SignPath.io](https://about.signpath.io/) 提供，证书由 [SignPath Foundation](https://signpath.org/) 提供。 仅在申请获批且签名功能实际启用后适用；当前发布的 **v1.0.0 Windows 安装包和便携版仍未签名**，不代表已获 SignPath 认证。
 

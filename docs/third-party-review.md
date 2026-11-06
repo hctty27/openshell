@@ -1,8 +1,14 @@
 # Third-party distribution and license review — OpenShell
 
-> Review status: **in progress (2026-11-05)**. This is a source/build-script inventory, **not** a completed software bill of materials (SBOM), a legal opinion, or a statement that all upstream components have passed compliance verification.
+> Review status: **in progress (2026-11-06)**. This is a source/build-script inventory, **not** a completed software bill of materials (SBOM), a legal opinion, or a statement that all upstream components have passed compliance verification.
 
-## Distribution boundary
+## Current Windows native-only ZMODEM distribution
+
+The current release packaging bundles only the OpenShell-built `zmodem/rz.exe`, `zmodem/sz.exe` launchers and the OpenShell Rust `zmodem/native/zmodem-sidecar.exe`. The new strict manifest verifies their SHA-256 and rejects `msys-2.0.dll`, `lrzsz-win32` and other stale files. The installer removes the former helper directory during upgrades. Go/npm/Rust license obligations remain subject to separate review.
+
+The **historical** inventory below documents earlier MSYS2/lrzsz releases and their unresolved old-binary source attribution. Those binaries are no longer distributed by the current native-only Windows packaging; this does not retroactively settle past redistribution questions.
+
+## Historical distribution boundary
 
 | File or component | Origin | Current treatment | Follow-up |
 | --- | --- | --- | --- |

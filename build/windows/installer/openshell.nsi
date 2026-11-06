@@ -45,6 +45,11 @@ Section "Install" SecMain
   SetShellVarContext current
   SetOutPath "$INSTDIR"
   File "${APP_BINARY}"
+  ; Remove obsolete MSYS2/lrzsz from an earlier OpenShell installation.
+  ; Abort rather than silently leave a mixed Rust + legacy runtime.
+  RMDir /r "$INSTDIR\zmodem"
+  IfFileExists "$INSTDIR\zmodem\*.*" 0 +2
+    Abort "Cannot remove old ZMODEM helpers. Close OpenShell and retry installation."
   SetOutPath "$INSTDIR\zmodem"
   File /r "${APP_HELPER_DIR}\*"
   SetOutPath "$INSTDIR"
