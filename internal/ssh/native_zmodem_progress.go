@@ -65,7 +65,7 @@ func (w *nativeTerminalProgressLog) Write(p []byte) (int, error) {
         end := bytes.IndexByte(p, '\n')
         if end < 0 {
             w.pending = append(w.pending, p...)
-            if len(w.pending) > 512 {
+            if len(w.pending) > 1024 {
                 _, _ = w.log.Write(w.pending)
                 w.pending = nil
             }
