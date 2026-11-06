@@ -32,6 +32,7 @@ type App struct {
 	ssh          *sshclient.Manager
 	sftp         *files.Manager
 	nativeZmodem *sshclient.NativeZmodemManager
+	nativeZmodemSkips map[domain.ConnectionRef]*nativeZmodemSkipControl
 	zmodemTransferMode string
 	sftpReadMu sync.Mutex
 	sftpReadCancels map[string]context.CancelFunc
