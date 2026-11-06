@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"time"
 )
@@ -48,6 +49,9 @@ func runNativeZmodemTerminalSidecarWithProgress(
 	}
 
 	cmd := exec.CommandContext(ctx, executable, direction, path)
+	if control := nativeZmodemSkipControl(ctx); control != "" && (direction == "send" || direction == "send-list") {
+		cmd.Env = append(os.Environ(), "OPENSHELL_ZMODEM_SKIP_FILE="+control)
+	}
 	configureNativeZmodemSidecar(cmd)
 	cmd.WaitDelay = nativeZmodemShutdownTimeout
 	stderr := &nativeZmodemLog{}
