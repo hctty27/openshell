@@ -17,6 +17,69 @@ const MAX_SIZE: u64 = 128 * 1024 * 1024;
 const SESSION_TIMEOUT: Duration = Duration::from_secs(90);
 const READ_TIMEOUT: Duration = Duration::from_millis(150);
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
+const MAX_EXPERIMENT_BATCH: usize = 32 * 1024;
+
+// Explicitly opt-in, inherited only by the local experimental sidecar.
+// Zero preserves the existing write_all + flush for each protocol frame.
+fn experimental_wire_batch_bytes() -> io::Result<usize> {
+    match env::var("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES") {
+        Err(env::VarError::NotPresent) => Ok(0),
+        Err(err) => Err(io::Error::new(io::ErrorKind::InvalidInput, err)),
+        Ok(raw) => {
+            let bytes = raw.parse::<usize>().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "invalid wire batch size")
+            })?;
+            if bytes != 0 && (bytes < 1024 || bytes > MAX_EXPERIMENT_BATCH) {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "wire batch size must be 0 or 1024..32768 bytes"));
+            }
+            Ok(bytes)
+        }
+    }
+}
+
+// This writer never mutates or parses protocol frames. When enabled, it
+// coalesces small consecutive writes, but always drains before an Idle wait.
+// The disabled path retains the original per-frame flush semantics.
+struct ExperimentalWireWriter<W: Write> {
+    writer: W,
+    pending: Vec<u8>,
+    limit: usize,
+}
+
+impl<W: Write> ExperimentalWireWriter<W> {
+    fn new(writer: W, limit: usize) -> Self {
+        Self { writer, pending: Vec::with_capacity(limit), limit }
+    }
+
+    fn write_wire(&mut self, frame: &[u8]) -> io::Result<()> {
+        if self.limit == 0 {
+            self.writer.write_all(frame)?;
+            return self.writer.flush();
+        }
+        if frame.len() >= self.limit {
+            self.flush_pending()?;
+            self.writer.write_all(frame)?;
+            return self.writer.flush();
+        }
+        if self.pending.len() + frame.len() > self.limit {
+            self.flush_pending()?;
+        }
+        self.pending.extend_from_slice(frame);
+        if self.pending.len() == self.limit {
+            self.flush_pending()?;
+        }
+        Ok(())
+    }
+
+    fn flush_pending(&mut self) -> io::Result<()> {
+        if !self.pending.is_empty() {
+            self.writer.write_all(&self.pending)?;
+            self.pending.clear();
+            self.writer.flush()?;
+        }
+        Ok(())
+    }
+}
 
 // Diagnostics only: stdout remains exclusively binary ZMODEM protocol.
 // Upload progress is bytes read from the source, not proof of remote persistence.
@@ -112,7 +175,7 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let rx = incoming_wire();
     let mut waiting = VecDeque::<u8>::new();
     let mut wire_scratch = Vec::<u8>::with_capacity(2048);
-    let mut output = io::stdout().lock();
+    let mut output = ExperimentalWireWriter::new(io::stdout().lock(), experimental_wire_batch_bytes()?);
     let mut file_scratch = Vec::<u8>::new();
     let mut next_file_offset = 0u64;
     let mut done_file = false;
@@ -123,8 +186,7 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     while Instant::now() < deadline {
         match sender.poll() {
             Action::WriteWire(data) => {
-                output.write_all(data)?;
-                output.flush()?;
+                output.write_wire(data)?;
                 let count = data.len();
                 sender.wire_written(count);
             }
@@ -140,10 +202,12 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 report_progress(processed, size, &mut progress_at, false);
             }
             Action::Event(Event::FileCompleted) => {
+                output.flush_pending()?;
                 done_file = true;
                 report_progress(size, size, &mut progress_at, true);
             },
             Action::Event(Event::SessionCompleted) => {
+                output.flush_pending()?;
                 if !done_file {
                     return Err("session ended without file completion".into());
                 }
@@ -152,6 +216,8 @@ fn send(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
             Action::Event(Event::Aborted) => return Err("remote aborted sender".into()),
             Action::Event(_) => {}
             Action::Idle => {
+                // Do not wait for remote control input while frames are buffered.
+                output.flush_pending()?;
                 if session_completed {
                     return Ok(());
                 }
@@ -200,7 +266,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let rx = incoming_wire();
     let mut waiting = VecDeque::<u8>::new();
     let mut wire_scratch = Vec::<u8>::with_capacity(2048);
-    let mut output = io::stdout().lock();
+    let mut output = ExperimentalWireWriter::new(io::stdout().lock(), experimental_wire_batch_bytes()?);
     let mut open_file: Option<(File, PathBuf, PathBuf, u64, Option<u32>)> = None;
     let mut completed = false;
     let mut session_completed = false;
@@ -212,8 +278,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     while Instant::now() < deadline {
         match receiver.poll() {
             Action::WriteWire(data) => {
-                output.write_all(data)?;
-                output.flush()?;
+                output.write_wire(data)?;
                 let count = data.len();
                 receiver.wire_written(count);
             }
@@ -253,6 +318,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 open_file = Some((file, temp, target, 0, advertised));
             }
             Action::Event(Event::FileCompleted) => {
+                output.flush_pending()?;
                 let (mut file, temp, target, size, advertised) =
                     open_file.take().ok_or("file completed without start")?;
                 if advertised.is_some_and(|expected| size != u64::from(expected)) {
@@ -266,6 +332,7 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 completed = true;
             }
             Action::Event(Event::SessionCompleted) => {
+                output.flush_pending()?;
                 if !completed {
                     return Err("session ended without file completion".into());
                 }
@@ -274,6 +341,8 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
             Action::Event(Event::Aborted) => return Err("remote aborted receiver".into()),
             Action::Event(_) => {}
             Action::Idle => {
+                // Always send pending acknowledgements before waiting.
+                output.flush_pending()?;
                 if session_completed {
                     return Ok(());
                 }
@@ -308,7 +377,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_source_chunk, safe_name};
+    use super::{read_source_chunk, safe_name, ExperimentalWireWriter};
     use std::fs::{self, OpenOptions};
     use std::io::{Seek, SeekFrom, Write};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -333,6 +402,40 @@ mod tests {
         assert_eq!(next, 12);
         drop(file);
         fs::remove_file(path).unwrap();
+    }
+
+
+    #[test]
+    fn default_wire_writer_flushes_every_frame_without_changes() {
+        let mut writer = ExperimentalWireWriter::new(std::io::Cursor::new(Vec::new()), 0);
+        writer.write_wire(&[0x00, 0x18, 0xff]).unwrap();
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x00, 0x18, 0xff]);
+        writer.write_wire(&[0x01, 0x02]).unwrap();
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x00, 0x18, 0xff, 0x01, 0x02]);
+    }
+
+    #[test]
+    fn wire_batches_preserve_frame_order_and_idle_flush_boundary() {
+        let mut writer = ExperimentalWireWriter::new(std::io::Cursor::new(Vec::new()), 8);
+        writer.write_wire(&[0x18, 0x00, 0xff]).unwrap();
+        writer.write_wire(&[0x01, 0x7f]).unwrap();
+        assert!(writer.writer.get_ref().as_slice().is_empty(), "must coalesce adjacent small frames");
+        writer.flush_pending().unwrap();
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x18, 0x00, 0xff, 0x01, 0x7f]);
+        writer.write_wire(&[3, 4, 5, 6, 7]).unwrap();
+        writer.write_wire(&[8, 9, 10, 11]).unwrap();
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x18, 0x00, 0xff, 0x01, 0x7f, 3, 4, 5, 6, 7]);
+        writer.flush_pending().unwrap();
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x18, 0x00, 0xff, 0x01, 0x7f, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    }
+
+    #[test]
+    fn wire_batches_send_oversized_frames_without_buffering() {
+        let mut writer = ExperimentalWireWriter::new(std::io::Cursor::new(Vec::new()), 4);
+        writer.write_wire(&[0x18]).unwrap();
+        writer.write_wire(&[1, 2, 3, 4, 5]).unwrap();
+        assert_eq!(writer.writer.get_ref().as_slice(), &[0x18, 1, 2, 3, 4, 5]);
+        assert!(writer.pending.is_empty());
     }
 
     #[test]
