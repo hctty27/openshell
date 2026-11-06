@@ -1,18 +1,17 @@
 # 原生 ZMODEM：直接输入 rz/sz 的实验性自动接管
 
-> **仅开发者试用，不是正式版默认行为。** 此实现将用户在普通 Shell 中输入的简单命令转换为一次需要用户确认的原生 ZMODEM GUI 传输。它不做纯协议头帧的无授权自动接管，不删除 `trzsz-go` 或旧 `rz/sz`。
+> **Windows 默认原生优先，保留兼容模式。** 仅在明确输入简单 Bash 命令后弹出需要授权的原生传输 GUI；不凭借远端 ZMODEM 帧头自动启动，旧引擎继续保留。
 
-## 开关与启动
+## 传输策略与启动
 
-先使用包含 `zmodem/native/zmodem-sidecar.exe` 的 Windows 实验测试包。在 PowerShell 中进入 `OpenShell.exe` 目录，设置：
+Windows 没有保存设置时默认 **原生优先**。在 OpenShell **设置 → 终端 → ZMODEM 传输引擎** 中随时切换：
 
-```powershell
-$env:OPENSHELL_NATIVE_ZMODEM_EXPERIMENT = "1"
-$env:OPENSHELL_NATIVE_ZMODEM_AUTO = "1"
-.\OpenShell.exe
-```
+- **原生优先（推荐）**：简单 `rz`、`sz /绝对路径` 经过原生 GUI 确认后传输，其他命令、缺少 sidecar、终端忙碌时在协议启动前沿用旧实现。
+- **兼容模式（旧版）**：全部继续用现有 `trzsz-go/lrzsz` 处理器。
 
-必须**同时**设置两个变量。只开启 `EXPERIMENT` 时仍通过原生实验按钮手动传输；不设置变量时所有直接输入的命令仍走旧 ZMODEM 路径。
+本地保存、立即生效，无须环境变量或重启。Windows 安装包/ZIP 必须包含 `OpenShell.exe` 同级 `zmodem/native/zmodem-sidecar.exe`。开发环境可设置 `OPENSHELL_NATIVE_ZMODEM_SIDECAR` 覆盖原生可执行文件路径。
+
+非 Windows 平台默认兼容模式；自行切换到原生模式前须确认 sidecar 可执行、SSH 与原生文件选择器工作正常。
 
 ## 支持的自动命令
 
@@ -39,13 +38,12 @@ $env:OPENSHELL_NATIVE_ZMODEM_AUTO = "1"
 
 ## 验收流程
 
-1. **无开关**：直接键入 `rz`/ `sz /tmp/example.bin` 仍由旧路径处理。
-2. **仅 EXPERIMENT**：只有手动原生按钮；无自动拦截。
-3. **双开关**：Bash 提示符执行 `rz`、`sz /tmp/example.bin`，弹出原生 GUI；传输结果与双方 SHA-256 相同。
-4. **GUI 取消**：输入行已清除，远端不会误启动裸 `rz/sz`，后续 Shell 正常。
-5. **异常/取消/断线**：不泄漏二进制帧到终端历史；需要重连时阻止复用旧 PTY。
-6. **旧版回退**：不可识别命令、sidecar 丢失、会话忙等均不拦截，旧版 `rz/sz` 仍可运行。
-7. **隔离性**：双终端交替执行命令、连续传输、重连后的旧代际输入均不串扰。
-8. **特殊 Shell**：zsh、fish、tmux、JumpServer、MySQL 等不在自动切换验收范围。不能假设所有 Shell 都支持 Ctrl-U。
+1. 在设置里切换 **兼容模式**，确认直接输入 `rz` / `sz /tmp/example.bin` 由旧版处理。
+2. 切换 **原生优先**，不重启直接输入 `rz` 和 `sz /tmp/example.bin`，确认原生 GUI 弹出、等待选择文件与确认，且 SHA-256 相同。
+3. **GUI 取消**：输入行清除且远端不执行裸命令；Shell 正常可继续使用。
+4. **异常与断线**：不泄漏 ZMODEM 二进制到终端；需重连的连接不可复用。
+5. **旧版回退**：不可识别命令、缺少 sidecar、JumpServer 或忙碌会话不被原生拦截。
+6. **隔离性**：同一标签连续传输、两个 SSH 标签并行传输、重连代际隔离。
+7. **非标准 Shell**：zsh、fish、tmux、交互程序默认走旧模式，无通用支持保证。
 
-自动化包括：`go test -race ./internal/ssh`、`go test -race ./...`、`cd frontend; npm test -- --run`、Windows smoke。**CI 不等于 Windows GUI 实机确认**；实机未通过前不要将 `OPENSHELL_NATIVE_ZMODEM_AUTO` 默认打开，不要删除旧 ZMODEM 辅助文件。
+自动化包括：`go test -race ./internal/ssh`、`go test -race ./...`、`cd frontend; npm test -- --run`、Windows smoke。**CI 不等于 Windows GUI 实机确认**；发现问题可立即在设置中切回兼容模式，不要删除旧 ZMODEM 辅助文件。
