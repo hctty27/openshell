@@ -190,72 +190,12 @@ jobs:
           go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInteractivePTY$' -v ./internal/ssh
           export OPENSHELL_ZMODEM_CROSS_OS_PTY=1
           export OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS=2
-          go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY
-      - name: Print SSH server diagnostics if the interop test failed
-        if: failure()
-        shell: bash
-        run: |
-          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.log" ]; then
-            sudo tail -100 "$ZMODEM_SSH_TEST_DIR/sshd.log"
-          fi
-      - name: Stop loopback SSH test server
-        if: always()
-        shell: bash
-        run: |
-          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.pid" ]; then
-            sudo kill "$(cat "$ZMODEM_SSH_TEST_DIR/sshd.pid")" || true
-          fi
- -v ./internal/ssh
-          go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInterruptedInteractivePTY
-      - name: Print SSH server diagnostics if the interop test failed
-        if: failure()
-        shell: bash
-        run: |
-          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.log" ]; then
-            sudo tail -100 "$ZMODEM_SSH_TEST_DIR/sshd.log"
-          fi
-      - name: Stop loopback SSH test server
-        if: always()
-        shell: bash
-        run: |
-          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.pid" ]; then
-            sudo kill "$(cat "$ZMODEM_SSH_TEST_DIR/sshd.pid")" || true
-          fi
- -v ./internal/ssh
+          go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY$' -v ./internal/ssh
+          go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInterruptedInteractivePTY$' -v ./internal/ssh
           # Exercise the explicitly enabled batch path on real PTY/lrzsz,
-          # including cancel, timeout and disconnect fail-closed handling.
-          OPENSHELL_ZMODEM_WIRE_BATCH_BYTES=16384 go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY
-      - name: Print SSH server diagnostics if the interop test failed
-        if: failure()
-        shell: bash
-        run: |
-          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.log" ]; then
-            sudo tail -100 "$ZMODEM_SSH_TEST_DIR/sshd.log"
-          fi
-      - name: Stop loopback SSH test server
-        if: always()
-        shell: bash
-        run: |
-          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.pid" ]; then
-            sudo kill "$(cat "$ZMODEM_SSH_TEST_DIR/sshd.pid")" || true
-          fi
- -v ./internal/ssh
-          OPENSHELL_ZMODEM_WIRE_BATCH_BYTES=16384 go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInterruptedInteractivePTY
-      - name: Print SSH server diagnostics if the interop test failed
-        if: failure()
-        shell: bash
-        run: |
-          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.log" ]; then
-            sudo tail -100 "$ZMODEM_SSH_TEST_DIR/sshd.log"
-          fi
-      - name: Stop loopback SSH test server
-        if: always()
-        shell: bash
-        run: |
-          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.pid" ]; then
-            sudo kill "$(cat "$ZMODEM_SSH_TEST_DIR/sshd.pid")" || true
-          fi
- -v ./internal/ssh
+          # including cancellation and disconnect fail-closed handling.
+          OPENSHELL_ZMODEM_WIRE_BATCH_BYTES=16384 go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY$' -v ./internal/ssh
+          OPENSHELL_ZMODEM_WIRE_BATCH_BYTES=16384 go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInterruptedInteractivePTY$' -v ./internal/ssh
       - name: Print SSH server diagnostics if the interop test failed
         if: failure()
         shell: bash
