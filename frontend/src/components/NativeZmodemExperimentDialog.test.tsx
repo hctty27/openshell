@@ -37,15 +37,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 function showDialog() {
-  const notice = vi.fn();
+  const onError = vi.fn();
   const dismiss = vi.fn();
   render(<NativeZmodemExperimentDialog refID={ref} sessionName="Linux"
-    onNotice={notice} onDismiss={dismiss} />);
-  return { notice, dismiss };
+    onError={onError} onDismiss={dismiss} />);
+  return { onError, dismiss };
 }
 
 test("experiment requires file selection and explicit failure/reconnect acknowledgement", async () => {
-  const { notice } = showDialog();
+  const { onError } = showDialog();
   const start = screen.getByRole("button", { name: "开始实验传输" }) as HTMLButtonElement;
   await waitFor(() => expect(actions.readiness).toHaveBeenCalledWith(ref));
   expect(start.disabled).toBe(true);
@@ -60,7 +60,8 @@ test("experiment requires file selection and explicit failure/reconnect acknowle
   await waitFor(() => expect(actions.start).toHaveBeenCalledWith(
     ref, "upload", "C:\\test\\example.bin", "",
   ));
-  await waitFor(() => expect(notice).toHaveBeenCalled());
+  await waitFor(() => expect(screen.getByText("原生 ZMODEM 文件传输完成")).toBeTruthy());
+  expect(onError).not.toHaveBeenCalled();
 });
 
 test("download requires remote file and local destination folder", async () => {
