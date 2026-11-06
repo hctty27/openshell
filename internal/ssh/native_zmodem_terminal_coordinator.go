@@ -290,7 +290,11 @@ func (c *nativeTerminalCoordinator) run(
 
 // compile-time signature check for the executable sidecar runner wrapper.
 func nativeTerminalExecutableRunner(executable string) nativeTerminalSidecarRunner {
+	return nativeTerminalExecutableRunnerWithProgress(executable, nil)
+}
+
+func nativeTerminalExecutableRunnerWithProgress(executable string, progress func(uint64, uint64)) nativeTerminalSidecarRunner {
 	return func(ctx context.Context, direction, path string, in io.ReadCloser, out io.Writer) error {
-		return runNativeZmodemTerminalSidecar(ctx, executable, direction, filepath.Clean(path), in, out)
+		return runNativeZmodemTerminalSidecarWithProgress(ctx, executable, direction, filepath.Clean(path), in, out, progress)
 	}
 }
