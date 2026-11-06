@@ -105,5 +105,6 @@ test("active native transfer can be cancelled from the modal", async () => {
   fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
   await waitFor(() => expect(actions.cancel).toHaveBeenCalledWith(ref));
   finish();
-  await waitFor(() => expect(screen.getByText("原生 ZMODEM 文件传输完成")).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(/已请求取消/)).toBeTruthy());
+  expect(screen.queryByText("原生 ZMODEM 文件传输完成")).toBeNull();
 });
