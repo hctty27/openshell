@@ -18,7 +18,7 @@ param(
     [ValidateRange(1, 4)]
     [int]$StressWorkers = 3,
 
-    [ValidateRange(1, 10)]
+    [ValidateRange(0, 10)]
     [int]$StressLatencyMS = 3,
 
     [string]$StressReportDir = "",
