@@ -102,6 +102,9 @@ func (cmd *terminalAICommand) consumeMySQL(p []byte) {
 func (lease *AITerminalLease) runMySQL(ctx context.Context, command string) (string, error) {
 	query, err := mysqlReadOnlyQuery(command)
 	if err != nil { return "", err }
+	if !lease.connection.readiness.mysqlReady() {
+		return "", errors.New("MySQL 当前未处于空白提示符，请确认上一条语句已结束")
+	}
 	lease.mu.Lock()
 	if lease.poisoned {
 		lease.mu.Unlock()
@@ -127,6 +130,7 @@ func (lease *AITerminalLease) runMySQL(ctx context.Context, command string) (str
 	// Both statements run inside the user's current mysql client, reusing its
 	// authenticated connection, selected database and transaction context.
 	source := query + "\rSELECT '" + marker + "' AS __openshell_ai_done;\r"
+	lease.connection.readiness.aiMySQLInputStarted()
 	if err := lease.send([]byte(source)); err != nil {
 		lease.markFailed()
 		return "", err
