@@ -150,8 +150,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         const status = event.error ? (existing.status === "cancelling" ? "cancelled" : "failed")
           : "completed";
         return { ...previous, [key]: { ...existing, status, error: event.error,
-          files: existing.files.map(file => file.status === "queued" || file.status === "running" || file.status === "skipping"
-            ? { ...file, status: status === "completed" ? "completed" : "failed" } : file),
+          files: existing.files.map(file =>
+            file.status === "queued" || file.status === "running" || file.status === "skipping" ||
+            (event.error && existing.direction === "download" && file.status === "completed")
+              ? { ...file, status: status === "completed" ? "completed" : "failed" } : file),
         }};
       });
     });
