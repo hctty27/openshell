@@ -45,9 +45,9 @@
 
 这些测试实际使用当前交互式 SSH PTY 和原生 Rust sidecar，**不是简单模拟协议响应**；验证后会清理文件。若一轮失败，结果应视为验收不通过，不能因为其他轮成功而忽略失败。
 
-## 原生写入合并 A/B 实验（默认关闭）
+## 原生实验写入合并（默认 16 KiB，可回退）
 
-Rust sidecar 增加 **仅实验模式使用** 的有界 `Action::WriteWire` 缓冲。默认 `0 KiB`，与先前逐帧 `write_all + flush` 完全一致；可在独立压力测试中设置为 `4`、`8`、`16` 或 `32 KiB`。
+Rust sidecar 的原生实验写入缓冲现在**默认 16 KiB**。只有显式启用原生实验模式时才会使用此 sidecar，OpenShell 正式 `rz/sz` 路径不变。设 `OPENSHELL_ZMODEM_WIRE_BATCH_BYTES=0` 可随时回退到旧的逐帧 `write_all + flush`；也支持 4、8、32 KiB 对照。压力脚本默认使用 16 KiB，A/B 对照必须显式传 `-WireBatchKiB 0`。
 
 连续小帧只做字节级拼接，帧内容和顺序不改。缓冲达到上限、遇到大帧、进入 `Action::Idle`（等待远端输入）或收到文件/会话完成事件时立即强制 `flush`。所有模式都保留握手完成及终端失败后必须重连的安全策略。
 
@@ -103,7 +103,7 @@ Rust sidecar 增加 **仅实验模式使用** 的有界 `Action::WriteWire` 缓�
 
 这组指标只覆盖 Rust 本地 receiver，不包含远端 `sz` 内部时间，也不能直接解释任意一次 3 秒长尾。若再次出现异常慢下载，需要把该轮 `io.rustRx` 与 Go `stagesMs`、`io.toSidecarPipeNs` 并列分析。由于计时阶段可能重叠或具有统计开销，不应把它们简单加总为整个传输耗时。
 
-只有大文件多轮基准和实际弱网验收没有显著退化后，才考虑调整原生合并写入默认值；现有旧 `rz/sz` 路径不变。
+已将 **原生实验 sidecar** 默认值设为 16 KiB；实际弱网和 GUI 验收完成前，现有正式 `rz/sz` 路径不变。
 
 ## 自动 A/B 矩阵测试
 
@@ -128,6 +128,28 @@ JSON 文件写入 `tmp/native-zmodem-stress/native-zmodem-matrix-*.json`，包�
 失败会保留已经完成的报告，整轮仍判为失败；绝不通过丢弃异常轮次得到“通过”结论。
 
 **注意**：同一延迟下连续使用一个 SSH 连接减少了环境切换，但仍可能存在系统缓存、CPU 调度和 Docker 资源波动。实际 `0/1/3/5 ms` 是 TCP 读写附加延迟，不代表真实公网延迟或丢包率。选择默认值之前，还应检查 128 MiB 大文件多次重复、取消/断线以及实际 GUI。
+
+## 隔离 Docker tc netem 弱网验收
+
+为避免把 Go 层“每次读写暂停数毫秒”误认为真实网络丢包，新增 Docker Linux 内核 `tc netem` 测试。该测试**只作用于临时容器的 `eth0` 出站流量**，并且只有运行专用入口时才为临时 Docker 容器授予 `NET_ADMIN`；SSH 只绑定到 `127.0.0.1` 随机端口。测试不会修改 Windows 宿主机网卡、正式 SSH 连接或永久 Docker 网络配置。
+
+```powershell
+# 先确认 Docker Desktop Linux 引擎、Go 和 Cargo 已就绪
+.\scripts\test-native-zmodem-netem.ps1 -Rounds 1
+
+# 3 种网络配置 × 2 种缓冲 × 2 轮 × 4 种协议/方向 = 48 次传输
+.\scripts\test-native-zmodem-netem.ps1 -Rounds 2
+```
+
+| Profile | Linux 容器出站 `tc qdisc` | 对照内容 |
+|---|---|---|
+| `clean` | 不添加 netem | 基准 |
+| `jitter` | `delay 20ms 8ms distribution normal` | 单向延迟与抖动 |
+| `loss` | `delay 20ms 8ms loss 0.1%` | 单向延迟、抖动和随机丢包 |
+
+各 Profile 在同一个临时容器内顺序运行；每轮交替 0/16 KiB，并校验原生上传、下载及 SFTP 上传、下载的 SHA-256。失败即终止，不忽略损坏或超时。配置失败时不会悄悄退回“无丢包”测试。每个 JSON 位于 `tmp/native-zmodem-stress/native-zmodem-netem-<profile>-*.json`，记录实际 `tc qdisc show dev eth0` 输出、每轮原始 I/O 数据和中位吞吐/P95 耗时。
+
+**重要局限**：容器 `eth0` 的 netem 影响的是**服务器→Windows 客户端**方向的出站数据，反向 ACK/控制反馈也受影响，但不等于同时对 Windows→服务器数据包施加丢包。Linux netem 手册指出 TCP 的 TSQ 等机制还会影响模拟准确性；未来若需要完整双向 RTT/丢包验收，应使用独立 Linux 网络命名空间、代理或接收侧 ingress 配置。<Link url="https://man7.org/linux/man-pages/man8/tc-netem.8.html" title="tc-netem 官方手册"/>。
 
 ## Windows 本机 Go Vet 与协议测试隔离
 
