@@ -84,6 +84,7 @@ type Backend = {
   StartNativeZmodemInteractiveTransfer(ref: Ref, direction: "upload" | "download", localPath: string, remotePath: string): Promise<void>;
   StartNativeZmodemInteractiveBatchTransfer(ref: Ref, direction: "upload" | "download", localPaths: string[], remotePaths: string[]): Promise<void>;
   CancelNativeZmodemInteractiveTransfer(ref: Ref): Promise<void>;
+  SkipNativeZmodemPendingFile(ref: Ref, batchID: string, index: number): Promise<void>;
   NativeZmodemChooseUploadFile(): Promise<string>;
   NativeZmodemChooseUploadFiles(): Promise<string[]>;
 
