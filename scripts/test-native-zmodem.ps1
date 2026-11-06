@@ -35,6 +35,7 @@ $tempDir = Join-Path ([IO.Path]::GetTempPath()) "openshell-zmodem-lab-$unique"
 $privateKey = Join-Path $tempDir "client_ed25519"
 $hostPublicKey = Join-Path $tempDir "host_ed25519.pub"
 $started = $false
+$containerAttempted = $false
 
 $variableNames = @(
     "OPENSHELL_ZMODEM_CROSS_OS_PTY",
@@ -56,8 +57,12 @@ try {
     Write-Host "[1/5] Build native Windows Rust sidecar"
     Push-Location (Join-Path $repoRoot "experiments\native-zmodem")
     try {
-        & cargo generate-lockfile
-        if ($LASTEXITCODE -ne 0) { throw "cargo generate-lockfile failed" }
+        # Reuse the local dependency lock on repeat runs instead of updating
+        # the crates.io index every time the integration suite starts.
+        if (-not (Test-Path -LiteralPath "Cargo.lock" -PathType Leaf)) {
+            & cargo generate-lockfile
+            if ($LASTEXITCODE -ne 0) { throw "cargo generate-lockfile failed" }
+        }
         & cargo test --locked --bin zmodem-sidecar
         if ($LASTEXITCODE -ne 0) { throw "Rust sidecar unit tests failed" }
         & cargo build --locked --release --bin zmodem-sidecar
@@ -75,20 +80,26 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Docker Linux SSH fixture build failed" }
 
     Write-Host "[3/5] Start localhost-only Linux SSH and generate ephemeral keys"
-    & docker run --detach --rm --name $container -p '127.0.0.1::22' $image | Out-Null
+    # Keep an exited container long enough to inspect its status and logs.
+    # It is removed in finally whether the test succeeds or fails.
+    $containerAttempted = $true
+    & docker run --detach --name $container -p '127.0.0.1::22' $image | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Docker Linux SSH fixture failed to start" }
     $started = $true
 
     $deadline = (Get-Date).AddSeconds(75)
     $healthy = $false
     while ((Get-Date) -lt $deadline) {
-        $status = & docker inspect --format '{{.State.Health.Status}}' $container 2>$null
-        if ($LASTEXITCODE -ne 0) { throw "Linux SSH container stopped before becoming ready" }
-        if ("$status".Trim() -eq "healthy") {
+        $stateLine = & docker inspect --format '{{.State.Status}}|{{.State.Health.Status}}' $container 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "Linux SSH container disappeared before becoming ready" }
+        $parts = "$stateLine".Trim().Split([char]'|')
+        if ($parts.Count -ne 2) { throw "Invalid Docker container health response: $stateLine" }
+        if ($parts[0] -ne "running") { throw "Linux SSH container stopped before becoming ready (status=$($parts[0]))" }
+        if ($parts[1] -eq "healthy") {
             $healthy = $true
             break
         }
-        if ("$status".Trim() -eq "unhealthy") {
+        if ($parts[1] -eq "unhealthy") {
             throw "Linux SSH container became unhealthy"
         }
         Start-Sleep -Milliseconds 1000
@@ -135,17 +146,36 @@ try {
     Write-Host "PASS: native Windows sidecar and real Linux OpenSSH/SFTP ZMODEM tests"
 }
 catch {
-    if ($started) {
+    $originalError = $_
+    if ($containerAttempted) {
         Write-Warning "Docker Linux SSH fixture diagnostics:"
-        & docker logs $container 2>&1 | Out-Host
+        try {
+            & docker inspect --format '{{.State.Status}} | {{.State.ExitCode}} | {{.State.Error}}' $container 2>&1 | Out-Host
+        }
+        catch {
+            Write-Warning "Docker inspect unavailable: $($_.Exception.Message)"
+        }
+        try {
+            & docker logs $container 2>&1 | Out-Host
+        }
+        catch {
+            Write-Warning "Docker logs unavailable: $($_.Exception.Message)"
+        }
     }
-    throw
+    throw $originalError
 }
 finally {
-    if ($started) {
-        & docker rm --force $container *> $null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Could not automatically remove test container: $container"
+    if ($containerAttempted) {
+        try {
+            & docker rm --force $container 2>$null | Out-Null
+            if ($started -and $LASTEXITCODE -ne 0) {
+                Write-Warning "Could not automatically remove test container: $container"
+            }
+        }
+        catch {
+            if ($started) {
+                Write-Warning "Could not automatically remove test container: $container ($($_.Exception.Message))"
+            }
         }
     }
     foreach ($name in $variableNames) {
