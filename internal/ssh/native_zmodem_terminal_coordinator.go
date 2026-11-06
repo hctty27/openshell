@@ -181,6 +181,12 @@ func (c *nativeTerminalCoordinator) run(
 	parent context.Context,
 	direction, localPath, remotePath string,
 ) error {
+	return c.runBatch(parent, direction, []string{localPath}, []string{remotePath})
+}
+
+func (c *nativeTerminalCoordinator) runBatch(
+	parent context.Context, direction string, localPaths, remotePaths []string,
+) error {
 	if parent == nil || c == nil || c.input == nil || c.output == nil || c.runner == nil {
 		return errors.New("缺少原生终端传输协调参数")
 	}
@@ -190,21 +196,28 @@ func (c *nativeTerminalCoordinator) run(
 	preparationStarted := time.Now()
 	token, err := newNativeRemoteBoundaryToken()
 	if err != nil { return fmt.Errorf("远端传输结束令牌创建失败：%w", err) }
-	command, action, err := nativeInteractiveFencedCommand(direction, remotePath, token)
-	if err != nil {
-		return err
-	}
-	path, err := nativeZmodemLocalPath(direction, localPath)
-	if err != nil {
-		return err
+	command, action, err := nativeInteractiveFencedCommand(direction, strings.Join(remotePaths, "\n"), token)
+	if err != nil { return err }
+
+	var path string
+	if action == "send" {
+		var paths []string
+		paths, err = nativeZmodemUploadPaths(localPaths)
+		if err != nil { return err }
+		var cleanup func()
+		path, action, cleanup, err = nativeZmodemUploadManifest(paths)
+		if err != nil { return err }
+		defer cleanup()
+	} else {
+		if len(localPaths) != 1 { return errors.New("下载只允许选择一个本地保存目录") }
+		path, err = nativeZmodemLocalPath("download", localPaths[0])
+		if err != nil { return err }
 	}
 	publishDestination := path
 	stage := ""
 	if action == "receive" {
 		stage, err = os.MkdirTemp(path, ".openshell-zmodem-terminal-")
-		if err != nil {
-			return err
-		}
+		if err != nil { return err }
 		defer os.RemoveAll(stage)
 		path = stage
 	}
