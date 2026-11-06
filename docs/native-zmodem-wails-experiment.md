@@ -24,7 +24,8 @@ Windows 默认选择 **原生优先**，可在 **设置 → 终端 → ZMODEM �
 - 批量文件传输、目录传输、断点续传、覆盖已有文件。
 - 任意命令/复杂 Shell 的自动接管、JumpServer 支持、传输中自动恢复或无损降级回传统协议；只识别有限的 Bash 简单命令。
 - 正式发布前的安装版/便携包 sidecar 在 Windows 实机上的 GUI 联动验收及第三方依赖许可证复核。
-- 128 MiB 大文件、真实公网高丢包、持续多轮长测、边缘 Shell 兼容性。
+- 文件上限已从 128 MiB 提升至 2 GiB 以下，固定 90 秒总时限改为 90 秒协议无活动超时；1 GiB 跨系统传输仍须单独验证，参见 [大文件与无活动超时验收](native-zmodem-largefile-idle.md)。
+- 真实公网高丢包、持续多轮 GB 级长测、边缘 Shell 兼容性仍待验证。
 
 Windows GUI 实机验收矩阵与记录门槛参见 [native-zmodem-gui-acceptance.md](native-zmodem-gui-acceptance.md)。CI 无法代替真实 WebView2、Win32 文件选择器和交互式 SSH 的人工验收。
 
