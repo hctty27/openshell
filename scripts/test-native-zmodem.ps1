@@ -272,10 +272,10 @@ try {
                     Profile = $group[0].profile
                     Direction = $group[0].direction
                     Samples = $group.Count
-                    Prepare = [math]::Round(($group | Measure-Object -Property { $_.stagesMs.prepare } -Average).Average, 1)
-                    Protocol = [math]::Round(($group | Measure-Object -Property { $_.stagesMs.protocol } -Average).Average, 1)
-                    RemoteConfirm = [math]::Round(($group | Measure-Object -Property { $_.stagesMs.remoteConfirm } -Average).Average, 1)
-                    RestorePublish = [math]::Round(($group | Measure-Object -Property { $_.stagesMs.restorePublish } -Average).Average, 1)
+                    Prepare = [math]::Round(($group | ForEach-Object { [double]$_.stagesMs.prepare } | Measure-Object -Average).Average, 1)
+                    Protocol = [math]::Round(($group | ForEach-Object { [double]$_.stagesMs.protocol } | Measure-Object -Average).Average, 1)
+                    RemoteConfirm = [math]::Round(($group | ForEach-Object { [double]$_.stagesMs.remoteConfirm } | Measure-Object -Average).Average, 1)
+                    RestorePublish = [math]::Round(($group | ForEach-Object { [double]$_.stagesMs.restorePublish } | Measure-Object -Average).Average, 1)
                 }
             } | Format-Table -AutoSize | Out-Host
         }
