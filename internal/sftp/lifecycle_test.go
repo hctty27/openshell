@@ -98,11 +98,12 @@ func TestShutdownRespectsDeadline(t *testing.T) {
 func TestShutdownCancelsQueuedTransferAndReclaimsSessionSlot(t *testing.T) {
     m := testManager()
     ref := domain.ConnectionRef{TabID: "tab", SessionID: "queued-server", Generation: 1}
-    blocked := make(chan struct{}, 2)
+    blocked := make(chan struct{}, 3)
+    blocked <- struct{}{}
     blocked <- struct{}{}
     blocked <- struct{}{}
     m.mu.Lock()
-    m.slots[ref.SessionID] = blocked
+    m.slots[fmt.Sprintf("%s:%s:%d", ref.TabID, ref.SessionID, ref.Generation)] = blocked
     m.mu.Unlock()
 
     task, err := m.Start(ref, "upload", filepath.Join(t.TempDir(), "source"), "/destination", false)
