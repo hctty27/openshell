@@ -265,3 +265,9 @@
 .transfer-center-settings label { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .transfer-center-settings select { min-width: 46px; border: 1px solid var(--border); border-radius: 5px; padding: 3px 4px; background: var(--field-bg); color: var(--text-primary); font: inherit; }
 .transfer-center-settings span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: right; }
+
+.transfer-dock-batch { display:flex; align-items:center; gap:6px; padding:7px 10px; font-size:11px; color:var(--text-secondary); border-bottom:1px solid var(--border); }
+.transfer-dock-batch > span:first-child { font-weight:600; color:var(--text-primary); }
+.transfer-dock-batch > span:nth-child(2) { margin-left:auto; }
+.transfer-dock-batch button { display:inline-flex; align-items:center; justify-content:center; flex:none; padding:3px; border-radius:5px; color:var(--text-muted); }
+.transfer-dock-batch button:hover { background:var(--hover); color:var(--text-primary); }

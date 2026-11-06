@@ -21,6 +21,15 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
 
   if (!refID || (!alwaysVisible && tasks.length === 0 && !zmodemActive)) return null;
   const running = tasks.filter(task => task.status === "running" || task.status === "queued").length + Number(zmodemActive);
+  const batches = new Map<string, {id: string; total: number; active: number; completed: number}>();
+  for (const task of tasks) {
+    if (!task.batchId) continue;
+    const batch = batches.get(task.batchId) ?? { id: task.batchId, total: 0, active: 0, completed: 0 };
+    batch.total++;
+    if (task.status === "queued" || task.status === "running") batch.active++;
+    if (task.status === "completed") batch.completed++;
+    batches.set(task.batchId, batch);
+  }
   const retry = (task: SFTPTask, resume: boolean) => {
     void api.SFTPTransfer(refID, task.direction, task.source, task.destination, task.overwrite, resume).catch(onNotice);
   };
@@ -50,6 +59,17 @@ export default function TransferDock({ refID, onNotice, alwaysVisible = false }:
               }}><X size={13} /></button>
           </div>
         )}
+        {[...batches.values()].filter(batch => batch.total > 1).map(batch => (
+          <div className="transfer-dock-batch" key={batch.id}>
+            <span>SFTP · {batch.total} {t("sftp:batchFiles")}</span>
+            <span>{batch.completed} / {batch.total} {t("sftp:batchCompleted")}</span>
+            {batch.active > 0 &&
+              <button type="button" aria-label={t("sftp:cancelBatch")}
+                onClick={() => void api.SFTPCancelBatch(refID, batch.id).catch(onNotice)}>
+                <X size={13}/>
+              </button>}
+          </div>
+        ))}
         {[...tasks].reverse().slice(0, 40).map(task => (
           <div className="transfer-dock-item" key={task.id}>
             <span title={task.name} className="transfer-dock-name">

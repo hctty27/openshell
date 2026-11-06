@@ -11,6 +11,7 @@ vi.mock("../bridge", () => ({
   api: {
     SFTPTransfers: vi.fn(async () => []),
     SFTPCancel: vi.fn(async () => {}),
+    SFTPCancelBatch: vi.fn(async () => {}),
     SFTPTransfer: vi.fn(async () => {}),
     CancelZmodem: vi.fn(async () => {}),
   },
@@ -90,4 +91,18 @@ test("ZMODEM status stops on local child exit without waiting for a remote callb
   act(() => events.callbacks.get("ssh:transfer-details")?.({ ref, direction: "upload" }));
   act(() => events.callbacks.get("ssh:transfer-state")?.({ ref, active: true }));
   expect(screen.getByText("ZMODEM 文件传输中 · 等待传输完成")).toBeTruthy();
+});
+
+test("SFTP dock can cancel an active batch without cancelling the SSH session", async () => {
+  render(<TransferDock refID={ref} onNotice={vi.fn()} />);
+  act(() => {
+    events.callbacks.get("sftp:transfer")?.({...task, id:"batch-task-1", batchId:"batch-a"});
+    events.callbacks.get("sftp:transfer")?.({
+      ...task, id:"batch-task-2", batchId:"batch-a", name:"other.log", status:"queued",
+    });
+  });
+  expect(screen.getByText("SFTP · 2 个文件")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", {name:"取消整批"}));
+  await waitFor(() => expect(api.SFTPCancelBatch).toHaveBeenCalledWith(ref,"batch-a"));
+  expect(api.SFTPCancel).not.toHaveBeenCalled();
 });
