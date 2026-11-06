@@ -219,3 +219,23 @@ test("progress events from other terminals or directions never affect this dialo
   finish();
   await waitFor(() => expect(screen.getByText("原生 ZMODEM 文件传输完成")).toBeTruthy());
 });
+
+test("auto-command download preselects the remote file without starting before consent", async () => {
+  const onError = vi.fn();
+  render(<NativeZmodemExperimentDialog refID={ref} sessionName="Linux"
+    initialDirection="download" initialRemotePath="/tmp/report.bin"
+    onError={onError} onDismiss={vi.fn()} />);
+  await waitFor(() => expect(actions.readiness).toHaveBeenCalledOnce());
+  expect((screen.getByRole("radio", { name: "下载文件" }) as HTMLInputElement).checked).toBe(true);
+  expect((screen.getByPlaceholderText("/home/user/example.bin") as HTMLInputElement).value)
+    .toBe("/tmp/report.bin");
+  expect((screen.getByRole("button", { name: "开始实验传输" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
+  await waitFor(() => expect(actions.downloadFolder).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  await waitFor(() => expect(actions.start).toHaveBeenCalledWith(
+    ref, "download", "C:\\downloads", "/tmp/report.bin",
+  ));
+  expect(onError).not.toHaveBeenCalled();
+});

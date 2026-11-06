@@ -418,7 +418,13 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	// Serialize manual input with AI takeover. Recheck after taking stdinMu,
 	// so pending manual writes cannot cross the ownership transition.
 	c.stdinMu.Lock()
-	defer c.stdinMu.Unlock()
+	var autoEvent map[string]any
+	defer func() {
+		c.stdinMu.Unlock()
+		if autoEvent != nil {
+			m.emit("ssh:native-zmodem-auto-intent", autoEvent)
+		}
+	}()
 	m.mu.Lock()
 	if current := m.connections[ref.TabID]; current != c || c.ref != ref || c.stdin == nil {
 		m.mu.Unlock()
@@ -429,15 +435,34 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		return errAITerminalBusy
 	}
 	stdin := c.stdin
+	autoSidecar := m.nativeAutoSidecar
 	m.mu.Unlock()
-	n, err := stdin.Write(p)
+
+	wire := p
+	direction, remotePath := "", ""
+	if autoSidecar != "" {
+		// MySQL may also have a verified prompt; it is not a POSIX Shell.
+		ready := c.readiness.readyProgram() == "shell" && c.readiness.checkReady() == nil
+		wire, direction, remotePath = c.nativeAutoInput.prepare(p, ready)
+		if direction != "" {
+			// Never intercept Enter unless a real sidecar and the exact SSH
+			// generation are still ready to accept an explicit GUI transfer.
+			if status := m.NativeZmodemExperimentalReadiness(ref, autoSidecar, true); !status.Ready {
+				wire, direction, remotePath = p, "", ""
+			}
+		}
+	}
+	n, err := stdin.Write(wire)
 	if err != nil { return err }
-	if n != len(p) { return io.ErrShortWrite }
+	if n != len(wire) { return io.ErrShortWrite }
 	// A native lease can reject manual input. Never update shell readiness
 	// for bytes that did not actually pass through the legacy input path.
 	m.mu.Lock()
 	if current := m.connections[ref.TabID]; current == c && c.ref == ref {
 		c.readiness.userInput(p)
+		if direction != "" {
+			autoEvent = map[string]any{"ref": ref, "direction": direction, "remotePath": remotePath, "sessionName": c.session.Name}
+		}
 	}
 	m.mu.Unlock()
 	return nil

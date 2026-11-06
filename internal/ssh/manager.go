@@ -51,6 +51,7 @@ type connection struct {
 	inputGate *terminalInputGate
 	nativeTerminalTransfer *nativeTerminalTransferTask
 	nativeTerminalPoisoned bool
+	nativeAutoInput nativeAutoInputTracker
 	aiController *AITerminalLease
 	readiness terminalShellReadiness
 	serverVersion string
@@ -70,6 +71,7 @@ type Manager struct {
 	connections map[string]*connection
 	generations map[string]uint64
 	nextZmodemSelectionID uint64
+	nativeAutoSidecar string
 	connecting  map[string]context.CancelFunc
 	keepaliveInterval time.Duration
 	closed      bool
