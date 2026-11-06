@@ -34,7 +34,9 @@ func TestNativeZmodemInteractiveDesktopDisabledByDefault(t *testing.T) {
 
 func TestNativeZmodemInteractiveDesktopRequiresExactActiveTerminal(t *testing.T) {
 	t.Setenv("OPENSHELL_NATIVE_ZMODEM_EXPERIMENT", "1")
-	t.Setenv("OPENSHELL_NATIVE_ZMODEM_SIDECAR", os.Args[0])
+	executable, err := filepath.Abs(os.Args[0])
+	if err != nil { t.Fatal(err) }
+	t.Setenv("OPENSHELL_NATIVE_ZMODEM_SIDECAR", executable)
 	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
 	if err != nil { t.Fatal(err) }
 	defer a.shutdown(context.Background())
