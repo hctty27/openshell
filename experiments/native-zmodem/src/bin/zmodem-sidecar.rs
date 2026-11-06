@@ -131,14 +131,18 @@ fn report_file_bytes(kind: &str, index: usize, processed: u64) {
 
 // The sender only checks requests at file boundaries; stdin/stdout remain
 // exclusively ZMODEM protocol streams. Indices are written by the Go app.
-fn skip_requested(index: usize) -> bool {
-    let Some(path) = env::var_os("OPENSHELL_ZMODEM_SKIP_FILE") else { return false };
-    if fs::metadata(&path).is_err_or(|meta| meta.len() > 4096) {
+fn skip_requested_from_path(path: &Path, index: usize) -> bool {
+    if fs::metadata(path).is_err_or(|meta| meta.len() > 4096) {
         return false;
     }
     fs::read_to_string(path).is_ok_and(|requests| {
         requests.lines().any(|line| line.parse::<usize>().ok() == Some(index))
     })
+}
+
+fn skip_requested(index: usize) -> bool {
+    let Some(path) = env::var_os("OPENSHELL_ZMODEM_SKIP_FILE") else { return false };
+    skip_requested_from_path(Path::new(&path), index)
 }
 
 fn incoming_wire() -> ChannelReceiver<io::Result<Vec<u8>>> {
@@ -659,7 +663,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_file_size, parse_wire_batch_bytes, read_source_chunk, safe_name, ActivityClock, ExperimentalWireWriter, INACTIVITY_TIMEOUT, MAX_SIZE};
+    use super::{checked_file_size, parse_wire_batch_bytes, read_source_chunk, safe_name, skip_requested_from_path, ActivityClock, ExperimentalWireWriter, INACTIVITY_TIMEOUT, MAX_SIZE};
     use std::fs::{self, OpenOptions};
     use std::io::{Seek, SeekFrom, Write};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -686,6 +690,23 @@ mod tests {
         fs::remove_file(path).unwrap();
     }
 
+
+    #[test]
+    fn skips_only_requested_file_indices() {
+        let dir = std::env::temp_dir().join(format!(
+            "openshell-zmodem-skip-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+        ));
+        fs::create_dir(&dir).unwrap();
+        let control = dir.join("pending");
+        fs::write(&control, b"1\n3\n").unwrap();
+        assert!(!skip_requested_from_path(&control, 0));
+        assert!(skip_requested_from_path(&control, 1));
+        assert!(!skip_requested_from_path(&control, 2));
+        assert!(skip_requested_from_path(&control, 3));
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn supports_gib_files_without_overflowing_legacy_zmodem_offsets() {
