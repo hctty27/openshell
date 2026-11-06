@@ -84,6 +84,7 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 	}); err != nil { return err }
 
 	process := exec.CommandContext(ctx, sidecar, direction, localPath)
+	configureNativeZmodemSidecar(process)
 	process.WaitDelay = nativeZmodemShutdownTimeout
 	log := &nativeZmodemLog{}
 	process.Stderr = log
