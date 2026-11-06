@@ -65,7 +65,9 @@ func psqlAICommand(command string) (string,error) {
 		switch fields[0] {
 		case `\d`,`\d+`,`\dt`,`\dt+`,`\di`,`\di+`,`\dn`,`\dn+`,`\dv`,`\dv+`,`\df`,`\df+`,`\l`,`\l+`,`\conninfo`:
 			// Meta-commands cannot run shell commands or write server state.
-			if strings.ContainsAny(c,";|") { return "",errors.New("psql 元命令不支持链式执行") }
+			if strings.ContainsAny(c,";|") || strings.Count(c,"\\") != 1 {
+				return "",errors.New("psql 元命令不支持链式执行")
+			}
 			return c,nil
 		default:
 			return "",errors.New("当前仅支持 psql 只读元命令（如 \\d、\\dt、\\conninfo）")
