@@ -92,6 +92,8 @@ test("terminal settings display multiline paste confirmation only when right-cli
   const props = {
     logHighlights: false,
     onLogHighlights: vi.fn(),
+    zmodemTransferMode: "native" as const,
+    onZmodemTransferMode: vi.fn(),
     autoCopySelection: true,
     onAutoCopySelection: vi.fn(),
     rightClickPaste: false,
@@ -106,4 +108,24 @@ test("terminal settings display multiline paste confirmation only when right-cli
   expect(props.onRightClickPaste).toHaveBeenCalledWith(true);
   rerender(<TerminalSettingsPanel {...props} rightClickPaste />);
   expect(screen.getByLabelText("多行粘贴前确认")).toBeTruthy();
+});
+
+test("terminal settings switch between native-first and legacy modes", () => {
+  const onZmodemTransferMode = vi.fn();
+  render(<TerminalSettingsPanel
+    logHighlights={false}
+    onLogHighlights={vi.fn()}
+    zmodemTransferMode="native"
+    onZmodemTransferMode={onZmodemTransferMode}
+    autoCopySelection={false}
+    onAutoCopySelection={vi.fn()}
+    rightClickPaste={false}
+    onRightClickPaste={vi.fn()}
+    confirmMultilinePaste={false}
+    onConfirmMultilinePaste={vi.fn()}
+  />);
+  const field = screen.getByLabelText("ZMODEM 传输引擎") as HTMLSelectElement;
+  expect(field.value).toBe("native");
+  fireEvent.change(field, { target: { value: "legacy" } });
+  expect(onZmodemTransferMode).toHaveBeenCalledWith("legacy");
 });

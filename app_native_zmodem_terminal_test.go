@@ -9,13 +9,12 @@ import (
 	"github.com/hctty27/openshell/internal/domain"
 )
 
-func TestNativeZmodemInteractiveDesktopDisabledByDefault(t *testing.T) {
-	t.Setenv("OPENSHELL_NATIVE_ZMODEM_EXPERIMENT", "")
+func TestNativeZmodemInteractiveDesktopDisabledByCompatibilityMode(t *testing.T) {
 	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
 	if err != nil { t.Fatal(err) }
 	defer a.shutdown(context.Background())
-
-	if a.NativeZmodemExperimentEnabled() { t.Fatal("native experiment unexpectedly enabled") }
+	if err := a.SavePreference("zmodemTransferMode", "legacy"); err != nil { t.Fatal(err) }
+	if a.NativeZmodemExperimentEnabled() { t.Fatal("compatibility mode unexpectedly enabled native transfer") }
 	ref := domain.ConnectionRef{TabID: "tab", SessionID: "test", Generation: 1}
 	status := a.NativeZmodemInteractiveReadiness(ref)
 	if status.Ready || status.Code != "disabled" {
@@ -33,15 +32,14 @@ func TestNativeZmodemInteractiveDesktopDisabledByDefault(t *testing.T) {
 }
 
 func TestNativeZmodemInteractiveDesktopRequiresExactActiveTerminal(t *testing.T) {
-	t.Setenv("OPENSHELL_NATIVE_ZMODEM_EXPERIMENT", "1")
 	executable, err := filepath.Abs(os.Args[0])
 	if err != nil { t.Fatal(err) }
 	t.Setenv("OPENSHELL_NATIVE_ZMODEM_SIDECAR", executable)
 	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
 	if err != nil { t.Fatal(err) }
 	defer a.shutdown(context.Background())
-
-	if !a.NativeZmodemExperimentEnabled() { t.Fatal("developer opt-in ignored") }
+	if err := a.SavePreference("zmodemTransferMode", "native"); err != nil { t.Fatal(err) }
+	if !a.NativeZmodemExperimentEnabled() { t.Fatal("native transfer mode ignored") }
 	ref := domain.ConnectionRef{TabID: "missing", SessionID: "missing", Generation: 1}
 	status := a.NativeZmodemInteractiveReadiness(ref)
 	if status.Ready || status.Code != "no_connection" {

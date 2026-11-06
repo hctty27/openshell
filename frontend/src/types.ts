@@ -62,6 +62,7 @@ export type Theme = "dark" | "light";
 export type TerminalTheme = "follow" | "classic" | "dark" | "light";
 export type DisconnectBehavior = "local" | "retain" | "close";
 export type LocalShell = "powershell" | "pwsh" | "cmd" | "wsl";
+export type ZmodemTransferMode = "native" | "legacy";
 export type QuickCommandLayout = "single" | "multi";
 export interface QuickCommand {
   id: string;
@@ -151,6 +152,7 @@ export interface AppState {
   rightClickPaste?: boolean;
   confirmMultilinePaste?: boolean;
   logHighlights?: boolean;
+  zmodemTransferMode?: ZmodemTransferMode;
   splitRatio?: number;
   sessionSidebarMode?: "pinned" | "auto-hide";
   sessionSidebarWidth?: number;

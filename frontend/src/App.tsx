@@ -495,6 +495,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     try {
       const data = await api.State();
       setState(data);
+      setNativeZmodemEnabled(data.zmodemTransferMode === "native");
       setTheme(data.theme === "light" ? "light" : "dark");
       setTerminalTheme(normalizeTerminalTheme(data.terminalTheme));
       setAutoCopySelection(data.autoCopySelection === true);
@@ -1642,6 +1643,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           onRightClickPaste={setRightClickPaste}
           logHighlights={logHighlights}
           onLogHighlights={setLogHighlights}
+          zmodemTransferMode={state.zmodemTransferMode}
           confirmMultilinePaste={confirmMultilinePaste}
           onConfirmMultilinePaste={setConfirmMultilinePaste}
           onClose={() => setDialog(null)}
