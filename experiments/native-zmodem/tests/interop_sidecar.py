@@ -66,7 +66,21 @@ def main() -> None:
             target = destination_dir / source.name
             assert target.exists() and sha256(target) == sha256(source)
 
-    print(f"Passed: {len(cases) + 3} native-sidecar SHA-256 file checks, including a three-file batch")
+        # Verify the exact Go/Wails process invocation: a bounded NUL list.
+        manifest_dir = root / "manifest-output"
+        manifest_dir.mkdir()
+        manifest = root / "upload.list"
+        manifest.write_bytes(b"".join(str(p).encode("utf-8") + b"\x00" for p in sources))
+        transfer_pair(
+            [sidecar, "send-list", str(manifest)],
+            [sidecar, "receive", str(manifest_dir)],
+            source_dir, manifest_dir, 97,
+        )
+        for source in sources:
+            target = manifest_dir / source.name
+            assert target.exists() and sha256(target) == sha256(source)
+
+    print(f"Passed: {len(cases) + 6} native-sidecar SHA-256 file checks, including batch and manifest sessions")
 
 
 if __name__ == "__main__":
