@@ -13,6 +13,8 @@ vi.mock("../bridge", () => ({
     SFTPCancel: vi.fn(async () => {}),
     SFTPTransfer: vi.fn(async () => {}),
     CancelZmodem: vi.fn(async () => {}),
+    CancelNativeZmodemInteractiveTransfer: vi.fn(async () => {}),
+    SkipNativeZmodemPendingFile: vi.fn(async () => {}),
   },
   listen: (name: string, callback: (value: any) => void) => {
     events.callbacks.set(name, callback);
@@ -126,4 +128,24 @@ test("native ZMODEM batch renders separate files and real byte progress", () => 
   expect(screen.getByText("b.bin")).toBeTruthy();
   expect(screen.getByText("ZMODEM · 2 个文件")).toBeTruthy();
   expect(screen.getByText("67%")).toBeTruthy();
+});
+
+test("skip queued rz upload file without cancelling the entire batch", async () => {
+  render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "skip-batch", direction: "upload", active: true,
+    files: [{ name: "first.txt", total: 100 }, { name: "second.txt", total: 200 }],
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  fireEvent.click(screen.getByRole("button", { name: "跳过 second.txt" }));
+  await waitFor(() => expect(api.SkipNativeZmodemPendingFile)
+    .toHaveBeenCalledWith(refA, "skip-batch", 1));
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "skip-batch", kind: "skip-requested", index: 1,
+  });
+  expect(screen.getByText("正在跳过")).toBeTruthy();
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "skip-batch", kind: "skipped", index: 1, processed: 0,
+  });
+  expect(screen.getByText("已跳过")).toBeTruthy();
 });
