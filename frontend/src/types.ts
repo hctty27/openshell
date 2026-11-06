@@ -238,3 +238,9 @@ export interface SFTPSyncPreview {
   bytes: number;
 }
 
+
+export interface NativeZmodemReadiness {
+  ready: boolean;
+  code: string;
+  message: string;
+}
