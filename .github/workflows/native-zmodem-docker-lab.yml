@@ -125,6 +125,8 @@ jobs:
           docker exec "$name" tc qdisc show dev eth0 | grep -q netem
           docker exec "$name" tc qdisc replace dev eth0 root netem delay 20ms 8ms loss 0.1%
           docker exec "$name" tc qdisc show dev eth0 | grep -q netem
+          # Prove our Go report can read the actual Linux tc -s counter format.
+          docker exec "$name" tc -s qdisc show dev eth0 | grep -Eq 'Sent [0-9]+ bytes [0-9]+ pkt \(dropped [0-9]+, overlimits [0-9]+ requeues [0-9]+\)'
           docker exec "$name" tc qdisc del dev eth0 root
 
 
