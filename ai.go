@@ -466,7 +466,13 @@ func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToo
 	needsReview := call.Function.Name == "ssh_exec" || call.Function.Name == "sftp_write"
 	summary := args.Command
 	if summary == "" { summary = call.Function.Name + ": " + args.Path }
-	if mode == "review" && needsReview && args.NeedsConfirmation {
+	// Python source can have side effects even when it looks like an expression.
+	// In review mode always require approval before sending it to the current REPL.
+	mustConfirm := args.NeedsConfirmation
+	if terminalLease != nil && terminalLease.Program() == "python" && call.Function.Name == "ssh_exec" {
+		mustConfirm = true
+	}
+	if mode == "review" && needsReview && mustConfirm {
 		approvalID := domain.NewID()
 		ch := make(chan bool, 1)
 		a.aiMu.Lock()
