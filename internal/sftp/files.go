@@ -40,6 +40,7 @@ type Manager struct {
     slots map[string]chan struct{}
     slotUsers map[string]int
     workers sync.WaitGroup
+    globalSlots chan struct{}
     reserved map[string]struct{}
     closed bool
     poolMu sync.Mutex
@@ -49,7 +50,7 @@ type Manager struct {
 }
 
 func NewManager(lookup Lookup, emit func(string, any)) *Manager {
-    return &Manager{lookup: lookup, emit: emit, tasks: make(map[string]*job), slots: make(map[string]chan struct{}), slotUsers: make(map[string]int), reserved: make(map[string]struct{}), pool: make(map[domain.ConnectionRef]*cachedRemote), poolEpoch: make(map[string]uint64)}
+    return &Manager{lookup: lookup, emit: emit, tasks: make(map[string]*job), slots: make(map[string]chan struct{}), slotUsers: make(map[string]int), globalSlots: make(chan struct{}, 6), reserved: make(map[string]struct{}), pool: make(map[domain.ConnectionRef]*cachedRemote), poolEpoch: make(map[string]uint64)}
 }
 
 func (m *Manager) remote(ref domain.ConnectionRef) (*pkg.Client, error) {
