@@ -50,16 +50,16 @@ function showDialog() {
   return { onError, dismiss };
 }
 
-test("experiment requires file selection and explicit failure/reconnect acknowledgement", async () => {
+test("native transfer requires file selection and terminal-ownership acknowledgement", async () => {
   const { onError } = showDialog();
-  const start = screen.getByRole("button", { name: "开始实验传输" }) as HTMLButtonElement;
+  const start = screen.getByRole("button", { name: "开始传输" }) as HTMLButtonElement;
   await waitFor(() => expect(actions.readiness).toHaveBeenCalledWith(ref));
   expect(start.disabled).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
   expect(start.disabled).toBe(true);
   fireEvent.click(screen.getByRole("checkbox", {
-    name: "我理解这是实验功能，出错后需要重新连接 SSH 终端",
+    name: "我已了解传输期间当前终端会被占用，取消或失败后可能需要重新连接 SSH",
   }));
   expect(start.disabled).toBe(false);
   fireEvent.click(start);
@@ -77,7 +77,7 @@ test("download requires remote file and local destination folder", async () => {
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   await waitFor(() => expect(actions.downloadFolder).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  const start = screen.getByRole("button", { name: "开始实验传输" }) as HTMLButtonElement;
+  const start = screen.getByRole("button", { name: "开始传输" }) as HTMLButtonElement;
   expect(start.disabled).toBe(true);
   fireEvent.change(screen.getByPlaceholderText("/home/user/example.bin"), {
     target: { value: "/home/test/remote.bin" },
@@ -95,7 +95,7 @@ test("backend not-ready status prevents interactive shell takeover", async () =>
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("先重新连接"));
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   fireEvent.click(screen.getByRole("checkbox"));
-  expect((screen.getByRole("button", { name: "开始实验传输" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "开始传输" }) as HTMLButtonElement).disabled).toBe(true);
   expect(actions.start).not.toHaveBeenCalled();
 });
 
@@ -107,7 +107,7 @@ test("active native transfer can be cancelled from the modal", async () => {
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  fireEvent.click(screen.getByRole("button", { name: "开始传输" }));
   await waitFor(() => expect(actions.start).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
   await waitFor(() => expect(actions.cancel).toHaveBeenCalledWith(ref));
@@ -124,7 +124,7 @@ test("native progress ignores stale session generations", async () => {
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  fireEvent.click(screen.getByRole("button", { name: "开始传输" }));
   await waitFor(() => expect(actions.progressCallback).not.toBeNull());
   actions.progressCallback?.({ ref: { ...ref, generation: 4 }, direction: "upload", processed: 99, total: 100 });
   expect(screen.queryByText("99%")).toBeNull();
@@ -141,7 +141,7 @@ test("native transfer failure reaches error channel without showing success", as
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  fireEvent.click(screen.getByRole("button", { name: "开始传输" }));
   await waitFor(() => expect(onError).toHaveBeenCalledOnce());
   expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
   expect(screen.queryByText("原生 ZMODEM 文件传输完成")).toBeNull();
@@ -159,7 +159,7 @@ test("failed transfer cannot retry while terminal readiness is still being check
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  const start = screen.getByRole("button", { name: "开始实验传输" }) as HTMLButtonElement;
+  const start = screen.getByRole("button", { name: "开始传输" }) as HTMLButtonElement;
   fireEvent.click(start);
   await waitFor(() => expect(onError).toHaveBeenCalledOnce());
   expect(start.disabled).toBe(true);
@@ -179,7 +179,7 @@ test("a failed readiness refresh never re-enables a second PTY takeover", async 
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  const start = screen.getByRole("button", { name: "开始实验传输" }) as HTMLButtonElement;
+  const start = screen.getByRole("button", { name: "开始传输" }) as HTMLButtonElement;
   fireEvent.click(start);
   await waitFor(() => expect(actions.readiness).toHaveBeenCalledTimes(2));
   expect(start.disabled).toBe(true);
@@ -196,7 +196,7 @@ test("a rejected cancellation is not mistaken for a confirmed cancellation", asy
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  fireEvent.click(screen.getByRole("button", { name: "开始传输" }));
   await waitFor(() => expect(actions.start).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
   await waitFor(() => expect(screen.getByText(/取消请求未送达/)).toBeTruthy());
@@ -213,7 +213,7 @@ test("progress events from other terminals or directions never affect this dialo
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   await waitFor(() => expect(actions.uploadFile).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  fireEvent.click(screen.getByRole("button", { name: "开始传输" }));
   await waitFor(() => expect(actions.progressCallback).not.toBeNull());
   actions.progressCallback?.({ ref: { ...ref, tabId: "different" }, direction: "upload", processed: 42, total: 100 });
   actions.progressCallback?.({ ref, direction: "download", processed: 72, total: 100 });
@@ -234,11 +234,11 @@ test("auto-command download preselects the remote file without starting before c
   expect((screen.getByRole("radio", { name: "下载文件" }) as HTMLInputElement).checked).toBe(true);
   expect((screen.getByPlaceholderText("/home/user/example.bin") as HTMLInputElement).value)
     .toBe("/tmp/report.bin");
-  expect((screen.getByRole("button", { name: "开始实验传输" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "开始传输" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   await waitFor(() => expect(actions.downloadFolder).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  fireEvent.click(screen.getByRole("button", { name: "开始传输" }));
   await waitFor(() => expect(actions.start).toHaveBeenCalledWith(
     ref, "download", "C:\\downloads", "/tmp/report.bin",
   ));
@@ -251,7 +251,7 @@ test("native upload selects several files in one authorized protocol session", a
   fireEvent.click(screen.getByRole("button", { name: "选择多个文件" }));
   await waitFor(() => expect(actions.uploadFiles).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  fireEvent.click(screen.getByRole("button", { name: "开始传输" }));
   await waitFor(() => expect(actions.startBatch).toHaveBeenCalledWith(
     ref, "upload", ["C:\\test\\first.bin", "C:\\test\\中文 文件.bin"], [],
   ));
@@ -269,7 +269,7 @@ test("native download parses multiple remote paths without shell evaluation", as
   fireEvent.click(screen.getByRole("button", { name: "浏览本地文件或目录" }));
   await waitFor(() => expect(actions.downloadFolder).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  fireEvent.click(screen.getByRole("button", { name: "开始传输" }));
   await waitFor(() => expect(actions.startBatch).toHaveBeenCalledWith(
     ref, "download", ["C:\\downloads"], ["/tmp/first.bin", "/tmp/中文 文件.bin"],
   ));
@@ -284,7 +284,7 @@ test("batch larger than 100 is rejected before entering the PTY", async () => {
   fireEvent.click(screen.getByRole("button", { name: "选择多个文件" }));
   await waitFor(() => expect(actions.uploadFiles).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "开始实验传输" }));
+  fireEvent.click(screen.getByRole("button", { name: "开始传输" }));
   await waitFor(() => expect(screen.getByText("每次请选择 1–100 个文件或远程路径。")).toBeTruthy());
   expect(actions.start).not.toHaveBeenCalled();
   expect(actions.startBatch).not.toHaveBeenCalled();
