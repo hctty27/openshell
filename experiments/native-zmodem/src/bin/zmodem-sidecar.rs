@@ -187,6 +187,27 @@ struct SendSource {
     size: u64,
 }
 
+// Private, NUL-delimited UTF-8 path manifest used by the Windows/Go desktop
+// bridge. NUL avoids interpreting quotes, spaces or newlines as shell syntax.
+fn read_send_manifest(manifest: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    let contents = fs::read(manifest)?;
+    if contents.is_empty() || contents.len() > 1024 * 1024 || *contents.last().unwrap() != 0 {
+        return Err("invalid native ZMODEM upload manifest".into());
+    }
+    let records = contents[..contents.len() - 1].split(|b| *b == 0);
+    let mut paths = Vec::new();
+    for record in records {
+        if record.is_empty() {
+            return Err("native upload manifest contains an empty filename".into());
+        }
+        paths.push(PathBuf::from(std::str::from_utf8(record)?));
+        if paths.len() > MAX_FILES_PER_SESSION {
+            return Err("native ZMODEM allows at most 100 files per session".into());
+        }
+    }
+    Ok(paths)
+}
+
 fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     if paths.is_empty() || paths.len() > MAX_FILES_PER_SESSION {
         return Err("native ZMODEM accepts 1..100 files per session".into());
@@ -510,9 +531,11 @@ fn main() {
     let result = match args.as_slice() {
         [_, action, paths @ ..] if action == "send" && !paths.is_empty() =>
             send(&paths.iter().map(PathBuf::from).collect::<Vec<_>>()),
+        [_, action, manifest] if action == "send-list" =>
+            read_send_manifest(Path::new(manifest)).and_then(|paths| send(&paths)),
         [_, action, dir] if action == "receive" => receive(Path::new(dir)),
         _ => {
-            eprintln!("Usage: zmodem-sidecar send FILE [FILE ...] | receive EXISTING_DIRECTORY");
+            eprintln!("Usage: zmodem-sidecar send FILE [FILE ...] | send-list MANIFEST | receive EXISTING_DIRECTORY");
             std::process::exit(2);
         }
     };
