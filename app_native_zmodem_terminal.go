@@ -10,9 +10,9 @@ import (
 	sshclient "github.com/hctty27/openshell/internal/ssh"
 )
 
-// 原生 ZMODEM 只允许显式开发者 opt-in；正式 rz/sz 默认路径保持不变。
+// 原生优先策略只对简单命令生效，不替换旧版 ZMODEM 处理器。
 func (a *App) NativeZmodemExperimentEnabled() bool {
-	return os.Getenv("OPENSHELL_NATIVE_ZMODEM_EXPERIMENT") == "1"
+	return a.nativeZmodemPreferred()
 }
 
 func nativeZmodemDesktopSidecarPath() string {
