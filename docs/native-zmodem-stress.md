@@ -66,7 +66,7 @@ Rust sidecar 增加 **仅实验模式使用** 的有界 `Action::WriteWire` 缓�
 
 可分别选择 `-LatencyMS 0`、`-LatencyMS 1`、`-LatencyMS 3`、`-LatencyMS 5` 做相同配置的比较。
 
-A/B 测试必须对照 JSON `io.toRemoteCalls`、`io.toRemoteWriteNs`、`miBPerSecond`、SHA-256；推荐每个延迟条件至少重复 5 次，并交替执行两组，以减少环境波动。**减少写入次数不代表一定能提高速度**：当 ZMODEM 协议当前流程必须等待远端 ACK 时，将始终在等待前 flush，不跨协议反馈边界强行拼接。缓冲不会改变模拟器的 3ms TCP 读写延迟语义；它也不模拟真实丢包。
+报告 `options.wireBatchBytes` 会记录本次使用的缓冲大小（0 表示原始模式）。A/B 测试必须对照 JSON `io.toRemoteCalls`、`io.toRemoteWriteNs`、`miBPerSecond`、SHA-256；推荐每个延迟条件至少重复 5 次，并交替执行两组，以减少环境波动。**减少写入次数不代表一定能提高速度**：当 ZMODEM 协议当前流程必须等待远端 ACK 时，将始终在等待前 flush，不跨协议反馈边界强行拼接。缓冲不会改变模拟器的 3ms TCP 读写延迟语义；它也不模拟真实丢包。
 
 ## Windows 本机 Go Vet 与协议测试隔离
 
