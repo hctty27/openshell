@@ -232,11 +232,15 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
     );
     imePositionRecovery.current = imeRecovery;
     const offImeWindowEvents = navigator.userAgent.includes("Windows")
-      ? (["common:WindowDidMove", "common:WindowDPIChanged"] as const).map(eventName =>
+      ? (["common:WindowDidMove", "common:WindowDPIChanged", "common:WindowFocus"] as const).map(eventName =>
           Events.On(eventName, () => {
             if (disposed || !callbacks.current.active) return;
-            applyGeometry();
-            imeRecovery.schedule();
+            if (eventName === "common:WindowFocus") {
+              imeRecovery.onWindowActivated();
+            } else {
+              applyGeometry();
+              imeRecovery.schedule();
+            }
           }),
         )
       : [];

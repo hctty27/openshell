@@ -154,3 +154,67 @@ test("restores focus after returning to an unfocused window", () => {
   expect(focusTerminal).toHaveBeenCalledOnce();
   recovery.dispose();
 });
+
+test("repairs the caret after Alt+Tab even if no resize or move occurred", () => {
+  const { textarea, focusTerminal, recovery } = setup();
+  const blur = vi.spyOn(textarea, "blur");
+  window.dispatchEvent(new FocusEvent("focus"));
+  vi.advanceTimersByTime(160);
+  expect(blur).toHaveBeenCalledOnce();
+  vi.advanceTimersByTime(60);
+  expect(focusTerminal).toHaveBeenCalledOnce();
+  expect(document.activeElement).toBe(textarea);
+  recovery.dispose();
+});
+
+test("deduplicates the native and DOM activation notifications", () => {
+  const { textarea, focusTerminal, recovery } = setup();
+  const blur = vi.spyOn(textarea, "blur");
+  recovery.onWindowActivated();
+  vi.advanceTimersByTime(50);
+  window.dispatchEvent(new FocusEvent("focus"));
+  vi.advanceTimersByTime(220);
+  expect(blur).toHaveBeenCalledOnce();
+  expect(focusTerminal).toHaveBeenCalledOnce();
+  vi.advanceTimersByTime(500);
+  expect(blur).toHaveBeenCalledOnce();
+  recovery.dispose();
+});
+
+test("does not steal focus from another input after Alt+Tab", () => {
+  const { textarea, focusTerminal, recovery } = setup();
+  const search = document.createElement("input");
+  document.body.appendChild(search);
+  search.focus();
+  recovery.onWindowActivated();
+  vi.advanceTimersByTime(400);
+  expect(document.activeElement).toBe(search);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  textarea.focus();
+  vi.advanceTimersByTime(220);
+  expect(focusTerminal).toHaveBeenCalledOnce();
+  recovery.dispose();
+});
+
+test("postpones Alt+Tab recovery until composition is complete", () => {
+  const { textarea, focusTerminal, recovery } = setup();
+  textarea.dispatchEvent(new Event("compositionstart"));
+  recovery.onWindowActivated();
+  vi.advanceTimersByTime(500);
+  expect(document.activeElement).toBe(textarea);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  textarea.dispatchEvent(new Event("compositionend"));
+  vi.advanceTimersByTime(220);
+  expect(focusTerminal).toHaveBeenCalledOnce();
+  recovery.dispose();
+});
+
+test("does not initiate Alt+Tab recovery for an inactive pane", () => {
+  const { focusTerminal, recovery, setActive } = setup();
+  setActive(false);
+  window.dispatchEvent(new FocusEvent("focus"));
+  recovery.onWindowActivated();
+  vi.advanceTimersByTime(400);
+  expect(focusTerminal).not.toHaveBeenCalled();
+  recovery.dispose();
+});

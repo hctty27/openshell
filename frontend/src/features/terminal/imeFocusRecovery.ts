@@ -38,6 +38,12 @@ export function attachImeFocusRecovery(
     if (pending && !disposed && !composing && !restoring) schedule();
   };
 
+  // Alt+Tab can invalidate WebView2's native IME caret even when the DOM
+  // layout did not change. A fresh window activation must arm recovery.
+  const onWindowActivated = () => {
+    if (!disposed && !restoring && isActive()) schedule();
+  };
+
   function recover() {
     layoutTimer = undefined;
     if (disposed || composing || restoring || !pending) return;
@@ -96,11 +102,12 @@ export function attachImeFocusRecovery(
   textarea?.addEventListener("keydown", onKeyDown, true);
   textarea?.addEventListener("blur", onBlur);
   textarea?.addEventListener("focus", onFocus);
-  window.addEventListener("focus", onFocus);
+  window.addEventListener("focus", onWindowActivated);
 
   return {
     schedule,
     resume,
+    onWindowActivated,
     dispose: () => {
       disposed = true;
       clearLayoutTimer();
@@ -110,7 +117,7 @@ export function attachImeFocusRecovery(
       textarea?.removeEventListener("keydown", onKeyDown, true);
       textarea?.removeEventListener("blur", onBlur);
       textarea?.removeEventListener("focus", onFocus);
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", onWindowActivated);
     },
   };
 }
