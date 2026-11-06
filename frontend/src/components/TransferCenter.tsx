@@ -24,7 +24,7 @@ interface NativeFile {
   name: string;
   total: number | null;
   bytes: number;
-  status: "queued" | "running" | "completed" | "cancelled" | "failed";
+  status: "queued" | "running" | "skipping" | "skipped" | "completed" | "cancelled" | "failed";
 }
 
 interface NativeBatch {
@@ -150,13 +150,13 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         const status = event.error ? (existing.status === "cancelling" ? "cancelled" : "failed")
           : "completed";
         return { ...previous, [key]: { ...existing, status, error: event.error,
-          files: existing.files.map(file => file.status === "queued" || file.status === "running"
+          files: existing.files.map(file => file.status === "queued" || file.status === "running" || file.status === "skipping"
             ? { ...file, status: status === "completed" ? "completed" : "failed" } : file),
         }};
       });
     });
     const offNativeFile = listen("ssh:native-zmodem-file", (event: {
-      ref: Ref; batchId: string; kind: "start" | "progress" | "completed";
+      ref: Ref; batchId: string; kind: "start" | "progress" | "completed" | "skip-requested" | "skipped";
       index: number; name?: string; total?: number | null; processed?: number;
     }) => {
       if (!event?.ref || !Number.isInteger(event.index) || event.index < 0 || event.index >= 100) return;
@@ -173,7 +173,9 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           ...current, name: event.name || current.name,
           total: event.kind === "start" && typeof event.total === "number" ? event.total : current.total,
           bytes: typeof event.processed === "number" ? event.processed : current.bytes,
-          status: event.kind === "completed" ? "completed" : "running",
+          status: event.kind === "completed" ? "completed" :
+            event.kind === "skipped" ? "skipped" :
+            event.kind === "skip-requested" ? "skipping" : "running",
         };
         return { ...previous, [key]: { ...batch, files } };
       });
@@ -327,9 +329,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
               <p className="transfer-center-empty">{t("sftp:noTransfers")}</p>
             )}
             {native.map(({ key, batch }) => {
-              const sizesKnown = batch.files.length > 0 && batch.files.every(file => file.total != null);
-              const total = sizesKnown ? batch.files.reduce((sum, file) => sum + (file.total ?? 0), 0) : null;
-              const bytes = batch.files.reduce((sum, file) => sum + file.bytes, 0);
+              const activeFiles = batch.files.filter(file => file.status !== "skipped");
+              const sizesKnown = activeFiles.length > 0 && activeFiles.every(file => file.total != null);
+              const total = sizesKnown ? activeFiles.reduce((sum, file) => sum + (file.total ?? 0), 0) : null;
+              const bytes = activeFiles.reduce((sum, file) => sum + file.bytes, 0);
               const percent = total === null ? null : total === 0
                 ? (batch.status === "completed" ? 100 : 0)
                 : Math.min(100, Math.round(bytes / total * 100));
@@ -354,8 +357,16 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                           <strong title={file.name}>{file.name}</strong>
                           <span className="transfer-center-session">{file.status === "queued" ? t("sftp:queued") :
                             file.status === "running" ? t("sftp:running") :
+                            file.status === "skipping" ? t("sftp:zmodemSkipping") :
+                            file.status === "skipped" ? t("sftp:zmodemSkipped") :
                             file.status === "completed" ? t("sftp:completed") :
                             file.status === "failed" ? t("sftp:failed") : t("sftp:cancelled")}</span>
+                          {batch.direction === "upload" && batch.status === "running" && file.status === "queued" && index > 0 &&
+                            <button type="button" aria-label={t("sftp:zmodemSkipFile", { name: file.name })}
+                              title={t("sftp:zmodemSkipFile", { name: file.name })}
+                              onClick={() => void api.SkipNativeZmodemPendingFile(batch.ref, batch.id, index).catch(onNotice)}>
+                              <X size={13}/>
+                            </button>}
                         </div>
                         <div className={"transfer-center-bar" + (filePercent == null && file.status === "running" ? " indeterminate" : "")}
                           role="progressbar" aria-valuemin={0} aria-valuemax={filePercent == null ? undefined : 100}
