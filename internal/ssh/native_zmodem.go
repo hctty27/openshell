@@ -21,6 +21,13 @@ const (
 	nativeZmodemMaxFileSize = (2 << 30) - 1
 )
 
+func nativeZmodemCheckFileSize(size int64) error {
+	if size < 0 || size > nativeZmodemMaxFileSize {
+		return errors.New("原生 ZMODEM 单文件最大支持 2 GiB 以下")
+	}
+	return nil
+}
+
 type NativeZmodemRequest struct {
 	Ref domain.ConnectionRef `json:"ref"`
 	Direction string `json:"direction"`
@@ -178,7 +185,7 @@ func nativeZmodemLocalPath(direction, localPath string) (string, error) {
 	switch direction {
 	case "upload":
 		if !info.Mode().IsRegular() { return "", errors.New("上传仅支持普通文件") }
-		if info.Size() > nativeZmodemMaxFileSize { return "", errors.New("原生 ZMODEM 单文件最大支持 2 GiB 以下") }
+		if err := nativeZmodemCheckFileSize(info.Size()); err != nil { return "", err }
 		if !utf8.ValidString(filepath.Base(absolute)) { return "", errors.New("文件名必须是 UTF-8") }
 	case "download":
 		if !info.IsDir() { return "", errors.New("下载目标必须是目录") }
