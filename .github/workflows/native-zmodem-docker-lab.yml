@@ -46,7 +46,7 @@ jobs:
           trap cleanup EXIT
           cp experiments/native-zmodem/docker-ssh-lab/* "$context/"
           # Reproduce a Windows CRLF checkout, independent of runner git settings.
-          python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); p.write_bytes(p.read_bytes().replace(b"\\r\\n", b"\\n").replace(b"\\n", b"\\r\\n"))' "$context/entrypoint.sh"
+          python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); data=p.read_bytes().replace(bytes([13,10]), bytes([10])).replace(bytes([10]), bytes([13,10])); p.write_bytes(data); assert bytes([13,10]) in data' "$context/entrypoint.sh"
           docker build -t openshell-zmodem-crlf-fixture:test "$context"
           docker run -d --name "$name" openshell-zmodem-crlf-fixture:test
           for i in $(seq 1 30); do
