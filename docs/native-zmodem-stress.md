@@ -50,6 +50,7 @@
 在 `tmp/native-zmodem-stress/` 生成一次运行对应的 `.json` 报告：
 
 - `profile`：运行场景。
+- `attempt`：本次轮次（或并发工作线程编号，从 0 开始）。
 - `protocol`：`native` 或 `sftp`，SFTP 仅作参考基线。
 - `direction`：`upload` / `download`。
 - `sizeBytes`：文件字节数。
