@@ -7,6 +7,7 @@ import (
     "crypto/ed25519"
     "crypto/rand"
     "errors"
+    "fmt"
     "os"
     "path/filepath"
     "strings"
@@ -156,12 +157,11 @@ func TestSFTPTransferDestinationIsReserved(t *testing.T) {
     if err:=os.WriteFile(src,[]byte("payload"),0600);err!=nil {t.Fatal(err)}
     dst:=filepath.Join(t.TempDir(),"target.txt")
 
-    // Saturate the two slots so the first job stays queued deterministically.
-    occupied:=make(chan struct{},2)
-    occupied<-struct{}{}
-    occupied<-struct{}{}
+    // Saturate the current three-slot limiter so the job remains queued.
+    occupied:=make(chan struct{},3)
+    for i:=0; i<3; i++ { occupied<-struct{}{} }
     manager.mu.Lock()
-    manager.slots[ref.SessionID]=occupied
+    manager.slots[fmt.Sprintf("%s:%s:%d",ref.TabID,ref.SessionID,ref.Generation)]=occupied
     manager.mu.Unlock()
 
     first,err:=manager.Start(ref,"upload",src,dst,false)
@@ -170,8 +170,7 @@ func TestSFTPTransferDestinationIsReserved(t *testing.T) {
         t.Fatal("duplicate destination was not rejected")
     }
     if err:=manager.Cancel(first.ID);err!=nil {t.Fatal(err)}
-    <-occupied
-    <-occupied
+    for i:=0; i<3; i++ { <-occupied }
     if result:=awaitTransfer(t,manager,first);result.Status!="cancelled" {
         t.Fatalf("queued job not cancelled: %+v",result)
     }
@@ -212,4 +211,63 @@ func TestSFTPLargeFileResumeAndAtomicPromotion(t *testing.T) {
  got,err=os.ReadFile(downloaded)
  if err!=nil || !bytes.Equal(got,content){t.Fatalf("downloaded file corrupted: %v",err)}
  if _,err:=os.Lstat(downloadPart);!errors.Is(err,os.ErrNotExist){t.Fatalf("download temporary file remains: %v",err)}
+}
+
+
+func TestSFTPBatchPreflightIsAtomicAndCancelIsScoped(t *testing.T) {
+    client := newFixture(t)
+    ref := domain.ConnectionRef{TabID:"batch-tab",SessionID:"batch-server",Generation:1}
+    wrong := domain.ConnectionRef{TabID:"other-tab",SessionID:"batch-server",Generation:1}
+    m := NewManager(func(domain.ConnectionRef) (*ssh.Client,error) { return client,nil },func(string,any){})
+    t.Cleanup(m.Close)
+    sourceDir := t.TempDir()
+    destinationDir := t.TempDir()
+    for _, name := range []string{"first.txt","second.txt","third.txt"} {
+        if err := os.WriteFile(filepath.Join(sourceDir,name), []byte(name), 0600); err != nil { t.Fatal(err) }
+    }
+    destination := filepath.Join(destinationDir,"first.txt")
+    conflict := []TransferRequest{
+        {Direction:"upload",Source:filepath.Join(sourceDir,"first.txt"),Destination:destination,Resume:true},
+        {Direction:"upload",Source:filepath.Join(sourceDir,"second.txt"),Destination:destination,Resume:true},
+    }
+    if _, err := m.StartBatch(ref,conflict); err == nil { t.Fatal("duplicate batch destination accepted") }
+    if got := m.Transfers(ref); len(got)!=0 { t.Fatalf("failed batch started tasks: %+v",got) }
+
+    occupied := make(chan struct{},3)
+    for i:=0;i<3;i++ { occupied<-struct{}{} }
+    key := fmt.Sprintf("%s:%s:%d",ref.TabID,ref.SessionID,ref.Generation)
+    m.mu.Lock()
+    m.slots[key]=occupied
+    m.mu.Unlock()
+    requests:=make([]TransferRequest,0,3)
+    for _,name:=range []string{"first.txt","second.txt","third.txt"} {
+        requests=append(requests,TransferRequest{Direction:"upload",Source:filepath.Join(sourceDir,name),
+            Destination:filepath.Join(destinationDir,name),Resume:true})
+    }
+    tasks,err:=m.StartBatch(ref,requests)
+    if err!=nil { t.Fatal(err) }
+    if len(tasks)!=3 || tasks[0].BatchID=="" { t.Fatalf("missing batch metadata: %+v",tasks) }
+    for _,task:=range tasks {
+        if task.BatchID!=tasks[0].BatchID || task.Status!="queued" { t.Fatalf("invalid batch task: %+v",task) }
+    }
+    if err:=m.CancelBatch(wrong,tasks[0].BatchID);!errors.Is(err,os.ErrNotExist) {
+        t.Fatalf("other connection cancelled batch: %v",err)
+    }
+    if err:=m.CancelBatch(ref,tasks[0].BatchID);err!=nil {t.Fatal(err)}
+    for i:=0;i<3;i++ { <-occupied }
+    for _,task:=range tasks {
+        if finished:=awaitTransfer(t,m,task);finished.Status!="cancelled" {
+            t.Fatalf("queued task was not cancelled: %+v",finished)
+        }
+    }
+}
+
+func TestSFTPConcurrencyLimitCanChangeForNewQueues(t *testing.T) {
+    m := NewManager(func(domain.ConnectionRef) (*ssh.Client,error){return nil,nil},func(string,any){})
+    defer m.Close()
+    if m.Concurrency()!=3 {t.Fatalf("default concurrency = %d",m.Concurrency())}
+    if err:=m.SetConcurrency(4);err!=nil {t.Fatal(err)}
+    if m.Concurrency()!=4 {t.Fatalf("new concurrency = %d",m.Concurrency())}
+    if err:=m.SetConcurrency(7);err==nil {t.Fatal("unsupported concurrency accepted")}
+    if m.Concurrency()!=4 {t.Fatal("invalid update changed the current limit")}
 }

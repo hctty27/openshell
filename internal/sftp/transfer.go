@@ -20,6 +20,7 @@ import (
 )
 type Task struct {
     ID string `json:"id"`
+    BatchID string `json:"batchId,omitempty"`
     Ref domain.ConnectionRef `json:"ref"`
     Direction string `json:"direction"`
     Source string `json:"source"`
@@ -44,42 +45,108 @@ type job struct {
 }
 var errSymlink = apperror.New("sftpTransferSymbolicLinksAreNotIncludedInTransfers",nil)
 
-func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination string, overwrite bool, resumeChoice ...bool) (Task, error) {
-    if direction != "upload" && direction != "download" { return Task{}, apperror.New("sftpTransferInvalidTransferDirection",nil) }
-    src, dst := "local", "remote"
-    if direction == "download" { src, dst = "remote", "local" }
-    if err := validate(src, source); err != nil { return Task{}, err }
-    if err := protectRoot(dst, destination); err != nil { return Task{}, err }
-    if _, err := m.lookup(ref); err != nil { return Task{}, err }
-    resume := true
-    if len(resumeChoice)>0 {resume=resumeChoice[0]}
-    ctx, cancel := context.WithCancel(context.Background())
-    task := Task{ID:domain.NewID(), Ref:ref, Direction:direction, Source:source,
-        Destination:destination, Name:filepath.Base(source), Overwrite:overwrite, Resume:resume, Status:"queued", Created:time.Now().UnixMilli()}
-    if direction == "download" { task.Name = path.Base(source) }
-    m.mu.Lock()
-    if m.closed { m.mu.Unlock(); cancel(); return Task{}, apperror.New("sftpTransferFileManagerClosed",nil) }
-    canonical := path.Clean(destination)
-    if dst == "local" { canonical = filepath.Clean(destination) }
-    reservation := ref.SessionID + "|" + direction + "|" + canonical
-    if _, busy := m.reserved[reservation]; busy {
-        m.mu.Unlock()
-        cancel()
-        return Task{}, apperror.New("sftpTransferAnotherTransferAlreadyTargetsThisPath",nil)
-    }
-    m.reserved[reservation] = struct{}{}
-    m.workers.Add(1)
-    slotKey := fmt.Sprintf("%s:%s:%d", ref.TabID, ref.SessionID, ref.Generation)
-    m.slotUsers[slotKey]++
-    slot := m.slots[slotKey]
-    if slot == nil { slot = make(chan struct{},3); m.slots[slotKey] = slot }
-    j := &job{task:task,ctx:ctx,cancel:cancel,slot:slot,slotKey:slotKey,reservation:reservation}
-    m.tasks[task.ID] = j
-    m.mu.Unlock()
-    m.emit("sftp:transfer", task)
-    go m.run(j)
-    return task,nil
+type TransferRequest struct {
+    Direction string `json:"direction"`
+    Source string `json:"source"`
+    Destination string `json:"destination"`
+    Overwrite bool `json:"overwrite"`
+    Resume bool `json:"resume"`
 }
+
+// Start preserves the existing one-file API. Single transfers are not
+// shown as a multi-file batch in the transfer center.
+func (m *Manager) Start(ref domain.ConnectionRef, direction, source, destination string, overwrite bool, resumeChoice ...bool) (Task, error) {
+    resume := true
+    if len(resumeChoice)>0 { resume=resumeChoice[0] }
+    tasks, err := m.StartBatch(ref, []TransferRequest{{
+        Direction: direction, Source: source, Destination: destination,
+        Overwrite: overwrite, Resume: resume,
+    }})
+    if err != nil { return Task{}, err }
+    return tasks[0], nil
+}
+
+// StartBatch validates every request and reserves all destinations before
+// starting any worker. A failed batch creates no partial transfer tasks.
+func (m *Manager) StartBatch(ref domain.ConnectionRef, requests []TransferRequest) ([]Task, error) {
+    if len(requests) == 0 || len(requests) > 4000 {
+        return nil, errors.New("SFTP 批次文件数量必须在 1–4000 之间")
+    }
+    if _, err := m.lookup(ref); err != nil { return nil, err }
+    type prepared struct {
+        task Task
+        reservation string
+    }
+    batchID := ""
+    if len(requests) > 1 { batchID = domain.NewID() }
+    ready := make([]prepared, 0, len(requests))
+    duplicates := make(map[string]struct{}, len(requests))
+    for _, request := range requests {
+        if request.Direction != "upload" && request.Direction != "download" {
+            return nil, apperror.New("sftpTransferInvalidTransferDirection", nil)
+        }
+        src, dst := "local", "remote"
+        if request.Direction == "download" { src, dst = "remote", "local" }
+        if err := validate(src, request.Source); err != nil { return nil, err }
+        if err := protectRoot(dst, request.Destination); err != nil { return nil, err }
+        canonical := path.Clean(request.Destination)
+        name := filepath.Base(request.Source)
+        if dst == "local" { canonical = filepath.Clean(request.Destination) }
+        if src == "remote" { name = path.Base(request.Source) }
+        reservation := ref.SessionID + "|" + request.Direction + "|" + canonical
+        if _, found := duplicates[reservation]; found {
+            return nil, apperror.New("sftpTransferAnotherTransferAlreadyTargetsThisPath", nil)
+        }
+        duplicates[reservation] = struct{}{}
+        ready = append(ready, prepared{
+            task: Task{
+                ID:domain.NewID(), BatchID:batchID, Ref:ref, Direction:request.Direction,
+                Source:request.Source, Destination:request.Destination, Name:name,
+                Overwrite:request.Overwrite, Resume:request.Resume,
+                Status:"queued", Created:time.Now().UnixMilli(),
+            },
+            reservation:reservation,
+        })
+    }
+
+    slotKey := fmt.Sprintf("%s:%s:%d", ref.TabID, ref.SessionID, ref.Generation)
+    m.mu.Lock()
+    if m.closed {
+        m.mu.Unlock()
+        return nil, apperror.New("sftpTransferFileManagerClosed", nil)
+    }
+    for _, item := range ready {
+        if _, busy := m.reserved[item.reservation]; busy {
+            m.mu.Unlock()
+            return nil, apperror.New("sftpTransferAnotherTransferAlreadyTargetsThisPath", nil)
+        }
+    }
+    slot := m.slots[slotKey]
+    if slot == nil {
+        slot = make(chan struct{}, m.maxConcurrent)
+        m.slots[slotKey] = slot
+    }
+    jobs := make([]*job, 0, len(ready))
+    tasks := make([]Task, 0, len(ready))
+    for _, item := range ready {
+        ctx, cancel := context.WithCancel(context.Background())
+        j := &job{
+            task:item.task, ctx:ctx, cancel:cancel, slot:slot,
+            slotKey:slotKey, reservation:item.reservation,
+        }
+        m.tasks[item.task.ID] = j
+        m.reserved[item.reservation] = struct{}{}
+        m.slotUsers[slotKey]++
+        m.workers.Add(1)
+        jobs = append(jobs, j)
+        tasks = append(tasks, item.task)
+    }
+    m.mu.Unlock()
+    for _, task := range tasks { m.emit("sftp:transfer", task) }
+    for _, j := range jobs { go m.run(j) }
+    return tasks, nil
+}
+
 func (m *Manager) Transfers(ref domain.ConnectionRef) []Task {
     m.mu.Lock()
     defer m.mu.Unlock()
@@ -123,6 +190,26 @@ func (m *Manager) Cancel(id string) error {
     j.cancel()
     return nil
 }
+// CancelBatch cancels only queued/running files belonging to this exact SSH
+// connection and batch, without touching completed files or other batches.
+func (m *Manager) CancelBatch(ref domain.ConnectionRef, batchID string) error {
+    if batchID == "" { return os.ErrNotExist }
+    m.mu.Lock()
+    found := false
+    var cancels []context.CancelFunc
+    for _, j := range m.tasks {
+        if j.task.Ref != ref || j.task.BatchID != batchID { continue }
+        found = true
+        if j.task.Status == "queued" || j.task.Status == "running" {
+            cancels = append(cancels, j.cancel)
+        }
+    }
+    m.mu.Unlock()
+    if !found { return os.ErrNotExist }
+    for _, cancel := range cancels { cancel() }
+    return nil
+}
+
 func (m *Manager) CancelConnection(ref domain.ConnectionRef) {
     m.invalidateRemoteClients(ref.TabID, &ref)
     m.mu.Lock()

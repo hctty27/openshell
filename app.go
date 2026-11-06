@@ -153,6 +153,11 @@ func newApp(path string, secrets domain.SecretStore, emit sshclient.EmitFunc) (*
 		a.ssh.ConfigureNativeZmodemAuto(sidecar)
 	}
 	a.sftp = files.NewManager(a.ssh.Client, func(name string, payload any) { a.emit(name, payload) })
+    if saved, getErr := db.GetPreference(a.ctx, "sftpMaxConcurrent"); getErr == nil {
+        if n, parseErr := strconv.Atoi(saved); parseErr == nil {
+            _ = a.sftp.SetConcurrency(n)
+        }
+    }
 	a.nativeZmodem = sshclient.NewNativeZmodemManager(a.ssh, func(name string, payload any) { a.emit(name, payload) }, sidecar)
 	return a, nil
 }
@@ -743,6 +748,26 @@ func (a *App) SFTPOperate(ref domain.ConnectionRef, side, operation, source, arg
 }
 func (a *App) SFTPTransfer(ref domain.ConnectionRef, direction, source, destination string, overwrite, resume bool) (files.Task, error) {
  return a.sftp.Start(ref, direction, source, destination, overwrite, resume)
+}
+func (a *App) SFTPStartBatch(ref domain.ConnectionRef, requests []files.TransferRequest) ([]files.Task, error) {
+    return a.sftp.StartBatch(ref, requests)
+}
+func (a *App) SFTPConcurrency() int {
+    return a.sftp.Concurrency()
+}
+func (a *App) SetSFTPConcurrency(value int) error {
+    switch value {
+    case 1, 2, 3, 4, 6:
+    default:
+        return apperror.New("unsupportedPreference", nil)
+    }
+    if err := a.store.SetPreference(a.ctx, "sftpMaxConcurrent", strconv.Itoa(value)); err != nil {
+        return err
+    }
+    return a.sftp.SetConcurrency(value)
+}
+func (a *App) SFTPCancelBatch(ref domain.ConnectionRef, batchID string) error {
+    return a.sftp.CancelBatch(ref, batchID)
 }
 func (a *App) SFTPTransfers(ref domain.ConnectionRef) []files.Task {
  return a.sftp.Transfers(ref)
