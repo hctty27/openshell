@@ -221,9 +221,10 @@ fn receive(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 let suffix = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
                 let temp = dir.join(format!(".openshell-zmodem-{}-{suffix}.part", std::process::id()));
                 let file = OpenOptions::new().write(true).create_new(true).open(&temp)?;
-                received_total = info.size.map_or(0, |size| u64::from(size.get()));
+                let advertised = info.size.map(|size| size.get());
+                received_total = advertised.map_or(0, u64::from);
                 report_progress(0, received_total, &mut progress_at, true);
-                open_file = Some((file, temp, target, 0, info.size.map(|size| size.get())));
+                open_file = Some((file, temp, target, 0, advertised));
             }
             Action::Event(Event::FileCompleted) => {
                 let (mut file, temp, target, size, advertised) =
