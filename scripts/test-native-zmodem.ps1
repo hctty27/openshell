@@ -340,6 +340,25 @@ try {
         Write-Host "PASS: batch matrix JSON written to $matrixFile"
     }
 
+    if ($StressLargeAB) {
+        if ($StressReportDir -eq "") {
+            $StressReportDir = Join-Path $repoRoot 'tmp/native-zmodem-stress'
+        }
+        $largeDir = [IO.Path]::GetFullPath($StressReportDir)
+        [void][IO.Directory]::CreateDirectory($largeDir)
+        $largeFile = Join-Path $largeDir "native-zmodem-large-ab-$(Get-Date -Format 'yyyyMMdd-HHmmss')-$unique.json"
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_LARGE_AB", "1", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_LARGE_AB_ROUNDS", "$StressLargeABRounds", "Process")
+        [Environment]::SetEnvironmentVariable("OPENSHELL_ZMODEM_LARGE_AB_REPORT", $largeFile, "Process")
+
+        Write-Host "[large AB] 128 MiB 0/16/32 KiB, $StressLargeABRounds rounds"
+        Invoke-NativeZmodemGoTest -Pattern '^TestNativeZmodemLargeABInteractivePTY$' -Name 'large-ab' -LogDirectory $diagnosticsDir -Timeout '60m' -CaptureProfile:$StressDiagnostics
+        if (-not (Test-Path -LiteralPath $largeFile -PathType Leaf)) {
+            throw "Large-file A/B report missing: $largeFile"
+        }
+        Write-Host "PASS: large A/B report written to $largeFile"
+    }
+
     Write-Host "PASS: native Windows sidecar and real Linux OpenSSH/SFTP ZMODEM tests"
 }
 catch {
