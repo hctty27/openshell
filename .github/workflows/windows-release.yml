@@ -198,8 +198,8 @@ jobs:
         run: |
           Push-Location experiments/native-zmodem
           try {
-            cargo generate-lockfile
-            if ($LASTEXITCODE -ne 0) { throw "Rust lock resolution failed" }
+            cargo metadata --locked --format-version 1 --no-deps | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Tracked Rust lockfile is missing or inconsistent" }
             cargo test --locked --bin zmodem-sidecar
             if ($LASTEXITCODE -ne 0) { throw "Rust ZMODEM protocol tests failed" }
             cargo build --locked --release --bin zmodem-sidecar

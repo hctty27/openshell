@@ -49,8 +49,8 @@ jobs:
         shell: pwsh
         working-directory: experiments/native-zmodem
         run: |
-          cargo generate-lockfile
-          if ($LASTEXITCODE -ne 0) { throw 'Cargo lock generation failed' }
+          cargo metadata --locked --format-version 1 --no-deps | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Tracked Cargo.lock is missing or inconsistent' }
           cargo test --locked --bin zmodem-sidecar
           if ($LASTEXITCODE -ne 0) { throw 'Windows sidecar unit tests failed' }
           cargo build --locked --release --bin zmodem-sidecar

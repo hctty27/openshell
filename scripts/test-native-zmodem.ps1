@@ -168,12 +168,9 @@ try {
     Write-Host "[1/5] Build native Windows Rust sidecar"
     Push-Location (Join-Path $repoRoot "experiments\native-zmodem")
     try {
-        # Reuse the local dependency lock on repeat runs instead of updating
-        # the crates.io index every time the integration suite starts.
-        if (-not (Test-Path -LiteralPath "Cargo.lock" -PathType Leaf)) {
-            & cargo generate-lockfile
-            if ($LASTEXITCODE -ne 0) { throw "cargo generate-lockfile failed" }
-        }
+        # Keep local interoperability tests on the same committed dependency set as CI.
+        & cargo metadata --locked --format-version 1 --no-deps | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Tracked Cargo.lock is missing or inconsistent" }
         & cargo test --locked --bin zmodem-sidecar
         if ($LASTEXITCODE -ne 0) { throw "Rust sidecar unit tests failed" }
         & cargo build --locked --release --bin zmodem-sidecar
