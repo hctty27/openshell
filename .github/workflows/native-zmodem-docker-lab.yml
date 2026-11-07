@@ -10,6 +10,11 @@ on:
       - "scripts/test-native-zmodem-batch-matrix.ps1"
       - "scripts/test-native-zmodem-large-ab.ps1"
       - "scripts/test-native-zmodem-netem.ps1"
+      - "scripts/verify_native_zmodem_metadata.ps1"
+      - "scripts/verify_native_zmodem_signatures.ps1"
+      - "scripts/verify_windows_signature.ps1"
+      - "scripts/test_native_zmodem_installer_upgrade.ps1"
+      - "scripts/prepare_native_zmodem_windows.ps1"
       - ".gitattributes"
       - ".github/workflows/native-zmodem-docker-lab.yml"
   push:
@@ -21,6 +26,11 @@ on:
       - "scripts/test-native-zmodem-batch-matrix.ps1"
       - "scripts/test-native-zmodem-large-ab.ps1"
       - "scripts/test-native-zmodem-netem.ps1"
+      - "scripts/verify_native_zmodem_metadata.ps1"
+      - "scripts/verify_native_zmodem_signatures.ps1"
+      - "scripts/verify_windows_signature.ps1"
+      - "scripts/test_native_zmodem_installer_upgrade.ps1"
+      - "scripts/prepare_native_zmodem_windows.ps1"
       - ".gitattributes"
       - ".github/workflows/native-zmodem-docker-lab.yml"
   workflow_dispatch:
@@ -141,7 +151,18 @@ jobs:
         run: |
           $tokens = $null
           $errors = $null
-          foreach ($file in @('scripts/test-native-zmodem.ps1', 'scripts/test-native-zmodem-stress.ps1', 'scripts/test-native-zmodem-batch-matrix.ps1', 'scripts/test-native-zmodem-large-ab.ps1', 'scripts/test-native-zmodem-netem.ps1')) {
+          foreach ($file in @(
+            'scripts/test-native-zmodem.ps1',
+            'scripts/test-native-zmodem-stress.ps1',
+            'scripts/test-native-zmodem-batch-matrix.ps1',
+            'scripts/test-native-zmodem-large-ab.ps1',
+            'scripts/test-native-zmodem-netem.ps1',
+            'scripts/verify_native_zmodem_metadata.ps1',
+            'scripts/verify_native_zmodem_signatures.ps1',
+            'scripts/verify_windows_signature.ps1',
+            'scripts/test_native_zmodem_installer_upgrade.ps1',
+            'scripts/prepare_native_zmodem_windows.ps1'
+          )) {
             $tokens = $null
             $errors = $null
             $script = (Resolve-Path $file).Path

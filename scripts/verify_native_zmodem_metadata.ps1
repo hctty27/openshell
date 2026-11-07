@@ -12,7 +12,7 @@ foreach ($name in @("rz.exe", "sz.exe", "native/zmodem-sidecar.exe")) {
     }
     $info = (Get-Item -LiteralPath $path).VersionInfo
     if ($info.ProductName -ne "OpenShell" -or $info.ProductVersion -ne $Version) {
-        throw "Invalid native helper product metadata for $name: name=$($info.ProductName), version=$($info.ProductVersion), expected OpenShell $Version"
+        throw "Invalid native helper product metadata for ${name}: name=$($info.ProductName), version=$($info.ProductVersion), expected OpenShell $Version"
     }
     Write-Host "PASS: $name product metadata = OpenShell $Version"
 }
