@@ -48,7 +48,7 @@ concurrency:
 jobs:
   windows-x64:
     runs-on: windows-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     permissions:
       contents: write
       actions: read
@@ -62,6 +62,7 @@ jobs:
       SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG || 'openshell' }}
       SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
       SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG || 'initial' }}
+      SIGNPATH_NATIVE_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_NATIVE_ARTIFACT_CONFIGURATION_SLUG || 'native-helpers' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -226,6 +227,60 @@ jobs:
           python scripts/verify_windows_icons.py --icon build/windows/icon.ico --exe build/bin/OpenShell.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Stage first-party ZMODEM helpers for SignPath
+        if: env.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $source = "build/bin/zmodem"
+          $stage = "build/signing-native-helpers"
+          New-Item -ItemType Directory -Path (Join-Path $stage "native") -Force | Out-Null
+          foreach ($name in @("rz.exe", "sz.exe", "native/zmodem-sidecar.exe")) {
+            $from = Join-Path $source $name
+            if (!(Test-Path -LiteralPath $from -PathType Leaf)) { throw "Missing unsigned native helper: $name" }
+            $to = Join-Path $stage $name
+            Copy-Item -LiteralPath $from -Destination $to -Force
+          }
+          ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir $source
+
+      - name: Upload unsigned native ZMODEM helpers for SignPath
+        id: upload-unsigned-native-helpers
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: OpenShell-unsigned-native-helpers-${{ github.run_id }}
+          path: build/signing-native-helpers/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign first-party native ZMODEM helpers with SignPath
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ env.SIGNPATH_NATIVE_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned-native-helpers.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: build/signed-native-helpers
+
+      - name: Replace native ZMODEM helpers with signed files
+        if: env.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $signedRoot = (Resolve-Path "build/signed-native-helpers").Path
+          $destination = (Resolve-Path "build/bin/zmodem").Path
+          ./scripts/verify_native_zmodem_signatures.ps1 -TargetDir $signedRoot -Version $env:APP_VERSION
+          foreach ($name in @("rz.exe", "sz.exe", "native/zmodem-sidecar.exe")) {
+            Copy-Item -LiteralPath (Join-Path $signedRoot $name) -Destination (Join-Path $destination $name) -Force
+          }
+          python scripts/generate_native_zmodem_manifest.py --target $destination
+          if ($LASTEXITCODE -ne 0) { throw "Unable to regenerate signed native ZMODEM checksums" }
+          ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir $destination
+          ./scripts/verify_native_zmodem_signatures.ps1 -TargetDir $destination -Version $env:APP_VERSION
+
       - name: Upload unsigned EXE for SignPath
         id: upload-unsigned-exe
         if: env.SIGNPATH_ENABLED == 'true'
@@ -278,6 +333,22 @@ jobs:
           Compress-Archive -Path (Join-Path $staging "*") -DestinationPath "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" -Force
           Remove-Item $staging -Recurse -Force
           Remove-Item $portable
+
+      - name: Verify signed portable ZIP contents
+        if: env.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $zip = "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip"
+          $verifyRoot = Join-Path $env:RUNNER_TEMP "openshell-signed-portable-check"
+          if (Test-Path -LiteralPath $verifyRoot) { Remove-Item -LiteralPath $verifyRoot -Recurse -Force }
+          try {
+            Expand-Archive -LiteralPath $zip -DestinationPath $verifyRoot -Force
+            ./scripts/verify_windows_signature.ps1 -Path (Join-Path $verifyRoot "OpenShell-v$env:APP_VERSION.exe") -Version $env:APP_VERSION
+            ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir (Join-Path $verifyRoot "zmodem")
+            ./scripts/verify_native_zmodem_signatures.ps1 -TargetDir (Join-Path $verifyRoot "zmodem") -Version $env:APP_VERSION
+          } finally {
+            if (Test-Path -LiteralPath $verifyRoot) { Remove-Item -LiteralPath $verifyRoot -Recurse -Force }
+          }
 
       - name: Ensure NSIS is installed
         shell: pwsh

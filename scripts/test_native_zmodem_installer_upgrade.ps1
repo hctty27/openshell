@@ -38,6 +38,7 @@ try {
     }
     if ($VerifySigned) {
         ./scripts/verify_windows_signature.ps1 -Path (Join-Path $installation "OpenShell.exe") -Version $Version
+        ./scripts/verify_native_zmodem_signatures.ps1 -TargetDir (Join-Path $installation "zmodem") -Version $Version
     }
     Write-Host "PASS: Native Rust-only NSIS upgrade removed all old ZMODEM helpers"
 } finally {
