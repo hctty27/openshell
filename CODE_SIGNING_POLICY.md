@@ -13,10 +13,10 @@ Free code signing provided by [SignPath.io](https://about.signpath.io/), certifi
 
 ## Scope: what may be signed
 
-- Only OpenShell's own release binaries produced from the reviewed repository: the Wails-generated `OpenShell.exe` and the NSIS `OpenShell-vX.Y.Z-windows-x64-Setup.exe`.
-- The portable ZIP is an archive containing OpenShell's executable and third-party ZMODEM helpers; it is **not itself Authenticode-signed**.
-- Current Windows packages contain locally built first-party `zmodem/rz.exe`, `zmodem/sz.exe`, and `zmodem/native/zmodem-sidecar.exe`. **These three helpers are not signed by the current workflow.** Their Go/Rust dependencies must still satisfy their own license conditions. Historical lrzsz-win32 and MSYS2 binaries are no longer shipped in the native-only package. See [third-party review](docs/third-party-review.md).
-- All signed PE files must carry matching `OpenShell` product name and build version metadata, enforced in the SignPath artifact configuration.
+- Only OpenShell's own release binaries produced from reviewed source: Wails `OpenShell.exe`, NSIS `OpenShell-vX.Y.Z-windows-x64-Setup.exe`, and the first-party Go/Rust ZMODEM executables `zmodem/rz.exe`, `zmodem/sz.exe`, and `zmodem/native/zmodem-sidecar.exe`.
+- The portable ZIP is an archive of the app and first-party ZMODEM helpers; the ZIP container itself is **not Authenticode-signed**. When release signing is active, all four contained EXEs are verified before publication.
+- Native ZMODEM helpers are built in OpenShell's workflow, not downloaded third-party EXEs. A dedicated SignPath configuration signs exactly those three binaries, before creating the ZIP/installer. Their Go/Rust dependencies remain subject to license obligations. Historical lrzsz-win32 and MSYS2 binaries are no longer shipped. See [third-party review](docs/third-party-review.md).
+- The Wails EXE and NSIS installer must carry the expected `OpenShell` product name and release version, enforced by `initial.xml`. The Go/Rust helper executables currently lack the same Wails/NSIS version-resource metadata; `native-helpers.xml` instead constrains exact archive paths and verifies the SignPath Foundation publisher, timestamp and resulting release manifest hashes.
 
 ## Team roles
 
@@ -33,12 +33,12 @@ Any additional maintainer must be listed here before being granted signing autho
 1. Build only from a reviewed immutable commit on `main` using GitHub-hosted Actions; CI must pass before public packaging.
 2. Configure SignPath's **trusted GitHub build system** and **origin verification** for `https://github.com/hctty27/openshell`. Restrict release signing to the intended branch and project.
 3. Require **manual approval for every release signing request** in the SignPath `release-signing` policy. A successful CI run is not signing approval.
-4. Submit separate first-party OpenShell executable and installer artifacts from the workflow to SignPath; do not re-sign third-party programs.
-5. Enforce product name and product version in the SignPath artifact configuration; verify the signed `OpenShell.exe` and NSIS installer have a valid Authenticode signature, expected certificate publisher, and valid timestamp before publishing them as signed.
+4. Submit three signing requests: one exact-path ZIP containing the three first-party ZMODEM helpers, one for `OpenShell.exe`, and one for the NSIS installer. Never sign upstream third-party programs with the OpenShell certificate.
+5. Enforce product name and version for OpenShell/NSIS; verify all five signed executable files (three helpers, app, installer) have valid Authenticode signatures, the expected certificate publisher and timestamps. Regenerate the native helper SHA-256 manifest **after** signing and validate signed ZIP and installed NSIS payloads.
 6. Only release builds from `main` can request SignPath signatures; pull-request and dry-run builds never submit signing requests. When `SIGNPATH_REQUIRED=true` is configured after approval, an absent token or missing organization ID fails a release instead of silently publishing unsigned artifacts.
 7. Never replace published release binaries without creating a new release; publish the source commit, version, and truthful signing status. A signing failure must not be described as a signed release.
 
-The GitHub Actions workflow implements conditional SignPath requests. Until the maintainer explicitly sets `SIGNPATH_REQUIRED=true`, it permits unsigned releases when the signing token is absent. The required SignPath account, Foundation approval, trusted-build policy, per-request manual approvals and uploaded artifact configuration must be confirmed outside this repository before enabling signing. The current SignPath configuration requires exactly one top-level OpenShell executable or installer per request.
+The GitHub Actions workflow implements conditional SignPath requests. Until the maintainer explicitly sets `SIGNPATH_REQUIRED=true`, it permits unsigned releases when the signing token is absent. The required SignPath account, Foundation approval, trusted-build policy, per-request manual approvals and uploaded artifact configuration must be confirmed outside this repository before enabling signing. The `initial.xml` configuration requires exactly one top-level OpenShell executable or installer per request. The separate `native-helpers.xml` configuration requires exactly the three first-party ZMODEM helpers at fixed paths. Both XML configurations must be uploaded to the SignPath portal before enabling a signed release.
 
 ## Privacy, installation and reporting
 
@@ -58,7 +58,7 @@ The GitHub Actions workflow implements conditional SignPath requests. Until the 
 
 原始 `v1.0.0` Windows 正式版**未签名**；后续各版本以 GitHub Release 说明和实际 Authenticode 验证为准。SignPath Foundation 是否批准仍未确认，本政策不代表已经取得证书。
 
-- 当前只对 OpenShell 自己构建的 `OpenShell.exe` 和 NSIS 安装包申请签名。Rust 原生 ZMODEM sidecar 与自研 `rz/sz` 启动器也是项目构建产物，但暂未纳入签名范围；旧版第三方 MSYS2/lrzsz 二进制不再随当前 Windows 包分发。
+- 代码工作流已扩展到 OpenShell 主程序、NSIS 安装包和三个自建 ZMODEM 辅助 EXE；签名前先检查三个辅助文件的固定路径，签名后重算 SHA-256，再验证安装版和便携版内的签名。旧版第三方 MSYS2/lrzsz 不在签名范围且不再随包分发。
 - 仓库维护者、外部贡献审核者、签名审批者目前均为 [@hctty27](https://github.com/hctty27)，需要自行确认已开启 GitHub 和 SignPath MFA。
 - 每次正式版签名需要由审批者在 SignPath **人工批准**，并验证来源、版本元数据和签名。
 - 用户数据行为见 [隐私政策](PRIVACY.md)，第三方授权待核事项见 [审查记录](docs/third-party-review.md)。

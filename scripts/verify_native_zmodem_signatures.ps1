@@ -14,8 +14,9 @@ $expected = @("rz.exe", "sz.exe", "native/zmodem-sidecar.exe")
 $files = @(Get-ChildItem -LiteralPath $root -File -Recurse | ForEach-Object {
     $_.FullName.Substring($root.TrimEnd('\', '/').Length + 1).Replace('\', '/')
 })
-if ($files.Count -ne $expected.Count -or
-    @($files | Where-Object { $_ -notin $expected }).Count -gt 0) {
+$allowed = @($expected) + @("BUNDLED_COMPONENTS.json")
+if ($files.Count -lt $expected.Count -or $files.Count -gt $allowed.Count -or
+    @($files | Where-Object { $_ -notin $allowed }).Count -gt 0) {
     throw "Signed ZMODEM helper set differs from expected files: $($files -join ', ')"
 }
 
