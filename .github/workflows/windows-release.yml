@@ -48,7 +48,7 @@ concurrency:
 jobs:
   windows-x64:
     runs-on: windows-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     permissions:
       contents: write
       actions: read
@@ -62,6 +62,7 @@ jobs:
       SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG || 'openshell' }}
       SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
       SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG || 'initial' }}
+      SIGNPATH_NATIVE_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_NATIVE_ARTIFACT_CONFIGURATION_SLUG || 'native-helpers' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -88,7 +89,9 @@ jobs:
           "VITE_APP_VERSION=$version" >> $env:GITHUB_ENV
           $info = Get-Content "build/windows/info.json" -Raw | ConvertFrom-Json
           $info.fixed.file_version = $version
-          $info.info.'0000'.ProductVersion = $version
+          $info.fixed.product_version = $version
+          $info.info.'0409'.ProductVersion = $version
+          $info.info.'0409'.FileVersion = $version
           $info | ConvertTo-Json -Depth 20 | Set-Content "build/windows/info.json" -Encoding utf8
       # Avoid extracting the large compiled Go build cache on Windows runners.
       - uses: actions/setup-go@v7
@@ -190,16 +193,22 @@ jobs:
           go build -mod=readonly -tags production -trimpath -ldflags "-H windowsgui -s -w -X github.com/hctty27/openshell/internal/branding.Version=$env:APP_VERSION" -o build/bin/OpenShell.exe .
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path "build/bin/OpenShell.exe")) { throw "OpenShell.exe was not generated" }
+          $metadata = (Get-Item -LiteralPath "build/bin/OpenShell.exe").VersionInfo
+          Write-Host "Built OpenShell PE metadata: ProductName=$($metadata.ProductName); ProductVersion=$($metadata.ProductVersion)"
+          if ($metadata.ProductName -ne "OpenShell" -or $metadata.ProductVersion -ne $env:APP_VERSION) {
+            throw "Main OpenShell.exe has invalid Windows version metadata"
+          }
           python scripts/verify_windows_gui_subsystem.py build/bin/OpenShell.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build native Rust ZMODEM sidecar
         shell: pwsh
         run: |
+          $env:OPENSHELL_APP_VERSION = $env:APP_VERSION
           Push-Location experiments/native-zmodem
           try {
-            cargo generate-lockfile
-            if ($LASTEXITCODE -ne 0) { throw "Rust lock resolution failed" }
+            cargo metadata --locked --format-version 1 --no-deps | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Tracked Rust lockfile is missing or inconsistent" }
             cargo test --locked --bin zmodem-sidecar
             if ($LASTEXITCODE -ne 0) { throw "Rust ZMODEM protocol tests failed" }
             cargo build --locked --release --bin zmodem-sidecar
@@ -213,6 +222,11 @@ jobs:
           $env:PYTHONIOENCODING = "utf-8"
           python experiments/native-zmodem/tests/interop_native_helpers.py "experiments/native-zmodem/target/release/zmodem-sidecar.exe" "build/bin/zmodem"
           if ($LASTEXITCODE -ne 0) { throw "Rust-only rz/sz wrapper interoperability failed" }
+      - name: Verify native helper product metadata
+        shell: pwsh
+        run: |
+          ./scripts/verify_native_zmodem_metadata.ps1 -TargetDir build/bin/zmodem -Version $env:APP_VERSION
+
       - name: Generate and verify native-only bundle manifest
         shell: pwsh
         run: |
@@ -225,6 +239,62 @@ jobs:
         run: |
           python scripts/verify_windows_icons.py --icon build/windows/icon.ico --exe build/bin/OpenShell.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Stage first-party ZMODEM helpers for SignPath
+        if: env.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $source = "build/bin/zmodem"
+          $stage = "build/signing-native-helpers"
+          New-Item -ItemType Directory -Path (Join-Path $stage "native") -Force | Out-Null
+          foreach ($name in @("rz.exe", "sz.exe", "native/zmodem-sidecar.exe")) {
+            $from = Join-Path $source $name
+            if (!(Test-Path -LiteralPath $from -PathType Leaf)) { throw "Missing unsigned native helper: $name" }
+            $to = Join-Path $stage $name
+            Copy-Item -LiteralPath $from -Destination $to -Force
+          }
+          ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir $source
+
+      - name: Upload unsigned native ZMODEM helpers for SignPath
+        id: upload-unsigned-native-helpers
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: OpenShell-unsigned-native-helpers-${{ github.run_id }}
+          path: build/signing-native-helpers/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign first-party native ZMODEM helpers with SignPath
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ env.SIGNPATH_NATIVE_ARTIFACT_CONFIGURATION_SLUG }}
+          parameters: |
+            version: "${{ env.APP_VERSION }}"
+          github-artifact-id: ${{ steps.upload-unsigned-native-helpers.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: build/signed-native-helpers
+
+      - name: Replace native ZMODEM helpers with signed files
+        if: env.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $signedRoot = (Resolve-Path "build/signed-native-helpers").Path
+          $destination = (Resolve-Path "build/bin/zmodem").Path
+          ./scripts/verify_native_zmodem_signatures.ps1 -TargetDir $signedRoot -Version $env:APP_VERSION
+          foreach ($name in @("rz.exe", "sz.exe", "native/zmodem-sidecar.exe")) {
+            Copy-Item -LiteralPath (Join-Path $signedRoot $name) -Destination (Join-Path $destination $name) -Force
+          }
+          python scripts/generate_native_zmodem_manifest.py --target $destination
+          if ($LASTEXITCODE -ne 0) { throw "Unable to regenerate signed native ZMODEM checksums" }
+          ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir $destination
+          ./scripts/verify_native_zmodem_signatures.ps1 -TargetDir $destination -Version $env:APP_VERSION
 
       - name: Upload unsigned EXE for SignPath
         id: upload-unsigned-exe
@@ -278,6 +348,22 @@ jobs:
           Compress-Archive -Path (Join-Path $staging "*") -DestinationPath "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip" -Force
           Remove-Item $staging -Recurse -Force
           Remove-Item $portable
+
+      - name: Verify signed portable ZIP contents
+        if: env.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $zip = "dist/OpenShell-v$env:APP_VERSION-windows-x64-portable.zip"
+          $verifyRoot = Join-Path $env:RUNNER_TEMP "openshell-signed-portable-check"
+          if (Test-Path -LiteralPath $verifyRoot) { Remove-Item -LiteralPath $verifyRoot -Recurse -Force }
+          try {
+            Expand-Archive -LiteralPath $zip -DestinationPath $verifyRoot -Force
+            ./scripts/verify_windows_signature.ps1 -Path (Join-Path $verifyRoot "OpenShell-v$env:APP_VERSION.exe") -Version $env:APP_VERSION
+            ./scripts/verify_native_only_zmodem_windows.ps1 -TargetDir (Join-Path $verifyRoot "zmodem")
+            ./scripts/verify_native_zmodem_signatures.ps1 -TargetDir (Join-Path $verifyRoot "zmodem") -Version $env:APP_VERSION
+          } finally {
+            if (Test-Path -LiteralPath $verifyRoot) { Remove-Item -LiteralPath $verifyRoot -Recurse -Force }
+          }
 
       - name: Ensure NSIS is installed
         shell: pwsh

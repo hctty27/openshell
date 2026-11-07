@@ -101,7 +101,9 @@ def main() -> None:
     info = ROOT / "build/windows/info.json"
     metadata = json.loads(info.read_text(encoding="utf-8"))
     metadata["fixed"]["file_version"] = version
-    metadata["info"]["0000"]["ProductVersion"] = version
+    metadata["fixed"]["product_version"] = version
+    metadata["info"]["0409"]["ProductVersion"] = version
+    metadata["info"]["0409"]["FileVersion"] = version
     info.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Prepared OpenShell v{version}")
 

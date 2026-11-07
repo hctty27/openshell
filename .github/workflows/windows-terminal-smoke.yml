@@ -153,8 +153,8 @@ jobs:
         run: |
           Push-Location experiments/native-zmodem
           try {
-            cargo generate-lockfile
-            if ($LASTEXITCODE -ne 0) { throw "Cargo lock resolution failed" }
+            cargo metadata --locked --format-version 1 --no-deps | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Tracked Cargo.lock is missing or inconsistent" }
             cargo build --locked --release --bin zmodem-sidecar
             if ($LASTEXITCODE -ne 0) { throw "Native Rust sidecar build failed" }
           } finally { Pop-Location }

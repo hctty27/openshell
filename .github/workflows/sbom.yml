@@ -83,6 +83,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cargo metadata --locked --format-version 1 --no-deps --manifest-path experiments/native-zmodem/Cargo.toml >/dev/null
           cargo install cargo-cyclonedx --version 0.5.9 --locked
           cargo cyclonedx --manifest-path experiments/native-zmodem/Cargo.toml --format json --target x86_64-pc-windows-msvc --spec-version 1.5 --override-filename rust-zmodem.cdx.json
           # cargo-cyclonedx may write relative to the current directory, not the manifest path.

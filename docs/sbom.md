@@ -15,7 +15,7 @@ GitHub Actions workflow: [Generate third-party SBOM](../.github/workflows/sbom.y
 | `license-review.json` | Count of components lacking explicit or evidence-only license metadata, with names, versions and package URLs |
 
 - These files are **workflow artifacts**, retained for 30 days; they are not automatically published as long-term GitHub Release assets.
-- The native Rust ZMODEM dependency SBOM is generated from `experiments/native-zmodem/Cargo.toml` for the Windows x64 target. It lists dependency licenses but does **not** by itself prove that Rust redistribution conditions are satisfied.
+- The native Rust ZMODEM dependency SBOM is generated from `experiments/native-zmodem/Cargo.toml` with the committed `experiments/native-zmodem/Cargo.lock` for the Windows x64 target, including pinned Windows version resource tool `winres` 0.1.12. Cargo validates `--locked` before inventory generation. It lists dependency licenses but does **not** by itself prove that Rust redistribution conditions are satisfied.
 - The Go SBOM reflects cross-platform module resolution for `GOOS=windows`, `GOARCH=amd64`, `CGO_ENABLED=0`, `GOFLAGS=-tags=production`. It does not independently attest to a compiled EXE's bytes, nor to the upstream ZMODEM helpers.
 - Tool-detected license names are candidates for review rather than completed legal determinations. Components with missing license metadata are left visible in `license-review.json`, not silently approved.
 - To reproduce, run the workflow manually or execute its pinned Go CLI and the npm commands with the project's current locked dependencies.
@@ -26,7 +26,7 @@ The current Windows release packaging bundles exactly three ZMODEM executables: 
 
 `scripts/prepare_native_zmodem_windows.ps1` clears the release staging folder, builds the two launchers and copies the verified Rust sidecar. `scripts/generate_native_zmodem_manifest.py` records SHA-256, origin and size of the three binaries in `zmodem/BUNDLED_COMPONENTS.json`. `scripts/verify_native_only_zmodem_windows.ps1` rejects any unexpected files, including old DLLs/source archives. The installer removes old `zmodem` helpers during an upgrade.
 
-The manifest is a file inventory, **not** a comprehensive Rust/Go/npm license clearance. Those dependencies still require their own review.
+When SignPath release signing is enabled, the three first-party helpers are signed **before** packaging. The SHA-256 manifest is then regenerated against the signed bytes so both the portable ZIP and installer carry consistent hashes. The manifest is a file inventory, **not** a comprehensive Rust/Go/npm license clearance. Those dependencies still require their own review.
 
 ## Historical ZMODEM components (previous MSYS2/lrzsz releases)
 

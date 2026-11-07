@@ -7,3 +7,6 @@ license = "MIT"
 
 [dependencies]
 zmodem2 = "=0.7.3"
+
+[build-dependencies]
+winres = "=0.1.12"

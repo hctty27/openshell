@@ -1,7 +1,8 @@
 #Requires -Version 5.1
 param(
     [Parameter(Mandatory = $true)][string]$Path,
-    [Parameter(Mandatory = $true)][string]$Version
+    [Parameter(Mandatory = $true)][string]$Version,
+    [switch]$NativeHelper
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,6 +25,9 @@ if ($publisher -ne "SignPath Foundation") {
 }
 
 $metadata = (Get-Item -LiteralPath $fullPath).VersionInfo
+if ($NativeHelper -and [IO.Path]::GetFileName($fullPath) -notin @("rz.exe", "sz.exe", "zmodem-sidecar.exe")) {
+    throw "Unexpected first-party ZMODEM helper: $fullPath"
+}
 if ($metadata.ProductName -ne "OpenShell" -or $metadata.ProductVersion -ne $Version) {
     throw "Invalid product metadata for $($fullPath): name=$($metadata.ProductName), version=$($metadata.ProductVersion), expected=$Version"
 }
