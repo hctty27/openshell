@@ -1,0 +1,29 @@
+name: Bootstrap Rust lockfile (temporary)
+
+on:
+  push:
+    branches:
+      - chore/rust-lock-and-zmodem-signing-20261107
+    paths:
+      - .github/workflows/rust-lock-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Refresh and validate lockfile for Windows version-resource build dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile --manifest-path experiments/native-zmodem/Cargo.toml
+          cargo metadata --locked --format-version 1 --no-deps --manifest-path experiments/native-zmodem/Cargo.toml >/dev/null
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f experiments/native-zmodem/Cargo.lock
+          git commit -m 'build(rust): lock WinRes resource compiler dependencies'
+          git push origin HEAD:refs/heads/chore/rust-lock-and-zmodem-signing-20261107
