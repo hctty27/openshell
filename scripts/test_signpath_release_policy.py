@@ -48,6 +48,14 @@ class SignPathReleasePolicyTests(unittest.TestCase):
         self.assertEqual(workflow.count("signpath/github-action-submit-signing-request@v3"), 3)
         self.assertNotIn("signpath/github-action-submit-signing-request@v2", workflow)
         self.assertIn("SIGNPATH_NATIVE_ARTIFACT_CONFIGURATION_SLUG", workflow)
+        self.assertIn("info.'0409'.ProductVersion", workflow)
+        with (ROOT / "build/windows/info.json").open("rb") as metadata_file:
+            import json
+            version_info = json.load(metadata_file)
+        self.assertEqual(list(version_info["info"]), ["0409"])
+        self.assertEqual(version_info["info"]["0409"]["ProductName"], "OpenShell")
+        bump = (ROOT / "scripts/bump_release_version.py").read_text(encoding="utf-8")
+        self.assertIn('metadata["info"]["0409"]["ProductVersion"]', bump)
         self.assertIn("scripts/verify_native_zmodem_metadata.ps1", workflow)
         self.assertIn('version: "${{ env.APP_VERSION }}"', workflow)
         self.assertIn("$env:OPENSHELL_APP_VERSION = $env:APP_VERSION", workflow)

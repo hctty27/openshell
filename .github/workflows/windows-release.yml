@@ -89,7 +89,7 @@ jobs:
           "VITE_APP_VERSION=$version" >> $env:GITHUB_ENV
           $info = Get-Content "build/windows/info.json" -Raw | ConvertFrom-Json
           $info.fixed.file_version = $version
-          $info.info.'0000'.ProductVersion = $version
+          $info.info.'0409'.ProductVersion = $version
           $info | ConvertTo-Json -Depth 20 | Set-Content "build/windows/info.json" -Encoding utf8
       # Avoid extracting the large compiled Go build cache on Windows runners.
       - uses: actions/setup-go@v7
