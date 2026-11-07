@@ -16,7 +16,7 @@ Free code signing provided by [SignPath.io](https://about.signpath.io/), certifi
 - Only OpenShell's own release binaries produced from reviewed source: Wails `OpenShell.exe`, NSIS `OpenShell-vX.Y.Z-windows-x64-Setup.exe`, and the first-party Go/Rust ZMODEM executables `zmodem/rz.exe`, `zmodem/sz.exe`, and `zmodem/native/zmodem-sidecar.exe`.
 - The portable ZIP is an archive of the app and first-party ZMODEM helpers; the ZIP container itself is **not Authenticode-signed**. When release signing is active, all four contained EXEs are verified before publication.
 - Native ZMODEM helpers are built in OpenShell's workflow, not downloaded third-party EXEs. A dedicated SignPath configuration signs exactly those three binaries, before creating the ZIP/installer. Their Go/Rust dependencies remain subject to license obligations. Historical lrzsz-win32 and MSYS2 binaries are no longer shipped. See [third-party review](docs/third-party-review.md).
-- The Wails EXE and NSIS installer must carry the expected `OpenShell` product name and release version, enforced by `initial.xml`. The Go/Rust helper executables currently lack the same Wails/NSIS version-resource metadata; `native-helpers.xml` instead constrains exact archive paths and verifies the SignPath Foundation publisher, timestamp and resulting release manifest hashes.
+- **All signed EXEs** carry the same `OpenShell` product name and release version. The Wails EXE and NSIS installer are constrained by `initial.xml`; the Go/Rust helpers embed Windows VERSIONINFO and are constrained by `native-helpers.xml` (including exact paths). Signatures, publisher, timestamp and signed helper SHA-256 values are independently verified.
 
 ## Team roles
 
@@ -58,7 +58,7 @@ The GitHub Actions workflow implements conditional SignPath requests. Until the 
 
 原始 `v1.0.0` Windows 正式版**未签名**；后续各版本以 GitHub Release 说明和实际 Authenticode 验证为准。SignPath Foundation 是否批准仍未确认，本政策不代表已经取得证书。
 
-- 代码工作流已扩展到 OpenShell 主程序、NSIS 安装包和三个自建 ZMODEM 辅助 EXE；签名前先检查三个辅助文件的固定路径，签名后重算 SHA-256，再验证安装版和便携版内的签名。旧版第三方 MSYS2/lrzsz 不在签名范围且不再随包分发。
+- 代码工作流已扩展到 OpenShell 主程序、NSIS 安装包和三个自建 ZMODEM 辅助 EXE；所有申请签名的 EXE 统一嵌入 OpenShell 产品名及版本资源；签名前先检查三个辅助文件的固定路径，签名后重算 SHA-256，再验证安装版和便携版内的签名。旧版第三方 MSYS2/lrzsz 不在签名范围且不再随包分发。
 - 仓库维护者、外部贡献审核者、签名审批者目前均为 [@hctty27](https://github.com/hctty27)，需要自行确认已开启 GitHub 和 SignPath MFA。
 - 每次正式版签名需要由审批者在 SignPath **人工批准**，并验证来源、版本元数据和签名。
 - 用户数据行为见 [隐私政策](PRIVACY.md)，第三方授权待核事项见 [审查记录](docs/third-party-review.md)。

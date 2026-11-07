@@ -9,8 +9,8 @@ Updated 2026-11-07. **Repository readiness checklist only — not proof of appli
 - [x] Document authors, reviewers, signing approver, manual approval requirement, and use of user-configured network services.
 - [x] Integrate conditional SignPath signing for the first-party `OpenShell.exe`, NSIS installer, and three Go/Rust ZMODEM helpers; verify publisher, timestamp and signed installed/portable payloads.
 - [x] Restrict signing to real `main` release runs; PR and manual build previews never submit a signing request. Optional `SIGNPATH_REQUIRED=true` prevents an accidentally unsigned official release after signing is enabled.
-- [x] Configure [initial.xml](../.signpath/artifact-configurations/initial.xml) for exactly **one** OpenShell/NSIS binary, and [native-helpers.xml](../.signpath/artifact-configurations/native-helpers.xml) for the three exact-path first-party helper executables.
-- [x] Commit Rust `experiments/native-zmodem/Cargo.lock`; enforce `--locked` builds/tests and validate the same locked graph before SBOM generation. Record hashes **after signing**. Automated inventories are **not** license clearance.
+- [x] Configure [initial.xml](../.signpath/artifact-configurations/initial.xml) for exactly **one** OpenShell/NSIS binary, and [native-helpers.xml](../.signpath/artifact-configurations/native-helpers.xml) for three exact-path first-party helpers, each restricted to matching OpenShell product-name and release-version metadata.
+- [x] Commit Rust `experiments/native-zmodem/Cargo.lock` including pinned `winres` resources; enforce `--locked` builds/tests and validate the same locked graph before SBOM generation. Record hashes **after signing**. Automated inventories are **not** license clearance.
 - [x] Current native-only Windows packaging excludes `lrzsz-win32` binaries and `msys-2.0.dll`. Keep any unresolved historical binary/source attribution in the [historical review](third-party-review.md), not as a claim that current installers still bundle MSYS2.
 
 ## Maintainer actions before submitting the application
@@ -28,7 +28,7 @@ Updated 2026-11-07. **Repository readiness checklist only — not proof of appli
 
 - [ ] Create or activate SignPath project `openshell` tied to `https://github.com/hctty27/openshell`, with the GitHub trusted build system, GitHub App and origin verification.
 - [ ] Configure a `release-signing` policy that only accepts intended `main` builds, uses the Foundation certificate, and **requires a human approval for every signing request**.
-- [ ] Upload both reviewed artifact configurations: `initial.xml` as `initial` (one OpenShell/NSIS EXE with version-resource restrictions), and `native-helpers.xml` as `native-helpers` (exactly the three first-party auxiliary EXEs).
+- [ ] Upload both reviewed artifact configurations: `initial.xml` as `initial` (one OpenShell/NSIS EXE with version-resource restrictions), and `native-helpers.xml` as `native-helpers` (three first-party auxiliary EXEs, each with enforced `OpenShell` ProductName/ProductVersion).
 - [ ] Set GitHub Actions secret `SIGNPATH_API_TOKEN`, repository variable `SIGNPATH_ORGANIZATION_ID`, and optionally `SIGNPATH_PROJECT_SLUG`, `SIGNPATH_SIGNING_POLICY_SLUG`, `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`, `SIGNPATH_NATIVE_ARTIFACT_CONFIGURATION_SLUG`. Never commit credentials.
 - [ ] Once ready to enforce signatures, set GitHub Actions variable `SIGNPATH_REQUIRED=true`. This prevents unsigned official releases if the token is missing; unset it only when intentionally allowing unsigned releases.
 - [ ] Run a new controlled release. Approve **all three** signing requests manually (helpers, app, installer); validate publisher/timestamp, app/installer metadata, signed auxiliary-file SHA-256 manifest and installed/portable executables.

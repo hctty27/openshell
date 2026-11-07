@@ -29,9 +29,12 @@ class SignPathReleasePolicyTests(unittest.TestCase):
             [entry.get("path") for entry in paths],
             ["rz.exe", "sz.exe", "native/zmodem-sidecar.exe"],
         )
+        self.assertEqual(root.find("./s:parameters/s:parameter", NAMESPACE).get("name"), "version")
         for entry in paths:
             self.assertIsNotNone(entry.find("s:authenticode-sign", NAMESPACE))
             self.assertNotIn("*", entry.get("path"))
+            self.assertEqual(entry.get("product-name"), "OpenShell")
+            self.assertEqual(entry.get("product-version"), "${version}")
             self.assertEqual(entry.get("min-matches", "1"), "1")
             self.assertEqual(entry.get("max-matches", "1"), "1")
 
@@ -45,6 +48,9 @@ class SignPathReleasePolicyTests(unittest.TestCase):
         self.assertEqual(workflow.count("signpath/github-action-submit-signing-request@v3"), 3)
         self.assertNotIn("signpath/github-action-submit-signing-request@v2", workflow)
         self.assertIn("SIGNPATH_NATIVE_ARTIFACT_CONFIGURATION_SLUG", workflow)
+        self.assertIn("scripts/verify_native_zmodem_metadata.ps1", workflow)
+        self.assertIn('version: "${{ env.APP_VERSION }}"', workflow)
+        self.assertIn("$env:OPENSHELL_APP_VERSION = $env:APP_VERSION", workflow)
 
         ordering = [
             "Sign first-party native ZMODEM helpers with SignPath",
@@ -71,13 +77,21 @@ class SignPathReleasePolicyTests(unittest.TestCase):
             self.assertIn(name, validator)
         self.assertIn("BUNDLED_COMPONENTS.json", validator)
         self.assertIn("-NativeHelper", validator)
+        metadata = (ROOT / "scripts/verify_native_zmodem_metadata.ps1").read_text(encoding="utf-8")
+        self.assertIn('ProductName -ne "OpenShell"', metadata)
+        self.assertIn("ProductVersion -ne $Version", metadata)
 
     def test_rust_dependency_graph_is_locked_everywhere(self):
         with (RUST_DIRECTORY / "Cargo.lock").open("rb") as stream:
             lock = tomllib.load(stream)
         packages = {package["name"]: package for package in lock["package"]}
         self.assertEqual(packages["zmodem2"]["version"], "0.7.3")
+        self.assertEqual(packages["winres"]["version"], "0.1.12")
         self.assertGreaterEqual(len(packages), 2)
+        build_script = (RUST_DIRECTORY / "build.rs").read_text(encoding="utf-8")
+        self.assertIn('set("ProductName", "OpenShell")', build_script)
+        self.assertIn('set("ProductVersion", &version)', build_script)
+        self.assertIn('set_version_info(winres::VersionInfo::PRODUCTVERSION, number)', build_script)
         for package in packages.values():
             if package.get("source", "").startswith("registry+"):
                 self.assertEqual(len(package["checksum"]), 64)

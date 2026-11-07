@@ -15,7 +15,7 @@ GitHub Actions workflow: [Generate third-party SBOM](../.github/workflows/sbom.y
 | `license-review.json` | Count of components lacking explicit or evidence-only license metadata, with names, versions and package URLs |
 
 - These files are **workflow artifacts**, retained for 30 days; they are not automatically published as long-term GitHub Release assets.
-- The native Rust ZMODEM dependency SBOM is generated from `experiments/native-zmodem/Cargo.toml` with the committed `experiments/native-zmodem/Cargo.lock` for the Windows x64 target. Cargo validates `--locked` before inventory generation. It lists dependency licenses but does **not** by itself prove that Rust redistribution conditions are satisfied.
+- The native Rust ZMODEM dependency SBOM is generated from `experiments/native-zmodem/Cargo.toml` with the committed `experiments/native-zmodem/Cargo.lock` for the Windows x64 target, including pinned Windows version resource tool `winres` 0.1.12. Cargo validates `--locked` before inventory generation. It lists dependency licenses but does **not** by itself prove that Rust redistribution conditions are satisfied.
 - The Go SBOM reflects cross-platform module resolution for `GOOS=windows`, `GOARCH=amd64`, `CGO_ENABLED=0`, `GOFLAGS=-tags=production`. It does not independently attest to a compiled EXE's bytes, nor to the upstream ZMODEM helpers.
 - Tool-detected license names are candidates for review rather than completed legal determinations. Components with missing license metadata are left visible in `license-review.json`, not silently approved.
 - To reproduce, run the workflow manually or execute its pinned Go CLI and the npm commands with the project's current locked dependencies.
