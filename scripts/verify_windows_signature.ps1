@@ -25,11 +25,10 @@ if ($publisher -ne "SignPath Foundation") {
 }
 
 $metadata = (Get-Item -LiteralPath $fullPath).VersionInfo
-if ($NativeHelper) {
-    if ([IO.Path]::GetFileName($fullPath) -notin @("rz.exe", "sz.exe", "zmodem-sidecar.exe")) {
-        throw "Only known first-party ZMODEM helpers may skip PE product metadata: $fullPath"
-    }
-} elseif ($metadata.ProductName -ne "OpenShell" -or $metadata.ProductVersion -ne $Version) {
+if ($NativeHelper -and [IO.Path]::GetFileName($fullPath) -notin @("rz.exe", "sz.exe", "zmodem-sidecar.exe")) {
+    throw "Unexpected first-party ZMODEM helper: $fullPath"
+}
+if ($metadata.ProductName -ne "OpenShell" -or $metadata.ProductVersion -ne $Version) {
     throw "Invalid product metadata for $($fullPath): name=$($metadata.ProductName), version=$($metadata.ProductVersion), expected=$Version"
 }
 

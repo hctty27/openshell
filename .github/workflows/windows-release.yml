@@ -197,6 +197,7 @@ jobs:
       - name: Build native Rust ZMODEM sidecar
         shell: pwsh
         run: |
+          $env:OPENSHELL_APP_VERSION = $env:APP_VERSION
           Push-Location experiments/native-zmodem
           try {
             cargo metadata --locked --format-version 1 --no-deps | Out-Null
@@ -214,6 +215,11 @@ jobs:
           $env:PYTHONIOENCODING = "utf-8"
           python experiments/native-zmodem/tests/interop_native_helpers.py "experiments/native-zmodem/target/release/zmodem-sidecar.exe" "build/bin/zmodem"
           if ($LASTEXITCODE -ne 0) { throw "Rust-only rz/sz wrapper interoperability failed" }
+      - name: Verify native helper product metadata
+        shell: pwsh
+        run: |
+          ./scripts/verify_native_zmodem_metadata.ps1 -TargetDir build/bin/zmodem -Version $env:APP_VERSION
+
       - name: Generate and verify native-only bundle manifest
         shell: pwsh
         run: |
@@ -261,6 +267,8 @@ jobs:
           project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
           signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
           artifact-configuration-slug: ${{ env.SIGNPATH_NATIVE_ARTIFACT_CONFIGURATION_SLUG }}
+          parameters: |
+            version: "${{ env.APP_VERSION }}"
           github-artifact-id: ${{ steps.upload-unsigned-native-helpers.outputs.artifact-id }}
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: 3600

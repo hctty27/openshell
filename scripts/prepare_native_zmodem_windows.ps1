@@ -22,9 +22,27 @@ $native = Join-Path $target "native"
 New-Item -ItemType Directory -Path $native -Force | Out-Null
 
 $launcher = Join-Path $target "openshell-zmodem-launcher.exe"
-& go build -mod=readonly -trimpath -ldflags '-s -w -H windowsgui' -o $launcher ./cmd/zmodem-launcher
-if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $launcher -PathType Leaf)) {
-    throw "Unable to build native-only Windows ZMODEM launcher"
+# Reuse the reviewed Windows version resource from the Wails executable build.
+# This gives both first-party rz/sz wrappers the same ProductName/ProductVersion
+# required by the SignPath Foundation signing policy.
+$repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$resource = Join-Path $repoRoot "rsrc_windows_amd64.syso"
+$launcherResource = Join-Path $repoRoot "cmd/zmodem-launcher/rsrc_windows_amd64.syso"
+if (Test-Path -LiteralPath $launcherResource) {
+    throw "Stale launcher version resource must not be reused: $launcherResource"
+}
+try {
+    if (Test-Path -LiteralPath $resource -PathType Leaf) {
+        Copy-Item -LiteralPath $resource -Destination $launcherResource
+    } else {
+        Write-Warning "Wails version resource was not generated; unsigned developer wrappers may lack product metadata"
+    }
+    & go build -mod=readonly -trimpath -ldflags '-s -w -H windowsgui' -o $launcher ./cmd/zmodem-launcher
+    if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $launcher -PathType Leaf)) {
+        throw "Unable to build native-only Windows ZMODEM launcher"
+    }
+} finally {
+    Remove-Item -LiteralPath $launcherResource -Force -ErrorAction SilentlyContinue
 }
 try {
     foreach ($name in @("rz.exe", "sz.exe")) {

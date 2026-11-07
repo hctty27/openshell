@@ -3,17 +3,21 @@
   SignPath artifact configuration slug: native-helpers.
   Exact relative paths inside the GitHub Actions uploaded ZIP are required.
   Only OpenShell-built binaries are eligible; never sign upstream third-party files.
-  These helper PEs do not embed the Wails/NSIS product-version resource fields.
+  All three first-party helpers carry matching OpenShell product-name and
+  product-version metadata; this configuration fails closed if metadata differs.
 -->
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
   <zip-file>
-    <pe-file path="rz.exe">
+    <pe-file path="rz.exe" product-name="OpenShell" product-version="${version}">
       <authenticode-sign />
     </pe-file>
-    <pe-file path="sz.exe">
+    <pe-file path="sz.exe" product-name="OpenShell" product-version="${version}">
       <authenticode-sign />
     </pe-file>
-    <pe-file path="native/zmodem-sidecar.exe">
+    <pe-file path="native/zmodem-sidecar.exe" product-name="OpenShell" product-version="${version}">
       <authenticode-sign />
     </pe-file>
   </zip-file>
