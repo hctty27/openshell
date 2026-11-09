@@ -56,6 +56,7 @@ import { useTabActivity } from "./features/sessions/useTabActivity";
 import { useAutoReconnect } from "./features/sessions/useAutoReconnect";
 import { useSplitWorkspace } from "./features/terminal/useSplitWorkspace";
 import { setTerminalSearchState, toggleTerminalSearchOpen } from "./features/terminal/searchState";
+import { attachGlobalImeFocusRecovery } from "./features/ime/globalImeFocusRecovery";
 import { useTabSplitDrop } from "./features/terminal/useTabSplitDrop";
 import { useTransferActivity } from "./features/transfers/useTransferActivity";
 import QuickCommandBar from "./components/QuickCommandBar";
@@ -131,6 +132,19 @@ export default function App() {
 }
 function Workspace({ initialState }: { initialState: AppState }) {
   useTranslation();
+  useEffect(() => {
+    if (!navigator.userAgent.includes("Windows")) return;
+    const recovery = attachGlobalImeFocusRecovery();
+    const offWindowFocus = listen("common:WindowFocus", () => recovery.onWindowActivated());
+    const offWindowMove = listen("common:WindowDidMove", () => recovery.onWindowGeometryChanged());
+    const offDPIChanged = listen("common:WindowDPIChanged", () => recovery.onWindowGeometryChanged());
+    return () => {
+      offWindowFocus();
+      offWindowMove();
+      offDPIChanged();
+      recovery.dispose();
+    };
+  }, []);
   const languageLock = useRef(false);
   const [languageSaving, setLanguageSaving] = useState(false);
   const [language, setLanguage] = useState<Language>(
