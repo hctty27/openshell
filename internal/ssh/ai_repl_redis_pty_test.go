@@ -3,6 +3,7 @@
 package sshclient
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -59,10 +60,22 @@ func TestRedisClusterPTYRoundTrip(t *testing.T) {
 	var terminalOutput strings.Builder
 	go func() {
 		buffer := make([]byte, 4096)
+		var queryTail []byte
 		for {
 			n, readErr := terminal.Read(buffer)
 			if n > 0 {
 				chunk := append([]byte(nil), buffer[:n]...)
+				queryData := append(append([]byte(nil), queryTail...), chunk...)
+				if bytes.Contains(queryData, []byte("\x1b[6n")) {
+					conn.stdinMu.Lock()
+					_, _ = terminal.Write([]byte("\x1b[1;1R"))
+					conn.stdinMu.Unlock()
+				}
+				if len(queryData) > 3 {
+					queryTail = append(queryTail[:0], queryData[len(queryData)-3:]...)
+				} else {
+					queryTail = append(queryTail[:0], queryData...)
+				}
 				outputMu.Lock()
 				_, _ = terminalOutput.Write(chunk)
 				outputMu.Unlock()
