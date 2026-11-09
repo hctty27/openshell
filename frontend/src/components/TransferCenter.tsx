@@ -545,10 +545,11 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
               const statusLabel = job.status === "completed" ? t("sftp:completed") :
                 job.status === "failed" ? t("sftp:failed") :
                 job.status === "cancelled" ? t("sftp:cancelled") : t("sftp:running");
-              const progressText = total != null
-                ? `${formatSize(job.processed ?? 0)} / ${formatSize(total)}`
-                : job.transferred ?? (job.status === "completed" ? t("sftp:completed") :
-                  job.status === "failed" ? t("sftp:failed") : t("sftp:estimating"));
+              const progressText = job.status === "completed" && total != null
+                ? `${formatSize(total)} / ${formatSize(total)}`
+                : total != null ? `${formatSize(job.processed ?? 0)} / ${formatSize(total)}`
+                  : job.transferred ?? (job.status === "completed" ? t("sftp:completed") :
+                    job.status === "failed" ? t("sftp:failed") : t("sftp:estimating"));
               return (
                 <article key={key} className="transfer-center-job">
                   <div className="transfer-center-line">
