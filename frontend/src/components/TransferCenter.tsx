@@ -175,7 +175,8 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       if (legacyFinished) scheduleTerminalCleanup(key);
     });
     const offState = listen("ssh:transfer-state", (event: {
-      ref: Ref; transferId?: string; active: boolean; status?: TransferStatus; error?: string;
+      ref: Ref; transferId?: string; active: boolean; status?: TransferStatus;
+      protocol?: Protocol; direction?: Direction; error?: string;
     }) => {
       if (!event?.ref) return;
       const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId);
@@ -188,8 +189,8 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
             [key]: {
               ...job,
               ref: event.ref, transferId: event.transferId || job?.transferId || "legacy",
-              protocol: job?.protocol ?? "trzsz",
-              direction: job?.direction,
+              protocol: event.protocol ?? job?.protocol ?? "trzsz",
+              direction: event.direction ?? job?.direction,
               status: job?.status === "cancelling" ? "cancelling" : "running",
               files: job?.files ?? [],
             },
