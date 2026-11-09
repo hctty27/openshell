@@ -15,6 +15,7 @@ interface Props {
 }
 
 const refKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generation}`;
+const splitFileLines = (raw: string) => raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 const parentPath = (directory: string) => {
   const trimmed = directory.replace(/[\\/]+$/, "");
   const index = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
