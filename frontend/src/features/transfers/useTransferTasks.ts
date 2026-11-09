@@ -17,6 +17,7 @@ export function useTransferTasks(refID?: Ref) {
   const [zmodemStats, setZmodemStats] = useState<ZmodemStats | null>(null);
   const seenZmodem = useRef(false);
   const finishedZmodem = useRef(false);
+  const currentTransferId = useRef<string | null>(null);
   useEffect(() => {
     let disposed = false;
     setTasks([]);
@@ -25,6 +26,7 @@ export function useTransferTasks(refID?: Ref) {
     setZmodemStats(null);
     seenZmodem.current = false;
     finishedZmodem.current = false;
+    currentTransferId.current = null;
     if (!refID) return;
     // Browser fixtures can emulate SSH without exposing the SFTP backend.
     // Check the actual Wails binding before calling through the API proxy.
@@ -41,11 +43,23 @@ export function useTransferTasks(refID?: Ref) {
       setTasks(old => mergeTransferHistory(old, [task]));
       if (task.status === "running" || task.status === "failed") setExpanded(true);
     });
-    const offDetails = listen("ssh:transfer-details", (payload: { ref: Ref }) => {
-      if (sameRef(payload?.ref, refID)) finishedZmodem.current = false;
-    });
-    const offState = listen("ssh:transfer-state", (payload: { ref: Ref; active: boolean }) => {
+    const offDetails = listen("ssh:transfer-details", (payload: { ref: Ref; transferId?: string }) => {
       if (!sameRef(payload?.ref, refID)) return;
+      currentTransferId.current = payload.transferId || "legacy";
+      finishedZmodem.current = false;
+      seenZmodem.current = true;
+      setZmodemActive(true);
+      setZmodemCancelling(false);
+      setZmodemStats(null);
+      setExpanded(true);
+    });
+    const offState = listen("ssh:transfer-state", (payload: {
+      ref: Ref; transferId?: string; active: boolean;
+    }) => {
+      if (!sameRef(payload?.ref, refID)) return;
+      const transferId = payload.transferId || currentTransferId.current || "legacy";
+      if (currentTransferId.current && transferId !== currentTransferId.current) return;
+      if (!currentTransferId.current) currentTransferId.current = transferId;
       if (payload.active && finishedZmodem.current) return;
       if (!payload.active) finishedZmodem.current = true;
       setZmodemActive(payload.active);
@@ -58,15 +72,31 @@ export function useTransferTasks(refID?: Ref) {
         seenZmodem.current = false;
       }
     });
-    const offProgress = listen("ssh:transfer-progress", (payload: { ref: Ref; transferred: string; speed: string }) => {
-      if (!sameRef(payload?.ref, refID) || finishedZmodem.current) return;
+    const offProgress = listen("ssh:transfer-progress", (payload: {
+      ref: Ref; transferId?: string; transferred: string; speed: string;
+    }) => {
+      if (!sameRef(payload?.ref, refID)) return;
+      const transferId = payload.transferId || currentTransferId.current || "legacy";
+      if (currentTransferId.current && transferId !== currentTransferId.current) return;
+      if (finishedZmodem.current) return;
       setZmodemStats({ transferred: payload.transferred, speed: payload.speed });
     });
     // Upstream legacy ZMODEM may delay its transfer-state(false) callback
     // until more remote output arrives after the local child has already exited.
-    const offFinished = listen("ssh:transfer-finished", (payload: { ref: Ref }) => {
+    const offFinished = listen("ssh:transfer-finished", (payload: { ref: Ref; transferId?: string }) => {
       if (!sameRef(payload?.ref, refID)) return;
+      const transferId = payload.transferId || currentTransferId.current || "legacy";
+      if (currentTransferId.current && transferId !== currentTransferId.current) return;
       finishedZmodem.current = true;
+      seenZmodem.current = false;
+      setZmodemActive(false);
+      setZmodemCancelling(false);
+      setZmodemStats(null);
+    });
+    const offDisconnected = listen("ssh:disconnected", (ref: Ref) => {
+      if (!sameRef(ref, refID)) return;
+      currentTransferId.current = null;
+      finishedZmodem.current = false;
       seenZmodem.current = false;
       setZmodemActive(false);
       setZmodemCancelling(false);
@@ -79,6 +109,7 @@ export function useTransferTasks(refID?: Ref) {
       offState();
       offProgress();
       offFinished();
+      offDisconnected();
     };
   }, [refID?.tabId, refID?.sessionId, refID?.generation]);
 
