@@ -363,10 +363,13 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       });
       setTerminalJobs(previous => {
         const ended = Object.entries(previous).filter(([, job]) =>
-          job.status === "completed" || job.status === "cancelled" || job.status === "failed");
+          job.status === "completed" || job.status === "cancelled");
         if (!ended.length) return previous;
         const next = { ...previous };
-        for (const [key] of ended) delete next[key];
+        for (const [key] of ended) {
+          delete next[key];
+          finished.current.delete(key);
+        }
         return next;
       });
       setSftpJobs(previous => {
@@ -548,8 +551,11 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
               const progressText = job.status === "completed" && total != null
                 ? `${formatSize(total)} / ${formatSize(total)}`
                 : total != null ? `${formatSize(job.processed ?? 0)} / ${formatSize(total)}`
-                  : job.transferred ?? (job.status === "completed" ? t("sftp:completed") :
-                    job.status === "failed" ? t("sftp:failed") : t("sftp:estimating"));
+                  : job.transferred ?? (active ? t("sftp:estimating") : "—");
+              const metricStatus = job.status === "completed" ? t("sftp:completed") :
+                job.status === "failed" ? t("sftp:failed") :
+                job.status === "cancelled" ? t("sftp:cancelled") :
+                percent == null ? statusLabel : `${percent}%`;
               return (
                 <article key={key} className="transfer-center-job">
                   <div className="transfer-center-line">
@@ -579,8 +585,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                   </div>
                   <div className="transfer-center-metrics">
                     <span>{progressText}{job.speed && active ? ` · ${job.speed}` : ""}</span>
-                    <span title={job.error}>{percent == null ? statusLabel : job.status === "completed" ?
-                      t("sftp:completed") : `${percent}%`}</span>
+                    <span title={job.error}>{metricStatus}</span>
                   </div>
                   {job.error && <div className="transfer-center-terminal-error" title={job.error}>{job.error}</div>}
                 </article>
