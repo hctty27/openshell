@@ -510,3 +510,140 @@ test("multi-selection submits one atomic SFTP transfer batch", async () => {
     {direction:"download",source:"/root/three.txt",destination:"C:/temp/three.txt",overwrite:false,resume:true},
   ]));
 });
+
+test("SFTP supports mouse marquee selection from the empty area of a file list", async () => {
+  setupBatchFiles();
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  await screen.findByText("three.txt");
+
+  const table = within(pane("remote")).getByRole("list") as HTMLDivElement;
+  const rows = Array.from(pane("remote").querySelectorAll<HTMLButtonElement>(".sftp-file-row"));
+  const bounds = {
+    x: 0, y: 0, left: 0, top: 0, right: 400, bottom: 300,
+    width: 400, height: 300, toJSON: () => ({}),
+  } as DOMRect;
+  const first = {
+    x: 0, y: 25, left: 0, top: 25, right: 400, bottom: 54,
+    width: 400, height: 29, toJSON: () => ({}),
+  } as DOMRect;
+  const last = {
+    x: 0, y: 83, left: 0, top: 83, right: 400, bottom: 112,
+    width: 400, height: 29, toJSON: () => ({}),
+  } as DOMRect;
+  vi.spyOn(table, "getBoundingClientRect").mockReturnValue(bounds);
+  vi.spyOn(rows[0], "getBoundingClientRect").mockReturnValue(first);
+  vi.spyOn(rows[rows.length - 1], "getBoundingClientRect").mockReturnValue(last);
+
+  fireEvent.pointerDown(table, {
+    pointerId: 1, pointerType: "mouse", button: 0, clientX: 5, clientY: 10,
+  });
+  fireEvent.pointerMove(table, {
+    pointerId: 1, pointerType: "mouse", button: 0, clientX: 250, clientY: 90,
+  });
+  fireEvent.pointerUp(table, {
+    pointerId: 1, pointerType: "mouse", button: 0, clientX: 250, clientY: 90,
+  });
+
+  expect(pane("remote").querySelectorAll(".sftp-file-row.selected")).toHaveLength(3);
+});
+
+test("dragging a selected SFTP row carries the entire selection", async () => {
+  setupBatchFiles();
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  await screen.findByText("three.txt");
+
+  fireEvent.click(row("remote", "one.txt"));
+  fireEvent.click(row("remote", "two.txt"), { ctrlKey: true });
+  const dataTransfer = { setData: vi.fn(), effectAllowed: "none" };
+  fireEvent.dragStart(row("remote", "two.txt"), { dataTransfer });
+
+  expect(dataTransfer.setData).toHaveBeenCalledWith(
+    "application/x-openshell-entry",
+    JSON.stringify({
+      side: "remote",
+      path: "/root/two.txt",
+      paths: ["/root/one.txt", "/root/two.txt"],
+    }),
+  );
+  expect(dataTransfer.effectAllowed).toBe("copy");
+});
+
+test("SFTP batch transfer supports overwriting all existing destination files", async () => {
+  const local = [
+    file("one.txt", "C:/temp/one.txt"),
+    file("two.txt", "C:/temp/two.txt"),
+  ];
+  const remote = [
+    file("one.txt", "/root/one.txt"),
+    file("two.txt", "/root/two.txt"),
+  ];
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
+    side === "local" ? local : remote);
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  await screen.findByText("two.txt");
+
+  fireEvent.click(row("local", "one.txt"));
+  fireEvent.click(row("local", "two.txt"), { ctrlKey: true });
+  fireEvent.click(within(pane("local")).getByRole("button", { name: "上传" }));
+  const dialog = await screen.findByRole("dialog", { name: t("sftp:overwriteTitle") });
+  fireEvent.click(within(dialog).getByRole("button", { name: "全部覆盖" }));
+
+  await waitFor(() => expect(api.SFTPStartBatch).toHaveBeenCalledWith(ref, [
+    { direction: "upload", source: "C:/temp/one.txt", destination: "/root/one.txt", overwrite: true, resume: true },
+    { direction: "upload", source: "C:/temp/two.txt", destination: "/root/two.txt", overwrite: true, resume: true },
+  ]));
+});
+
+test("SFTP batch transfer can skip all conflicts and still transfer new files", async () => {
+  const local = [
+    file("one.txt", "C:/temp/one.txt"),
+    file("two.txt", "C:/temp/two.txt"),
+    file("new.txt", "C:/temp/new.txt"),
+  ];
+  const remote = [
+    file("one.txt", "/root/one.txt"),
+    file("two.txt", "/root/two.txt"),
+  ];
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
+    side === "local" ? local : remote);
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  await screen.findByText("new.txt");
+
+  fireEvent.keyDown(within(pane("local")).getByRole("list"), { key: "a", ctrlKey: true });
+  fireEvent.click(within(pane("local")).getByRole("button", { name: "上传" }));
+  const dialog = await screen.findByRole("dialog", { name: t("sftp:overwriteTitle") });
+  fireEvent.click(within(dialog).getByRole("button", { name: "全部跳过" }));
+
+  await waitFor(() => expect(api.SFTPStartBatch).toHaveBeenCalledWith(ref, [
+    { direction: "upload", source: "C:/temp/new.txt", destination: "/root/new.txt", overwrite: false, resume: true },
+  ]));
+});
+
+test("SFTP batch transfer can decide each overwrite conflict independently", async () => {
+  const local = [
+    file("one.txt", "C:/temp/one.txt"),
+    file("two.txt", "C:/temp/two.txt"),
+  ];
+  const remote = [
+    file("one.txt", "/root/one.txt"),
+    file("two.txt", "/root/two.txt"),
+  ];
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
+    side === "local" ? local : remote);
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
+  await screen.findByText("two.txt");
+
+  fireEvent.click(row("local", "one.txt"));
+  fireEvent.click(row("local", "two.txt"), { ctrlKey: true });
+  fireEvent.click(within(pane("local")).getByRole("button", { name: "上传" }));
+
+  let dialog = await screen.findByRole("dialog", { name: t("sftp:overwriteTitle") });
+  fireEvent.click(within(dialog).getByRole("button", { name: "跳过当前" }));
+  await waitFor(() => expect(screen.getByText(/2\/2/)).toBeTruthy());
+
+  dialog = screen.getByRole("dialog", { name: t("sftp:overwriteTitle") });
+  fireEvent.click(within(dialog).getByRole("button", { name: "覆盖当前" }));
+  await waitFor(() => expect(api.SFTPStartBatch).toHaveBeenCalledWith(ref, [
+    { direction: "upload", source: "C:/temp/two.txt", destination: "/root/two.txt", overwrite: true, resume: true },
+  ]));
+});

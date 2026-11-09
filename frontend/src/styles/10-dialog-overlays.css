@@ -62,6 +62,34 @@
   border-radius: 7px;
   font-size: 12px;
 }
+.app-dialog__actions--choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.app-dialog__actions--choices .app-dialog__cancel {
+  grid-column: 1 / -1;
+  justify-self: end;
+  min-width: 124px;
+}
+.app-dialog__choice {
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--panel);
+}
+.app-dialog__choice:hover {
+  color: var(--text-primary);
+  background: var(--hover);
+}
+.app-dialog__choice--primary {
+  color: var(--on-accent);
+  background: var(--accent-fill);
+  border-color: transparent;
+}
+.app-dialog__choice--primary:hover {
+  color: var(--on-accent);
+  background: var(--accent-fill);
+  filter: brightness(1.07);
+}
 .app-dialog__primary--danger:focus-visible { outline-color: var(--danger); }
 /* Keep long editor and picker content scrollable under fixed chrome. */
 .modal-surface.settings-dialog--settings,

@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent } from "react";
+import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Info, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, ArrowLeftRight } from "lucide-react";
 import { api, listen, errorText } from "../bridge";
@@ -19,6 +19,15 @@ const directoryCacheKey = (ref: Ref, directory: string) =>
 type Operation = "rename" | "delete" | "chmod" | "mkdir";
 type SelectionMode = "single" | "toggle" | "range";
 type DeleteProgress = { completed: number; total: number; failed: number; running: boolean; cancelled: boolean };
+interface MarqueeState {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  additive: boolean;
+  active: boolean;
+}
+interface MarqueeRect { left: number; top: number; width: number; height: number }
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const basename = (name: string) => name.split(/[\\/]/).filter(Boolean).pop() ?? name;
 const join = (side: Side, dir: string, name: string) =>
   dir.replace(/[\\/]$/, "") + (side === "remote" ? "/" : (dir.includes("\\") ? "\\" : "/")) + name;
@@ -42,7 +51,7 @@ interface Props { refID: Ref; onNotice(error: unknown): void; hideTaskQueue?: bo
 interface PanelProps {
   side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: unknown; showHidden: boolean;
   onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void;
-  onSelect(item: SFTPEntry, mode: SelectionMode): void; onSelectAll(paths: string[]): void; onClearSelection(): void;
+  onSelect(item: SFTPEntry, mode: SelectionMode): void; onSelectAll(paths: string[]): void; onMarqueeSelect(paths: string[], additive: boolean): void; onClearSelection(): void;
   deleting: DeleteProgress | null; onCancelDelete(): void;
   onOpenFile?(entry:SFTPEntry): void; onTransfer(): void; onOperate(operation: Operation): void;
   onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLElement>): void;
@@ -64,9 +73,15 @@ const FileRow = memo(function FileRow({
 }: FileRowProps) {
   return (
     <button type="button" role="listitem"
-      className={`sftp-file-row ${selected ? "selected" : ""}`}
+      className={"sftp-file-row" + (selected ? " selected" : "")} data-path={entry.path}
       draggable={!entry.isSymlink && !deleting}
-      onDragStart={event => event.dataTransfer.setData("application/x-openshell-entry", JSON.stringify({ side, path: entry.path }))}
+      onDragStart={event => {
+        const paths = callbacks.current.selected.includes(entry.path)
+          ? callbacks.current.selected
+          : [entry.path];
+        event.dataTransfer.setData("application/x-openshell-entry", JSON.stringify({ side, path: entry.path, paths }));
+        event.dataTransfer.effectAllowed = "copy";
+      }}
       onClick={event => callbacks.current.onSelect(entry, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "single")}
       onDoubleClick={() => {
         if (entry.isSymlink) return;
@@ -104,6 +119,90 @@ function FilePanel(p: PanelProps) {
       selected={selectedPaths.has(entry.path)} deleting={deleting}
       side={p.side} callbacks={callbacks} />
   )), [displayEntries, selectedPaths, p.side, deleting]);
+  const tableRef = useRef<HTMLDivElement>(null);
+  const marqueeRef = useRef<MarqueeState | null>(null);
+  const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
+
+  const updateMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = marqueeRef.current;
+    const table = tableRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || !table) return;
+
+    const bounds = table.getBoundingClientRect();
+    const x = clamp(event.clientX, bounds.left, bounds.right);
+    const y = clamp(event.clientY, bounds.top, bounds.bottom);
+    if (!drag.active && Math.hypot(x - drag.startX, y - drag.startY) < 4) return;
+
+    drag.active = true;
+    setMarqueeRect({
+      left: Math.min(drag.startX, x) - bounds.left + table.scrollLeft,
+      top: Math.min(drag.startY, y) - bounds.top + table.scrollTop,
+      width: Math.abs(x - drag.startX),
+      height: Math.abs(y - drag.startY),
+    });
+
+    const rows = table.querySelectorAll<HTMLButtonElement>(".sftp-file-row");
+    if (rows.length === 0) {
+      p.onMarqueeSelect([], drag.additive);
+      return;
+    }
+    const first = rows[0].getBoundingClientRect();
+    const last = rows[rows.length - 1].getBoundingClientRect();
+    const top = Math.min(drag.startY, y);
+    const bottom = Math.max(drag.startY, y);
+    if (bottom < first.top || top > last.bottom) {
+      p.onMarqueeSelect([], drag.additive);
+      return;
+    }
+
+    const rowHeight = first.height || 29;
+    const start = clamp(Math.floor((top - first.top) / rowHeight), 0, rows.length - 1);
+    const end = clamp(Math.floor((bottom - first.top) / rowHeight), 0, rows.length - 1);
+    const paths = Array.from(rows).slice(start, end + 1)
+      .map(row => row.dataset.path)
+      .filter((path): path is string => Boolean(path));
+    p.onMarqueeSelect(paths, drag.additive);
+  };
+
+  const startMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || (event.pointerType && event.pointerType !== "mouse")) return;
+    const target = event.target as Element;
+    if (target.closest(".sftp-file-row")) return;
+    if (target !== event.currentTarget &&
+        !target.closest(".sftp-column-head") &&
+        !target.closest(".sftp-placeholder")) return;
+
+    const table = event.currentTarget;
+    marqueeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      additive: event.ctrlKey || event.metaKey,
+      active: false,
+    };
+    try {
+      table.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is unavailable in some test and embedded environments.
+    }
+    event.preventDefault();
+  };
+
+  const finishMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = marqueeRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (drag.active) updateMarquee(event);
+    else if (!drag.additive) p.onClearSelection();
+    marqueeRef.current = null;
+    setMarqueeRect(null);
+  };
+
+  const cancelMarquee = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (marqueeRef.current?.pointerId !== event.pointerId) return;
+    marqueeRef.current = null;
+    setMarqueeRect(null);
+  };
+
   return (
     <section className={`sftp-panel sftp-${p.side}`} onDragOver={event=>{
       if (event.dataTransfer.types.includes("application/x-openshell-entry")) event.preventDefault();
@@ -125,7 +224,14 @@ function FilePanel(p: PanelProps) {
         <button type="button" title={t("sftp:up")} onClick={()=>p.onDir(parent(p.side,p.directory))}><ChevronUp size={15}/></button>
         <input aria-label={t("sftp:path")} value={draft} onChange={event=>setDraft(event.target.value)} spellCheck={false}/>
       </form>
-      <div className="sftp-file-table" role="list" tabIndex={0} aria-label={t(remote ? "sftp:remote" : "sftp:local")}
+      <div ref={tableRef} className={"sftp-file-table" + (marqueeRect ? " is-selecting" : "")}
+        role="list" tabIndex={0} title={t("sftp:dragSelectionHint")}
+        aria-label={t(remote ? "sftp:remote" : "sftp:local")}
+        onPointerDown={startMarquee}
+        onPointerMove={updateMarquee}
+        onPointerUp={finishMarquee}
+        onPointerCancel={cancelMarquee}
+        onLostPointerCapture={cancelMarquee}
         onKeyDown={event => {
           if (event.altKey || event.nativeEvent.isComposing) return;
           if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "a") {
@@ -144,6 +250,10 @@ function FilePanel(p: PanelProps) {
         : p.error ? <div className="sftp-placeholder sftp-error">{errorText(p.error)}</div>
         : visible.length === 0 ? <div className="sftp-placeholder">{t("sftp:emptyFolder")}</div>
         : fileRows}
+        {marqueeRect && <div className="sftp-marquee" aria-hidden="true" style={{
+          left: marqueeRect.left, top: marqueeRect.top,
+          width: marqueeRect.width, height: marqueeRect.height,
+        }}/>}
       </div>
       <div className="sftp-panel-footer">
         <span title={p.deleting ? t(p.deleting.cancelled ? "sftp:deleteCancelled" : p.deleting.running ? "sftp:deleteProgress" : "sftp:deleteComplete", { completed: p.deleting.completed, total: p.deleting.total, success: p.deleting.completed - p.deleting.failed, failed: p.deleting.failed }) : undefined}>
@@ -270,30 +380,73 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   },[refID.tabId,refID.sessionId,refID.generation]);
 
   const transfer = async (side:Side, paths:string[], dstDir:string) => {
-    if (!dstDir) return;
-    const direction = side==="local" ? "upload" : "download";
-    const destSide = side==="local" ? "remote" : "local";
+    if (!dstDir || paths.length === 0) return;
+    const direction = side === "local" ? "upload" : "download";
+    const destSide = side === "local" ? "remote" : "local";
     try {
-      // The visible listing may be stale while uploads are queued. Resolve
-      // destination conflicts from the current filesystem, not React state.
-      const destinationNames = new Set((await api.SFTPList(refID, destSide, dstDir)).map(item => item.name));
+      const destinationNames = new Set(
+        (await api.SFTPList(refID, destSide, dstDir)).map(item => item.name),
+      );
+      const conflicts = paths.filter(path => destinationNames.has(basename(path)));
+      const conflictPreview = [
+        ...conflicts.slice(0, 30).map(basename),
+        ...(conflicts.length > 30 ? [t("sftp:moreSelected", { count: conflicts.length - 30 })] : []),
+      ].join("\n");
       const requests: SFTPTransferRequest[] = [];
-      for(const file of paths) {
+      let overwriteAll = false;
+      let skipAll = false;
+      let conflictPosition = 0;
+
+      for (const file of paths) {
         const name = basename(file);
         const existing = destinationNames.has(name);
         let overwrite = false;
         if (existing) {
-          overwrite = await dialogs.confirm({
-            title:t("sftp:overwriteTitle"), description:t("sftp:overwriteDescription",{name}),
-            tone:"warning",confirmLabel:t("sftp:overwrite")
-          });
-          if (!overwrite) continue;
+          conflictPosition++;
+          if (skipAll) continue;
+          if (overwriteAll) {
+            overwrite = true;
+          } else {
+            const choice = await dialogs.choose({
+              title: t("sftp:overwriteTitle"),
+              description: t("sftp:overwriteBatchDescription", {
+                name, current: conflictPosition, total: conflicts.length,
+              }),
+              tone: "warning",
+              preview: conflicts.length > 1 ? conflictPreview : undefined,
+              cancelLabel: t("sftp:cancelTransferBatch"),
+              choices: [
+                { value: "overwrite", label: t("sftp:overwriteCurrent") },
+                { value: "overwrite-all", label: t("sftp:overwriteAll"), tone: "primary" },
+                { value: "skip", label: t("sftp:skipCurrent") },
+                { value: "skip-all", label: t("sftp:skipAll") },
+              ],
+            });
+            if (choice === null) return;
+            if (choice === "overwrite") overwrite = true;
+            else if (choice === "overwrite-all") {
+              overwrite = true;
+              overwriteAll = true;
+            } else if (choice === "skip-all") {
+              skipAll = true;
+              continue;
+            } else if (choice === "skip") {
+              continue;
+            } else {
+              return;
+            }
+          }
         }
-        requests.push({direction, source:file, destination:join(destSide,dstDir,name), overwrite, resume:true});
+        requests.push({
+          direction, source: file, destination: join(destSide, dstDir, name),
+          overwrite, resume: true,
+        });
         destinationNames.add(name);
       }
       if (requests.length) await api.SFTPStartBatch(refID, requests);
-    }catch(error){onNotice(error);}
+    } catch (error) {
+      onNotice(error);
+    }
   };
   useEffect(() => {
     if (remoteDir) onRemoteDirectoryChange?.(remoteDir);
@@ -332,6 +485,24 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     selectionAnchor.current[side] = paths[0] ?? null;
     setSelection(s=>({...s,[side]:paths}));
     if (!deletionRunning.current[side]) setDeleting(s=>({...s,[side]:null}));
+  };
+  const selectMarquee = (side:Side, paths:string[], additive:boolean) => {
+    if (paths.length && (!additive || !selectionAnchor.current[side])) {
+      selectionAnchor.current[side] = paths[0];
+    } else if (!additive && paths.length === 0) {
+      selectionAnchor.current[side] = null;
+    }
+    setSelection(current => {
+      const next = additive
+        ? Array.from(new Set([...current[side], ...paths]))
+        : paths;
+      if (next.length === current[side].length &&
+          next.every((path, index) => path === current[side][index])) return current;
+      return { ...current, [side]: next };
+    });
+    if (!deletionRunning.current[side]) {
+      setDeleting(current => current[side] === null ? current : { ...current, [side]: null });
+    }
   };
   const clearSelection = (side:Side) => {
     selectionAnchor.current[side] = null;
@@ -433,13 +604,20 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     setMenu({x:event.clientX,y:event.clientY,anchor:event.currentTarget,items});
   };
   const drop = (target:Side,event:DragEvent<HTMLElement>) => {
-    const raw=event.dataTransfer.getData("application/x-openshell-entry");
-    if(!raw)return;
+    const raw = event.dataTransfer.getData("application/x-openshell-entry");
+    if (!raw) return;
     event.preventDefault();
     try {
-      const source=JSON.parse(raw) as {side:Side;path:string};
-      if(source.side!==target && source.path)void transfer(source.side,[source.path],target==="remote"?remoteDir:localDir);
-    }catch{ /* ignore unrelated drags */ }
+      const source = JSON.parse(raw) as { side:Side; path?:string; paths?:string[] };
+      const paths = Array.isArray(source.paths)
+        ? source.paths.filter((path): path is string => typeof path === "string" && path.length > 0)
+        : source.path ? [source.path] : [];
+      if (source.side !== target && paths.length) {
+        void transfer(source.side, paths, target === "remote" ? remoteDir : localDir);
+      }
+    } catch {
+      // Ignore unrelated drag payloads.
+    }
   };
   const openEditor = async (entry:Pick<SFTPEntry,"path">) => {
     if(editorLoadInProgress.current || editor || editorSaveInProgress.current)return;
@@ -534,7 +712,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
       <div className="sftp-panes">
         <FilePanel side="local" directory={localDir} entries={localListedKey===directoryCacheKey(refID,localDir)?localFiles:[]} selected={selection.local} loading={localBusy} error={localError} showHidden={hidden.local}
           onToggleHidden={()=>{setHidden(s=>({...s,local:!s.local}));clearSelection("local");}} onChooseDirectory={()=>void api.SFTPChooseDirectory().then(dir=>{if(dir)changeDir("local",dir);}).catch(onNotice)} onDir={dir=>changeDir("local",dir)} onReload={()=>refresh("local")}
-          onSelect={(item,mode)=>choose("local",item,mode)} onSelectAll={paths=>selectAll("local",paths)} onClearSelection={()=>clearSelection("local")} deleting={deleting.local} onCancelDelete={()=>{deletionCancelled.current.local=true;}} onTransfer={()=>void transfer("local",selection.local,remoteDir)}
+          onSelect={(item,mode)=>choose("local",item,mode)} onSelectAll={paths=>selectAll("local",paths)} onMarqueeSelect={(paths,additive)=>selectMarquee("local",paths,additive)} onClearSelection={()=>clearSelection("local")} deleting={deleting.local} onCancelDelete={()=>{deletionCancelled.current.local=true;}} onTransfer={()=>void transfer("local",selection.local,remoteDir)}
           onOperate={action=>void operate("local",action)} onContext={(event,item)=>context(event,"local",item)}
           onFileDrop={event=>drop("local",event)}/>
         <FilePanel side="remote" directory={remoteDir} entries={remoteListedKey===directoryCacheKey(refID,remoteDir)?remoteFiles:[]} selected={selection.remote} loading={remoteBusy} error={remoteError} showHidden={hidden.remote}
@@ -542,7 +720,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
           onCwdHelp={!cwdReported ? () => void Clipboard.SetText(BASH_CWD_REPORT_COMMAND)
             .then(() => onNotice(t("sftp:cwdCommandCopied")))
             .catch(onNotice) : undefined}
-          onOpenFile={item=>void openEditor(item)} onSelect={(item,mode)=>choose("remote",item,mode)} onSelectAll={paths=>selectAll("remote",paths)} onClearSelection={()=>clearSelection("remote")} deleting={deleting.remote} onCancelDelete={()=>{deletionCancelled.current.remote=true;}} onTransfer={()=>void transfer("remote",selection.remote,localDir)}
+          onOpenFile={item=>void openEditor(item)} onSelect={(item,mode)=>choose("remote",item,mode)} onSelectAll={paths=>selectAll("remote",paths)} onMarqueeSelect={(paths,additive)=>selectMarquee("remote",paths,additive)} onClearSelection={()=>clearSelection("remote")} deleting={deleting.remote} onCancelDelete={()=>{deletionCancelled.current.remote=true;}} onTransfer={()=>void transfer("remote",selection.remote,localDir)}
           onOperate={action=>void operate("remote",action)} onContext={(event,item)=>context(event,"remote",item)}
           onFileDrop={event=>drop("remote",event)}/>
       </div>

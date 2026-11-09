@@ -39,24 +39,45 @@ export interface InputDialogOptions {
   confirmLabel?: DisplayText;
 }
 
+export interface ChoiceDialogOption {
+  value: string;
+  label: DisplayText;
+  tone?: "default" | "primary" | "warning";
+}
+
+export interface ChoiceDialogOptions {
+  title: DisplayText;
+  description?: DisplayText;
+  choices: ChoiceDialogOption[];
+  cancelLabel?: DisplayText;
+  tone?: "default" | "warning" | "danger";
+  preview?: string;
+}
+
 interface DialogAPI {
   confirm(options: ConfirmDialogOptions): Promise<boolean>;
   input(options: InputDialogOptions): Promise<string | null>;
+  choose(options: ChoiceDialogOptions): Promise<string | null>;
 }
 
-type DialogRequest =
+type DialogRequestInput =
   | {
-      id: number;
       kind: "confirm";
       options: ConfirmDialogOptions;
       resolve(value: boolean): void;
     }
   | {
-      id: number;
       kind: "input";
       options: InputDialogOptions;
       resolve(value: string | null): void;
+    }
+  | {
+      kind: "choice";
+      options: ChoiceDialogOptions;
+      resolve(value: string | null): void;
     };
+
+type DialogRequest = DialogRequestInput & { id: number };
 
 const DialogContext = createContext<DialogAPI | null>(null);
 
@@ -81,13 +102,16 @@ function DialogContent({
   const titleID = useId();
   const descriptionID = useId();
   const isInput = request.kind === "input";
+  const isChoice = request.kind === "choice";
   const options = request.options;
   const [value, setValue] = useState(
     isInput ? ((options as InputDialogOptions).defaultValue ?? "") : "",
   );
-  const tone = !isInput
-    ? ((options as ConfirmDialogOptions).tone ?? "default")
-    : "default";
+  const tone = request.kind === "confirm"
+    ? request.options.tone ?? "default"
+    : request.kind === "choice"
+      ? request.options.tone ?? "default"
+      : "default";
   const Icon = isInput
     ? (options as InputDialogOptions).icon === "rename"
       ? Pencil
@@ -104,25 +128,28 @@ function DialogContent({
     onDone(result);
   };
 
-  const cancel = () => complete(isInput ? null : false);
+  const cancel = () => complete(isInput || isChoice ? null : false);
   const confirm = () => {
     if (request.kind === "input") {
       const trimmed = value.trim();
       if (trimmed) complete(trimmed);
-    } else {
+    } else if (request.kind === "confirm") {
       complete(true);
     }
   };
 
-  const preview =
-    request.kind === "confirm" ? request.options.preview : undefined;
+  const preview = request.kind === "confirm"
+    ? request.options.preview
+    : request.kind === "choice"
+      ? request.options.preview
+      : undefined;
   const description = options.description
     ? renderMessage(options.description)
     : undefined;
 
   return (
     <ModalSurface
-      className={`app-dialog app-dialog--${tone}`}
+      className={"app-dialog app-dialog--" + tone}
       role={tone === "danger" ? "alertdialog" : "dialog"}
       aria-labelledby={titleID}
       aria-describedby={description ? descriptionID : undefined}
@@ -133,7 +160,7 @@ function DialogContent({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          confirm();
+          if (!isChoice) confirm();
         }}
       >
         <div className="app-dialog__header">
@@ -151,67 +178,92 @@ function DialogContent({
           </button>
         </div>
         <div className="app-dialog__body">
-        {description && (
-          <p id={descriptionID} className="app-dialog__description">
-            {description}
-          </p>
-        )}
-        {request.kind === "input" ? (
-          <label className="app-dialog__field">
-            <span>{renderMessage(request.options.label)}</span>
-            <input
-              ref={inputRef}
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              placeholder={
-                request.options.placeholder
-                  ? renderMessage(request.options.placeholder)
-                  : undefined
-              }
-              autoComplete="off"
-              autoFocus
-            />
-          </label>
-        ) : preview !== undefined ? (
-          <div className="app-dialog__preview">
-            <pre>
-              {preview.length > 4000
-                ? t("common:previewTruncated", { text: preview.slice(0, 4000) })
-                : preview}
-            </pre>
-            {preview.includes("\n") && (
-              <small>
-                {t("common:lineCount", {
-                  count: preview.split(/\r\n|\n|\r/).length,
-                })}
-              </small>
-            )}
+          {description && (
+            <p id={descriptionID} className="app-dialog__description">
+              {description}
+            </p>
+          )}
+          {request.kind === "input" ? (
+            <label className="app-dialog__field">
+              <span>{renderMessage(request.options.label)}</span>
+              <input
+                ref={inputRef}
+                value={value}
+                onChange={(event) => setValue(event.target.value)}
+                placeholder={
+                  request.options.placeholder
+                    ? renderMessage(request.options.placeholder)
+                    : undefined
+                }
+                autoComplete="off"
+                autoFocus
+              />
+            </label>
+          ) : preview !== undefined ? (
+            <div className="app-dialog__preview">
+              <pre>
+                {preview.length > 4000
+                  ? t("common:previewTruncated", { text: preview.slice(0, 4000) })
+                  : preview}
+              </pre>
+              {preview.includes("\n") && (
+                <small>
+                  {t("common:lineCount", {
+                    count: preview.split(/\r\n|\n|\r/).length,
+                  })}
+                </small>
+              )}
+            </div>
+          ) : null}
+        </div>
+        {isChoice ? (
+          <div className="app-dialog__actions app-dialog__actions--choices">
+            {request.options.choices.map(choice => (
+              <button
+                key={choice.value}
+                type="button"
+                className={"app-dialog__choice" + (choice.tone ? " app-dialog__choice--" + choice.tone : "")}
+                onClick={() => complete(choice.value)}
+              >
+                {renderMessage(choice.label)}
+              </button>
+            ))}
+            <button
+              type="button"
+              ref={cancelRef}
+              className="app-dialog__secondary app-dialog__cancel"
+              onClick={cancel}
+            >
+              {request.options.cancelLabel
+                ? renderMessage(request.options.cancelLabel)
+                : t("common:cancel")}
+            </button>
           </div>
-        ) : null}
-        </div>
-        <div className="app-dialog__actions">
-          <button
-            type="button"
-            ref={cancelRef}
-            className="app-dialog__secondary"
-            onClick={cancel}
-          >
-            {!isInput && (options as ConfirmDialogOptions).cancelLabel
-              ? renderMessage((options as ConfirmDialogOptions).cancelLabel!)
-              : t("common:cancel")}
-          </button>
-          <button
-            type="submit"
-            className={`app-dialog__primary ${tone === "danger" ? "app-dialog__primary--danger" : ""}`}
-            disabled={isInput && !value.trim()}
-          >
-            {options.confirmLabel
-              ? renderMessage(options.confirmLabel)
-              : isInput
-                ? t("common:ok")
-                : t("common:confirm")}
-          </button>
-        </div>
+        ) : (
+          <div className="app-dialog__actions">
+            <button
+              type="button"
+              ref={cancelRef}
+              className="app-dialog__secondary"
+              onClick={cancel}
+            >
+              {!isInput && (options as ConfirmDialogOptions).cancelLabel
+                ? renderMessage((options as ConfirmDialogOptions).cancelLabel!)
+                : t("common:cancel")}
+            </button>
+            <button
+              type="submit"
+              className={"app-dialog__primary" + (tone === "danger" ? " app-dialog__primary--danger" : "")}
+              disabled={isInput && !value.trim()}
+            >
+              {options.confirmLabel
+                ? renderMessage(options.confirmLabel)
+                : isInput
+                  ? t("common:ok")
+                  : t("common:confirm")}
+            </button>
+          </div>
+        )}
       </form>
     </ModalSurface>
   );
@@ -223,44 +275,39 @@ export function DialogProvider({ children }: PropsWithChildren) {
   const id = useRef(0);
   const [current, setCurrent] = useState<DialogRequest | null>(null);
 
+  const enqueue = useCallback((request: DialogRequestInput) => {
+    queue.current.push({ ...request, id: ++id.current } as DialogRequest);
+    if (queue.current.length === 1) setCurrent(queue.current[0]);
+  }, []);
+
   const confirm = useCallback(
     (options: ConfirmDialogOptions): Promise<boolean> =>
-      new Promise((resolve) => {
-        queue.current.push({
-          id: ++id.current,
-          kind: "confirm",
-          options,
-          resolve,
-        });
-        if (queue.current.length === 1) setCurrent(queue.current[0]);
-      }),
-    [],
+      new Promise(resolve => enqueue({ kind: "confirm", options, resolve })),
+    [enqueue],
   );
 
   const input = useCallback(
     (options: InputDialogOptions): Promise<string | null> =>
-      new Promise((resolve) => {
-        queue.current.push({
-          id: ++id.current,
-          kind: "input",
-          options,
-          resolve,
-        });
-        if (queue.current.length === 1) setCurrent(queue.current[0]);
-      }),
-    [],
+      new Promise(resolve => enqueue({ kind: "input", options, resolve })),
+    [enqueue],
+  );
+
+  const choose = useCallback(
+    (options: ChoiceDialogOptions): Promise<string | null> =>
+      new Promise(resolve => enqueue({ kind: "choice", options, resolve })),
+    [enqueue],
   );
 
   const done = useCallback((result: boolean | string | null) => {
     const request = queue.current.shift();
     if (request?.kind === "confirm") request.resolve(result === true);
-    else if (request?.kind === "input")
+    else if (request?.kind === "input" || request?.kind === "choice")
       request.resolve(typeof result === "string" ? result : null);
     setCurrent(queue.current[0] ?? null);
   }, []);
 
   return (
-    <DialogContext.Provider value={{ confirm, input }}>
+    <DialogContext.Provider value={{ confirm, input, choose }}>
       {children}
       {current && (
         <DialogContent key={current.id} request={current} onDone={done} />

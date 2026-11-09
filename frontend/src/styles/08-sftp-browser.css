@@ -55,7 +55,18 @@
   background: transparent; font: 11px Consolas, monospace; color: var(--text-primary);
   padding: 0 7px; outline: none;
 }
-.sftp-file-table { overflow: auto; flex: 1; min-height: 0; }
+.sftp-file-table { position: relative; overflow: auto; flex: 1; min-height: 0; }
+.sftp-file-table.is-selecting,
+.sftp-file-table.is-selecting * { user-select: none; -webkit-user-select: none; }
+.sftp-file-table.is-selecting { cursor: crosshair; }
+.sftp-marquee {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  opacity: .58;
+}
 .sftp-column-head, .sftp-file-row {
   display: grid; grid-template-columns: minmax(0,1fr) 74px 89px 48px;
   align-items: center; text-align: left; column-gap: 8px; padding: 0 9px;
