@@ -174,6 +174,7 @@ type zmodemDirectionWriter struct {
 	tail        []byte
 	onDirection func(string) bool
 	onTrzsz     func(string, bool) bool
+	metadata    *zmodemMetadataParser
 }
 
 var zmodemDirectionPattern = regexp.MustCompile(`\*\*\x18B0([01])[0-9a-f]{12}`)
@@ -219,6 +220,9 @@ func (w *zmodemDirectionWriter) Write(p []byte) (int, error) {
 				return len(p), nil
 			}
 		}
+	}
+	if w.metadata != nil {
+		w.metadata.Write(p)
 	}
 	return w.dst.Write(p)
 }
@@ -273,22 +277,67 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
         m.mu.Lock()
         current := m.connections[ref.TabID]
         valid := current == connection && current.ref == ref
-        if valid { connection.transferring = transferring }
+        if valid {
+            connection.transferring = transferring
+        }
+        event := map[string]any{"ref": ref, "active": transferring}
+        if valid && connection.transferID != 0 {
+            event["transferId"] = strconv.FormatUint(connection.transferID, 10)
+            if !transferring {
+                if connection.transferCancelled {
+                    event["status"] = "cancelled"
+                } else {
+                    event["status"] = "completed"
+                }
+            }
+        }
         m.mu.Unlock()
-        if valid && !transferring { _ = filter.SetDefaultDownloadPath("") }
-        if valid { m.emit("ssh:transfer-state", map[string]any{"ref": ref, "active": transferring}) }
+        if valid && !transferring {
+            _ = filter.SetDefaultDownloadPath("")
+        }
+        if valid {
+            m.emit("ssh:transfer-state", event)
+        }
     })
+	metadata := newZmodemMetadataParser(
+		func(file zmodemFileMetadata) {
+			m.mu.Lock()
+			valid := m.connections[ref.TabID] == connection && connection.ref == ref &&
+				connection.transferID != 0 && connection.transferProtocol == "zmodem" &&
+				connection.transferDirection == "download"
+			transferID := connection.transferID
+			m.mu.Unlock()
+			if valid {
+				m.emit("ssh:transfer-file", map[string]any{
+					"ref": ref, "transferId": strconv.FormatUint(transferID, 10),
+					"kind": "start", "name": file.Name, "total": file.Total,
+				})
+			}
+		},
+		func(file zmodemFileMetadata, processed uint64) {
+			m.mu.Lock()
+			valid := m.connections[ref.TabID] == connection && connection.ref == ref &&
+				connection.transferID != 0 && connection.transferProtocol == "zmodem" &&
+				connection.transferDirection == "download"
+			transferID := connection.transferID
+			m.mu.Unlock()
+			if valid {
+				m.emit("ssh:transfer-file", map[string]any{
+					"ref": ref, "transferId": strconv.FormatUint(transferID, 10),
+					"kind": "completed", "name": file.Name, "total": file.Total,
+					"processed": processed,
+				})
+			}
+		},
+	)
 	observedOutput := &zmodemDirectionWriter{
-		dst: remoteOutput,
+		dst:      remoteOutput,
+		metadata: metadata,
 		onDirection: func(direction string) bool {
-            if !m.selectZmodemPaths(connection, direction, "zmodem", false, filter, remoteInput) { return false }
-            m.emit("ssh:transfer-details", map[string]any{"ref": ref, "direction": direction, "protocol": "zmodem"})
-            return true
-        },
+			return m.selectZmodemPaths(connection, direction, "zmodem", false, filter, remoteInput)
+		},
 		onTrzsz: func(direction string, directory bool) bool {
-			if !m.selectZmodemPaths(connection, direction, "trzsz", directory, filter, remoteInput) { return false }
-			m.emit("ssh:transfer-details", map[string]any{"ref": ref, "direction": direction, "protocol": "trzsz"})
-			return true
+			return m.selectZmodemPaths(connection, direction, "trzsz", directory, filter, remoteInput)
 		},
 	}
 	gate := newTerminalOutputGate(observedOutput)
@@ -358,50 +407,111 @@ var trzszProgressPattern = regexp.MustCompile(`([0-9]{1,3})% \| ([0-9]+(?:\.[0-9
 // trzsz-go emits these messages immediately after the local rz/sz child exits.
 // Its transfer-state callback can be delayed until further remote SSH output.
 // Observe the exact local protocol message to close the progress UI promptly.
-var zmodemLocalExitPattern = regexp.MustCompile(`\r\x1b\[2K(?:\x1b\[1;32mSuccess!!\x1b\[0m|client exit with [0-9]+)\r\n`)
+var zmodemLocalExitPattern = regexp.MustCompile(`\r\x1b\[2K(?:\x1b\[1;32mSuccess!!\x1b\[0m|client exit with ([0-9]+))\r\n`)
 func (o *terminalOutputCloser) Write(p []byte) (int, error) {
     o.mu.Lock()
     oldTailSize := len(o.tail)
     data := append(append([]byte(nil), o.tail...), p...)
     matches := zmodemProgressPattern.FindAllSubmatch(data, -1)
     nativeMatches := trzszProgressPattern.FindAllSubmatch(data, -1)
+    var exitStatus, exitError string
     locallyExited := false
-    for _, loc := range zmodemLocalExitPattern.FindAllIndex(data, -1) {
-        if loc[1] > oldTailSize {
-            locallyExited = true
-            break
+    for _, loc := range zmodemLocalExitPattern.FindAllStringSubmatchIndex(string(data), -1) {
+        if loc[1] <= oldTailSize {
+            continue
         }
+        locallyExited = true
+        if loc[2] >= 0 {
+            exitStatus = "failed"
+            exitError = "本地 ZMODEM 进程退出，代码 " + string(data[loc[2]:loc[3]])
+        } else {
+            exitStatus = "completed"
+        }
+        break
     }
     if len(data) > 256 { data = data[len(data)-256:] }
     o.tail = append(o.tail[:0], data...)
+    o.writer.m.mu.Lock()
+    transferID := o.writer.c.transferID
+    transferCancelled := o.writer.c.transferCancelled
+    o.writer.m.mu.Unlock()
+    transferIDText := ""
+    if transferID != 0 {
+        transferIDText = strconv.FormatUint(transferID, 10)
+    }
     if len(nativeMatches) != 0 && time.Since(o.lastProgress) >= 180*time.Millisecond {
         last := nativeMatches[len(nativeMatches)-1]
         percentage := -1
         if n, err := strconv.Atoi(string(last[1])); err == nil && n <= 100 { percentage = n }
         if percentage >= 0 {
             o.lastProgress = time.Now()
-            o.writer.m.emit("ssh:transfer-progress", map[string]any{
+            event := map[string]any{
                 "ref": o.writer.c.ref, "protocol": "trzsz", "percent": percentage,
                 "transferred": string(last[2]), "speed": string(last[3]),
-            })
+                "processed": parseZmodemDisplaySize(string(last[2])),
+            }
+            if transferIDText != "" { event["transferId"] = transferIDText }
+            o.writer.m.emit("ssh:transfer-progress", event)
         }
     } else if len(matches) != 0 && time.Since(o.lastProgress) >= 180*time.Millisecond {
         last := matches[len(matches)-1]
         o.lastProgress = time.Now()
-        o.writer.m.emit("ssh:transfer-progress", map[string]any{
+        event := map[string]any{
             "ref": o.writer.c.ref,
             "transferred": string(last[1]),
             "speed": string(last[2]),
-        })
+            "processed": parseZmodemDisplaySize(string(last[1])),
+        }
+        if transferIDText != "" { event["transferId"] = transferIDText }
+        o.writer.m.emit("ssh:transfer-progress", event)
     }
     if locallyExited {
-        o.writer.m.emit("ssh:transfer-finished", map[string]any{
+        status := exitStatus
+        if transferCancelled {
+            status = "cancelled"
+            exitError = ""
+        }
+        event := map[string]any{
             "ref": o.writer.c.ref,
-        })
+            "status": status,
+            "error": exitError,
+        }
+        if transferIDText != "" { event["transferId"] = transferIDText }
+        o.writer.m.emit("ssh:transfer-finished", event)
     }
     o.mu.Unlock()
     return o.writer.Write(p)
 }
+func parseZmodemDisplaySize(value string) uint64 {
+	fields := strings.Fields(strings.TrimSpace(value))
+	if len(fields) != 2 {
+		return 0
+	}
+	amount, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil || amount < 0 || amount > 1e15 {
+		return 0
+	}
+	multiplier := float64(1)
+	switch strings.ToUpper(fields[1]) {
+	case "KB":
+		multiplier = 1 << 10
+	case "MB":
+		multiplier = 1 << 20
+	case "GB":
+		multiplier = 1 << 30
+	case "TB":
+		multiplier = 1 << 40
+	case "PB":
+		multiplier = 1 << 50
+	case "EB":
+		multiplier = 1 << 60
+	case "B":
+	default:
+		return 0
+	}
+	return uint64(amount * multiplier)
+}
+
 func (o *terminalOutputCloser) Close() error {
 	o.once.Do(func() { o.writer.Close(); close(o.done) })
 	return nil
@@ -485,6 +595,7 @@ func (m *Manager) CancelZmodem(ref domain.ConnectionRef) error {
         m.mu.Unlock()
         return apperror.New("noActiveFileTransfer", nil)
     }
+    c.transferCancelled = true
     filter := c.filter
     input := c.stdin
     m.mu.Unlock()
