@@ -93,6 +93,17 @@ func TestREPLSourceValidation(t *testing.T) {
 	}
 }
 
+func TestRedisSourceSeparatesCommandAndCompletionMarker(t *testing.T) {
+	source,err:=replSource("redis","GET temp_version","OPEN_SHELL_AI_REPL_123")
+	if err!=nil || source!="GET temp_version\r" || strings.Contains(source,"ECHO") {
+		t.Fatalf("Redis command must be sent alone: %q, %v",source,err)
+	}
+	marker,err:=replCompletionSource("redis","OPEN_SHELL_AI_REPL_123")
+	if err!=nil || marker!="ECHO OPEN_SHELL_AI_REPL_123\r" {
+		t.Fatalf("unexpected Redis completion command: %q, %v",marker,err)
+	}
+}
+
 func TestREPLMarkerAndPromptRequired(t *testing.T) {
 	cases:=[]struct{program,prompt,result string}{
 		{"redis","127.0.0.1:6379> ","\"OPEN_SHELL_AI_REPL_123\""},
@@ -102,7 +113,7 @@ func TestREPLMarkerAndPromptRequired(t *testing.T) {
 	for _,tc:=range cases {
 		cmd:=&terminalAICommand{
 			done:make(chan terminalAIResult,1),
-			repl:&replAIState{program:tc.program,marker:"OPEN_SHELL_AI_REPL_123"},
+			repl:&replAIState{program:tc.program,marker:"OPEN_SHELL_AI_REPL_123",markerSent:tc.program=="redis"},
 		}
 		cmd.consumeREPL([]byte("result: 42\r\nSELECT 'OPEN_SHELL_AI_REPL_123' AS marker;\r\n"))
 		select {case <-cmd.done:t.Fatal("echoed marker completed early");default:}
@@ -132,6 +143,12 @@ func TestREPLLeaseUsesExistingPTY(t *testing.T) {
 			input.onWrite=func(p []byte) {
 				wire:=string(p)
 				if strings.Contains(wire,"OpenShellAI;") {t.Errorf("Shell marker sent to %s",tc.program);return}
+				if tc.program=="redis" && !strings.HasPrefix(wire,"ECHO ") {
+					reply:=[]byte("\r\n"+tc.result+"\r\n"+tc.prompt)
+					lease.connection.readiness.observe(reply)
+					lease.Observe(reply)
+					return
+				}
 				marker:=regexp.MustCompile("OPEN_SHELL_AI_REPL_[a-f0-9]+").FindString(wire)
 				if marker=="" {t.Errorf("missing marker: %q",wire);return}
 				reply:=[]byte("\r\n"+tc.result+"\r\n"+marker+"\r\n"+tc.prompt)
@@ -147,6 +164,96 @@ func TestREPLLeaseUsesExistingPTY(t *testing.T) {
 			lease.Release()
 		})
 	}
+}
+
+func TestRedisCompletionMarkerWaitsForClusterRedirectPrompt(t *testing.T) {
+	_,lease,input:=newAITestLease()
+	lease.program="redis"
+	initREPLState(t,&lease.connection.readiness,"redis-cli -c","10.10.10.70:6380> ","redis")
+
+	commandSent:=make(chan struct{})
+	markerSent:=make(chan struct{})
+	input.onWrite=func(p []byte) {
+		wire:=string(p)
+		if strings.HasPrefix(wire,"GET ") {
+			close(commandSent)
+			reply:=[]byte("\r\n-> Redirected to slot [16099] located at 10.10.10.70:6383\r\n(nil)\r\n")
+			lease.connection.readiness.observe(reply)
+			lease.Observe(reply)
+			return
+		}
+		if strings.HasPrefix(wire,"ECHO ") {
+			close(markerSent)
+			marker:=strings.TrimSuffix(strings.TrimPrefix(wire,"ECHO "), "\r")
+			reply:=[]byte("\r\n\""+marker+"\"\r\n10.10.10.70:6383> ")
+			lease.connection.readiness.observe(reply)
+			lease.Observe(reply)
+			return
+		}
+		t.Errorf("unexpected Redis PTY input: %q",wire)
+	}
+	type result struct { output string; err error }
+	resultCh:=make(chan result,1)
+	go func() {
+		ctx,cancel:=context.WithTimeout(context.Background(),3*time.Second)
+		defer cancel()
+		output,err:=lease.Run(ctx,"GET temp_version")
+		resultCh<-result{output:output,err:err}
+	}()
+
+	<-commandSent
+	select {
+	case <-markerSent:
+		t.Fatal("completion marker was sent before Redis returned its redirected prompt")
+	case <-time.After(100*time.Millisecond):
+	}
+	prompt:=[]byte("10.10.10.70:6383> ")
+	lease.connection.readiness.observe(prompt)
+	lease.Observe(prompt)
+	select {
+	case <-markerSent:
+	case <-time.After(2*time.Second):
+		t.Fatal("completion marker was not sent after Redis returned to its prompt")
+	}
+	got:=<-resultCh
+	if got.err!=nil || !strings.Contains(got.output,"(nil)") ||
+		!strings.Contains(got.output,"Redirected to slot") ||
+		!strings.Contains(got.output,"执行状态: 成功") {
+		t.Fatalf("unexpected Redis result: %q, %v",got.output,got.err)
+	}
+	lease.Release()
+}
+
+func TestRedisCompletionMarkerTimeoutPoisonsLease(t *testing.T) {
+	_,lease,input:=newAITestLease()
+	lease.program="redis"
+	initREPLState(t,&lease.connection.readiness,"redis-cli","127.0.0.1:6379> ","redis")
+	markerSent:=make(chan struct{})
+	input.onWrite=func(p []byte) {
+		wire:=string(p)
+		if strings.HasPrefix(wire,"ECHO ") {
+			close(markerSent)
+			return
+		}
+		reply:=[]byte("\r\nPONG\r\n127.0.0.1:6379> ")
+		lease.connection.readiness.observe(reply)
+		lease.Observe(reply)
+	}
+	ctx,cancel:=context.WithTimeout(context.Background(),700*time.Millisecond)
+	defer cancel()
+	_,err:=lease.Run(ctx,"PING")
+	if err==nil || !lease.Failed() {
+		t.Fatalf("expected marker timeout to poison the lease: %v",err)
+	}
+	select {
+	case <-markerSent:
+	default:
+		t.Fatal("Redis completion marker was not sent after the command prompt")
+	}
+	if !strings.Contains(input.String(),string([]byte{3})) {
+		t.Fatal("Redis marker timeout should interrupt the PTY")
+	}
+	lease.Release()
 }
 
 func TestREPLTimeoutPoisonsLease(t *testing.T) {
