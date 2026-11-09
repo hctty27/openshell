@@ -8,16 +8,26 @@ import { mergeTransferHistory } from "../features/transfers/transferHistory";
 
 type Direction = "upload" | "download";
 type Protocol = "zmodem" | "trzsz";
-type TransferStatus = "running" | "cancelling" | "completed" | "cancelled";
+type TransferStatus = "running" | "cancelling" | "completed" | "cancelled" | "failed";
+
+interface TerminalFile {
+  name: string;
+  total: number | null;
+  status: "queued" | "running" | "completed" | "cancelled" | "failed";
+}
 
 interface TerminalTransfer {
   ref: Ref;
+  transferId: string;
   protocol: Protocol;
   direction?: Direction;
   status: TransferStatus;
   transferred?: string;
   speed?: string;
   percent?: number;
+  processed?: number;
+  files: TerminalFile[];
+  error?: string;
 }
 
 interface NativeFile {
@@ -44,6 +54,7 @@ interface Props {
 }
 
 const refKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generation}`;
+const transferKey = (ref: Ref, transferId?: string) => `${refKey(ref)}:${transferId || "legacy"}`;
 const activeSftp = (task: SFTPTask) => task.status === "queued" || task.status === "running";
 const formatSize = (bytes: number) =>
   bytes < 1024 ? `${bytes} B` : bytes < 1048576 ?
@@ -73,71 +84,155 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
 
   useEffect(() => {
     const offDetails = listen("ssh:transfer-details", (event: {
-      ref: Ref; direction: Direction; protocol?: Protocol;
+      ref: Ref; transferId?: string; direction: Direction; protocol?: Protocol;
+      files?: { name: string; total?: number | null }[];
     }) => {
       if (!event?.ref) return;
-      const key = refKey(event.ref);
+      const transferId = event.transferId || "legacy";
+      const key = transferKey(event.ref, transferId);
       finished.current.delete(key);
       setTerminalJobs(previous => ({
         ...previous,
         [key]: {
-          ref: event.ref, direction: event.direction,
+          ref: event.ref, transferId, direction: event.direction,
           protocol: event.protocol === "trzsz" ? "trzsz" : "zmodem",
           status: "running",
+          files: (event.files ?? []).map(file => ({
+            name: file.name,
+            total: typeof file.total === "number" ? file.total : null,
+            status: "queued",
+          })),
         },
       }));
     });
-    const offState = listen("ssh:transfer-state", (event: { ref: Ref; active: boolean }) => {
+    const offState = listen("ssh:transfer-state", (event: {
+      ref: Ref; transferId?: string; active: boolean; status?: TransferStatus;
+    }) => {
       if (!event?.ref) return;
-      const key = refKey(event.ref);
+      const transferId = event.transferId || "legacy";
+      const key = transferKey(event.ref, transferId);
       if (event.active) {
         if (finished.current.has(key)) return;
-        setTerminalJobs(previous => ({
-          ...previous,
-          [key]: { ref: event.ref, protocol: previous[key]?.protocol ?? "trzsz",
-            direction: previous[key]?.direction, status: "running",
-            transferred: previous[key]?.transferred, speed: previous[key]?.speed,
-            percent: previous[key]?.percent },
-        }));
+        setTerminalJobs(previous => {
+          const job = previous[key];
+          return {
+            ...previous,
+            [key]: {
+              ...job,
+              ref: event.ref, transferId,
+              protocol: job?.protocol ?? "trzsz",
+              direction: job?.direction,
+              status: job?.status === "cancelling" ? "cancelling" : "running",
+              files: job?.files ?? [],
+            },
+          };
+        });
       } else {
+        if (finished.current.has(key)) return;
         finished.current.add(key);
         setTerminalJobs(previous => {
           const job = previous[key];
           if (!job) return previous;
-          return { ...previous, [key]: { ...job,
-            status: job.status === "cancelling" ? "cancelled" : "completed" } };
+          const status = event.status ?? (job.status === "cancelling" ? "cancelled" : "completed");
+          return {
+            ...previous,
+            [key]: {
+              ...job, status,
+              files: job.files.map(file => file.status === "completed" ? file : ({
+                ...file, status: status === "completed" ? "completed" : status === "failed" ? "failed" : "cancelled",
+              })),
+            },
+          };
         });
       }
     });
     const offProgress = listen("ssh:transfer-progress", (event: {
-      ref: Ref; transferred?: string; speed?: string;
-      protocol?: Protocol; percent?: number;
+      ref: Ref; transferId?: string; transferred?: string; speed?: string;
+      protocol?: Protocol; percent?: number; processed?: number;
     }) => {
       if (!event?.ref) return;
-      const key = refKey(event.ref);
+      const transferId = event.transferId || "legacy";
+      const key = transferKey(event.ref, transferId);
       if (finished.current.has(key)) return;
-      setTerminalJobs(previous => ({
-        ...previous,
-        [key]: {
-          ref: event.ref,
-          protocol: event.protocol === "trzsz" ? "trzsz" : previous[key]?.protocol ?? "zmodem",
-          direction: previous[key]?.direction,
-          status: previous[key]?.status === "cancelling" ? "cancelling" : "running",
-          transferred: event.transferred,
-          speed: event.speed,
-          percent: typeof event.percent === "number" && event.percent >= 0 &&
-            event.percent <= 100 ? event.percent : previous[key]?.percent,
-        },
-      }));
+      setTerminalJobs(previous => {
+        const job = previous[key];
+        return {
+          ...previous,
+          [key]: {
+            ...job,
+            ref: event.ref, transferId,
+            protocol: event.protocol === "trzsz" ? "trzsz" : job?.protocol ?? "zmodem",
+            direction: job?.direction,
+            status: job?.status === "cancelling" ? "cancelling" : "running",
+            transferred: event.transferred ?? job?.transferred,
+            speed: event.speed ?? job?.speed,
+            processed: typeof event.processed === "number" ? event.processed : job?.processed,
+            percent: typeof event.percent === "number" && event.percent >= 0 &&
+              event.percent <= 100 ? event.percent : job?.percent,
+            files: (job?.files ?? []).map(file => file.status === "queued" ? ({
+              ...file, status: "running",
+            }) : file),
+          },
+        };
+      });
     });
-    const offFinished = listen("ssh:transfer-finished", (event: { ref: Ref }) => {
+    const offFinished = listen("ssh:transfer-finished", (event: {
+      ref: Ref; transferId?: string; status?: TransferStatus; error?: string;
+    }) => {
       if (!event?.ref) return;
-      const key = refKey(event.ref);
+      const transferId = event.transferId || "legacy";
+      const key = transferKey(event.ref, transferId);
       finished.current.add(key);
       setTerminalJobs(previous => {
         const job = previous[key];
-        return job ? { ...previous, [key]: { ...job,
-          status: job.status === "cancelling" ? "cancelled" : "completed" } } : previous;
+        if (!job) return previous;
+        const status = event.status ?? (job.status === "cancelling" ? "cancelled" : "completed");
+        return {
+          ...previous,
+          [key]: {
+            ...job, status, error: event.error,
+            percent: status === "completed" ? 100 : job.percent,
+            files: job.files.map(file => file.status === "completed" ? file : ({
+              ...file, status: status === "completed" ? "completed" : status === "failed" ? "failed" : "cancelled",
+            })),
+          },
+        };
+      });
+    });
+    const offFile = listen("ssh:transfer-file", (event: {
+      ref: Ref; transferId: string; kind: "start" | "completed";
+      name: string; total?: number; processed?: number;
+    }) => {
+      if (!event?.ref || !event.transferId || !event.name) return;
+      const key = transferKey(event.ref, event.transferId);
+      if (finished.current.has(key)) return;
+      setTerminalJobs(previous => {
+        const job = previous[key];
+        if (!job) return previous;
+        const files = [...job.files];
+        let index = files.findIndex(file => file.name === event.name && file.status !== "completed");
+        if (event.kind === "start") {
+          if (index < 0) {
+            files.push({
+              name: event.name,
+              total: typeof event.total === "number" ? event.total : null,
+              status: "running",
+            });
+          } else {
+            files[index] = {
+              ...files[index],
+              total: typeof event.total === "number" ? event.total : files[index].total,
+              status: "running",
+            };
+          }
+        } else if (index >= 0) {
+          files[index] = {
+            ...files[index],
+            total: typeof event.total === "number" ? event.total : files[index].total,
+            status: "completed",
+          };
+        }
+        return { ...previous, [key]: { ...job, files } };
       });
     });
     const offNativeBatch = listen("ssh:native-zmodem-batch", (event: {
@@ -212,17 +307,20 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     });
     const offDisconnect = listen("ssh:disconnected", (ref: Ref) => {
       if (!ref) return;
-      const key = refKey(ref);
-      finished.current.add(key);
+      const prefix = refKey(ref) + ":";
+      for (const key of finished.current) {
+        if (key.startsWith(prefix)) finished.current.delete(key);
+      }
       setTerminalJobs(previous => {
-        if (!previous[key]) return previous;
         const next = { ...previous };
-        delete next[key];
+        for (const key of Object.keys(next)) {
+          if (key.startsWith(prefix)) delete next[key];
+        }
         return next;
       });
     });
     return () => {
-      offDetails(); offState(); offProgress(); offFinished(); offNativeBatch(); offNativeFile(); offNativeProgress(); offSftp(); offDisconnect();
+      offDetails(); offState(); offProgress(); offFinished(); offFile(); offNativeBatch(); offNativeFile(); offNativeProgress(); offSftp(); offDisconnect();
     };
   }, []);
 
@@ -265,7 +363,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       });
       setTerminalJobs(previous => {
         const ended = Object.entries(previous).filter(([, job]) =>
-          job.status === "completed" || job.status === "cancelled");
+          job.status === "completed" || job.status === "cancelled" || job.status === "failed");
         if (!ended.length) return previous;
         const next = { ...previous };
         for (const [key] of ended) delete next[key];
@@ -278,7 +376,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         for (const task of completed) delete next[task.id];
         return next;
       });
-    }, 20000);
+    }, 5000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -286,7 +384,8 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     .filter(([key]) => liveRefs.some(ref => refKey(ref) === key))
     .map(([key, batch]) => ({ key, batch })), [nativeBatches, refIDs]);
   const terminal = useMemo(() => Object.entries(terminalJobs)
-    .filter(([key]) => liveRefs.some(ref => refKey(ref) === key) && !nativeBatches[key])
+    .filter(([key]) => liveRefs.some(ref => key.startsWith(refKey(ref) + ":")) &&
+      !nativeBatches[refKey(terminalJobs[key].ref)])
     .map(([key, job]) => ({ key, job })), [terminalJobs, nativeBatches, refIDs]);
   const sftp = useMemo(() => Object.values(sftpJobs)
     .filter(task => liveRefs.some(ref => refKey(ref) === refKey(task.ref)))
@@ -435,30 +534,57 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                 </article>
               );
             })}
-            {terminal.map(({ key, job }) => (
-              <article key={key} className="transfer-center-job">
-                <div className="transfer-center-line">
-                  {job.direction === "download" ? <ArrowDownToLine size={15} /> : <ArrowUpFromLine size={15} />}
-                  <strong>{job.protocol === "trzsz" ? "trzsz" : "ZMODEM"}</strong>
-                  <span className="transfer-center-session" title={sessionName(job.ref)}>{sessionName(job.ref)}</span>
-                  {job.status === "running" || job.status === "cancelling" ?
-                    <button type="button" disabled={job.status === "cancelling"}
-                      title={t("sftp:cancelTransfer")} onClick={() => cancelTerminal(key, job)}><X size={14} /></button> :
-                    <Check size={15} />}
-                </div>
-                <div className={`transfer-center-bar ${job.percent == null || job.protocol === "zmodem" ? "indeterminate" : ""}`}
-                  role="progressbar" aria-valuemin={0}
-                  aria-valuemax={job.percent == null ? undefined : 100}
-                  aria-valuenow={job.percent == null ? undefined : job.percent}>
-                  <div style={job.percent != null && job.protocol === "trzsz" ? { width: `${job.percent}%` } : undefined} />
-                </div>
-                <div className="transfer-center-metrics">
-                  <span>{job.transferred ?? t("sftp:estimating")}{job.speed ? ` · ${job.speed}` : ""}</span>
-                  <span>{job.percent != null && job.protocol === "trzsz" ?
-                    `${job.percent}%` : t("sftp:transferUnknownProgress")}</span>
-                </div>
-              </article>
-            ))}
+            {terminal.map(({ key, job }) => {
+              const sizesKnown = job.files.length > 0 && job.files.every(file => file.total != null);
+              const total = sizesKnown ? job.files.reduce((sum, file) => sum + (file.total ?? 0), 0) : null;
+              const percent = job.status === "completed" ? 100 :
+                total != null && total > 0 && typeof job.processed === "number"
+                  ? Math.min(100, Math.round(job.processed / total * 100))
+                  : job.percent ?? (total === 0 && sizesKnown ? 0 : null);
+              const active = job.status === "running" || job.status === "cancelling";
+              const statusLabel = job.status === "completed" ? t("sftp:completed") :
+                job.status === "failed" ? t("sftp:failed") :
+                job.status === "cancelled" ? t("sftp:cancelled") : t("sftp:running");
+              const progressText = total != null
+                ? `${formatSize(job.processed ?? 0)} / ${formatSize(total)}`
+                : job.transferred ?? (job.status === "completed" ? t("sftp:completed") :
+                  job.status === "failed" ? t("sftp:failed") : t("sftp:estimating"));
+              return (
+                <article key={key} className="transfer-center-job">
+                  <div className="transfer-center-line">
+                    {job.direction === "download" ? <ArrowDownToLine size={15} /> : <ArrowUpFromLine size={15} />}
+                    <strong>{job.protocol === "trzsz" ? "trzsz" : "ZMODEM"}{job.files.length > 1 ? ` · ${job.files.length} 个文件` : ""}</strong>
+                    <span className="transfer-center-session" title={sessionName(job.ref)}>{sessionName(job.ref)}</span>
+                    {active ?
+                      <button type="button" disabled={job.status === "cancelling"}
+                        title={t("sftp:cancelTransfer")} onClick={() => cancelTerminal(key, job)}><X size={14} /></button> :
+                      <Check size={15} />}
+                  </div>
+                  {job.files.length > 0 && (
+                    <div className="transfer-center-terminal-files">
+                      {job.files.slice(0, 4).map((file, index) => (
+                        <div key={job.transferId + ":" + index} className="transfer-center-terminal-file">
+                          <span title={file.name}>{file.name}</span>
+                          <span>{file.total == null ? "—" : formatSize(file.total)}</span>
+                        </div>
+                      ))}
+                      {job.files.length > 4 && <span className="transfer-center-terminal-more">+{job.files.length - 4} 个文件</span>}
+                    </div>
+                  )}
+                  <div className={"transfer-center-bar" + (active && percent == null ? " indeterminate" : "")}
+                    role="progressbar" aria-valuemin={0} aria-valuemax={percent == null ? undefined : 100}
+                    aria-valuenow={percent == null ? undefined : percent}>
+                    <div style={percent == null ? undefined : { width: String(percent) + "%" }} />
+                  </div>
+                  <div className="transfer-center-metrics">
+                    <span>{progressText}{job.speed && active ? ` · ${job.speed}` : ""}</span>
+                    <span title={job.error}>{percent == null ? statusLabel : job.status === "completed" ?
+                      t("sftp:completed") : `${percent}%`}</span>
+                  </div>
+                  {job.error && <div className="transfer-center-terminal-error" title={job.error}>{job.error}</div>}
+                </article>
+              );
+            })}
             {groupedSftp.map(group => {
               const active = group.allTasks.filter(activeSftp).length;
               const completed = group.allTasks.filter(task => task.status === "completed").length;
