@@ -371,7 +371,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       } catch (error) {
         inputQueue.length = 0;
         const reason = errorText(error);
-        if (!disposed && !reason.includes("原生 ZMODEM 独占终端输入")) {
+        if (!disposed && !reason.includes("native terminal input busy")) {
           callbacks.current.onError(error);
         }
       } finally {
