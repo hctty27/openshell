@@ -6,7 +6,7 @@ import { t } from "../i18n";
 import type { Ref, SFTPEntry } from "../types";
 
 type Direction = "upload" | "download";
-interface PickerRequest { ref: Ref; id: number; direction: Direction; protocol?: "zmodem" | "trzsz"; allowDirectories?: boolean }
+interface PickerRequest { ref: Ref; id: number; direction: Direction; protocol?: "zmodem" | "trzsz"; allowDirectories?: boolean; native?: boolean; remotePath?: string }
 interface Places { home: string; roots: string[] }
 interface Props {
   activeRef?: Ref;
@@ -41,6 +41,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
   const dialogRef = useRef<HTMLDialogElement>(null);
   const submittingKey = useRef("");
   const navigatedDirectory = useRef("");
+  const nextNativeRequestID = useRef(0);
   const currentRequestKey = useRef(requestKey);
   const onClosedRef = useRef(onClosed);
   currentRequestKey.current = requestKey;
@@ -49,6 +50,22 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
   useEffect(() => {
     const offPick = listen("ssh:zmodem-pick", (request: PickerRequest) => {
       if (!request?.ref || !["upload", "download"].includes(request.direction)) return;
+      setRequests(previous => ({ ...previous, [refKey(request.ref)]: request }));
+    });
+    const offNativeIntent = listen("ssh:native-zmodem-auto-intent", (event: {
+      ref?: Ref;
+      direction?: Direction;
+      remotePath?: string;
+    }) => {
+      if (!event?.ref || (event.direction !== "upload" && event.direction !== "download")) return;
+      const request: PickerRequest = {
+        ref: event.ref,
+        id: -(++nextNativeRequestID.current),
+        direction: event.direction,
+        protocol: "zmodem",
+        native: true,
+        remotePath: event.remotePath ?? "",
+      };
       setRequests(previous => ({ ...previous, [refKey(request.ref)]: request }));
     });
     const offEnded = listen("ssh:zmodem-pick-ended", (event: {ref: Ref; id: number}) => {
@@ -72,7 +89,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     const offError = listen("ssh:zmodem-pick-error", (event: {error: string}) => {
       if (event?.error) onNotice(event.error);
     });
-    return () => { offPick(); offEnded(); offDisconnected(); offError(); };
+    return () => { offPick(); offNativeIntent(); offEnded(); offDisconnected(); offError(); };
   }, [onNotice]);
 
   useEffect(() => {
@@ -145,28 +162,58 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     setDraft(path);
     setReload(value => value + 1);
   };
+  const closeRequest = () => {
+    if (currentRequestKey.current !== requestKey) return;
+    const dialog = dialogRef.current;
+    if (dialog?.open) {
+      if (typeof dialog.close === "function") dialog.close();
+      else dialog.removeAttribute("open");
+    }
+    setRequests(previous => {
+      const key = refKey(request.ref);
+      if (previous[key]?.id !== request.id) return previous;
+      const next = { ...previous };
+      delete next[key];
+      return next;
+    });
+  };
   const submit = async (paths: string[]) => {
     if (busy || submittingKey.current === requestKey) return;
     submittingKey.current = requestKey;
     setBusy(true);
     setError("");
+    if (request.native) {
+      if (currentRequestKey.current !== requestKey) return;
+      if (paths.length === 0) {
+        closeRequest();
+        return;
+      }
+      try {
+        const download = request.direction === "download";
+        const remotePaths = download ? splitFileLines(request.remotePath ?? "") : [];
+        const transfer = api.StartNativeZmodemInteractiveBatchTransfer(
+          request.ref,
+          request.direction,
+          download ? [directory] : paths,
+          remotePaths,
+        );
+        void transfer.catch(onNotice);
+        void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
+        closeRequest();
+      } catch (err) {
+        if (currentRequestKey.current !== requestKey) return;
+        setError(errorText(err));
+        setBusy(false);
+        submittingKey.current = "";
+      }
+      return;
+    }
     try {
       await api.SubmitZmodemSelection(request.ref, request.id, paths);
       if (currentRequestKey.current !== requestKey) return;
       if (paths.length > 0) void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
       // Submission only acknowledges the paths. The transfer continues after the picker closes.
-      const dialog = dialogRef.current;
-      if (dialog?.open) {
-        if (typeof dialog.close === "function") dialog.close();
-        else dialog.removeAttribute("open");
-      }
-      setRequests(previous => {
-        const key = refKey(request.ref);
-        if (previous[key]?.id !== request.id) return previous;
-        const next = { ...previous };
-        delete next[key];
-        return next;
-      });
+      closeRequest();
     } catch (err) {
       if (currentRequestKey.current !== requestKey) return;
       setError(errorText(err));
