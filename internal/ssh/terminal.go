@@ -439,7 +439,6 @@ func (o *terminalOutputCloser) Write(p []byte) (int, error) {
     o.tail = append(o.tail[:0], data...)
     o.writer.m.mu.Lock()
     transferID := o.writer.c.transferID
-    transferCancelled := o.writer.c.transferCancelled
     o.writer.m.mu.Unlock()
     transferIDText := ""
     if transferID != 0 {
@@ -473,11 +472,11 @@ func (o *terminalOutputCloser) Write(p []byte) (int, error) {
     }
     if locallyExited {
         status := exitStatus
-        if transferCancelled {
+        o.writer.m.mu.Lock()
+        if o.writer.c.transferCancelled {
             status = "cancelled"
             exitError = ""
         }
-        o.writer.m.mu.Lock()
         if current := o.writer.m.connections[o.writer.c.ref.TabID]; current == o.writer.c &&
             o.writer.c.transferID == transferID {
             o.writer.c.transferFinished = true
