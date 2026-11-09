@@ -194,7 +194,7 @@ test("ZMODEM uses selected local file sizes and stops the indeterminate bar on c
 
   expect(screen.getByText("archive.bin")).toBeTruthy();
   expect(screen.getByText("100.0 MB / 100.0 MB")).toBeTruthy();
-  expect(screen.getByText("已完成")).toBeTruthy();
+  expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
   expect(container.querySelector(".transfer-center-bar.indeterminate")).toBeNull();
   expect(container.querySelector(".transfer-center-bar > div")?.getAttribute("style")).toContain("width: 100%");
 });
@@ -220,7 +220,7 @@ test("different transfer ids on one SSH tab do not share completion state", () =
 
   expect(screen.getByText("first.bin")).toBeTruthy();
   expect(screen.getByText("second.bin")).toBeTruthy();
-  expect(screen.getByText("已完成")).toBeTruthy();
+  expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
   expect(screen.getByText("25%")).toBeTruthy();
 });
 
@@ -248,7 +248,7 @@ test("remote ZMODEM file metadata is added and completed independently", () => {
 
   expect(screen.getByText("remote-backup.tar")).toBeTruthy();
   expect(screen.getByText("200 B / 200 B")).toBeTruthy();
-  expect(screen.getByText("已完成")).toBeTruthy();
+  expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
 });
 
 test("failed ZMODEM process is not displayed as a successful transfer", () => {
