@@ -8,7 +8,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
-import { api, errorText } from "../bridge";
+import { api, errorText, listen } from "../bridge";
 import { terminalOutputDispatcher } from "../features/terminal/terminalOutputDispatcher";
 import { TerminalOutputAcknowledger } from "../features/terminal/terminalOutputAcknowledger";
 import { recordTerminalWrite } from "../features/diagnostics/collector";
@@ -78,6 +78,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
   const scrollbackSnapshot = useRef("");
   const localSequence = useRef(0);
   const cloneCwdSent = useRef(false);
+  const nativeTransferActive = useRef(false);
   const terminalMode = p.tab.status === "connected" && p.tab.ref ? "ssh"
     : p.tab.ref && p.tab.everConnected && ["disconnected", "error"].includes(p.tab.status)
       ? (p.tab.localFallbackPending || p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
@@ -127,6 +128,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       }
     }));
     terminal.current = term;
+    term.options.disableStdin = nativeTransferActive.current;
     term.open(container.current);
     let alignmentFrame = 0;
     const getScrollbarTrack = () =>
@@ -318,6 +320,30 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       : terminalOutputDispatcher.onSSH(ref!, onOutput);
     const encoder = new TextEncoder();
     const inputQueue: string[] = [];
+    const matchesConnection = (candidate: Ref) =>
+      !!ref && candidate.tabId === ref.tabId &&
+      candidate.sessionId === ref.sessionId &&
+      candidate.generation === ref.generation;
+    const offNativeBatch = listen("ssh:native-zmodem-batch", (event: {
+      ref?: Ref; active: boolean; terminalSafe?: boolean; error?: string;
+    }) => {
+      if (!event?.ref || !matchesConnection(event.ref)) return;
+      if (event.active) {
+        nativeTransferActive.current = true;
+        inputQueue.length = 0;
+        term.options.disableStdin = true;
+        return;
+      }
+      const terminalSafe = event.terminalSafe === true ||
+        (event.terminalSafe == null && !event.error);
+      nativeTransferActive.current = !terminalSafe;
+      term.options.disableStdin = !terminalSafe;
+    });
+    const offDisconnected = listen("ssh:disconnected", (disconnectedRef: Ref) => {
+      if (!matchesConnection(disconnectedRef)) return;
+      nativeTransferActive.current = false;
+      term.options.disableStdin = false;
+    });
     let inputFlushing = false;
     let inputScheduled = false;
     const flushInput = async () => {
@@ -338,7 +364,10 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
         }
       } catch (error) {
         inputQueue.length = 0;
-        if (!disposed) callbacks.current.onError(error);
+        const reason = errorText(error);
+        if (!disposed && !reason.includes("原生 ZMODEM 独占终端输入")) {
+          callbacks.current.onError(error);
+        }
       } finally {
         inputFlushing = false;
         if (inputQueue.length && !disposed) scheduleInput();
@@ -353,7 +382,8 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       });
     };
     const input = term.onData((data) => {
-      if (terminalMode === "offline" || (terminalMode === "ssh" && callbacks.current.aiControlled)) return;
+      if (terminalMode === "offline" || nativeTransferActive.current ||
+        (terminalMode === "ssh" && callbacks.current.aiControlled)) return;
       if (terminalMode === "ssh" && ref && data.length > 0) callbacks.current.onUserInput?.(ref);
       // Never inject an automatic cd after the user has started interacting.
       if (terminalMode === "ssh" && callbacks.current.tab.cloneCwd) cloneCwdSent.current = true;
@@ -422,11 +452,12 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       }, 0);
     };
     const pasteFromClipboard = async () => {
-      if (pastePending || disposed || !callbacks.current.active || callbacks.current.aiControlled) return;
+      if (pastePending || disposed || !callbacks.current.active || callbacks.current.aiControlled ||
+        nativeTransferActive.current) return;
       pastePending = true;
       try {
         const text = await Clipboard.Text();
-        if (disposed || !callbacks.current.active || !text) return;
+        if (disposed || !callbacks.current.active || nativeTransferActive.current || !text) return;
         if (callbacks.current.confirmMultilinePaste && /[\r\n]/.test(text)) {
           const accepted = await dialogsRef.current.confirm({
             title: message("terminal:confirmMultilinePaste"),
@@ -451,6 +482,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
           disposed ||
           !callbacks.current.active ||
           terminalMode === "offline" ||
+          nativeTransferActive.current ||
           (!local && (currentRef?.tabId !== ref?.tabId ||
           currentRef?.sessionId !== ref?.sessionId ||
           currentRef?.generation !== ref?.generation))
@@ -577,6 +609,8 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       offImeWindowEvents.forEach(off => off());
       if (imePositionRecovery.current === imeRecovery) imePositionRecovery.current = null;
       off();
+      offNativeBatch();
+      offDisconnected();
       if (local) void api.CloseLocalTerminal(p.tab.id, localID).catch(() => {});
       paneElement.removeEventListener("mousedown", onMouseDown, true);
       document.removeEventListener("mouseup", onMouseUp, true);
