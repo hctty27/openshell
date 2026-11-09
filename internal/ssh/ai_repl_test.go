@@ -448,7 +448,8 @@ func TestPsqlPasswordFailureRecoversShellReadiness(t *testing.T) {
 func TestPsqlPasswordPromptFallbackFromRealPTYOutput(t *testing.T) {
 	var r terminalShellReadiness
 	r.observe([]byte("root@user-server:~# "))
-	r.observe([]byte("root@user-server:~# psql -h 127.0.0.1 -p 5432 -U root -d postgres\r\nPassword for user root: "))
+	// The shell prompt was already rendered before the user typed the command.
+	r.observe([]byte("psql -h 127.0.0.1 -p 5432 -U root -d postgres\r\nPassword for user root: "))
 	if !r.psqlPasswordPrompt || r.startedProgram != "psql" {
 		t.Fatalf("named libpq password prompt did not recover psql state: started=%q password=%v", r.startedProgram, r.psqlPasswordPrompt)
 	}
