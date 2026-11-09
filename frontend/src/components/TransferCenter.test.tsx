@@ -265,3 +265,45 @@ test("failed ZMODEM process is not displayed as a successful transfer", () => {
   expect(screen.getByText("失败")).toBeTruthy();
   expect(screen.getByText("本地 ZMODEM 进程退出，代码 1")).toBeTruthy();
 });
+
+
+test("legacy ZMODEM lifecycle events merge into the identified transfer", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  const total = 100 * 1024 * 1024;
+
+  emit("ssh:transfer-state", { ref: refA, active: true });
+  emit("ssh:transfer-progress", {
+    ref: refA, transferred: "100 MB", speed: "42.9 MB/s", processed: total,
+  });
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "zmodem-legacy-1", direction: "download", protocol: "zmodem",
+    files: [{ name: "archive.bin", total }],
+  });
+  emit("ssh:transfer-finished", {
+    ref: refA, transferId: "zmodem-legacy-1", status: "completed",
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(container.querySelectorAll(".transfer-center-job")).toHaveLength(1);
+  expect(screen.getByText("archive.bin")).toBeTruthy();
+  expect(screen.getByText("100.0 MB / 100.0 MB")).toBeTruthy();
+  expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
+});
+
+test("id-less lifecycle events resolve to the only active identified transfer", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "zmodem-identified-1", direction: "download", protocol: "zmodem",
+    files: [{ name: "backup.bin", total: 200 }],
+  });
+  emit("ssh:transfer-state", { ref: refA, active: true });
+  emit("ssh:transfer-progress", {
+    ref: refA, transferred: "200 B", speed: "20 B/s", processed: 200,
+  });
+  emit("ssh:transfer-state", { ref: refA, active: false, status: "completed" });
+
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(container.querySelectorAll(".transfer-center-job")).toHaveLength(1);
+  expect(screen.getByText("backup.bin")).toBeTruthy();
+  expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
+});
