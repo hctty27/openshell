@@ -8,7 +8,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 )
 
 const (
