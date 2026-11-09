@@ -43,6 +43,7 @@ vi.mock("@xterm/xterm", () => ({
     bufferChangeHandler = (_buffer: {type: "normal" | "alternate"}) => {};
     buffer = {
       active: { viewportY: 4, type: "normal" as "normal" | "alternate", getLine: vi.fn(() => undefined) },
+      normal: { baseY: 0, cursorY: 0, getLine: vi.fn(() => undefined) },
       onBufferChange: vi.fn((callback: (buffer: {type: "normal" | "alternate"}) => void) => {
         this.bufferChangeHandler = callback;
         return { dispose: vi.fn() };
@@ -1066,7 +1067,7 @@ test("locks terminal input during native ZMODEM and restores it only after a saf
 test("does not report a native ZMODEM input ownership rejection as an SSH failure", async () => {
   const onError = vi.fn();
   vi.mocked(api.WriteTerminal).mockRejectedValueOnce(
-    new Error("原生 ZMODEM 独占终端输入，暂不接受键盘或 AI 输入"),
+    new Error("native terminal input busy"),
   );
   renderTerminal({ onError });
   act(() => refs.terms[0].onDataCallback("x"));
