@@ -232,7 +232,13 @@ func TestRedisCompletionMarkerTimeoutPoisonsLease(t *testing.T) {
 	input.onWrite=func(p []byte) {
 		wire:=string(p)
 		if strings.HasPrefix(wire,"ECHO ") {
+			if lease.connection.readiness.programReady("redis") {
+				t.Error("Redis prompt must be invalidated while the completion marker is pending")
+			}
 			close(markerSent)
+			return
+		}
+		if wire==string([]byte{3}) {
 			return
 		}
 		reply:=[]byte("\r\nPONG\r\n127.0.0.1:6379> ")
@@ -252,9 +258,6 @@ func TestRedisCompletionMarkerTimeoutPoisonsLease(t *testing.T) {
 	}
 	if !strings.Contains(input.String(),string([]byte{3})) {
 		t.Fatal("Redis marker timeout should interrupt the PTY")
-	}
-	if lease.connection.readiness.programReady("redis") {
-		t.Fatal("timed-out marker must not leave a stale Redis prompt marked ready")
 	}
 	lease.Release()
 }
