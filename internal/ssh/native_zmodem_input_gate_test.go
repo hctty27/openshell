@@ -134,6 +134,21 @@ func TestNativeZmodemInputGateBlocksManagerManualWrites(t *testing.T) {
 	}
 }
 
+func TestNativeZmodemInputGateBlocksWritesBeforeLeaseAcquisition(t *testing.T) {
+	manager, ref := connected(t)
+	if err := manager.OpenTerminal(ref, 80, 24); err != nil { t.Fatal(err) }
+
+	manager.mu.Lock()
+	connection := manager.connections[ref.TabID]
+	connection.nativeTerminalTransfer = &nativeTerminalTransferTask{ref: ref}
+	manager.mu.Unlock()
+
+	encoded := base64.StdEncoding.EncodeToString([]byte("blocked before PTY lease"))
+	if err := manager.Write(ref, encoded); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("manager accepted input after native transfer reservation: %v", err)
+	}
+}
+
 // Include a parallel lease stress test in Go race CI.
 func TestNativeZmodemInputGateSerializesConcurrentNativeWrites(t *testing.T) {
 	var remote bytes.Buffer
