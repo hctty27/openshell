@@ -31,7 +31,7 @@ func encodeZmodemTestHeader(frameType, format byte, position uint32) []byte {
 		raw = append(raw, byte(crc>>8), byte(crc))
 		encoded := make([]byte, hex.EncodedLen(len(raw)))
 		hex.Encode(encoded, raw)
-		return append([]byte("**\x18B"), append(encoded, []byte("\r\n\x11")...)...)
+		return append([]byte("**\x18B"), append(encoded, []byte("\r\x8a\x11")...)...)
 	}
 
 	if format == 'C' {
