@@ -17,7 +17,6 @@ import type { Tab, Ref, Theme, TerminalTheme, DisconnectBehavior, LocalShell } f
 import { resolveTerminalTheme } from "../terminalThemes";
 import { buildRemoteCdCommand, decideCloneDirectoryAction, parseOsc7Directory, parseOsc1337Directory, parseOscTitleDirectory } from "../terminalCwd";
 import { useDialogs } from "./DialogProvider";
-import { attachImeFocusRecovery } from "../features/terminal/imeFocusRecovery";
 import { getTerminalEdgeBackground } from "../features/terminal/edgeBackground";
 import { calculateGridCenteringCorrection, calculateTerminalGeometry } from "../features/terminal/terminalGeometry";
 const TERMINAL_SCROLLBAR_WIDTH = 8;
@@ -69,7 +68,6 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
   const terminal = useRef<Terminal | null>(null);
   const refit = useRef<(() => void) | null>(null);
   const refreshEdgeBackground = useRef<() => void>(() => {});
-  const imePositionRecovery = useRef<ReturnType<typeof attachImeFocusRecovery> | null>(null);
   const searchAddon = useRef<SearchAddon | null>(null);
   const logAddons = useRef<SearchAddon[]>([]);
   const webglAddon = useRef<WebglAddon | null>(null);
@@ -228,22 +226,13 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       }
     });
     if (ref && !local) callbacks.current.onAlternateScreenChange?.(ref, term.buffer.active.type === "alternate");
-    const imeRecovery = attachImeFocusRecovery(
-      navigator.userAgent.includes("Windows") ? term.textarea : undefined,
-      () => callbacks.current.active,
-      () => { if (!disposed) term.focus(); },
-    );
-    imePositionRecovery.current = imeRecovery;
-    const offImeWindowEvents = navigator.userAgent.includes("Windows")
-      ? (["common:WindowDidMove", "common:WindowDPIChanged", "common:WindowFocus"] as const).map(eventName =>
+    // Keep native geometry synchronization, but never blur/refocus xterm on
+    // window activation or layout changes; that can detach the WebView2 IME UI.
+    const offWindowGeometryEvents = navigator.userAgent.includes("Windows")
+      ? (["common:WindowDidMove", "common:WindowDPIChanged"] as const).map(eventName =>
           Events.On(eventName, () => {
             if (disposed || !callbacks.current.active) return;
-            if (eventName === "common:WindowFocus") {
-              imeRecovery.onWindowActivated();
-            } else {
-              applyGeometry();
-              imeRecovery.schedule();
-            }
+            applyGeometry();
           }),
         )
       : [];
@@ -554,14 +543,12 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
         measuredHeight = clientHeight;
         applyGeometry();
         syncEdgeBackground();
-        if (callbacks.current.active) imeRecovery.schedule();
       });
     };
     const observer = new ResizeObserver(resize);
     observer.observe(container.current);
     const onWindowResize = () => {
       if (callbacks.current.visible ?? callbacks.current.active) applyGeometry();
-      if (callbacks.current.active) imeRecovery.schedule();
     };
     window.addEventListener("resize", onWindowResize);
     requestAnimationFrame(() => {
@@ -611,9 +598,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       inputQueue.length = 0;
       observer.disconnect();
       window.removeEventListener("resize", onWindowResize);
-      imeRecovery.dispose();
-      offImeWindowEvents.forEach(off => off());
-      if (imePositionRecovery.current === imeRecovery) imePositionRecovery.current = null;
+      offWindowGeometryEvents.forEach(off => off());
       off();
       offNativeBatch();
       offDisconnected();
@@ -720,7 +705,6 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
     if (terminal.current) {
       terminal.current.options.fontSize = p.fontSize;
       refit.current?.();
-      if (p.active) imePositionRecovery.current?.schedule();
     }
   }, [p.fontSize]);
   useEffect(() => {
@@ -740,15 +724,11 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
     }
   }, [p.visible ?? p.active]);
   useEffect(() => {
-    if (p.active && p.paneBounds) imePositionRecovery.current?.schedule();
-  }, [p.active, p.paneBounds?.left, p.paneBounds?.top, p.paneBounds?.width, p.paneBounds?.height]);
-  useEffect(() => {
     if (p.active) {
       requestAnimationFrame(() => {
         if (searchOpen) searchInput.current?.focus();
         else {
           terminal.current?.focus();
-          imePositionRecovery.current?.resume();
         }
       });
     }
