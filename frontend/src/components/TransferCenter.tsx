@@ -542,7 +542,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
               const total = sizesKnown ? job.files.reduce((sum, file) => sum + (file.total ?? 0), 0) : null;
               const percent = job.status === "completed" ? 100 :
                 total != null && total > 0 && typeof job.processed === "number"
-                  ? Math.min(100, Math.round(job.processed / total * 100))
+                  ? Math.min(99, Math.round(job.processed / total * 100))
                   : job.percent ?? (total === 0 && sizesKnown ? 0 : null);
               const active = job.status === "running" || job.status === "cancelling";
               const statusLabel = job.status === "completed" ? t("sftp:completed") :
