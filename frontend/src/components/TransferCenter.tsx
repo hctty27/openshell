@@ -573,6 +573,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                         <div key={job.transferId + ":" + index} className="transfer-center-terminal-file">
                           <span title={file.name}>{file.name}</span>
                           <span>{file.total == null ? "—" : formatSize(file.total)}</span>
+                          <span>{file.status === "queued" ? t("sftp:queued") :
+                            file.status === "running" ? t("sftp:running") :
+                            file.status === "completed" ? t("sftp:completed") :
+                            file.status === "failed" ? t("sftp:failed") : t("sftp:cancelled")}</span>
                         </div>
                       ))}
                       {job.files.length > 4 && <span className="transfer-center-terminal-more">+{job.files.length - 4} 个文件</span>}
