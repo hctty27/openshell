@@ -1038,6 +1038,7 @@ test("locks terminal input during native ZMODEM and restores it only after a saf
   emitBatch({ ref: { ...tab.ref!, generation: 2 }, active: true });
   expect(term.options.disableStdin).toBeFalsy();
 
+  emitBatch({ ref: tab.ref, id: "batch-1", active: true });
   emitBatch({ ref: tab.ref, id: "batch-2", active: true });
   expect(term.options.disableStdin).toBe(true);
   act(() => term.onDataCallback("pwd\r"));
@@ -1050,6 +1051,12 @@ test("locks terminal input during native ZMODEM and restores it only after a saf
   expect(term.options.disableStdin).toBe(true);
 
   emitBatch({ ref: tab.ref, id: "batch-2", active: false, terminalSafe: true });
+  expect(term.options.disableStdin).toBe(false);
+
+  emitBatch({ ref: tab.ref, id: "batch-3", active: true });
+  emitBatch({ ref: tab.ref, id: "batch-3", active: false, terminalSafe: false, error: "需要重新连接" });
+  expect(term.options.disableStdin).toBe(true);
+  act(() => events.listeners.get("ssh:disconnected")?.(tab.ref));
   expect(term.options.disableStdin).toBe(false);
   act(() => term.onDataCallback("pwd\\r"));
   await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalledOnce());
