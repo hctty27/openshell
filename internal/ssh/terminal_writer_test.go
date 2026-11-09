@@ -204,7 +204,11 @@ func TestZmodemLocalExitNotifiesEvenWithoutRemoteOutput(t *testing.T) {
         name, message string
     }{
         {"successful child", "\r\x1b[2K\x1b[1;32mSuccess!!\x1b[0m\r\n"},
+        {"successful child alternate color", "\r\x1b[2K\x1b[32mSuccess!!\x1b[0m\r\n"},
+        {"successful child without color", "\r\x1b[2KSuccess!!\r\n"},
+        {"successful child multiple SGR codes", "\r\x1b[2K\x1b[1m\x1b[32mSuccess!!\x1b[0m\r\n"},
         {"failed child", "\r\x1b[2Kclient exit with 1\r\n"},
+        {"failed child with color", "\r\x1b[2K\x1b[31mclient exit with 1\x1b[0m\r\n"},
     } {
         t.Run(tc.name, func(t *testing.T) {
             events := make(chan string, 4)
@@ -338,8 +342,23 @@ func TestZmodemLocalExitCarriesTransferIdentityAndOutcome(t *testing.T) {
             wantStatus: "completed",
         },
         {
+            name: "success with alternate ANSI color",
+            message: "\r\x1b[2K\x1b[32mSuccess!!\x1b[0m\r\n",
+            wantStatus: "completed",
+        },
+        {
+            name: "success without color",
+            message: "\r\x1b[2KSuccess!!\r\n",
+            wantStatus: "completed",
+        },
+        {
             name: "failure",
             message: "\r\x1b[2Kclient exit with 1\r\n",
+            wantStatus: "failed",
+        },
+        {
+            name: "failure with ANSI color",
+            message: "\r\x1b[2K\x1b[31mclient exit with 1\x1b[0m\r\n",
             wantStatus: "failed",
         },
         {
