@@ -79,7 +79,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
   const localSequence = useRef(0);
   const cloneCwdSent = useRef(false);
   const nativeTransferActive = useRef(false);
-  const nativeTransferID = useRef<string | null>(null);
+  const nativeTransferIDs = useRef(new Set<string>());
   const terminalMode = p.tab.status === "connected" && p.tab.ref ? "ssh"
     : p.tab.ref && p.tab.everConnected && ["disconnected", "error"].includes(p.tab.status)
       ? (p.tab.localFallbackPending || p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
@@ -329,25 +329,25 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       ref?: Ref; id?: string; active: boolean; terminalSafe?: boolean; error?: string;
     }) => {
       if (!event?.ref || !matchesConnection(event.ref)) return;
+      const transferID = event.id ?? "legacy";
       if (event.active) {
-        nativeTransferID.current = event.id ?? null;
+        nativeTransferIDs.current.add(transferID);
         nativeTransferActive.current = true;
         inputQueue.length = 0;
         term.options.disableStdin = true;
         return;
       }
-      if (nativeTransferID.current && event.id &&
-        nativeTransferID.current !== event.id) return;
       const terminalSafe = event.terminalSafe === true ||
         (event.terminalSafe == null && !event.error);
-      nativeTransferActive.current = !terminalSafe;
-      if (terminalSafe) nativeTransferID.current = null;
-      term.options.disableStdin = !terminalSafe;
+      if (terminalSafe) nativeTransferIDs.current.delete(transferID);
+      else nativeTransferIDs.current.add(transferID);
+      nativeTransferActive.current = nativeTransferIDs.current.size > 0;
+      term.options.disableStdin = nativeTransferActive.current;
     });
     const offDisconnected = listen("ssh:disconnected", (disconnectedRef: Ref) => {
       if (!matchesConnection(disconnectedRef)) return;
       nativeTransferActive.current = false;
-      nativeTransferID.current = null;
+      nativeTransferIDs.current.clear();
       term.options.disableStdin = false;
     });
     let inputFlushing = false;
