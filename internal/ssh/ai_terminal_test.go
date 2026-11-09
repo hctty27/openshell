@@ -103,6 +103,34 @@ func TestAITerminalStopInterruptsAndBlocksLaterCommands(t *testing.T) {
     lease.Release()
 }
 
+func TestManagerWriteDoesNotOverwriteFastREPLPrompt(t *testing.T) {
+	m := NewManager(nil, nil)
+	ref := domain.ConnectionRef{TabID: "psql-tab", SessionID: "session", Generation: 1}
+	input := &aiCaptureInput{}
+	c := &connection{ref: ref, stdin: input}
+	c.readiness.program = "psql"
+	c.readiness.prompt = true
+	c.readiness.lastOutput = time.Now().Add(-time.Second)
+	input.onWrite = func([]byte) {
+		c.readiness.observe([]byte("\r\nYou are now connected to database \"private-chat\" as user \"root\".\r\nprivate-chat=# "))
+	}
+	m.connections[ref.TabID] = c
+
+	command := base64.StdEncoding.EncodeToString([]byte("\\c private-chat\r"))
+	if err := m.Write(ref, command); err != nil {
+		t.Fatal(err)
+	}
+	c.readiness.mu.Lock()
+	c.readiness.lastOutput = time.Now().Add(-time.Second)
+	c.readiness.mu.Unlock()
+	if err := c.readiness.checkReady(); err != nil {
+		t.Fatalf("fast psql prompt was overwritten by late input state: %v", err)
+	}
+	if got := c.readiness.readyProgram(); got != "psql" {
+		t.Fatalf("expected psql to remain ready, got %q", got)
+	}
+}
+
 func TestAITerminalLocksManualInput(t *testing.T) {
     m,lease,input:=newAITestLease()
     payload:=base64.StdEncoding.EncodeToString([]byte("echo manual\r"))

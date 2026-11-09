@@ -341,11 +341,11 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 				"在当前 redis-cli 交互终端执行一条允许的只读 Redis 命令，无需重新连接。")
 		case "psql":
 			system += aiPromptText(language,
-				"\nThe visible terminal is already running psql. Use ssh_exec for ONE read-only PostgreSQL SQL statement (SELECT, SHOW, EXPLAIN, TABLE or VALUES) or one allowed psql metadata command (\\d, \\dt, \\di, \\dn, \\dv, \\df, \\l, \\conninfo). No shell commands, psql login or database writes; the current DB and transaction are preserved.",
-				"\n当前终端已经进入 PostgreSQL psql。ssh_exec 每次仅执行一条只读 SQL（SELECT、SHOW、EXPLAIN、TABLE、VALUES），或者一条允许的只读元命令（\\d、\\dt、\\di、\\dn、\\dv、\\df、\\l、\\conninfo）。不要执行 Shell 命令、psql 登录或修改数据库；保留当前数据库和事务。")
+				"\nThe visible terminal is already running psql. Use ssh_exec for ONE read-only PostgreSQL SQL statement (SELECT, SHOW, EXPLAIN, TABLE or VALUES) or one allowed psql metadata command (\\d, \\dt, \\di, \\dn, \\dv, \\df, \\l, \\conninfo). Do not run shell commands or database writes. Only when the user explicitly asks to switch databases, allow \\c <database> or \\connect <database> with one simple database name; never provide connection options, hosts, users, ports or connection strings.",
+				"\n当前终端已经进入 PostgreSQL psql。ssh_exec 每次仅执行一条只读 SQL（SELECT、SHOW、EXPLAIN、TABLE、VALUES），或者一条允许的只读元命令（\\d、\\dt、\\di、\\dn、\\dv、\\df、\\l、\\conninfo）。不要执行 Shell 命令或修改数据库。只有用户明确要求切换数据库时，才允许执行 \\c <database> 或 \\connect <database>，且只能提供单个简单数据库名；禁止指定 host、port、user、URI 或连接串。")
 			toolDescription = aiPromptText(language,
-				"Execute one read-only SQL or psql metadata command in the existing authenticated psql PTY.",
-				"在当前已登录的 psql 交互终端执行一条只读 SQL 或元命令。")
+				"Execute one read-only SQL or metadata command, or an explicitly requested safe database switch, in the existing authenticated psql PTY.",
+				"在当前已登录的 psql 终端执行一条只读 SQL/元命令，或执行用户明确要求的安全数据库切换。")
 		case "python":
 			system += aiPromptText(language,
 				"\nThe visible terminal is an existing Python REPL. ssh_exec executes one Python snippet in its current globals; expressions are printed as in the interpreter. No new interpreter or SSH connection. Avoid input(), interactive prompts, exit(), quit(), blocking operations and untrusted code. In review mode, request approval before code with side effects or external calls.",
@@ -533,12 +533,8 @@ func aiHistoryContext(messages []store.AIMessage) []store.AIMessage {
 		case "user":
 			result = append(result, store.AIMessage{Role: "user", Content: truncateAIOutput(msg.Content, 12000)})
 		case "assistant":
+			// Tool-call envelopes are task-scoped protocol metadata, not user-facing text.
 			content := truncateAIOutput(msg.Content, 12000)
-			if len(msg.ToolCalls) > 0 {
-				tools := make([]string, 0, len(msg.ToolCalls))
-				for _, call := range msg.ToolCalls { tools = append(tools, call.Function.Name) }
-				content += "\n[历史工具调用：" + strings.Join(tools, "、") + "。目标标识已失效，不得重用。]"
-			}
 			if content != "" { result = append(result, store.AIMessage{Role: "assistant", Content: content}) }
 		case "tool":
 			// Historical tool outputs are plain context, never active tool responses.

@@ -60,6 +60,21 @@ func redisAICommand(command string) (string,error) {
 	return c,nil
 }
 
+func validPsqlDatabaseName(value string) bool {
+	if len(value) == 0 || len(value) > 63 {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		valid := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' ||
+			c >= '0' && c <= '9' || c == '_' || c == '.' || c == '-'
+		if !valid || i == 0 && (c == '.' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
 func psqlAICommand(command string) (string,error) {
 	c:=strings.TrimSpace(command)
 	if err:=validREPLText(c,false);err!=nil { return "",err }
@@ -67,6 +82,12 @@ func psqlAICommand(command string) (string,error) {
 		fields:=strings.Fields(c)
 		if len(fields)==0 { return "",errors.New("psql 元命令为空") }
 		switch fields[0] {
+		case `\c`, `\connect`:
+			if len(fields) != 2 || !validPsqlDatabaseName(fields[1]) ||
+				strings.ContainsAny(c, ";|") || strings.Count(c, "\\") != 1 {
+				return "", errors.New("psql 数据库切换仅允许单个简单数据库名")
+			}
+			return c, nil
 		case `\d`,`\d+`,`\dt`,`\dt+`,`\di`,`\di+`,`\dn`,`\dn+`,`\dv`,`\dv+`,`\df`,`\df+`,`\l`,`\l+`,`\conninfo`:
 			// Meta-commands cannot run shell commands or write server state.
 			if strings.ContainsAny(c,";|") || strings.Count(c,"\\") != 1 {

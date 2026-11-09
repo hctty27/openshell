@@ -36,5 +36,24 @@ func TestAIContextEstimateAndLiveToolSafety(t *testing.T) {
   {Role:"tool",ToolCallID:"new",Content:"new result"},
  }}
  chat:=aiPreparedMessages(c,"system",3,false)
- if len(chat)!=7 || len(chat[2].ToolCalls)!=0 || chat[3].Role!="assistant" || chat[6].ToolCallID!="new" {t.Fatalf("unsafe history %#v",chat)}
+ if len(chat)!=6 || chat[2].Role!="assistant" ||
+  chat[2].Content!="[历史工具结果，仅供参考，不代表当前连接状态]\nold result" ||
+  chat[3].Role!="user" || len(chat[4].ToolCalls)!=1 || chat[5].ToolCallID!="new" {
+  t.Fatalf("unsafe history %#v",chat)
+ }
+}
+
+func TestAIHistoryDoesNotInventStaleTargetWarnings(t *testing.T) {
+ messages := []store.AIMessage{
+  {Role:"assistant",ToolCalls:[]store.AIToolCall{{ID:"old",Function:store.AIFunction{Name:"ssh_exec"}}}},
+  {Role:"assistant",Content:"已查询数据库。",ToolCalls:[]store.AIToolCall{{ID:"old-2",Function:store.AIFunction{Name:"ssh_exec"}}}},
+  {Role:"tool",Content:"private-chat=#"},
+ }
+ history := aiHistoryContext(messages)
+ if len(history)!=2 || history[0].Role!="assistant" || history[0].Content!="已查询数据库。" {
+  t.Fatalf("unexpected historical messages: %#v",history)
+ }
+ if history[1].Role!="assistant" || history[1].Content!="[历史工具结果，仅供参考，不代表当前连接状态]\nprivate-chat=#" {
+  t.Fatalf("historical tool result was not sanitized: %#v",history[1])
+ }
 }

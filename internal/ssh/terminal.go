@@ -585,19 +585,22 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 			}
 		}
 	}
+	// Mark the terminal busy before writing. The remote process can return a
+	// prompt before stdin.Write completes; recording input afterward can
+	// overwrite that prompt and leave the REPL permanently marked busy.
+	c.readiness.userInput(p)
+
 	n, err := stdin.Write(wire)
 	if err != nil { return err }
 	if n != len(wire) { return io.ErrShortWrite }
-	// A native lease can reject manual input. Never update shell readiness
-	// for bytes that did not actually pass through the legacy input path.
-	m.mu.Lock()
-	if current := m.connections[ref.TabID]; current == c && c.ref == ref {
-		c.readiness.userInput(p)
-		if direction != "" {
+
+	if direction != "" {
+		m.mu.Lock()
+		if current := m.connections[ref.TabID]; current == c && c.ref == ref {
 			autoEvent = map[string]any{"ref": ref, "direction": direction, "remotePath": remotePath, "sessionName": c.session.Name}
 		}
+		m.mu.Unlock()
 	}
-	m.mu.Unlock()
 	return nil
 }
 // CancelZmodem requests cancellation through the filter for trzsz, or sends

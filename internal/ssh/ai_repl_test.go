@@ -77,6 +77,11 @@ func TestREPLSourceValidation(t *testing.T) {
 		{"psql","\\conninfo",true},
 		{"psql","\\! ls",false},
 		{"psql","\\dt \\! ls",false},
+		{"psql","\c private-chat",true},
+		{"psql","\connect private_chat",true},
+		{"psql","\c private-chat root",false},
+		{"psql","\c postgresql://127.0.0.1/private-chat",false},
+		{"psql","\c -h",false},
 		{"psql","DELETE FROM users",false},
 		{"psql","SELECT 1; DROP TABLE users;",false},
 		{"python","1+2",true},
@@ -90,6 +95,32 @@ func TestREPLSourceValidation(t *testing.T) {
 			if tc.valid && (err!=nil || got=="") {t.Fatalf("query rejected: %v",err)}
 			if !tc.valid && err==nil {t.Fatalf("unsafe query accepted: %q",got)}
 		})
+	}
+}
+
+func TestPsqlDatabaseSwitchRunsBeforeCompletionMarker(t *testing.T) {
+	source, err := replSource("psql", "\\c private-chat", "OPEN_SHELL_AI_REPL_123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "\\c private-chat\rSELECT 'OPEN_SHELL_AI_REPL_123' AS __openshell_ai_done;\r"
+	if source != want {
+		t.Fatalf("unexpected psql switch source: %q", source)
+	}
+}
+
+func TestPsqlPromptTracksDatabaseSwitch(t *testing.T) {
+	var state terminalShellReadiness
+	initREPLState(t, &state, "psql", "postgres=> ", "psql")
+	state.observe([]byte("\r\nYou are now connected to database \"private-chat\" as user \"root\".\r\nprivate-chat=# "))
+	state.mu.Lock()
+	state.lastOutput = time.Now().Add(-time.Second)
+	state.mu.Unlock()
+	if err := state.checkReady(); err != nil {
+		t.Fatalf("new database prompt was not ready: %v", err)
+	}
+	if got := state.readyProgram(); got != "psql" {
+		t.Fatalf("expected psql after database switch, got %q", got)
 	}
 }
 
