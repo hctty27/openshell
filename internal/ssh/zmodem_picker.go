@@ -104,6 +104,8 @@ func (m *Manager) selectZmodemPaths(c *connection, direction, protocol string, a
     c.transferProtocol = protocol
     c.transferDirection = direction
     c.transferCancelled = false
+    c.transferFinished = false
+    c.transferStatus = ""
     m.mu.Unlock()
 
     files := []map[string]any{}
