@@ -4,6 +4,7 @@ go 1.26.10
 
 require (
 	github.com/UserExistsError/conpty v0.1.4
+	github.com/creack/pty v1.1.24
 	github.com/pkg/sftp v1.13.10
 	github.com/trzsz/trzsz-go v1.2.1-0.20261010161529-351cf747d8f9
 	github.com/wailsapp/wails/v3 v3.1.0
@@ -27,7 +28,6 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
-	github.com/creack/pty v1.1.24 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dchest/jsmin v1.0.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hctty27/openshell/internal/domain"
 )
@@ -17,6 +18,9 @@ type replAIState struct {
 	marker string
 	tail []byte
 	seenResult bool
+	commandPrompt chan struct{}
+	commandPromptSeen bool
+	markerSent bool
 }
 
 var redisReadCommands = map[string]bool{
@@ -98,7 +102,7 @@ func replSource(program, command, marker string) (string,error) {
 	case "redis":
 		c,err:=redisAICommand(command)
 		if err!=nil { return "",err }
-		return c+"\rECHO "+marker+"\r",nil
+		return c+"\r",nil
 	case "psql":
 		c,err:=psqlAICommand(command)
 		if err!=nil { return "",err }
@@ -118,6 +122,22 @@ func replSource(program, command, marker string) (string,error) {
 		return "exec("+strconv.Quote(inner)+")\r",nil
 	}
 	return "",errors.New("未知交互程序")
+}
+
+func replCompletionSource(program, marker string) (string,error) {
+	if program != "redis" {
+		return "",errors.New("当前交互程序不支持独立结束标记")
+	}
+	return "ECHO "+marker+"\r",nil
+}
+
+func lastNonEmptyREPLLine(lines []string) string {
+	for i:=len(lines)-1;i>=0;i-- {
+		if line:=strings.TrimSpace(lines[i]);line!="" {
+			return line
+		}
+	}
+	return ""
 }
 
 func matchREPLCompletionPrompt(program,line string) bool {
@@ -140,6 +160,18 @@ func (cmd *terminalAICommand) consumeREPL(p []byte) {
 	visible=terminalAIColor.ReplaceAllString(visible,"")
 	visible=strings.ReplaceAll(visible,"\r","")
 	lines:=strings.Split(visible,"\n")
+	if state.program=="redis" && !state.markerSent {
+		if !state.commandPromptSeen && matchREPLCompletionPrompt("redis",lastNonEmptyREPLLine(lines)) {
+			state.commandPromptSeen=true
+			if state.commandPrompt!=nil {
+				select {
+				case state.commandPrompt<-struct{}{}:
+				default:
+				}
+			}
+		}
+		return
+	}
 	if !state.seenResult {
 		for _,line:=range lines {
 			row:=strings.TrimSpace(line)
@@ -149,7 +181,7 @@ func (cmd *terminalAICommand) consumeREPL(p []byte) {
 			}
 		}
 	}
-	if !state.seenResult || !matchREPLCompletionPrompt(state.program,lines[len(lines)-1]) {return}
+	if !state.seenResult || !matchREPLCompletionPrompt(state.program,lastNonEmptyREPLLine(lines)) {return}
 	output:=cleanAITerminalOutput(cmd.output,cmd.truncated)
 	var cleaned []string
 	code:=0
@@ -172,6 +204,28 @@ func (cmd *terminalAICommand) consumeREPL(p []byte) {
 	cmd.done<-terminalAIResult{output:strings.TrimSpace(strings.Join(cleaned,"\n")),code:code}
 }
 
+func (lease *AITerminalLease) waitForREPLPrompt(ctx context.Context) error {
+	ticker:=time.NewTicker(25*time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if lease.connection.readiness.readyProgram()!=lease.program {
+			return errors.New("交互程序已退出或提示符发生变化，无法确认命令结束")
+		}
+		if lease.connection.readiness.programReady(lease.program) {
+			if err:=lease.connection.readiness.checkReady();err==nil {
+				return nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-lease.closed:
+			return errors.New("SSH 终端已释放或断开")
+		case <-ticker.C:
+		}
+	}
+}
+
 func (lease *AITerminalLease) runREPL(ctx context.Context,command string) (string,error) {
 	if !lease.connection.readiness.programReady(lease.program) {
 		return "",errors.New("交互程序未处于空白主提示符，请等待上一条命令结束")
@@ -188,9 +242,13 @@ func (lease *AITerminalLease) runREPL(ctx context.Context,command string) (strin
 	marker:="OPEN_SHELL_AI_REPL_"+strings.ReplaceAll(domain.NewID(),"-","")
 	source,err:=replSource(lease.program,command,marker)
 	if err!=nil {lease.mu.Unlock();return "",err}
+	replState:=&replAIState{program:lease.program,marker:marker}
+	if lease.program=="redis" {
+		replState.commandPrompt=make(chan struct{},1)
+	}
 	running:=&terminalAICommand{
 		done:make(chan terminalAIResult,1),
-		repl:&replAIState{program:lease.program,marker:marker},
+		repl:replState,
 	}
 	lease.current=running
 	lease.mu.Unlock()
@@ -199,10 +257,46 @@ func (lease *AITerminalLease) runREPL(ctx context.Context,command string) (strin
 		if lease.current==running {lease.current=nil}
 		lease.mu.Unlock()
 	}()
-	lease.connection.readiness.aiMySQLInputStarted()
+
+	lease.connection.readiness.aiREPLInputStarted()
 	if err:=lease.send([]byte(source));err!=nil {
 		lease.markFailed()
 		return "",err
+	}
+	if lease.program=="redis" {
+		select {
+		case <-running.repl.commandPrompt:
+		case <-ctx.Done():
+			lease.markFailed()
+			lease.interrupt()
+			return "",ctx.Err()
+		case <-lease.closed:
+			lease.markFailed()
+			return "",errors.New("SSH 终端已释放或断开")
+		}
+		if err:=lease.waitForREPLPrompt(ctx);err!=nil {
+			lease.markFailed()
+			if ctx.Err()!=nil {lease.interrupt()}
+			return "",err
+		}
+		markerSource,err:=replCompletionSource(lease.program,marker)
+		if err!=nil {
+			lease.markFailed()
+			return "",err
+		}
+		lease.mu.Lock()
+		if lease.current!=running || running.finished {
+			lease.mu.Unlock()
+			lease.markFailed()
+			return "",errors.New("Redis 终端执行状态已变化，已停止继续操作")
+		}
+		running.repl.markerSent=true
+		lease.mu.Unlock()
+		lease.connection.readiness.aiREPLInputStarted()
+		if err:=lease.send([]byte(markerSource));err!=nil {
+			lease.markFailed()
+			return "",err
+		}
 	}
 	select {
 	case result:=<-running.done:
