@@ -443,3 +443,51 @@ func TestPsqlPasswordFailureRecoversShellReadiness(t *testing.T) {
 		t.Fatalf("Shell was not ready after psql authentication failure: %v", err)
 	}
 }
+
+
+func TestPsqlPasswordPromptFallbackFromRealPTYOutput(t *testing.T) {
+	var r terminalShellReadiness
+	r.observe([]byte("root@user-server:~# "))
+	// The shell prompt was already rendered before the user typed the command.
+	r.observe([]byte("psql -h 127.0.0.1 -p 5432 -U root -d postgres\r\nPassword for user root: "))
+	if !r.psqlPasswordPrompt || r.startedProgram != "psql" {
+		t.Fatalf("named libpq password prompt did not recover psql state: started=%q password=%v", r.startedProgram, r.psqlPasswordPrompt)
+	}
+
+	r.userInput([]byte("example-secret\r"))
+	if r.startedProgram != "psql" || len(r.launchInput) != 0 {
+		t.Fatal("password input replaced the psql launch candidate or was buffered")
+	}
+	r.observe([]byte("\r\npsql (14.24 (Ubuntu 14.24-0ubuntu0.22.04.1))\r\nType \"help\" for help.\r\npostgres=# "))
+	r.mu.Lock()
+	r.lastOutput = time.Now().Add(-time.Second)
+	r.mu.Unlock()
+	if err := r.checkReady(); err != nil || r.readyProgram() != "psql" {
+		t.Fatalf("psql was not ready after successful authentication: %v", err)
+	}
+}
+
+func TestPsqlLaunchCandidateSurvivesUnclassifiedPasswordInput(t *testing.T) {
+	var r terminalShellReadiness
+	r.observe([]byte("root@db:~# "))
+	r.userInput([]byte("psql -h 127.0.0.1 -U root -d postgres\r"))
+	if r.startedProgram != "psql" {
+		t.Fatalf("psql launch was not recorded: %q", r.startedProgram)
+	}
+
+	// Simulate a password prompt event that was not recognized by the
+	// terminal parser. The subsequent password Enter must not erase the
+	// already identified psql process.
+	r.userInput([]byte("example-secret\r"))
+	if r.startedProgram != "psql" {
+		t.Fatalf("unclassified input erased psql launch state: %q", r.startedProgram)
+	}
+
+	r.observe([]byte("\r\npostgres=# "))
+	r.mu.Lock()
+	r.lastOutput = time.Now().Add(-time.Second)
+	r.mu.Unlock()
+	if err := r.checkReady(); err != nil || r.readyProgram() != "psql" {
+		t.Fatalf("psql prompt was not recognized after authentication: %v", err)
+	}
+}
