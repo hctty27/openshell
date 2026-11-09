@@ -111,7 +111,7 @@ func (p *zmodemMetadataParser) process() {
 				}
 				p.currentFile = nil
 			}
-		case zmodemZABORT, zmodemZFIN:
+		case 0, 1, zmodemZABORT, zmodemZFIN:
 			p.currentFile = nil
 		}
 
