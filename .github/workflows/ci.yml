@@ -137,10 +137,79 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  redis-pty-integration:
+    name: Redis Cluster PTY integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref_sha || github.sha }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Install Redis CLI and server
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server redis-tools
+      - name: Start a three-node Redis Cluster
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(mktemp -d)"
+          echo "REDIS_CLUSTER_TEST_ROOT=$root" >> "$GITHUB_ENV"
+          for port in 7000 7001 7002; do
+            node="$root/$port"
+            mkdir -p "$node"
+            cat > "$node/redis.conf" <<EOF
+          port $port
+          bind 127.0.0.1
+          protected-mode no
+          daemonize yes
+          supervised no
+          pidfile $node/redis.pid
+          logfile $node/redis.log
+          dir $node
+          cluster-enabled yes
+          cluster-config-file nodes.conf
+          cluster-node-timeout 5000
+          appendonly no
+          save ""
+          EOF
+            redis-server "$node/redis.conf"
+          done
+          for port in 7000 7001 7002; do
+            for attempt in {1..30}; do
+              if redis-cli -h 127.0.0.1 -p "$port" ping >/dev/null 2>&1; then break; fi
+              sleep 0.2
+            done
+            redis-cli -h 127.0.0.1 -p "$port" ping
+          done
+          redis-cli --cluster create 127.0.0.1:7000 127.0.0.1:7001 127.0.0.1:7002 --cluster-replicas 0 --cluster-yes
+          for attempt in {1..30}; do
+            if redis-cli -h 127.0.0.1 -p 7000 cluster info | grep -q 'cluster_state:ok'; then exit 0; fi
+            sleep 0.2
+          done
+          echo "Redis Cluster did not reach cluster_state:ok"
+          cat "$root"/*/redis.log
+          exit 1
+      - name: Exercise real redis-cli through a PTY
+        run: OPENSHELL_REDIS_CLUSTER_ADDR=127.0.0.1:7000 go test -race ./internal/ssh -run '^TestRedisClusterPTYRoundTrip$' -count=1
+      - name: Stop Redis Cluster
+        if: always()
+        shell: bash
+        run: |
+          for port in 7000 7001 7002; do
+            redis-cli -h 127.0.0.1 -p "$port" shutdown nosave >/dev/null 2>&1 || true
+          done
+          if [[ -n "${REDIS_CLUSTER_TEST_ROOT:-}" ]]; then rm -rf "$REDIS_CLUSTER_TEST_ROOT"; fi
+
   release:
     name: Windows release after CI
-    needs: [changes, go-tests, frontend-tests]
-    if: always() && needs.go-tests.result == 'success' && needs.frontend-tests.result == 'success' && (inputs.publish || (github.event_name == 'push' && needs.changes.outputs.release == 'true'))
+    needs: [changes, go-tests, frontend-tests, redis-pty-integration]
+    if: always() && needs.go-tests.result == 'success' && needs.frontend-tests.result == 'success' && needs.redis-pty-integration.result == 'success' && (inputs.publish || (github.event_name == 'push' && needs.changes.outputs.release == 'true'))
     permissions:
       contents: write
       actions: read
