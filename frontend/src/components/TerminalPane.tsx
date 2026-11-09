@@ -79,6 +79,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
   const localSequence = useRef(0);
   const cloneCwdSent = useRef(false);
   const nativeTransferActive = useRef(false);
+  const nativeTransferID = useRef<string | null>(null);
   const terminalMode = p.tab.status === "connected" && p.tab.ref ? "ssh"
     : p.tab.ref && p.tab.everConnected && ["disconnected", "error"].includes(p.tab.status)
       ? (p.tab.localFallbackPending || p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
@@ -325,23 +326,28 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       candidate.sessionId === ref.sessionId &&
       candidate.generation === ref.generation;
     const offNativeBatch = listen("ssh:native-zmodem-batch", (event: {
-      ref?: Ref; active: boolean; terminalSafe?: boolean; error?: string;
+      ref?: Ref; id?: string; active: boolean; terminalSafe?: boolean; error?: string;
     }) => {
       if (!event?.ref || !matchesConnection(event.ref)) return;
       if (event.active) {
+        nativeTransferID.current = event.id ?? null;
         nativeTransferActive.current = true;
         inputQueue.length = 0;
         term.options.disableStdin = true;
         return;
       }
+      if (nativeTransferID.current && event.id &&
+        nativeTransferID.current !== event.id) return;
       const terminalSafe = event.terminalSafe === true ||
         (event.terminalSafe == null && !event.error);
       nativeTransferActive.current = !terminalSafe;
+      if (terminalSafe) nativeTransferID.current = null;
       term.options.disableStdin = !terminalSafe;
     });
     const offDisconnected = listen("ssh:disconnected", (disconnectedRef: Ref) => {
       if (!matchesConnection(disconnectedRef)) return;
       nativeTransferActive.current = false;
+      nativeTransferID.current = null;
       term.options.disableStdin = false;
     });
     let inputFlushing = false;
