@@ -17,7 +17,8 @@ var (
 	mysqlPromptPattern = regexp.MustCompile(`^(?:mysql(?:@[A-Za-z0-9_.:-]+(?:\[[^\r\n\]]{0,120}\])?)?|MariaDB \[[^\r\n\]]{0,120}\])> ?$`)
 	redisPromptPattern = regexp.MustCompile(`^(?:redis> ?|(?:redis\s+)?(?:[A-Za-z0-9_.-]+|\[[0-9A-Fa-f:]+\]):[0-9]{1,5}(?:\[[0-9]+\])?> ?)$`)
 	psqlPromptPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,80}=[*!]?[>#] ?$`)
-	psqlPasswordPromptPattern = regexp.MustCompile("(?i)^Password(?: for user [^:\\r\\n]{1,128})?: ?\\z")
+	psqlPasswordPromptPattern = regexp.MustCompile("(?i)^Password(?: for user [^:\\r\\n]{1,128})?:\\s*\\z")
+	psqlPasswordUserPromptPattern = regexp.MustCompile("(?i)^Password for user [^:\\r\\n]{1,128}:\\s*\\z")
 	mysqlCustomPromptPattern = regexp.MustCompile(`^\(?[A-Za-z0-9_.-]+@[A-Za-z0-9_.:-]+\)?[^\r\n>]{0,120}> ?$`)
 	shellPromptPattern = regexp.MustCompile("^(?:\\[[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120}\\]|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[^\\r\\n]{0,120}|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120})[#$%] ?$")
 	terminalCSIPattern = regexp.MustCompile("\x1b\\[[0-?]*[ -/]*[@-~]")
@@ -102,7 +103,15 @@ func (r *terminalShellReadiness) observe(p []byte) {
 	// MySQL permits custom user@host]db> and user@host|db> prompt layouts.
 	// Require a previously observed MySQL welcome banner before trusting them.
 	// Database prompts require a different executor from the Shell marker protocol.
-	if !r.assetMenu && (r.program == "psql" || r.startedProgram == "psql") && psqlPasswordPromptPattern.MatchString(visible) {
+	passwordPrompt := strings.TrimSpace(visible)
+	psqlLaunchKnown := r.program == "psql" || r.startedProgram == "psql"
+	if !r.assetMenu && psqlPasswordPromptPattern.MatchString(passwordPrompt) &&
+		(psqlLaunchKnown || psqlPasswordUserPromptPattern.MatchString(passwordPrompt)) {
+		if !psqlLaunchKnown {
+			// libpq's named-user prompt is distinctive enough to recover a psql
+			// launch when paste/history input bypassed the local input tracker.
+			r.startedProgram = "psql"
+		}
 		// libpq disables terminal echo while waiting for a password. Preserve
 		// the detected psql launch, but never buffer authentication input as a
 		// new command or retain the password in launchInput.
@@ -234,7 +243,12 @@ func (r *terminalShellReadiness) userInput(p []byte) {
 	for _, b := range p {
 		switch b {
 		case '\r', '\n':
-			r.startedProgram = replLaunchCommand(string(r.launchInput))
+			// Keep a previously recognized REPL launch until its prompt is
+			// observed or the Shell prompt returns. Authentication input and
+			// transformed key paths are not necessarily launch commands.
+			if launched := replLaunchCommand(string(r.launchInput)); launched != "" {
+				r.startedProgram = launched
+			}
 			r.launchInput = nil
 		case 3:
 			r.launchInput = nil
