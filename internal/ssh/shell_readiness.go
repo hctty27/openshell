@@ -252,6 +252,13 @@ func (r *terminalShellReadiness) aiMySQLInputStarted() {
 	r.mu.Unlock()
 }
 
+func (r *terminalShellReadiness) aiREPLInputStarted() {
+	r.mu.Lock()
+	r.manualInput = true
+	r.prompt = false
+	r.mu.Unlock()
+}
+
 // readyProgram must only be read after checkReady succeeds.
 func (r *terminalShellReadiness) readyProgram() string {
 	r.mu.Lock()
