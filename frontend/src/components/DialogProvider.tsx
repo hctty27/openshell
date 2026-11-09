@@ -146,6 +146,9 @@ function DialogContent({
   const description = options.description
     ? renderMessage(options.description)
     : undefined;
+  const confirmLabel = request.kind === "choice"
+    ? undefined
+    : request.options.confirmLabel;
 
   return (
     <ModalSurface
@@ -256,8 +259,8 @@ function DialogContent({
               className={"app-dialog__primary" + (tone === "danger" ? " app-dialog__primary--danger" : "")}
               disabled={isInput && !value.trim()}
             >
-              {request.kind !== "choice" && request.options.confirmLabel
-                ? renderMessage(request.options.confirmLabel)
+              {confirmLabel
+                ? renderMessage(confirmLabel)
                 : isInput
                   ? t("common:ok")
                   : t("common:confirm")}
