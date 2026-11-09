@@ -323,3 +323,69 @@ func TestTerminalWriterCloseReleasesBlockedOutput(t *testing.T) {
 	case <-time.After(2 * time.Second): t.Fatal("close left writer blocked")
 	}
 }
+
+
+func TestZmodemLocalExitCarriesTransferIdentityAndOutcome(t *testing.T) {
+    cases := []struct {
+        name string
+        message string
+        cancelled bool
+        wantStatus string
+    }{
+        {
+            name: "success",
+            message: "\r\x1b[2K\x1b[1;32mSuccess!!\x1b[0m\r\n",
+            wantStatus: "completed",
+        },
+        {
+            name: "failure",
+            message: "\r\x1b[2Kclient exit with 1\r\n",
+            wantStatus: "failed",
+        },
+        {
+            name: "cancelled",
+            message: "\r\x1b[2Kclient exit with 1\r\n",
+            cancelled: true,
+            wantStatus: "cancelled",
+        },
+    }
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            events := make(chan map[string]any, 1)
+            ref := domain.ConnectionRef{TabID: "tab", SessionID: "session", Generation: 1}
+            manager := NewManager(nil, func(name string, payload any) {
+                if name == "ssh:transfer-finished" {
+                    events <- payload.(map[string]any)
+                }
+            })
+            writer := &terminalWriter{
+                m: manager,
+                c: &connection{
+                    ref: ref,
+                    history: NewHistory(8192),
+                    transferID: 42,
+                    transferCancelled: tc.cancelled,
+                },
+            }
+            closer := &terminalOutputCloser{writer: writer, done: make(chan struct{})}
+            defer closer.Close()
+            if _, err := closer.Write([]byte(tc.message)); err != nil {
+                t.Fatal(err)
+            }
+            select {
+            case event := <-events:
+                if event["transferId"] != "42" {
+                    t.Fatalf("unexpected transfer id: %+v", event)
+                }
+                if event["status"] != tc.wantStatus {
+                    t.Fatalf("unexpected transfer status: %+v", event)
+                }
+                if tc.wantStatus == "failed" && event["error"] == "" {
+                    t.Fatalf("failed transfer has no error: %+v", event)
+                }
+            case <-time.After(time.Second):
+                t.Fatal("local exit did not emit a completion event")
+            }
+        })
+    }
+}
