@@ -55,6 +55,18 @@ interface Props {
 
 const refKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generation}`;
 const transferKey = (ref: Ref, transferId?: string) => `${refKey(ref)}:${transferId || "legacy"}`;
+const resolveTerminalTransferKey = (
+  jobs: Record<string, TerminalTransfer>, ref: Ref, transferId?: string,
+) => {
+  if (transferId) return transferKey(ref, transferId);
+  const prefix = refKey(ref) + ":";
+  const legacyKey = transferKey(ref);
+  const candidates = Object.entries(jobs).filter(([key]) => key.startsWith(prefix) && key !== legacyKey);
+  const active = candidates.filter(([, job]) => job.status === "running" || job.status === "cancelling");
+  if (active.length === 1) return active[0][0];
+  if (active.length === 0 && candidates.length === 1) return candidates[0][0];
+  return legacyKey;
+};
 const activeSftp = (task: SFTPTask) => task.status === "queued" || task.status === "running";
 const formatSize = (bytes: number) =>
   bytes < 1024 ? `${bytes} B` : bytes < 1048576 ?
@@ -63,7 +75,15 @@ const formatSize = (bytes: number) =>
 export default function TransferCenter({ tabs, onNotice }: Props) {
   useTranslation();
   const [open, setOpen] = useState(false);
-  const [terminalJobs, setTerminalJobs] = useState<Record<string, TerminalTransfer>>({});
+  const [terminalJobs, setTerminalJobsState] = useState<Record<string, TerminalTransfer>>({});
+  const terminalJobsRef = useRef(terminalJobs);
+  const setTerminalJobs = (update: (previous: Record<string, TerminalTransfer>) => Record<string, TerminalTransfer>) => {
+    setTerminalJobsState(previous => {
+      const next = update(previous);
+      terminalJobsRef.current = next;
+      return next;
+    });
+  };
   const [nativeBatches, setNativeBatches] = useState<Record<string, NativeBatch>>({});
   const [sftpJobs, setSftpJobs] = useState<Record<string, SFTPTask>>({});
   const [sftpConcurrency, setSftpConcurrency] = useState(3);
@@ -115,28 +135,53 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       if (!event?.ref) return;
       const transferId = event.transferId || "legacy";
       const key = transferKey(event.ref, transferId);
+      const legacyKey = transferKey(event.ref);
+      const mergeLegacy = key !== legacyKey;
+      const legacyFinished = mergeLegacy && finished.current.has(legacyKey);
       clearTerminalCleanup(key);
+      if (mergeLegacy) {
+        clearTerminalCleanup(legacyKey);
+        finished.current.delete(legacyKey);
+      }
       finished.current.delete(key);
-      setTerminalJobs(previous => ({
-        ...previous,
-        [key]: {
-          ref: event.ref, transferId, direction: event.direction,
-          protocol: event.protocol === "trzsz" ? "trzsz" : "zmodem",
-          status: "running",
-          files: (event.files ?? []).map(file => ({
+      if (legacyFinished) finished.current.add(key);
+      setTerminalJobs(previous => {
+        const legacy = mergeLegacy ? previous[legacyKey] : undefined;
+        const next = { ...previous };
+        if (mergeLegacy) delete next[legacyKey];
+        const status = legacy?.status ?? "running";
+        const files = event.files
+          ? event.files.map(file => ({
             name: file.name,
             total: typeof file.total === "number" ? file.total : null,
-            status: "queued",
-          })),
-        },
-      }));
+            status: status === "completed" ? "completed" as const :
+              status === "failed" ? "failed" as const :
+              status === "cancelled" ? "cancelled" as const : "queued" as const,
+          }))
+          : legacy?.files ?? [];
+        return {
+          ...next,
+          [key]: {
+            ref: event.ref, transferId, direction: event.direction,
+            protocol: event.protocol === "trzsz" ? "trzsz" : "zmodem",
+            status,
+            transferred: legacy?.transferred,
+            speed: legacy?.speed,
+            processed: legacy?.processed,
+            percent: legacy?.percent,
+            files,
+            error: legacy?.error,
+          },
+        };
+      });
+      if (legacyFinished) scheduleTerminalCleanup(key);
     });
     const offState = listen("ssh:transfer-state", (event: {
       ref: Ref; transferId?: string; active: boolean; status?: TransferStatus; error?: string;
     }) => {
       if (!event?.ref) return;
       const transferId = event.transferId || "legacy";
-      const key = transferKey(event.ref, transferId);
+      const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId);
       if (event.active) {
         if (finished.current.has(key)) return;
         setTerminalJobs(previous => {
@@ -179,7 +224,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     }) => {
       if (!event?.ref) return;
       const transferId = event.transferId || "legacy";
-      const key = transferKey(event.ref, transferId);
+      const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId);
       if (finished.current.has(key)) return;
       setTerminalJobs(previous => {
         const job = previous[key];
@@ -208,7 +253,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     }) => {
       if (!event?.ref) return;
       const transferId = event.transferId || "legacy";
-      const key = transferKey(event.ref, transferId);
+      const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId);
       finished.current.add(key);
       setTerminalJobs(previous => {
         const job = previous[key];
