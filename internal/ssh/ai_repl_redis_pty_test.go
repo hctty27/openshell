@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,12 +55,17 @@ func TestRedisClusterPTYRoundTrip(t *testing.T) {
 	conn.aiController = lease
 	manager.mu.Unlock()
 
+	var outputMu sync.Mutex
+	var terminalOutput strings.Builder
 	go func() {
 		buffer := make([]byte, 4096)
 		for {
 			n, readErr := terminal.Read(buffer)
 			if n > 0 {
 				chunk := append([]byte(nil), buffer[:n]...)
+				outputMu.Lock()
+				_, _ = terminalOutput.Write(chunk)
+				outputMu.Unlock()
 				conn.readiness.observe(chunk)
 				lease.Observe(chunk)
 			}
@@ -78,7 +84,10 @@ func TestRedisClusterPTYRoundTrip(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	if err := lease.waitForREPLPrompt(ctx); err != nil {
-		t.Fatalf("redis-cli did not reach its interactive prompt: %v", err)
+		outputMu.Lock()
+		rawOutput := terminalOutput.String()
+		outputMu.Unlock()
+		t.Fatalf("redis-cli did not reach its interactive prompt: %v; program=%q; output=%q", err, lease.connection.readiness.readyProgram(), rawOutput)
 	}
 
 	key := redisClusterKeyForRemoteMaster()
