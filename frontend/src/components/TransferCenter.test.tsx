@@ -193,9 +193,10 @@ test("ZMODEM uses selected local file sizes and stops the indeterminate bar on c
   fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
 
   expect(screen.getByText("archive.bin")).toBeTruthy();
-  expect(screen.getByText("100%")).toBeTruthy();
+  expect(screen.getByText("100.0 MB / 100.0 MB")).toBeTruthy();
   expect(screen.getByText("已完成")).toBeTruthy();
   expect(container.querySelector(".transfer-center-bar.indeterminate")).toBeNull();
+  expect(container.querySelector(".transfer-center-bar > div")?.getAttribute("style")).toContain("width: 100%");
 });
 
 test("different transfer ids on one SSH tab do not share completion state", () => {
