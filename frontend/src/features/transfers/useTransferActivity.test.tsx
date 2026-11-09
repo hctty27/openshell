@@ -59,3 +59,22 @@ test("listeners are unregistered on unmount", () => {
   unmount();
   for (const callbacks of events.listeners.values()) expect(callbacks.size).toBe(0);
 });
+
+
+test("late completion from an earlier transfer cannot deactivate the next transfer", () => {
+  render(<Probe />);
+  emit("ssh:transfer-details", { ref, transferId: "transfer-1", direction: "upload" });
+  emit("ssh:transfer-state", { ref, transferId: "transfer-1", active: true });
+  expect(activity.hasActiveTransfers(ref)).toBe(true);
+
+  emit("ssh:transfer-finished", { ref, transferId: "transfer-1", status: "completed" });
+  expect(activity.hasActiveTransfers(ref)).toBe(false);
+
+  emit("ssh:transfer-details", { ref, transferId: "transfer-2", direction: "download" });
+  emit("ssh:transfer-state", { ref, transferId: "transfer-2", active: true });
+  expect(activity.hasActiveTransfers(ref)).toBe(true);
+
+  emit("ssh:transfer-state", { ref, transferId: "transfer-1", active: false });
+  emit("ssh:transfer-finished", { ref, transferId: "transfer-1", status: "failed" });
+  expect(activity.hasActiveTransfers(ref)).toBe(true);
+});

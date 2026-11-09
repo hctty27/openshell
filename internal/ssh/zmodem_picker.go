@@ -5,6 +5,7 @@ import (
     "io"
     "os"
     "path/filepath"
+    "strconv"
     "time"
 
     "github.com/hctty27/openshell/internal/domain"
@@ -93,7 +94,47 @@ func (m *Manager) selectZmodemPaths(c *connection, direction, protocol string, a
         }
         return false
     }
+
+    m.mu.Lock()
+    if m.connections[ref.TabID] != c || c.ref != ref {
+        m.mu.Unlock()
+        return false
+    }
+    c.transferID = request.id
+    c.transferProtocol = protocol
+    c.transferDirection = direction
+    c.transferCancelled = false
+    c.transferFinished = false
+    c.transferStatus = ""
+    m.mu.Unlock()
+
+    files := []map[string]any{}
+    if protocol == "zmodem" {
+        files = zmodemSelectedFiles(paths)
+    }
+    m.emit("ssh:transfer-details", map[string]any{
+        "ref": ref,
+        "transferId": strconv.FormatUint(request.id, 10),
+        "direction": direction,
+        "protocol": protocol,
+        "files": files,
+    })
     return true
+}
+
+func zmodemSelectedFiles(paths []string) []map[string]any {
+    files := make([]map[string]any, 0, len(paths))
+    for _, path := range paths {
+        info, err := os.Stat(path)
+        if err != nil || !info.Mode().IsRegular() || info.Size() < 0 {
+            continue
+        }
+        files = append(files, map[string]any{
+            "name": filepath.Base(path),
+            "total": info.Size(),
+        })
+    }
+    return files
 }
 
 // SubmitZmodemSelection accepts only a current request on its original SSH

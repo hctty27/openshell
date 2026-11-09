@@ -58,6 +58,12 @@ type connection struct {
 	aiExecProbed bool
 	aiExecSupported bool
 	transferring bool
+	transferID uint64
+	transferProtocol string
+	transferDirection string
+	transferCancelled bool
+	transferFinished bool
+	transferStatus string
 	zmodemSelection *zmodemSelection
 	history  *History
 	sequence uint64

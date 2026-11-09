@@ -9,7 +9,8 @@ const connectionKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generat
 export function useTransferActivity() {
   const sftpJobs = useRef(new Map<string, Set<string>>());
   const zmodemActive = useRef(new Set<string>());
-  const zmodemFinished = useRef(new Set<string>());
+  const zmodemFinished = useRef(new Map<string, string>());
+  const currentTransferIds = useRef(new Map<string, string>());
 
   useEffect(() => {
     const offSFTP = listen("sftp:transfer", (task: SFTPTask) => {
@@ -21,24 +22,35 @@ export function useTransferActivity() {
       if (active.size) sftpJobs.current.set(key, active);
       else sftpJobs.current.delete(key);
     });
-    const offDetails = listen("ssh:transfer-details", (payload: { ref: Ref }) => {
-      if (payload?.ref) zmodemFinished.current.delete(connectionKey(payload.ref));
-    });
-    const offState = listen("ssh:transfer-state", (payload: { ref: Ref; active: boolean }) => {
+    const offDetails = listen("ssh:transfer-details", (payload: { ref: Ref; transferId?: string }) => {
       if (!payload?.ref) return;
       const key = connectionKey(payload.ref);
-      if (payload.active && !zmodemFinished.current.has(key)) {
+      currentTransferIds.current.set(key, payload.transferId || "legacy");
+      zmodemFinished.current.delete(key);
+    });
+    const offState = listen("ssh:transfer-state", (payload: {
+      ref: Ref; transferId?: string; active: boolean;
+    }) => {
+      if (!payload?.ref) return;
+      const key = connectionKey(payload.ref);
+      const transferId = payload.transferId || currentTransferIds.current.get(key) || "legacy";
+      const currentTransferId = currentTransferIds.current.get(key);
+      if (currentTransferId && transferId !== currentTransferId) return;
+      if (payload.active && zmodemFinished.current.get(key) !== transferId) {
         zmodemActive.current.add(key);
       } else if (!payload.active) {
         zmodemActive.current.delete(key);
-        zmodemFinished.current.add(key);
+        zmodemFinished.current.set(key, transferId);
       }
     });
-    const offFinished = listen("ssh:transfer-finished", (payload: { ref: Ref }) => {
+    const offFinished = listen("ssh:transfer-finished", (payload: { ref: Ref; transferId?: string }) => {
       if (!payload?.ref) return;
       const key = connectionKey(payload.ref);
+      const transferId = payload.transferId || currentTransferIds.current.get(key) || "legacy";
+      const currentTransferId = currentTransferIds.current.get(key);
+      if (currentTransferId && transferId !== currentTransferId) return;
       zmodemActive.current.delete(key);
-      zmodemFinished.current.add(key);
+      zmodemFinished.current.set(key, transferId);
     });
     const offDisconnected = listen("ssh:disconnected", (ref: Ref) => {
       if (!ref?.tabId) return;
@@ -46,6 +58,7 @@ export function useTransferActivity() {
       sftpJobs.current.delete(key);
       zmodemActive.current.delete(key);
       zmodemFinished.current.delete(key);
+      currentTransferIds.current.delete(key);
     });
     return () => {
       offSFTP();
