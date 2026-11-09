@@ -371,3 +371,75 @@ func TestRedisShellEchoMustHaveRecognizedPrompt(t *testing.T) {
 		t.Fatalf("valid echoed launch rejected: %s",got)
 	}
 }
+
+
+func TestPsqlPasswordPromptPreservesLaunchAndDoesNotStorePassword(t *testing.T) {
+	for _, prompt := range []string{"Password for user root: ", "Password: "} {
+		t.Run(prompt, func(t *testing.T) {
+			var r terminalShellReadiness
+			r.observe([]byte("root@db:~# "))
+			r.userInput([]byte("psql -h 127.0.0.1 -p 5432 -U root -d postgres\r"))
+			if r.startedProgram != "psql" {
+				t.Fatalf("psql launch was not recorded: %q", r.startedProgram)
+			}
+
+			r.observe([]byte("\r\n" + prompt))
+			if !r.psqlPasswordPrompt || r.prompt {
+				t.Fatal("psql password prompt was not recognized as an input state")
+			}
+			if err := r.checkReady(); err == nil || !strings.Contains(err.Error(), "密码") {
+				t.Fatalf("expected an explicit password prompt error, got %v", err)
+			}
+
+			for _, password := range []string{"wrong-secret", "correct-secret"} {
+				r.userInput([]byte(password[:5]))
+				r.userInput([]byte(password[5:] + "\r"))
+				if r.startedProgram != "psql" {
+					t.Fatalf("password input replaced psql launch state: %q", r.startedProgram)
+				}
+				if len(r.launchInput) != 0 || strings.Contains(string(r.launchInput), password) {
+					t.Fatal("password was retained in the shell launch buffer")
+				}
+				if !r.manualInput {
+					t.Fatal("password input did not keep the terminal in a non-ready state")
+				}
+				r.observe([]byte("\r\n" + prompt))
+				if !r.psqlPasswordPrompt {
+					t.Fatal("repeated password prompt was not recognized")
+				}
+			}
+
+			r.observe([]byte("\r\npostgres=# "))
+			r.mu.Lock()
+			r.lastOutput = time.Now().Add(-time.Second)
+			r.mu.Unlock()
+			if r.psqlPasswordPrompt {
+				t.Fatal("successful authentication did not clear the password prompt state")
+			}
+			if err := r.checkReady(); err != nil || r.readyProgram() != "psql" {
+				t.Fatalf("psql prompt was not ready after authentication: %v", err)
+			}
+		})
+	}
+}
+
+func TestPsqlPasswordFailureRecoversShellReadiness(t *testing.T) {
+	var r terminalShellReadiness
+	r.observe([]byte("root@db:~# "))
+	r.userInput([]byte("psql -h 127.0.0.1 -U root -d postgres\r"))
+	r.observe([]byte("\r\nPassword for user root: "))
+	if !r.psqlPasswordPrompt {
+		t.Fatal("psql password prompt was not recognized")
+	}
+	r.userInput([]byte("wrong-secret\r"))
+	r.observe([]byte("\r\npsql: error: connection to server failed: FATAL: password authentication failed\r\nroot@db:~# "))
+	r.mu.Lock()
+	r.lastOutput = time.Now().Add(-time.Second)
+	r.mu.Unlock()
+	if r.psqlPasswordPrompt || r.startedProgram != "" {
+		t.Fatal("failed psql authentication left stale launch state")
+	}
+	if err := r.checkReady(); err != nil || r.readyProgram() != "shell" {
+		t.Fatalf("Shell was not ready after psql authentication failure: %v", err)
+	}
+}

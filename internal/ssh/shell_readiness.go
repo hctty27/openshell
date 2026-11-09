@@ -17,6 +17,7 @@ var (
 	mysqlPromptPattern = regexp.MustCompile(`^(?:mysql(?:@[A-Za-z0-9_.:-]+(?:\[[^\r\n\]]{0,120}\])?)?|MariaDB \[[^\r\n\]]{0,120}\])> ?$`)
 	redisPromptPattern = regexp.MustCompile(`^(?:redis> ?|(?:redis\s+)?(?:[A-Za-z0-9_.-]+|\[[0-9A-Fa-f:]+\]):[0-9]{1,5}(?:\[[0-9]+\])?> ?)$`)
 	psqlPromptPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,80}=[*!]?[>#] ?$`)
+	psqlPasswordPromptPattern = regexp.MustCompile("(?i)^Password(?: for user [^:\\r\\n]{1,128})?: ?\\z")
 	mysqlCustomPromptPattern = regexp.MustCompile(`^\(?[A-Za-z0-9_.-]+@[A-Za-z0-9_.:-]+\)?[^\r\n>]{0,120}> ?$`)
 	shellPromptPattern = regexp.MustCompile("^(?:\\[[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120}\\]|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[^\\r\\n]{0,120}|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+ [^\\r\\n]{0,120})[#$%] ?$")
 	terminalCSIPattern = regexp.MustCompile("\x1b\\[[0-?]*[ -/]*[@-~]")
@@ -33,6 +34,7 @@ type terminalShellReadiness struct {
 	program string
 	mysqlObserved bool
 	startedProgram string
+	psqlPasswordPrompt bool
 	launchInput []byte
 	jumpServer bool
 	assetMenu bool
@@ -100,7 +102,14 @@ func (r *terminalShellReadiness) observe(p []byte) {
 	// MySQL permits custom user@host]db> and user@host|db> prompt layouts.
 	// Require a previously observed MySQL welcome banner before trusting them.
 	// Database prompts require a different executor from the Shell marker protocol.
-	if !r.assetMenu && r.mysqlObserved && (mysqlPromptPattern.MatchString(visible) ||
+	if !r.assetMenu && (r.program == "psql" || r.startedProgram == "psql") && psqlPasswordPromptPattern.MatchString(visible) {
+		// libpq disables terminal echo while waiting for a password. Preserve
+		// the detected psql launch, but never buffer authentication input as a
+		// new command or retain the password in launchInput.
+		r.psqlPasswordPrompt = true
+		r.prompt = false
+		r.manualInput = false
+	} else if !r.assetMenu && r.mysqlObserved && (mysqlPromptPattern.MatchString(visible) ||
 		mysqlCustomPromptPattern.MatchString(visible)) {
 		r.program = "mysql"
 		r.prompt = true
@@ -109,6 +118,7 @@ func (r *terminalShellReadiness) observe(p []byte) {
 		r.prompt = true
 		r.manualInput = false
 		r.startedProgram = ""
+		r.psqlPasswordPrompt = false
 	} else if shellPromptPattern.MatchString(visible) {
 		if !r.integration || r.assetMenu || (r.program != "" && r.program != "shell") {
 			r.program = "shell"
@@ -117,6 +127,7 @@ func (r *terminalShellReadiness) observe(p []byte) {
 			r.mysqlObserved = false
 		}
 		r.startedProgram = ""
+		r.psqlPasswordPrompt = false
 		r.launchInput = nil
 		if r.assetMenu { r.assetMenu = false }
 	} else if r.program == "mysql" || r.program == "redis" || r.program == "python" ||
@@ -212,6 +223,11 @@ func (r *terminalShellReadiness) userInput(p []byte) {
 	defer r.mu.Unlock()
 	r.manualInput = true
 	r.prompt = false
+	if r.psqlPasswordPrompt {
+		// Password input is intentionally not retained or interpreted as a
+		// shell command. The psql prompt will clear this state after auth.
+		return
+	}
 	// Only buffer startup text in a Shell. Interactive Redis/Python sessions
 	// may contain passwords; do not accumulate their manual command input.
 	if r.program != "" && r.program != "shell" { return }
@@ -278,6 +294,9 @@ func (r *terminalShellReadiness) checkReady() error {
 	defer r.mu.Unlock()
 	if r.assetMenu {
 		return errors.New("当前处于 JumpServer 资产菜单（Opt>），请先选择资产并进入 Shell")
+	}
+	if r.psqlPasswordPrompt {
+		return errors.New("psql 正在等待数据库密码，请先完成认证后再让 AI 执行")
 	}
 	if r.alternate {
 		return errors.New("当前终端正在使用全屏程序，无法交给 AI 操作")
