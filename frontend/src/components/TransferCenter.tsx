@@ -180,7 +180,6 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       ref: Ref; transferId?: string; active: boolean; status?: TransferStatus; error?: string;
     }) => {
       if (!event?.ref) return;
-      const transferId = event.transferId || "legacy";
       const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId);
       if (event.active) {
         if (finished.current.has(key)) return;
@@ -190,7 +189,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
             ...previous,
             [key]: {
               ...job,
-              ref: event.ref, transferId,
+              ref: event.ref, transferId: event.transferId || job?.transferId || "legacy",
               protocol: job?.protocol ?? "trzsz",
               direction: job?.direction,
               status: job?.status === "cancelling" ? "cancelling" : "running",
@@ -223,7 +222,6 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       protocol?: Protocol; percent?: number; processed?: number;
     }) => {
       if (!event?.ref) return;
-      const transferId = event.transferId || "legacy";
       const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId);
       if (finished.current.has(key)) return;
       setTerminalJobs(previous => {
@@ -232,7 +230,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           ...previous,
           [key]: {
             ...job,
-            ref: event.ref, transferId,
+            ref: event.ref, transferId: event.transferId || job?.transferId || "legacy",
             protocol: event.protocol === "trzsz" ? "trzsz" : job?.protocol ?? "zmodem",
             direction: job?.direction,
             status: job?.status === "cancelling" ? "cancelling" : "running",
@@ -252,7 +250,6 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       ref: Ref; transferId?: string; status?: TransferStatus; error?: string;
     }) => {
       if (!event?.ref) return;
-      const transferId = event.transferId || "legacy";
       const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId);
       finished.current.add(key);
       setTerminalJobs(previous => {
