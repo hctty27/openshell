@@ -140,7 +140,7 @@ func TestNativeZmodemInputGateBlocksWritesBeforeLeaseAcquisition(t *testing.T) {
 
 	manager.mu.Lock()
 	connection := manager.connections[ref.TabID]
-	connection.nativeTerminalTransfer = &nativeTerminalTransferTask{ref: ref}
+	connection.nativeTerminalTransfer = &nativeTerminalTransferTask{ref: ref, cancel: func() {}}
 	manager.mu.Unlock()
 
 	encoded := base64.StdEncoding.EncodeToString([]byte("blocked before PTY lease"))
