@@ -580,7 +580,7 @@ test("SFTP batch transfer supports overwriting all existing destination files", 
   vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
     side === "local" ? local : remote);
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
-  await screen.findByText("two.txt");
+  await within(pane("local")).findByText("two.txt");
 
   fireEvent.click(row("local", "one.txt"));
   fireEvent.click(row("local", "two.txt"), { ctrlKey: true });
@@ -631,7 +631,7 @@ test("SFTP batch transfer can decide each overwrite conflict independently", asy
   vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
     side === "local" ? local : remote);
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()} /></DialogProvider>);
-  await screen.findByText("two.txt");
+  await within(pane("local")).findByText("two.txt");
 
   fireEvent.click(row("local", "one.txt"));
   fireEvent.click(row("local", "two.txt"), { ctrlKey: true });
