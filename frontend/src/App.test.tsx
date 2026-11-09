@@ -40,13 +40,6 @@ vi.mock("./components/TerminalPane", () => ({
     />
   ),
 }));
-vi.mock("./components/NativeZmodemExperimentDialog", () => ({
-  default: (props: { initialDirection?: "upload" | "download"; sessionName: string }) => (
-    <div data-testid="native-zmodem-transfer-dialog" data-direction={props.initialDirection ?? ""}>
-      {props.sessionName}
-    </div>
-  ),
-}));
 vi.mock("./components/SFTPView", () => ({
   default: (props: { initialRemoteDirectory?: string; cwdReported?: boolean }) =>
     <div data-testid="sftp-panel-stub" data-initial-directory={props.initialRemoteDirectory} data-cwd-reported={String(props.cwdReported)}>
@@ -103,7 +96,7 @@ test("opens right AI dock from the edge rail without a titlebar icon", async () 
   expect(aiDock.classList.contains("is-open")).toBe(true);
   expect(screen.getByRole("complementary", { name: "AI 助手" })).toBeTruthy();
 });
-test("native ZMODEM keeps automatic rz/sz handoff without a manual toolbar action", async () => {
+test("native ZMODEM auto handoff never opens the experiment dialog", async () => {
   await act(async () => { render(<App />); });
   expect(screen.queryByRole("button", { name: "原生 ZMODEM 文件传输" })).toBeNull();
 
@@ -113,8 +106,7 @@ test("native ZMODEM keeps automatic rz/sz handoff without a manual toolbar actio
       listener({ ref, sessionName: "Linux", direction: "upload", remotePath: "" });
     }
   });
-  expect(screen.getByTestId("native-zmodem-transfer-dialog").getAttribute("data-direction")).toBe("upload");
-  expect(screen.getByText("Linux")).toBeTruthy();
+  expect(screen.queryByTestId("native-zmodem-transfer-dialog")).toBeNull();
 });
 
 test("right AI dock mirrors session sidebar hover, pin and Escape behavior", async () => {
