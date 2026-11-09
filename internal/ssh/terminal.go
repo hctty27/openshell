@@ -412,8 +412,9 @@ var trzszProgressPattern = regexp.MustCompile(`([0-9]{1,3})% \| ([0-9]+(?:\.[0-9
 
 // trzsz-go emits these messages immediately after the local rz/sz child exits.
 // Its transfer-state callback can be delayed until further remote SSH output.
-// Observe the exact local protocol message to close the progress UI promptly.
-var zmodemLocalExitPattern = regexp.MustCompile(`\r\x1b\[2K(?:\x1b\[1;32mSuccess!!\x1b\[0m|client exit with ([0-9]+))\r\n`)
+// Accept ANSI SGR variations while keeping the clear-line prefix to avoid
+// treating ordinary shell output such as "Success!!" as a transfer result.
+var zmodemLocalExitPattern = regexp.MustCompile(`\r\x1b\[2K(?:(?:\x1b\[[0-?]*[ -/]*m)*Success!!(?:\x1b\[[0-?]*[ -/]*m)*|(?:\x1b\[[0-?]*[ -/]*m)*client exit with ([0-9]+)(?:\x1b\[[0-?]*[ -/]*m)*)\r\n`)
 func (o *terminalOutputCloser) Write(p []byte) (int, error) {
     o.mu.Lock()
     oldTailSize := len(o.tail)
