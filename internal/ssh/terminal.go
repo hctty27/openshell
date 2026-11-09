@@ -284,9 +284,15 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
         if valid && connection.transferID != 0 {
             event["transferId"] = strconv.FormatUint(connection.transferID, 10)
             if !transferring {
-                if connection.transferCancelled {
+                switch {
+                case connection.transferFinished:
+                    event["status"] = connection.transferStatus
+                case connection.transferCancelled:
                     event["status"] = "cancelled"
-                } else {
+                case connection.transferProtocol == "zmodem":
+                    event["status"] = "failed"
+                    event["error"] = "ZMODEM 传输结束，但未收到本地完成确认"
+                default:
                     event["status"] = "completed"
                 }
             }
@@ -471,6 +477,13 @@ func (o *terminalOutputCloser) Write(p []byte) (int, error) {
             status = "cancelled"
             exitError = ""
         }
+        o.writer.m.mu.Lock()
+        if current := o.writer.m.connections[o.writer.c.ref.TabID]; current == o.writer.c &&
+            o.writer.c.transferID == transferID {
+            o.writer.c.transferFinished = true
+            o.writer.c.transferStatus = status
+        }
+        o.writer.m.mu.Unlock()
         event := map[string]any{
             "ref": o.writer.c.ref,
             "status": status,
