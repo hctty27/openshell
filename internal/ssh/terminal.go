@@ -283,6 +283,12 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
         event := map[string]any{"ref": ref, "active": transferring}
         if valid && connection.transferID != 0 {
             event["transferId"] = strconv.FormatUint(connection.transferID, 10)
+            if connection.transferProtocol != "" {
+                event["protocol"] = connection.transferProtocol
+            }
+            if connection.transferDirection != "" {
+                event["direction"] = connection.transferDirection
+            }
             if !transferring {
                 switch {
                 case connection.transferFinished:
