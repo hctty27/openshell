@@ -174,3 +174,93 @@ test("SFTP batch cancellation is scoped and concurrency is saved", async () => {
   fireEvent.change(selector, { target: { value: "4" } });
   await waitFor(() => expect(api.SetSFTPConcurrency).toHaveBeenCalledWith(4));
 });
+
+
+test("ZMODEM uses selected local file sizes and stops the indeterminate bar on completion", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  const total = 100 * 1024 * 1024;
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "upload-1", direction: "upload", protocol: "zmodem",
+    files: [{ name: "archive.bin", total }],
+  });
+  emit("ssh:transfer-progress", {
+    ref: refA, transferId: "upload-1", transferred: "100 MB",
+    speed: "11.2 MB/s", processed: total,
+  });
+  emit("ssh:transfer-finished", {
+    ref: refA, transferId: "upload-1", status: "completed",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+
+  expect(screen.getByText("archive.bin")).toBeTruthy();
+  expect(screen.getByText("100%")).toBeTruthy();
+  expect(screen.getByText("已完成")).toBeTruthy();
+  expect(container.querySelector(".transfer-center-bar.indeterminate")).toBeNull();
+});
+
+test("different transfer ids on one SSH tab do not share completion state", () => {
+  render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "transfer-a", direction: "upload", protocol: "zmodem",
+    files: [{ name: "first.bin", total: 100 }],
+  });
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "transfer-b", direction: "upload", protocol: "zmodem",
+    files: [{ name: "second.bin", total: 200 }],
+  });
+  emit("ssh:transfer-finished", {
+    ref: refA, transferId: "transfer-a", status: "completed",
+  });
+  emit("ssh:transfer-progress", {
+    ref: refA, transferId: "transfer-b", transferred: "50 B",
+    speed: "10 B/s", processed: 50,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+
+  expect(screen.getByText("first.bin")).toBeTruthy();
+  expect(screen.getByText("second.bin")).toBeTruthy();
+  expect(screen.getByText("已完成")).toBeTruthy();
+  expect(screen.getByText("25%")).toBeTruthy();
+});
+
+test("remote ZMODEM file metadata is added and completed independently", () => {
+  render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "download-1", direction: "download", protocol: "zmodem",
+  });
+  emit("ssh:transfer-file", {
+    ref: refA, transferId: "download-1", kind: "start",
+    name: "remote-backup.tar", total: 200,
+  });
+  emit("ssh:transfer-file", {
+    ref: refA, transferId: "download-1", kind: "completed",
+    name: "remote-backup.tar", total: 200, processed: 200,
+  });
+  emit("ssh:transfer-progress", {
+    ref: refA, transferId: "download-1", transferred: "200 B",
+    speed: "20 B/s", processed: 200,
+  });
+  emit("ssh:transfer-finished", {
+    ref: refA, transferId: "download-1", status: "completed",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+
+  expect(screen.getByText("remote-backup.tar")).toBeTruthy();
+  expect(screen.getByText("200 B / 200 B")).toBeTruthy();
+  expect(screen.getByText("已完成")).toBeTruthy();
+});
+
+test("failed ZMODEM process is not displayed as a successful transfer", () => {
+  render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "failed-1", direction: "download", protocol: "zmodem",
+  });
+  emit("ssh:transfer-finished", {
+    ref: refA, transferId: "failed-1", status: "failed",
+    error: "本地 ZMODEM 进程退出，代码 1",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+
+  expect(screen.getByText("失败")).toBeTruthy();
+  expect(screen.getByText("本地 ZMODEM 进程退出，代码 1")).toBeTruthy();
+});
