@@ -256,8 +256,8 @@ function DialogContent({
               className={"app-dialog__primary" + (tone === "danger" ? " app-dialog__primary--danger" : "")}
               disabled={isInput && !value.trim()}
             >
-              {options.confirmLabel
-                ? renderMessage(options.confirmLabel)
+              {request.kind !== "choice" && request.options.confirmLabel
+                ? renderMessage(request.options.confirmLabel)
                 : isInput
                   ? t("common:ok")
                   : t("common:confirm")}
