@@ -78,11 +78,9 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
   const [terminalJobs, setTerminalJobsState] = useState<Record<string, TerminalTransfer>>({});
   const terminalJobsRef = useRef(terminalJobs);
   const setTerminalJobs = (update: (previous: Record<string, TerminalTransfer>) => Record<string, TerminalTransfer>) => {
-    setTerminalJobsState(previous => {
-      const next = update(previous);
-      terminalJobsRef.current = next;
-      return next;
-    });
+    const next = update(terminalJobsRef.current);
+    terminalJobsRef.current = next;
+    setTerminalJobsState(next);
   };
   const [nativeBatches, setNativeBatches] = useState<Record<string, NativeBatch>>({});
   const [sftpJobs, setSftpJobs] = useState<Record<string, SFTPTask>>({});
