@@ -69,8 +69,33 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
   const [sftpConcurrency, setSftpConcurrency] = useState(3);
   const [savingConcurrency, setSavingConcurrency] = useState(false);
   const finished = useRef(new Set<string>());
+  const terminalCleanupTimers = useRef(new Map<string, number>());
   const panel = useRef<HTMLDivElement>(null);
   const liveRefs = tabs.filter(tab => tab.ref).map(tab => tab.ref!);
+  const clearTerminalCleanup = (key: string) => {
+    const timer = terminalCleanupTimers.current.get(key);
+    if (timer != null) window.clearTimeout(timer);
+    terminalCleanupTimers.current.delete(key);
+  };
+  const scheduleTerminalCleanup = (key: string) => {
+    clearTerminalCleanup(key);
+    const timer = window.setTimeout(() => {
+      terminalCleanupTimers.current.delete(key);
+      setTerminalJobs(previous => {
+        const job = previous[key];
+        if (!job || (job.status !== "completed" && job.status !== "cancelled")) return previous;
+        const next = { ...previous };
+        delete next[key];
+        finished.current.delete(key);
+        return next;
+      });
+    }, 4000);
+    terminalCleanupTimers.current.set(key, timer);
+  };
+  useEffect(() => () => {
+    for (const timer of terminalCleanupTimers.current.values()) window.clearTimeout(timer);
+    terminalCleanupTimers.current.clear();
+  }, []);
   const refIDs = liveRefs.map(refKey).sort().join("|");
 
   useEffect(() => {
@@ -90,6 +115,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       if (!event?.ref) return;
       const transferId = event.transferId || "legacy";
       const key = transferKey(event.ref, transferId);
+      clearTerminalCleanup(key);
       finished.current.delete(key);
       setTerminalJobs(previous => ({
         ...previous,
@@ -144,6 +170,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
             },
           };
         });
+        if (event.status !== "failed") scheduleTerminalCleanup(key);
       }
     });
     const offProgress = listen("ssh:transfer-progress", (event: {
@@ -198,6 +225,8 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           },
         };
       });
+      if (event.status !== "failed") scheduleTerminalCleanup(key);
+      else clearTerminalCleanup(key);
     });
     const offFile = listen("ssh:transfer-file", (event: {
       ref: Ref; transferId: string; kind: "start" | "completed";
@@ -311,6 +340,9 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       for (const key of finished.current) {
         if (key.startsWith(prefix)) finished.current.delete(key);
       }
+      for (const key of terminalCleanupTimers.current.keys()) {
+        if (key.startsWith(prefix)) clearTerminalCleanup(key);
+      }
       setTerminalJobs(previous => {
         const next = { ...previous };
         for (const key of Object.keys(next)) {
@@ -379,7 +411,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         for (const task of completed) delete next[task.id];
         return next;
       });
-    }, 5000);
+    }, 20000);
     return () => window.clearInterval(timer);
   }, []);
 
