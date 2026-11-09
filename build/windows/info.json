@@ -1,17 +1,17 @@
 {
   "fixed": {
-    "file_version": "1.0.8",
-    "product_version": "1.0.8"
+    "file_version": "1.0.9",
+    "product_version": "1.0.9"
   },
   "info": {
     "0409": {
-      "ProductVersion": "1.0.8",
+      "ProductVersion": "1.0.9",
       "CompanyName": "Cheng",
       "FileDescription": "OpenShell SSH/SFTP client",
       "LegalCopyright": "Copyright 2026 Cheng",
       "ProductName": "OpenShell",
       "Comments": "OpenShell — lightweight Windows SSH/SFTP client",
-      "FileVersion": "1.0.8"
+      "FileVersion": "1.0.9"
     }
   }
 }
