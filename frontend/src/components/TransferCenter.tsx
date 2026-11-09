@@ -106,7 +106,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       }));
     });
     const offState = listen("ssh:transfer-state", (event: {
-      ref: Ref; transferId?: string; active: boolean; status?: TransferStatus;
+      ref: Ref; transferId?: string; active: boolean; status?: TransferStatus; error?: string;
     }) => {
       if (!event?.ref) return;
       const transferId = event.transferId || "legacy";
@@ -137,7 +137,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           return {
             ...previous,
             [key]: {
-              ...job, status,
+              ...job, status, error: event.error ?? job.error,
               files: job.files.map(file => file.status === "completed" ? file : ({
                 ...file, status: status === "completed" ? "completed" : status === "failed" ? "failed" : "cancelled",
               })),
