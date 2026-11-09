@@ -292,6 +292,7 @@ func (lease *AITerminalLease) runREPL(ctx context.Context,command string) (strin
 		}
 		running.repl.markerSent=true
 		lease.mu.Unlock()
+		lease.connection.readiness.aiREPLInputStarted()
 		if err:=lease.send([]byte(markerSource));err!=nil {
 			lease.markFailed()
 			return "",err
