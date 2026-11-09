@@ -62,6 +62,8 @@ type connection struct {
 	transferProtocol string
 	transferDirection string
 	transferCancelled bool
+	transferFinished bool
+	transferStatus string
 	zmodemSelection *zmodemSelection
 	history  *History
 	sequence uint64
