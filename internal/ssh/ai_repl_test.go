@@ -277,7 +277,7 @@ func TestREPLErrorStatus(t *testing.T) {
 		{"python",">>> ","Traceback (most recent call last):"},
 	} {
 		cmd:=&terminalAICommand{done:make(chan terminalAIResult,1),
-			repl:&replAIState{program:tc.program,marker:"OPEN_SHELL_AI_REPL_123"}}
+			repl:&replAIState{program:tc.program,marker:"OPEN_SHELL_AI_REPL_123",markerSent:tc.program=="redis"}}
 		cmd.consumeREPL([]byte(tc.errorLine+"\r\nOPEN_SHELL_AI_REPL_123\r\n"+tc.prompt))
 		select {
 		case res:=<-cmd.done:
