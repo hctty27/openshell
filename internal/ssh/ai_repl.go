@@ -160,15 +160,6 @@ func (cmd *terminalAICommand) consumeREPL(p []byte) {
 	visible=terminalAIColor.ReplaceAllString(visible,"")
 	visible=strings.ReplaceAll(visible,"\r","")
 	lines:=strings.Split(visible,"\n")
-	if !state.seenResult {
-		for _,line:=range lines {
-			row:=strings.TrimSpace(line)
-			if row==state.marker || (state.program=="redis" && row==strconv.Quote(state.marker)) {
-				state.seenResult=true
-				break
-			}
-		}
-	}
 	if state.program=="redis" && !state.markerSent {
 		if !state.commandPromptSeen && matchREPLCompletionPrompt("redis",lastNonEmptyREPLLine(lines)) {
 			state.commandPromptSeen=true
@@ -180,6 +171,15 @@ func (cmd *terminalAICommand) consumeREPL(p []byte) {
 			}
 		}
 		return
+	}
+	if !state.seenResult {
+		for _,line:=range lines {
+			row:=strings.TrimSpace(line)
+			if row==state.marker || (state.program=="redis" && row==strconv.Quote(state.marker)) {
+				state.seenResult=true
+				break
+			}
+		}
 	}
 	if !state.seenResult || !matchREPLCompletionPrompt(state.program,lastNonEmptyREPLLine(lines)) {return}
 	output:=cleanAITerminalOutput(cmd.output,cmd.truncated)
