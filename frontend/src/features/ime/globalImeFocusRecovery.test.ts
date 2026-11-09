@@ -41,10 +41,10 @@ test.each(["text", "search", "email"])("restores a focused input[type=%s] after 
 test("restores a textarea and preserves its caret and scroll position", () => {
   const textarea = document.createElement("textarea");
   textarea.value = "OpenShell IME recovery";
+  const { target, recovery } = setup(textarea);
   textarea.setSelectionRange(4, 9, "backward");
   textarea.scrollTop = 12;
   textarea.scrollLeft = 3;
-  const { target, recovery } = setup(textarea);
 
   recovery.onWindowActivated();
   vi.advanceTimersByTime(220);
