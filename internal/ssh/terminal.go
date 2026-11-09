@@ -166,8 +166,8 @@ func (w *terminalWriter) Close() {
 	w.flushLocked()
 }
 
-// zmodemDirectionWriter passively observes the remote ZMODEM start header.
-// It forwards the byte stream unchanged and does not parse file payloads.
+// zmodemDirectionWriter observes ZMODEM handshakes and file metadata.
+// It forwards the byte stream unchanged to the transfer filter.
 type zmodemDirectionWriter struct {
 	mu          sync.Mutex
 	dst         io.Writer
