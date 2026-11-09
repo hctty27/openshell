@@ -175,7 +175,7 @@ func parseZmodemFrameHeader(data []byte) (zmodemFrameHeader, int, bool, bool) {
 				if end+1 >= len(data) {
 					return zmodemFrameHeader{}, 0, false, true
 				}
-				if data[end+1] == '\n' {
+				if data[end+1] == '\n' || data[end+1] == 0x8a {
 					end += 2
 				}
 			}
