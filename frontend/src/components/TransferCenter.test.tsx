@@ -307,3 +307,16 @@ test("id-less lifecycle events resolve to the only active identified transfer", 
   expect(screen.getByText("backup.bin")).toBeTruthy();
   expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
 });
+
+
+test("identified lifecycle events preserve transfer direction before details arrive", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-state", {
+    ref: refA, transferId: "zmodem-state-1", active: true,
+    protocol: "zmodem", direction: "download",
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(screen.getByText("ZMODEM")).toBeTruthy();
+  expect(container.querySelector(".transfer-center-job .lucide-arrow-down-to-line")).not.toBeNull();
+});
