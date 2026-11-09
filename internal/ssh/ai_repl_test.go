@@ -253,6 +253,9 @@ func TestRedisCompletionMarkerTimeoutPoisonsLease(t *testing.T) {
 	if !strings.Contains(input.String(),string([]byte{3})) {
 		t.Fatal("Redis marker timeout should interrupt the PTY")
 	}
+	if lease.connection.readiness.programReady("redis") {
+		t.Fatal("timed-out marker must not leave a stale Redis prompt marked ready")
+	}
 	lease.Release()
 }
 
