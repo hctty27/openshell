@@ -51,7 +51,6 @@ import AISidebar from "./components/AISidebar";
 import { assignTerminalHistoryScopes } from "./features/ai/terminalScope";
 import WindowTitleBar from "./components/WindowTitleBar";
 import ZmodemFilePicker from "./components/ZmodemFilePicker";
-import NativeZmodemExperimentDialog from "./components/NativeZmodemExperimentDialog";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
 import { useTabActivity } from "./features/sessions/useTabActivity";
 import { useAutoReconnect } from "./features/sessions/useAutoReconnect";
@@ -165,26 +164,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
         ? { ...tab, hasExecutedAction: true } : tab);
   };
   const { hasActiveTransfers } = useTransferActivity();
-  const [nativeZmodemDialog, setNativeZmodemDialog] = useState<{
-    ref: Ref;
-    sessionName: string;
-    direction?: "upload" | "download";
-    remotePath?: string;
-  } | null>(null);
-  useEffect(() => listen("ssh:native-zmodem-auto-intent", (event: {
-    ref?: Ref;
-    sessionName?: string;
-    direction?: "upload" | "download";
-    remotePath?: string;
-  }) => {
-    if (!event?.ref || !["upload", "download"].includes(event.direction ?? "")) return;
-    setNativeZmodemDialog({
-      ref: event.ref,
-      sessionName: event.sessionName || event.ref.sessionId,
-      direction: event.direction,
-      remotePath: event.remotePath ?? "",
-    });
-  }), []);
   const [transferFocusRequest, setTransferFocusRequest] = useState<{ ref: Ref } | null>(null);
   useEffect(() => {
     const offFinished = listen("ssh:transfer-finished", (event: { ref: Ref }) => {
@@ -1767,17 +1746,6 @@ function Workspace({ initialState }: { initialState: AppState }) {
               )}
             </footer>
         </ModalSurface>
-      )}
-      {nativeZmodemDialog && (
-        <NativeZmodemExperimentDialog
-          key={nativeZmodemDialog.ref.tabId + ":" + nativeZmodemDialog.ref.generation}
-          refID={nativeZmodemDialog.ref}
-          sessionName={nativeZmodemDialog.sessionName}
-          initialDirection={nativeZmodemDialog.direction}
-          initialRemotePath={nativeZmodemDialog.remotePath}
-          onDismiss={() => setNativeZmodemDialog(null)}
-          onError={notify}
-        />
       )}
       <ZmodemFilePicker activeRef={active?.ref ?? undefined} onNotice={notify}
         onClosed={ref => setTransferFocusRequest({ ref })} />
