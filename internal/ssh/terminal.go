@@ -609,6 +609,7 @@ func (m *Manager) CancelZmodem(ref domain.ConnectionRef) error {
         return apperror.New("noActiveFileTransfer", nil)
     }
     c.transferCancelled = true
+    transferID := c.transferID
     filter := c.filter
     input := c.stdin
     m.mu.Unlock()
@@ -619,6 +620,13 @@ func (m *Manager) CancelZmodem(ref domain.ConnectionRef) error {
     // ZMODEM has no exported Stop method. Send the terminal interrupt and
     // wait for the pipe write result instead of reporting a false success.
     _, err := input.Write([]byte{0x03})
+    if err != nil {
+        m.mu.Lock()
+        if current := m.connections[ref.TabID]; current == c && c.ref == ref && c.transferID == transferID {
+            c.transferCancelled = false
+        }
+        m.mu.Unlock()
+    }
     return err
 }
 func (m *Manager) Resize(ref domain.ConnectionRef, cols, rows int) error {
