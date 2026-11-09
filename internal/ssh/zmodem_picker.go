@@ -106,7 +106,10 @@ func (m *Manager) selectZmodemPaths(c *connection, direction, protocol string, a
     c.transferCancelled = false
     m.mu.Unlock()
 
-    files := zmodemSelectedFiles(paths)
+    files := []map[string]any{}
+    if protocol == "zmodem" {
+        files = zmodemSelectedFiles(paths)
+    }
     m.emit("ssh:transfer-details", map[string]any{
         "ref": ref,
         "transferId": strconv.FormatUint(request.id, 10),
