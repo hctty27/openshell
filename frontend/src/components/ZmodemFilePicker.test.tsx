@@ -16,6 +16,7 @@ vi.mock("../bridge", () => ({
       { name: "hello.txt", path: "/home/user/hello.txt", isDir: false, isSymlink: false, size: 512, modified: 0, mode: "0644" },
     ]),
     SubmitZmodemSelection: vi.fn(async () => {}),
+    StartNativeZmodemInteractiveBatchTransfer: vi.fn(async () => {}),
   },
   listen: (name: string, callback: (payload: any) => void) => {
     events.callbacks.set(name, callback);
@@ -43,6 +44,51 @@ test("rz uses the embedded picker and sends selected paths without a native dial
   fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
   await waitFor(() => expect(api.SubmitZmodemSelection).toHaveBeenCalledWith(ref, 1, ["/home/user/hello.txt"]));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+test("native rz intent uses the embedded picker and starts the Rust transfer without a second dialog", async () => {
+  let finish!: () => void;
+  vi.mocked(api.StartNativeZmodemInteractiveBatchTransfer).mockImplementationOnce(
+    () => new Promise<void>(resolve => { finish = resolve; }),
+  );
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-auto-intent", {
+    ref, sessionName: "Linux", direction: "upload", remotePath: "",
+  });
+  expect(await screen.findByText("hello.txt")).toBeTruthy();
+  fireEvent.click(screen.getByText("hello.txt"));
+  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
+
+  await waitFor(() => expect(api.StartNativeZmodemInteractiveBatchTransfer)
+    .toHaveBeenCalledWith(ref, "upload", ["/home/user/hello.txt"], []));
+  expect(api.SubmitZmodemSelection).not.toHaveBeenCalled();
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+  await act(async () => { finish(); });
+});
+
+test("native sz intent uses the embedded picker destination and preserves remote paths", async () => {
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-auto-intent", {
+    ref, direction: "download", remotePath: "/var/log/a.log\n/var/log/b.log",
+  });
+  expect(await screen.findByText("hello.txt")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "保存到此处" }));
+
+  await waitFor(() => expect(api.StartNativeZmodemInteractiveBatchTransfer)
+    .toHaveBeenCalledWith(ref, "download", ["/home/user"], ["/var/log/a.log", "/var/log/b.log"]));
+  expect(api.SubmitZmodemSelection).not.toHaveBeenCalled();
+});
+
+test("cancelling a native picker does not submit a legacy ZMODEM selection", async () => {
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-auto-intent", { ref, direction: "upload", remotePath: "" });
+  expect(await screen.findByText("hello.txt")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(api.StartNativeZmodemInteractiveBatchTransfer).not.toHaveBeenCalled();
+  expect(api.SubmitZmodemSelection).not.toHaveBeenCalled();
 });
 
 test("sz chooses the current local destination directory", async () => {
