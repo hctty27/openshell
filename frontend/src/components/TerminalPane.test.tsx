@@ -43,6 +43,7 @@ vi.mock("@xterm/xterm", () => ({
     bufferChangeHandler = (_buffer: {type: "normal" | "alternate"}) => {};
     buffer = {
       active: { viewportY: 4, type: "normal" as "normal" | "alternate", getLine: vi.fn(() => undefined) },
+      normal: { baseY: 0, cursorY: 0, getLine: vi.fn(() => undefined) },
       onBufferChange: vi.fn((callback: (buffer: {type: "normal" | "alternate"}) => void) => {
         this.bufferChangeHandler = callback;
         return { dispose: vi.fn() };
@@ -1023,4 +1024,54 @@ test("alternate-screen transitions notify the AI target guard", () => {
   expect(onAlternateScreenChange).toHaveBeenCalledWith(tab.ref, true);
   term.bufferChangeHandler({ type: "normal" });
   expect(onAlternateScreenChange).toHaveBeenCalledWith(tab.ref, false);
+});
+
+
+test("locks terminal input during native ZMODEM and restores it only after a safe finish", async () => {
+  const onError = vi.fn();
+  renderTerminal({ onError });
+  const term = refs.terms[0];
+  const emitBatch = (payload: unknown) => {
+    act(() => events.listeners.get("ssh:native-zmodem-batch")?.(payload));
+  };
+
+  await waitFor(() => expect(events.listeners.has("ssh:native-zmodem-batch")).toBe(true));
+  emitBatch({ ref: { ...tab.ref!, generation: 2 }, active: true });
+  expect(term.options.disableStdin).toBeFalsy();
+
+  emitBatch({ ref: tab.ref, id: "batch-1", active: true });
+  emitBatch({ ref: tab.ref, id: "batch-2", active: true });
+  expect(term.options.disableStdin).toBe(true);
+  act(() => term.onDataCallback("pwd\r"));
+  expect(api.WriteTerminal).not.toHaveBeenCalled();
+
+  emitBatch({ ref: tab.ref, id: "batch-1", active: false, terminalSafe: true });
+  expect(term.options.disableStdin).toBe(true);
+
+  emitBatch({ ref: tab.ref, id: "batch-2", active: false, terminalSafe: false, error: "需要重新连接" });
+  expect(term.options.disableStdin).toBe(true);
+
+  emitBatch({ ref: tab.ref, id: "batch-2", active: false, terminalSafe: true });
+  expect(term.options.disableStdin).toBe(false);
+
+  emitBatch({ ref: tab.ref, id: "batch-3", active: true });
+  emitBatch({ ref: tab.ref, id: "batch-3", active: false, terminalSafe: false, error: "需要重新连接" });
+  expect(term.options.disableStdin).toBe(true);
+  act(() => events.listeners.get("ssh:disconnected")?.(tab.ref));
+  expect(term.options.disableStdin).toBe(false);
+  act(() => term.onDataCallback("pwd\\r"));
+  await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalledOnce());
+  expect(onError).not.toHaveBeenCalled();
+});
+
+test("does not report a native ZMODEM input ownership rejection as an SSH failure", async () => {
+  const onError = vi.fn();
+  vi.mocked(api.WriteTerminal).mockRejectedValueOnce(
+    new Error("native terminal input busy"),
+  );
+  renderTerminal({ onError });
+  act(() => refs.terms[0].onDataCallback("x"));
+  await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalledOnce());
+  expect(onError).not.toHaveBeenCalled();
+  expect(api.Disconnect).not.toHaveBeenCalled();
 });

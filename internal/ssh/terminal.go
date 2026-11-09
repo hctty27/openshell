@@ -563,6 +563,10 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		m.mu.Unlock()
 		return errAITerminalBusy
 	}
+	if c.nativeTerminalTransfer != nil {
+		m.mu.Unlock()
+		return errNativeTerminalInputBusy
+	}
 	stdin := c.stdin
 	autoSidecar := m.nativeAutoSidecar
 	m.mu.Unlock()

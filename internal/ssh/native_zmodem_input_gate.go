@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	errNativeTerminalInputBusy = errors.New("原生 ZMODEM 独占终端输入，暂不接受键盘或 AI 输入")
+	errNativeTerminalInputBusy = errors.New("native terminal input busy")
 	errNativeTerminalInputLease = errors.New("终端输入独占令牌已失效")
 )
 

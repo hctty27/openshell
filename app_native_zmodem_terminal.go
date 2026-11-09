@@ -114,6 +114,7 @@ func (a *App) StartNativeZmodemInteractiveBatchTransfer(
 	defer func() {
 		payload := map[string]any{"ref": ref, "id": batchID, "direction": direction, "active": false}
 		if err != nil { payload["error"] = err.Error() }
+		payload["terminalSafe"] = a.NativeZmodemInteractiveReadiness(ref).Ready
 		a.emit("ssh:native-zmodem-batch", payload)
 	}()
 	ctx := sshclient.WithNativeZmodemFileObserver(a.ctx, func(event sshclient.NativeZmodemFileProgress) {
