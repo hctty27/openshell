@@ -195,6 +195,12 @@
 .transfer-center-bar.indeterminate > div { width: 34%; animation: transfer-center-progress 1.6s ease-in-out infinite alternate; }
 .transfer-center-metrics { display: flex; justify-content: space-between; gap: 10px; color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
 .transfer-center-metrics span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-center-terminal-files { display: flex; flex-direction: column; gap: 3px; padding: 0 1px; }
+.transfer-center-terminal-file { display: flex; justify-content: space-between; gap: 10px; min-width: 0; color: var(--text-secondary); font-size: 10px; }
+.transfer-center-terminal-file span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-center-terminal-file span:last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.transfer-center-terminal-more { color: var(--text-muted); font-size: 10px; }
+.transfer-center-terminal-error { overflow: hidden; color: var(--danger, #dc2626); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .transfer-center-empty { padding: 26px 14px; text-align: center; font-size: 12px; color: var(--text-muted); }
 @keyframes transfer-center-progress { from { transform: translateX(-100%); } to { transform: translateX(295%); } }
 @media (prefers-reduced-motion: reduce) { .transfer-center-bar.indeterminate > div { animation: none; width: 100%; opacity: .5; } }
