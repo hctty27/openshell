@@ -1,7 +1,7 @@
 <div align="center">
   <img src="build/openshell-icon.svg" alt="OpenShell" width="88" height="88" />
   <h1>OpenShell</h1>
-  <p><strong>Free and open-source SSH/SFTP client for Windows — terminal tabs, splits, file transfers and quick commands.</strong></p>
+  <p><strong>Free, open-source AI-assisted SSH workspace for Windows — multi-session terminals, SFTP, native Rust ZMODEM and Xshell import.</strong></p>
   <p>
     <a href="https://github.com/hctty27/openshell/releases/latest"><img src="https://img.shields.io/github/v/release/hctty27/openshell?label=release" alt="Latest release" /></a>
     <a href="https://github.com/hctty27/openshell/actions/workflows/ci.yml"><img src="https://github.com/hctty27/openshell/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
@@ -18,7 +18,7 @@
   </p>
 </div>
 
-OpenShell is a free, open-source Windows SSH/SFTP client for developers and server administrators. Manage servers with tabs and split terminals, transfer files with SFTP or rz/sz, import Xshell sessions, and run saved quick commands.
+OpenShell is a free, open-source SSH workspace for Windows, built for developers and server administrators. Manage multiple SSH sessions in tabs and split panes, transfer files with SFTP or native Rust ZMODEM (`rz` / `sz`), import Xshell sessions, and optionally use AI assistance for remote operations—all in one desktop app.
 
 **Status:** v1.0 stable release, with ongoing maintenance. Windows x64 installers and portable packages are available. See the [release notes](https://github.com/hctty27/openshell/releases) for the changes and signing status of each build.
 
@@ -32,19 +32,20 @@ OpenShell is a free, open-source Windows SSH/SFTP client for developers and serv
 
 ## Why OpenShell
 
-- **Work like a terminal power user.** Organize SSH sessions, rearrange tabs, split terminals, and reconnect without rebuilding your workspace.
-- **Move files in the same window.** Use SFTP, `rz` / `sz`, or `trz` / `tsz` with an embedded picker and a non-modal global transfer center.
-- **Focused by design.** Use SSH, SFTP and terminal tools without an external AI provider or API key.
+- **Keep multiple servers in view.** Organize SSH sessions, rearrange tabs, split terminals, and reconnect without rebuilding your workspace.
+- **Manage files without switching apps.** Browse local and remote files, edit remote text, queue transfers, and preview one-way directory sync with SFTP.
+- **Use AI when it helps.** Configure your own compatible model API for a global assistant or Terminal AI; SSH and SFTP remain fully usable without AI.
+- **Transfer through a native Windows engine.** Windows uses OpenShell's Rust-native ZMODEM sidecar for `rz` / `sz`, with `trz` / `tsz` also supported when installed on the remote host.
 
 ## Highlights
 
 | Area | What you can do |
 | --- | --- |
-| SSH workspace | Open, duplicate, drag-reorder, and split terminal tabs; search output and use interactive programs such as vim and top. |
-| Session management | Organize connections in nested folders, search and edit sessions, authenticate with a password or local private key, import Xshell sessions, and export session backups. |
-| Connection controls | Configure keepalive and reconnection, disconnect manually, return to a local Windows shell, and confirm before closing live connections. |
-| SFTP | Browse local and remote files, upload and download files or directories, resume transfers, edit remote text, preview one-way directory sync, and manage permissions. |
-| Terminal file transfers | Use `rz` / `sz` or `trz` / `tsz` with an embedded file picker and a cross-session transfer center—without opening Explorer or an extra CMD window. |
+| SSH workspace | Manage multiple SSH sessions with tabs, duplicate connections, drag-reordering, horizontal or vertical splits, output search, and interactive programs such as vim and top. |
+| AI assistance | Configure an OpenAI-compatible provider and model for the global AI assistant or Terminal AI. Target selected connected sessions or work with the active terminal. |
+| SFTP | Browse local and remote files, batch upload and download, resume transfers, edit remote text, preview one-way directory sync, and manage permissions. |
+| Native file transfer | Use the Rust-native Windows ZMODEM engine for `rz` / `sz`; use `trz` / `tsz` when `trzsz` is installed on the remote host. |
+| Session management | Organize nested folders, search and edit sessions, authenticate with a password or local private key, import Xshell sessions, and export session backups. |
 | Quick commands | Save reusable commands with search, ordering, and global, folder, or session scope. Line breaks control when commands execute. |
 | Appearance and language | Switch between English and Simplified Chinese, light and dark application themes, and independent classic, dark, or light terminal palettes. |
 
@@ -78,6 +79,16 @@ The interface defaults to English; switch to Simplified Chinese in Settings → 
 - Choose a global terminal palette or override it per session; changes apply without reconnecting. The quick-command bar supports a single scrolling row or multiple rows.
 - Configure disconnect behavior to return to a local shell, keep the disconnected tab, or close it. Local choices include Windows PowerShell, PowerShell 7, CMD, and WSL. Automatic reconnection applies to unexpected disconnects, not a manual disconnect. Closing an active SSH tab or exiting while connections are live requires confirmation.
 - Use **Manage** in the quick-command bar to add commands. Each line break sends Enter; without a final line break, the last line is inserted without executing. Run these only when the terminal is ready to receive shell input.
+
+## AI assistance (optional)
+
+Configure one or more model profiles in **Settings → AI**. Each profile uses a provider name, API Base URL, API key, and model ID. OpenShell supports compatible model APIs; availability and tool behavior depend on the provider and model.
+
+- **Global AI assistant:** select one or more connected SSH sessions and ask the assistant to inspect, diagnose, or perform remote tasks through its independent SSH execution path where supported.
+- **Terminal AI:** work with the active SSH terminal. Supported interactive workflows include MySQL/MariaDB, Redis, PostgreSQL (`psql`), and Python. Current-terminal execution is limited to the active session.
+- **Execution control:** choose review-before-execution or fully automatic mode. Terminal readiness is checked before commands are sent; when a safe shell state cannot be verified, execution is refused. Terminal AI also provides a take-control action to stop AI operation and return control to the user.
+
+AI prompts and the context needed for a request are sent to the model provider you configured when you use AI. Review the [privacy policy](PRIVACY.md) and your provider's data-handling terms before sending sensitive information.
 
 ## Files and transfers
 
