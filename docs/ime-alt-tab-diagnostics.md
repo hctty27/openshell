@@ -38,6 +38,7 @@ task build
 
 ```powershell
 $env:OPENSHELL_IME_VISUAL_HOSTING = "0"
+$env:OPENSHELL_IME_NATIVE_FRAME = "0"
 .\build\bin\OpenShell.exe
 ```
 
@@ -54,6 +55,7 @@ $env:OPENSHELL_IME_VISUAL_HOSTING = "0"
 
 ```powershell
 $env:OPENSHELL_IME_VISUAL_HOSTING = "1"
+$env:OPENSHELL_IME_NATIVE_FRAME = "0"
 .\build\bin\OpenShell.exe
 ```
 
@@ -66,7 +68,7 @@ $env:OPENSHELL_IME_VISUAL_HOSTING = "1"
 ```powershell
 $env:OPENSHELL_IME_VISUAL_HOSTING = "0"
 $env:OPENSHELL_IME_NATIVE_FRAME = "1"
-.\\build\\bin\\OpenShell.exe
+.\build\bin\OpenShell.exe
 ```
 
 由于应用内部还包含自己的标题栏，本模式可能出现双标题栏，仅供问题隔离。不应作为正式发行的 UI。
@@ -87,12 +89,12 @@ $env:OPENSHELL_IME_NATIVE_FRAME = "1"
 
 ### 验收表
 
-| 输入位置 | 默认 HWND 20 轮异常次数 | Visual Hosting 20 轮异常次数 | 是否出现输入失效 | 是否出现窗口交互回归 |
-| --- | ---: | ---: | --- | --- |
-| AI 输入框 | 待实测 | 待实测 | 待实测 | 待实测 |
-| SFTP 编辑器 | 待实测 | 待实测 | 待实测 | 待实测 |
-| 设置输入框 | 待实测 | 待实测 | 待实测 | 待实测 |
-| xterm | 待实测 | 待实测 | 待实测 | 待实测 |
+| 输入位置 | 默认 HWND 20 轮 | Visual Hosting 20 轮 | 原生边框 20 轮 | 输入是否失效 | 窗口是否异常 |
+| --- | ---: | ---: | ---: | --- | --- |
+| AI 输入框 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 |
+| SFTP 编辑器 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 |
+| 设置输入框 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 |
+| xterm | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 |
 
 ## 后续判定
 
