@@ -135,7 +135,7 @@ func allowedOperation(module, operation string) bool {
         return operation == "xterm_write_batch"
     case "frontend":
         return operation == "uncaught_error" || operation == "unhandled_rejection"
-
+    }
     return false
 }
 
