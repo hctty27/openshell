@@ -72,7 +72,10 @@ func main() {
     }
     window := desktop.Window.NewWithOptions(application.WebviewWindowOptions{
       Name: "main", Title: branding.Name, Width: 1440, Height: 900,
-      MinWidth: 1000, MinHeight: 640, Frameless: true, EnableFileDrop: true,
+      MinWidth: 1000, MinHeight: 640,
+      // Optional window-frame control: Wails re-extends DWM on WM_ACTIVATE for frameless windows.
+      Frameless: os.Getenv("OPENSHELL_IME_NATIVE_FRAME") != "1",
+      EnableFileDrop: true,
       BackgroundColour: application.NewRGB(11,16,23),
       Windows: application.WindowsWindow{
         NonClientRegionSupport: true,
