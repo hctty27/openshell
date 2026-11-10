@@ -1,92 +1,10 @@
 # OpenShell 使用指南
 
-本文档保留原 README 中的详细使用、配置、文件传输、隐私、开发、验证与发布说明。
+本文档介绍 OpenShell 的配置与详细使用方法。产品介绍和下载入口请查看[项目 README](../README.zh-CN.md)。
+
+[English](user-guide.md) · [官方网站](https://openshell.testnb.me/) · [GitHub Releases](https://github.com/hctty27/openshell/releases/latest)
 
 ---
-
-<div align="center">
-  <img src="build/openshell-icon.svg" alt="OpenShell" width="88" height="88" />
-  <h1>OpenShell</h1>
-  <p><strong>免费开源的 Windows AI 辅助 SSH 工作空间：多会话终端、SFTP、Rust 原生 ZMODEM 与 Xshell 导入。</strong></p>
-  <p>
-    <a href="https://github.com/hctty27/openshell/releases/latest"><img src="https://img.shields.io/github/v/release/hctty27/openshell?label=release" alt="最新版本" /></a>
-    <a href="https://github.com/hctty27/openshell/actions/workflows/ci.yml"><img src="https://github.com/hctty27/openshell/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
-    <a href="https://github.com/hctty27/openshell/releases/latest"><img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4" alt="Windows x64" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT 许可证" /></a>
-  </p>
-  <p><a href="README.md">English</a> · <strong>简体中文</strong></p>
-  <p>
-    <a href="https://openshell.testnb.me/">官方网站</a> ·
-    <a href="https://github.com/hctty27/openshell/releases/latest">下载</a> ·
-    <a href="#快速开始">快速开始</a> ·
-    <a href="CHANGELOG.md">更新记录</a> ·
-    <a href="https://github.com/hctty27/openshell/issues">反馈问题</a>
-  </p>
-</div>
-
-OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH 工作空间，集成多会话终端、分屏操作、SFTP 文件管理、Rust 原生 ZMODEM、Xshell 会话导入与可选 AI 助手，让服务器连接、操作和文件传输集中在一个桌面应用中。
-
-**项目状态：** 已进入 v1.0 正式版阶段，持续维护更新。已提供 Windows x64 安装版与便携版，各版本改动和实际签名状态见 [发布说明](https://github.com/hctty27/openshell/releases)。
-
-**政策文件：** [Code signing policy（代码签名政策）](../CODE_SIGNING_POLICY.md) · [隐私政策](../PRIVACY.md) · [第三方组件授权审查](third-party-review.md) · [SBOM 与二进制清单](sbom.md) · [SignPath 申请清单](signpath-application-checklist.md)。
-
-## 界面预览
-
-### 主工作空间
-
-![OpenShell 主工作空间：SSH 会话、终端、SFTP 与 AI 助手](screenshots/01-workspace-overview.png)
-
-### SSH 多会话分屏
-
-![OpenShell 多 SSH 会话分屏界面](screenshots/02-split-terminals.png)
-
-### 全局 AI 助手
-
-![OpenShell 全局 AI 助手同时处理选中的 SSH 会话](screenshots/03-ai-assistant.png)
-
-### SFTP 文件管理
-
-![OpenShell 本地与远程 SFTP 文件管理界面](screenshots/04-sftp-file-manager.png)
-
-### Rust 原生 ZMODEM
-
-![OpenShell Rust 原生 ZMODEM 多文件传输与实时进度](screenshots/05-native-zmodem-transfer.png)
-
-### 终端 AI + MySQL
-
-![OpenShell 在当前 SSH 终端中使用终端 AI 交互 MySQL](screenshots/06-terminal-ai-database.png)
-
-## 为什么选择 OpenShell
-
-- **多台服务器，一处管理。** 集中组织 SSH 会话，拖拽调整标签顺序，使用左右或上下分屏，并在异常断线后恢复工作。
-- **文件操作无需切换软件。** 在同一工作空间浏览本地和远程文件，编辑远程文本、管理传输队列并预览单向目录同步。
-- **AI 按需启用。** 配置兼容的模型 API 后，可使用全局 AI 助手或终端 AI；不配置 AI 也能完整使用 SSH 和 SFTP。
-- **Windows 原生文件传输。** Windows 端使用 Rust 原生 ZMODEM 引擎处理 `rz` / `sz`；远端安装 `trzsz` 后也可使用 `trz` / `tsz`。
-
-## 功能亮点
-
-| 功能 | 可以做什么 |
-| --- | --- |
-| SSH 工作空间 | 多标签、复制连接、拖拽排序、左右或上下分屏及输出搜索，支持 vim、top 等交互式程序。 |
-| AI 助手与终端 AI | 配置兼容的模型 API 和模型 ID，使用全局助手处理已连接会话任务，或在当前 SSH 终端中使用终端 AI。 |
-| SFTP 文件管理 | 浏览本地与远程文件，批量上传下载、断点续传、远程文本编辑、单向目录同步预览及权限管理。 |
-| 原生文件传输 | Windows 使用 Rust 原生 ZMODEM 引擎处理 `rz` / `sz`；远端安装 `trzsz` 后支持 `trz` / `tsz`。 |
-| 会话管理 | 多级文件夹、搜索与编辑会话、密码与本地私钥认证、Xshell 会话导入、会话备份与恢复。 |
-| 快速命令 | 支持搜索、排序及全局 / 文件夹 / 会话作用范围，通过换行控制是否执行。 |
-| 外观与语言 | 英文与简体中文切换，浅色 / 深色应用主题，独立的经典黑色、深灰和白色终端配色。 |
-
-## 下载安装
-
-前往 **[GitHub Releases](https://github.com/hctty27/openshell/releases/latest)** 下载最新版本。
-
-| 安装包 | 使用方式 |
-| --- | --- |
-| `OpenShell-vX.Y.Z-windows-x64-Setup.exe` | Windows 安装版，运行安装程序即可。 |
-| `OpenShell-vX.Y.Z-windows-x64-portable.zip` | 完整解压后运行 `OpenShell-vX.Y.Z.exe`，保留旁边的 `zmodem` 目录。 |
-
-应用依赖 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。本地终端回退使用 Windows ConPTY；选择 PowerShell 7 或 WSL 时，需要先安装对应环境。
-
-便携版免安装，但配置和凭据仍保存在 Windows 用户目录与凭据管理器中。
 
 ## 快速开始
 
