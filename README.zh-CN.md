@@ -1,7 +1,7 @@
 <div align="center">
   <img src="build/openshell-icon.svg" alt="OpenShell" width="88" height="88" />
   <h1>OpenShell</h1>
-  <p><strong>免费开源 Windows SSH/SFTP 客户端：多会话、分屏终端与文件传输。</strong></p>
+  <p><strong>免费开源的 Windows AI 辅助 SSH 工作空间：多会话终端、SFTP、Rust 原生 ZMODEM 与 Xshell 导入。</strong></p>
   <p>
     <a href="https://github.com/hctty27/openshell/releases/latest"><img src="https://img.shields.io/github/v/release/hctty27/openshell?label=release" alt="最新版本" /></a>
     <a href="https://github.com/hctty27/openshell/actions/workflows/ci.yml"><img src="https://github.com/hctty27/openshell/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
@@ -18,7 +18,7 @@
   </p>
 </div>
 
-OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH/SFTP 客户端，支持多标签、分屏终端、会话管理、SFTP、rz/sz、Xshell 会话导入与快捷命令。
+OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH 工作空间，集成多会话终端、分屏操作、SFTP 文件管理、Rust 原生 ZMODEM、Xshell 会话导入与可选 AI 助手，让服务器连接、操作和文件传输集中在一个桌面应用中。
 
 **项目状态：** 已进入 v1.0 正式版阶段，持续维护更新。已提供 Windows x64 安装版与便携版，各版本改动和实际签名状态见 [发布说明](https://github.com/hctty27/openshell/releases)。
 
@@ -32,19 +32,20 @@ OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH/SFT
 
 ## 为什么选择 OpenShell
 
-- **熟悉的终端操作。** 集中管理 SSH 会话，自由调整标签顺序、使用分屏，并在断线后保持工作空间。
-- **文件传输无需切换软件。** 内置 SFTP 文件管理器，同时支持 `rz` / `sz` 和 `trz` / `tsz`，统一使用内嵌文件选择器与传输进度中心。
-- **轻量、专注的 SSH 工具。** 无须配置 AI 服务，连接、终端与文件管理均可直接使用。
+- **多台服务器，一处管理。** 集中组织 SSH 会话，拖拽调整标签顺序，使用左右或上下分屏，并在异常断线后恢复工作。
+- **文件操作无需切换软件。** 在同一工作空间浏览本地和远程文件，编辑远程文本、管理传输队列并预览单向目录同步。
+- **AI 按需启用。** 配置兼容的模型 API 后，可使用全局 AI 助手或终端 AI；不配置 AI 也能完整使用 SSH 和 SFTP。
+- **Windows 原生文件传输。** Windows 端使用 Rust 原生 ZMODEM 引擎处理 `rz` / `sz`；远端安装 `trzsz` 后也可使用 `trz` / `tsz`。
 
 ## 功能亮点
 
 | 功能 | 可以做什么 |
 | --- | --- |
 | SSH 工作空间 | 多标签、复制连接、拖拽排序、左右或上下分屏及输出搜索，支持 vim、top 等交互式程序。 |
+| AI 助手与终端 AI | 配置兼容的模型 API 和模型 ID，使用全局助手处理已连接会话任务，或在当前 SSH 终端中使用终端 AI。 |
+| SFTP 文件管理 | 浏览本地与远程文件，批量上传下载、断点续传、远程文本编辑、单向目录同步预览及权限管理。 |
+| 原生文件传输 | Windows 使用 Rust 原生 ZMODEM 引擎处理 `rz` / `sz`；远端安装 `trzsz` 后支持 `trz` / `tsz`。 |
 | 会话管理 | 多级文件夹、搜索与编辑会话、密码与本地私钥认证、Xshell 会话导入、会话备份与恢复。 |
-| 连接控制 | 支持 SSH 保活、异常重连、主动断开、断线返回本地终端，关闭活动连接或退出应用前进行确认。 |
-| SFTP 文件管理 | 浏览本地与远程文件，上传下载文件和目录、断点续传、远程文本编辑、单向目录同步预览、权限管理。 |
-| 终端文件传输 | 支持 `rz` / `sz` 与 `trz` / `tsz`，统一使用内嵌文件选择器与顶部传输中心，无需弹出系统资源管理器或额外 CMD 窗口。 |
 | 快速命令 | 支持搜索、排序及全局 / 文件夹 / 会话作用范围，通过换行控制是否执行。 |
 | 外观与语言 | 英文与简体中文切换，浅色 / 深色应用主题，独立的经典黑色、深灰和白色终端配色。 |
 
@@ -78,6 +79,16 @@ OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH/SFT
 - 终端配色支持全局设置与单会话覆盖，无需重连即可生效；快速命令栏可选择单行横向滚动或多行布局。
 - 断开后可返回本地终端、保留已断开的标签或自动关闭标签。本地 Shell 支持 Windows PowerShell、PowerShell 7、CMD、WSL。自动重连只针对异常断线，主动断开不会自动连接。关闭活动 SSH 标签或退出仍有连接的应用时需要确认。
 - 点击快速命令栏的「管理」添加命令。每个换行对应一次 Enter；末尾不换行，最后一行只输入、不执行。使用前请确认终端处于可接收 Shell 命令的状态。
+
+## AI 助手（可选）
+
+在 **设置 → AI** 中配置一个或多个模型服务。每个配置包含服务名称、API Base URL、API Key 和模型 ID。OpenShell 支持兼容的模型 API，实际工具调用能力取决于服务商和模型。
+
+- **全局 AI 助手：** 可以选择一个或多个已连接的 SSH 会话，让 AI 协助检查、诊断或执行远程任务；在支持的连接环境中通过独立 SSH 执行通道工作。
+- **终端 AI：** 在当前激活的 SSH 终端中协助操作，支持 MySQL/MariaDB、Redis、PostgreSQL（`psql`）和 Python 等交互环境。当前终端模式仅针对当前激活会话。
+- **执行控制：** 可选择执行前审查或完全自动模式。发送命令前会检查终端状态；无法确认 Shell 安全就绪时会拒绝执行。终端 AI 提供「接管终端」操作，可随时停止 AI 并恢复手动控制。
+
+使用 AI 时，请求所需的提示词和上下文会发送到你配置的模型服务。发送敏感信息前，请阅读[隐私政策](PRIVACY.md)及所选服务商的数据处理条款。
 
 ## 文件管理与传输
 
