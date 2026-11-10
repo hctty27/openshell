@@ -34,7 +34,7 @@ node --check website/app.js
 | Production branch | `main` |
 | 环境变量 | 不需要 |
 
-4. 在 Pages 项目中设置 **Build watch paths**：监听 `website/*`、`website/**/*` 与 `docs/screenshots/*`（Cloudflare 实际输入规则以 Dashboard 支持的 glob 为准），确保截图更新也能触发网站重新部署。
+4. 在 Pages 项目中设置 **Build watch paths**：监听 `website/*` 与 `website/**/*`，避免每次 SSH 客户端代码提交都重新部署网站。产品截图通过 `raw.githubusercontent.com` 直接加载，截图文件更新不需要重新构建 Pages。
 5. 首次使用 Cloudflare 生成的 `*.pages.dev` 地址预览，确认样式、移动端、语言切换和下载入口。
 6. 在 **Custom domains** 中添加 `openshell.testnb.me`，按 Cloudflare 的提示迁移现有 DNS 指向。先确认当前官网的原有源站可回滚，再切换流量；不要在未验证 Pages 项目之前直接删除现有 DNS。
 
