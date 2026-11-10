@@ -139,3 +139,35 @@ func TestPruneExpiredReportsAtOpen(t *testing.T) {
         t.Fatalf("expired report was retained: %v", err)
     }
 }
+
+
+func TestIMEDiagnosticsKeepOnlySafeGeometry(t *testing.T) {
+    event := normalize(Event{
+        Module: "ime", Operation: "window_active", Status: "ok",
+        IME: &IMEGeometry{
+            Target: "textarea/password", HasFocus: true, RectX: 123.456,
+            RectY: 12.345, RectWidth: 245, RectHeight: 28, DPR: 2,
+            ScreenX: 700, ScreenY: 200,
+        },
+    })
+    if event.Module != "ime" || event.IME == nil || event.IME.Target != "other" {
+        t.Fatalf("IME geometry not sanitized: %#v", event)
+    }
+    if event.IME.RectX != 123.46 || event.IME.RectY != 12.35 || !event.IME.HasFocus {
+        t.Fatalf("unexpected IME geometry: %#v", event.IME)
+    }
+
+    unrelated := normalize(Event{
+        Module: "ssh", Operation: "Connect", Status: "ok",
+        IME: &IMEGeometry{Target: "input", ScreenX: 100},
+    })
+    if unrelated.IME != nil { t.Fatalf("unrelated event persisted IME data: %#v", unrelated) }
+
+    invalid := normalize(Event{
+        Module: "ime", Operation: "composition_start", Status: "ok",
+        IME: &IMEGeometry{Target: "input", RectX: 9999999, DPR: 99999},
+    })
+    if invalid.IME == nil || invalid.IME.RectX != 0 || invalid.IME.DPR != 0 {
+        t.Fatalf("out-of-bounds geometry persisted: %#v", invalid.IME)
+    }
+}
