@@ -31,4 +31,4 @@ This folder contains real screenshots of the shipped Windows application. Do not
 
 ## Current status
 
-The existing `02-ssh-sftp.webp` is retained so current README and website links do not break. It was added on 2026-10-26 and predates the recent v1.0 feature and UI updates. Replace its references only after the new real screenshots have been captured and reviewed. Do not rename or remove it before all public references have moved.
+The existing `02-ssh-sftp.webp` is retained so current README and website links do not break. It was added on 2026-10-26 and predates the v1.0 release and subsequent feature and UI updates. Replace its references only after the new real screenshots have been captured and reviewed. Do not rename or remove it before all public references have moved.
