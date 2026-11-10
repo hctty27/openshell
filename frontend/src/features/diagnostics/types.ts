@@ -7,6 +7,7 @@ export interface DiagnosticEvent {
   code?: string;
   durationMs?: number;
   count?: number;
+  ime?: IMEDiagnosticGeometry;
 }
 
 export interface DiagnosticOperation {
@@ -27,4 +28,17 @@ export interface DiagnosticsSnapshot {
   diskEnabled: boolean;
   events: DiagnosticEvent[];
   operations: DiagnosticOperation[];
+}
+
+export interface IMEDiagnosticGeometry {
+  target: "xterm" | "input" | "textarea" | "contenteditable" | "other" | "none";
+  hasFocus: boolean;
+  composing: boolean;
+  rectX: number;
+  rectY: number;
+  rectWidth: number;
+  rectHeight: number;
+  screenX: number;
+  screenY: number;
+  dpr: number;
 }
