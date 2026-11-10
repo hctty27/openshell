@@ -1,5 +1,4 @@
 import { Call } from "@wailsio/runtime";
-import type { IMEDiagnosticGeometry } from "./types";
 
 type DiagnosticEvent = {
   module: string;
@@ -8,7 +7,6 @@ type DiagnosticEvent = {
   durationMs: number;
   count?: number;
   code?: string;
-  ime?: IMEDiagnosticGeometry;
 };
 
 const operations: Record<string, { module: string; slowMs: number }> = {
@@ -91,11 +89,6 @@ export function recordTerminalWrite(durationMs: number): void {
     terminalCount = 0;
     terminalMaxMS = 0;
   }, 1000);
-}
-
-// Diagnostic-only categorical metadata. The IME trace never contains typed text.
-export function recordImeDiagnostic(operation: string, geometry: IMEDiagnosticGeometry): void {
-  enqueue({ module: "ime", operation, status: "ok", durationMs: 0, ime: geometry });
 }
 
 export function installGlobalErrorDiagnostics(): void {
