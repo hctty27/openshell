@@ -182,29 +182,66 @@ func (lease *AITerminalLease) runMarker(ctx context.Context, command string, isP
 
 // Run performs one command in the visible terminal. A short probe verifies
 // that the terminal is actually at a shell prompt before any AI command.
-func (lease *AITerminalLease) Run(ctx context.Context, command string) (string,error) {
-    if strings.TrimSpace(command)=="" || len(command)>8192 ||
-        strings.ContainsRune(command, 0) {
-        return "",errors.New("终端命令长度或内容无效")
-    }
-    if lease.program == "mysql" { return lease.runMySQL(ctx,command) }
-    if lease.program == "redis" || lease.program == "python" || lease.program == "psql" { return lease.runREPL(ctx,command) }
-    if !lease.ready {
-        probeCtx,cancel := context.WithTimeout(ctx,4*time.Second)
-        _,err := lease.runMarker(probeCtx,"",true)
-        cancel()
-        if err != nil {
-            return "",fmt.Errorf("终端未返回就绪标记，请确认处于空白的 Shell 提示符（非 vim/top/传输）：%w",err)
-        }
-        lease.ready = true
-    }
-    result,err := lease.runMarker(ctx,command,false)
-    if err != nil { return "",err }
-    if result.code < 0 {
-        lease.markFailed()
-        return "",errors.New("终端命令结束标记格式无效，已停止继续执行")
-    }
-    return fmt.Sprintf("%s\n退出状态: %d",result.output,result.code),nil
+func (lease *AITerminalLease) Run(ctx context.Context, command string) (string, error) {
+	if strings.TrimSpace(command) == "" || len(command) > 8192 ||
+		strings.ContainsRune(command, 0) {
+		return "", errors.New("终端命令长度或内容无效")
+	}
+	if lease.program == "mysql" {
+		return lease.runMySQL(ctx, command)
+	}
+	if lease.program == "redis" || lease.program == "python" || lease.program == "psql" {
+		return lease.runREPL(ctx, command)
+	}
+	if !lease.ready {
+		probeCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+		_, err := lease.runMarker(probeCtx, "", true)
+		if err == nil {
+			err = lease.waitForShellPrompt(probeCtx)
+		}
+		cancel()
+		if err != nil {
+			lease.markFailed()
+			return "", fmt.Errorf("终端未返回就绪标记或 Shell 提示符未恢复，请确认处于空白的 Shell 提示符（非 vim/top/传输）：%w", err)
+		}
+		lease.ready = true
+	}
+	result, err := lease.runMarker(ctx, command, false)
+	if err != nil {
+		return "", err
+	}
+	if result.code < 0 {
+		lease.markFailed()
+		return "", errors.New("终端命令结束标记格式无效，已停止继续执行")
+	}
+	promptCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	err = lease.waitForShellPrompt(promptCtx)
+	cancel()
+	if err != nil {
+		lease.markFailed()
+		return "", fmt.Errorf("Shell 命令已结束，但未确认提示符恢复: %w", err)
+	}
+	return fmt.Sprintf("%s\n退出状态: %d", result.output, result.code), nil
+}
+
+func (lease *AITerminalLease) waitForShellPrompt(ctx context.Context) error {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if lease.connection.readiness.readyProgram() != "shell" {
+			return errors.New("Shell 已退出或提示符发生变化，无法确认命令结束")
+		}
+		if err := lease.connection.readiness.checkReady(); err == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("等待 Shell 提示符恢复超时: %w", ctx.Err())
+		case <-lease.closed:
+			return errors.New("SSH 终端已经释放或断开")
+		case <-ticker.C:
+		}
+	}
 }
 
 func (lease *AITerminalLease) Observe(p []byte) {

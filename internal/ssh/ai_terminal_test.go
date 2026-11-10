@@ -10,6 +10,7 @@ import (
     "time"
 
     "github.com/hctty27/openshell/internal/domain"
+	"golang.org/x/crypto/ssh"
 )
 
 func TestAITerminalMarkerCrossesChunks(t *testing.T) {
@@ -71,23 +72,144 @@ func newAITestLease() (*Manager,*AITerminalLease,*aiCaptureInput) {
 }
 
 func TestAITerminalRunUsesExistingPTYAndPreservesShellSyntax(t *testing.T) {
-    _,lease,input:=newAITestLease()
-    input.onWrite=func(p []byte) {
-        source:=string(p)
-        index:=strings.Index(source,"OpenShellAI;")
-        if index<0 {return}
-        token:=strings.SplitN(source[index+len("OpenShellAI;"):],";",2)[0]
-        lease.Observe([]byte(fmt.Sprintf("done\x1b]777;OpenShellAI;%s;0\x07",token)))
-    }
-    ctx,cancel:=context.WithTimeout(context.Background(),time.Second)
-    defer cancel()
-    output,err:=lease.Run(ctx,"cd /tmp && pwd")
-    if err!=nil {t.Fatal(err)}
-    if !strings.Contains(output,"退出状态: 0") ||
-        !strings.Contains(input.String(),"cd /tmp && pwd") {
-        t.Fatalf("unexpected output=%s, input=%q",output,input.String())
-    }
-    lease.Release()
+	_, lease, input := newAITestLease()
+	lease.program = "shell"
+	lease.ready = true
+	lease.connection.readiness.observe([]byte("\x1b]133;B\x07"))
+	input.onWrite = func(p []byte) {
+		source := string(p)
+		index := strings.Index(source, "OpenShellAI;")
+		if index < 0 {
+			return
+		}
+		token := strings.SplitN(source[index+len("OpenShellAI;"):], ";", 2)[0]
+		lease.connection.readiness.observe([]byte("\x1b]133;C\x07"))
+		lease.Observe([]byte(fmt.Sprintf("done\x1b]777;OpenShellAI;%s;0\x07", token)))
+		lease.connection.readiness.observe([]byte("\x1b]133;B\x07"))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	output, err := lease.Run(ctx, "cd /tmp && pwd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "退出状态: 0") ||
+		!strings.Contains(input.String(), "cd /tmp && pwd") {
+		t.Fatalf("unexpected output=%s, input=%q", output, input.String())
+	}
+	lease.Release()
+}
+
+func TestAITerminalRunWaitsForShellPrompt(t *testing.T) {
+	_, lease, input := newAITestLease()
+	lease.program = "shell"
+	lease.ready = true
+	lease.connection.readiness.observe([]byte("\x1b]133;B\x07"))
+	written := make(chan struct{})
+	input.onWrite = func(p []byte) {
+		source := string(p)
+		index := strings.Index(source, "OpenShellAI;")
+		if index < 0 {
+			return
+		}
+		token := strings.SplitN(source[index+len("OpenShellAI;"):], ";", 2)[0]
+		lease.connection.readiness.observe([]byte("\x1b]133;C\x07"))
+		lease.Observe([]byte(fmt.Sprintf("done\x1b]777;OpenShellAI;%s;0\x07", token)))
+		close(written)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		_, err := lease.Run(ctx, "rm -f /tmp/openshell-ai-test")
+		result <- err
+	}()
+	select {
+	case <-written:
+	case <-time.After(time.Second):
+		t.Fatal("AI command did not reach the terminal")
+	}
+	select {
+	case err := <-result:
+		t.Fatalf("Run returned before the Shell prompt was restored: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	lease.connection.readiness.observe([]byte("\x1b]133;B\x07"))
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run did not resume after the Shell prompt was restored")
+	}
+	lease.Release()
+}
+
+func TestAITerminalSupportsTenSequentialShellCommands(t *testing.T) {
+	_, lease, input := newAITestLease()
+	lease.program = "shell"
+	lease.ready = true
+	lease.connection.readiness.observe([]byte("\x1b]133;B\x07"))
+	writes := 0
+	input.onWrite = func(p []byte) {
+		source := string(p)
+		index := strings.Index(source, "OpenShellAI;")
+		if index < 0 {
+			return
+		}
+		token := strings.SplitN(source[index+len("OpenShellAI;"):], ";", 2)[0]
+		lease.connection.readiness.observe([]byte("\x1b]133;C\x07"))
+		lease.Observe([]byte(fmt.Sprintf("done\x1b]777;OpenShellAI;%s;0\x07", token)))
+		lease.connection.readiness.observe([]byte("\x1b]133;B\x07"))
+		writes++
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	for i := 0; i < 10; i++ {
+		output, err := lease.Run(ctx, fmt.Sprintf("printf 'round-%d'", i))
+		if err != nil {
+			t.Fatalf("round %d failed: %v", i+1, err)
+		}
+		if !strings.Contains(output, "退出状态: 0") {
+			t.Fatalf("round %d returned unexpected output: %q", i+1, output)
+		}
+	}
+	if writes != 10 {
+		t.Fatalf("expected 10 terminal commands, got %d", writes)
+	}
+	lease.Release()
+}
+
+func TestAITerminalCanBeReacquiredAfterCommand(t *testing.T) {
+	m, lease, input := newAITestLease()
+	lease.program = "shell"
+	lease.ready = true
+	lease.connection.terminal = &ssh.Session{}
+	lease.connection.filter = aiReadyFilter{}
+	lease.connection.readiness.observe([]byte("\x1b]133;B\x07"))
+	input.onWrite = func(p []byte) {
+		source := string(p)
+		index := strings.Index(source, "OpenShellAI;")
+		if index < 0 {
+			return
+		}
+		token := strings.SplitN(source[index+len("OpenShellAI;"):], ";", 2)[0]
+		lease.connection.readiness.observe([]byte("\x1b]133;C\x07"))
+		lease.Observe([]byte(fmt.Sprintf("done\x1b]777;OpenShellAI;%s;0\x07", token)))
+		lease.connection.readiness.observe([]byte("\x1b]133;B\x07"))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := lease.Run(ctx, "rm -f /tmp/openshell-ai-test"); err != nil {
+		t.Fatal(err)
+	}
+	lease.Release()
+	next, err := m.AcquireAITerminal(lease.ref)
+	if err != nil {
+		t.Fatalf("terminal could not be acquired for the next AI message: %v", err)
+	}
+	next.Release()
 }
 
 func TestAITerminalStopInterruptsAndBlocksLaterCommands(t *testing.T) {
