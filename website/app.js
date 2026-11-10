@@ -116,11 +116,11 @@ function setLanguage(language) {
     element.setAttribute("alt", words[element.dataset.i18nAlt] || "");
   });
   const description = language === "zh"
-    ? "OpenShell — 免费开源的 Windows SSH 工作空间，集成多会话终端、SFTP、Rust 原生 ZMODEM 与可选 AI 助手。"
-    : "OpenShell is a free, open-source Windows SSH workspace with multi-session terminals, SFTP, native Rust ZMODEM, Xshell import and optional AI assistance.";
+    ? "OpenShell — 免费开源的 Windows SSH 工作空间，集成多会话终端、SFTP 文件管理、Rust 原生 ZMODEM 与可选 AI 助手。"
+    : "OpenShell is a free, open-source Windows SSH workspace with multi-session terminals, SFTP file management, native Rust ZMODEM, Xshell import and optional AI assistance.";
   document.title = language === "zh"
-    ? "OpenShell — AI 辅助的 Windows SSH 工作空间"
-    : "OpenShell — AI-assisted SSH workspace for Windows";
+    ? "OpenShell — Windows SSH 工作空间"
+    : "OpenShell — SSH Workspace for Windows";
   document.querySelector('meta[name="description"]').content = description;
   document.querySelector('meta[property="og:title"]').content = document.title;
   document.querySelector('meta[property="og:description"]').content = description;
@@ -131,8 +131,8 @@ function setLanguage(language) {
   toggle.setAttribute("aria-label", language === "zh" ? "Switch to English" : "切换至简体中文");
   const docs = document.getElementById("documentation-link");
   docs.href = language === "zh"
-    ? "https://github.com/hctty27/openshell/blob/main/README.zh-CN.md"
-    : "https://github.com/hctty27/openshell/blob/main/README.md";
+    ? "https://github.com/hctty27/openshell/blob/main/docs/user-guide.zh-CN.md"
+    : "https://github.com/hctty27/openshell/blob/main/docs/user-guide.md";
   if (currentVersion) updateVersionLabels(currentVersion);
   try { localStorage.setItem("openshell-website-language", language); } catch { /* storage may be disabled */ }
 }

@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#081223">
-  <meta name="description" content="OpenShell — 免费开源的 Windows SSH 工作空间，集成多会话终端、SFTP、Rust 原生 ZMODEM 与可选 AI 助手。">
-  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#f5f6f2">
+  <meta name="description" content="OpenShell — 免费开源的 Windows SSH 工作空间，集成多会话终端、SFTP 文件管理、Rust 原生 ZMODEM 与可选 AI 助手。">
+  <meta name="color-scheme" content="light">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="OpenShell">
-  <meta property="og:title" content="OpenShell — AI 辅助的 Windows SSH 工作空间">
-  <meta property="og:description" content="免费开源的 Windows SSH 工作空间：多会话终端、SFTP、Rust 原生 ZMODEM、Xshell 导入与可选 AI 助手。">
+  <meta property="og:title" content="OpenShell — Windows SSH 工作空间">
+  <meta property="og:description" content="免费开源的 Windows SSH 工作空间：多会话终端、SFTP 文件管理、Rust 原生 ZMODEM、Xshell 导入与可选 AI 助手。">
   <meta property="og:url" content="https://openshell.testnb.me/">
   <meta property="og:image" content="https://raw.githubusercontent.com/hctty27/openshell/main/docs/screenshots/github-social-preview.png">
   <meta property="og:image:type" content="image/png">
@@ -17,7 +17,7 @@
   <meta property="og:image:height" content="640">
   <meta property="og:image:alt" content="OpenShell Windows SSH workspace with terminal and SFTP file management">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="OpenShell — AI-assisted SSH workspace for Windows">
+  <meta name="twitter:title" content="OpenShell — SSH Workspace for Windows">
   <meta name="twitter:description" content="Free, open-source Windows SSH workspace with multi-session terminals, SFTP, native Rust ZMODEM, Xshell import and optional AI assistance.">
   <meta name="twitter:image" content="https://raw.githubusercontent.com/hctty27/openshell/main/docs/screenshots/github-social-preview.png">
   <meta name="twitter:image:alt" content="OpenShell Windows SSH workspace with SFTP, AI assistance and native Rust ZMODEM">
@@ -29,7 +29,7 @@
     "alternateName": "OpenShell for Windows",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Windows",
-    "description": "免费开源的 Windows SSH 工作空间，集成多会话终端、SFTP、Rust 原生 ZMODEM、Xshell 导入与可选 AI 助手。",
+    "description": "免费开源的 Windows SSH 工作空间，集成多会话终端、SFTP 文件管理、Rust 原生 ZMODEM、Xshell 导入与可选 AI 助手。",
     "url": "https://openshell.testnb.me/",
     "downloadUrl": "https://github.com/hctty27/openshell/releases/latest",
     "codeRepository": "https://github.com/hctty27/openshell",
@@ -40,7 +40,7 @@
   <link rel="canonical" href="https://openshell.testnb.me/">
   <link rel="icon" href="./assets/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
-  <title>OpenShell — AI 辅助的 Windows SSH 工作空间</title>
+  <title>OpenShell — Windows SSH 工作空间</title>
   <script defer src="./app.js"></script>
 </head>
 <body>
@@ -122,7 +122,7 @@
             <span class="feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 10 3 3-3 3m6 0h4"/></svg></span>
             <h3 data-i18n="f1Title">多会话 SSH 终端</h3>
             <p data-i18n="f1Text">标签管理、左右与上下分屏、断线重连，让多台服务器始终有序。</p>
-            <div class="feature-visual terminal-visual" aria-hidden="true"><div><b>●</b> ubuntu@production</div><code><em>➜</em> ~/workspace <span>ssh connected</span></code><code><em>➜</em> ~/workspace <span class="green">ready_</span></code></div>
+            <div class="feature-visual terminal-visual"><img src="https://raw.githubusercontent.com/hctty27/openshell/main/docs/screenshots/02-split-terminals.png" width="1600" height="900" alt="SSH split terminals" data-i18n-alt="screenshotSplitAlt" loading="lazy" decoding="async"></div>
           </article>
           <article class="feature-card">
             <span class="feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h7l2 2h7v10H4z"/><path d="M4 7V5h7l2 2"/></svg></span>
@@ -161,18 +161,6 @@
           <p data-i18n="screenshotsIntro">Explore real screenshots from the Windows application—not concept renders or mock interfaces.</p>
         </div>
         <div class="screenshots-grid">
-          <figure class="screenshot-card screenshot-card-featured">
-            <a class="screenshot-image-link" href="https://raw.githubusercontent.com/hctty27/openshell/main/docs/screenshots/01-workspace-overview.png" target="_blank" rel="noopener noreferrer">
-              <img src="https://raw.githubusercontent.com/hctty27/openshell/main/docs/screenshots/01-workspace-overview.png" width="1600" height="900" alt="OpenShell workspace overview" data-i18n-alt="screenshotOverviewAlt" loading="lazy" decoding="async">
-            </a>
-            <figcaption><strong data-i18n="screenshotOverviewTitle">Workspace overview</strong><span data-i18n="screenshotOverviewDesc">SSH sessions, terminal, SFTP and AI in one desktop workspace.</span></figcaption>
-          </figure>
-          <figure class="screenshot-card">
-            <a class="screenshot-image-link" href="https://raw.githubusercontent.com/hctty27/openshell/main/docs/screenshots/02-split-terminals.png" target="_blank" rel="noopener noreferrer">
-              <img src="https://raw.githubusercontent.com/hctty27/openshell/main/docs/screenshots/02-split-terminals.png" width="1600" height="900" alt="SSH split terminals" data-i18n-alt="screenshotSplitAlt" loading="lazy" decoding="async">
-            </a>
-            <figcaption><strong data-i18n="screenshotSplitTitle">SSH split terminals</strong><span data-i18n="screenshotSplitDesc">Keep multiple server sessions visible and organized.</span></figcaption>
-          </figure>
           <figure class="screenshot-card">
             <a class="screenshot-image-link" href="https://raw.githubusercontent.com/hctty27/openshell/main/docs/screenshots/03-ai-assistant.png" target="_blank" rel="noopener noreferrer">
               <img src="https://raw.githubusercontent.com/hctty27/openshell/main/docs/screenshots/03-ai-assistant.png" width="1600" height="900" alt="Global AI assistant" data-i18n-alt="screenshotAssistantAlt" loading="lazy" decoding="async">
@@ -207,7 +195,7 @@
           <div class="eyebrow" data-i18n="workflowEyebrow">ONE WORKSPACE</div>
           <h2 data-i18n="workflowHeading">连接服务器，<br>专注完成工作。</h2>
           <p data-i18n="workflowBody">连接服务器、管理终端、浏览远程目录、传输文件，并在需要时使用 AI 辅助操作。OpenShell 让这些工作发生在同一个窗口内。</p>
-          <a href="https://github.com/hctty27/openshell/blob/main/README.zh-CN.md" id="documentation-link" target="_blank" rel="noopener noreferrer" class="inline-link"><span data-i18n="workflowDocs">阅读使用文档</span><span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/hctty27/openshell/blob/main/docs/user-guide.zh-CN.md" id="documentation-link" target="_blank" rel="noopener noreferrer" class="inline-link"><span data-i18n="workflowDocs">阅读使用文档</span><span aria-hidden="true">↗</span></a>
         </div>
         <div class="workflow-panel" aria-label="OpenShell feature overview">
           <div class="workflow-row"><span class="workflow-num">01</span><div><strong data-i18n="wf1Title">连接</strong><span data-i18n="wf1Desc">SSH 会话与安全主机验证</span></div><span class="workflow-indicator">↗</span></div>
