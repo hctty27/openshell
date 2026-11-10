@@ -159,18 +159,8 @@ export default function DiagnosticsSettingsPanel() {
                 </div>
                 <div className="settings-diagnostics-log-detail">
                   <span>{formatTime(event.time)} · {event.status}{event.code ? " · " + event.code : ""}</span>
-                  {event.durationMs != null && event.module !== "ime" && <span>{Math.round(event.durationMs)} ms</span>}
+                  {event.durationMs != null && <span>{Math.round(event.durationMs)} ms</span>}
                 </div>
-                {event.ime && (
-                  <div className="settings-diagnostics-log-detail">
-                    <span>
-                      {event.ime.target} · focus={String(event.ime.hasFocus)} · composing={String(event.ime.composing)}
-                      {" · rect=(" + event.ime.rectX + "," + event.ime.rectY + "," + event.ime.rectWidth + "," + event.ime.rectHeight + ")"}
-                      {" · screen=(" + event.ime.screenX + "," + event.ime.screenY + ")"}
-                      {" · DPR=" + event.ime.dpr}
-                    </span>
-                  </div>
-                )}
               </div>
             ))}
             {events.length === 0 && <p className="settings-diagnostics-empty">{t("settings:diagnosticsEmpty")}</p>}
