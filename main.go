@@ -74,7 +74,11 @@ func main() {
       Name: "main", Title: branding.Name, Width: 1440, Height: 900,
       MinWidth: 1000, MinHeight: 640, Frameless: true, EnableFileDrop: true,
       BackgroundColour: application.NewRGB(11,16,23),
-      Windows: application.WindowsWindow{NonClientRegionSupport: true},
+      Windows: application.WindowsWindow{
+        NonClientRegionSupport: true,
+        // Composition hosting keeps Windows IME candidate windows correctly anchored after Alt+Tab.
+        WebView2CompositionHosting: true,
+      },
     })
     // A WindowClosing hook must cancel the native close before WebView2 is destroyed.
     // ShouldQuit alone runs too late for the frontend to display its confirmation.
