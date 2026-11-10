@@ -72,15 +72,12 @@ func main() {
     }
     window := desktop.Window.NewWithOptions(application.WebviewWindowOptions{
       Name: "main", Title: branding.Name, Width: 1440, Height: 900,
-      MinWidth: 1000, MinHeight: 640,
-      // Optional window-frame control: Wails re-extends DWM on WM_ACTIVATE for frameless windows.
-      Frameless: os.Getenv("OPENSHELL_IME_NATIVE_FRAME") != "1",
-      EnableFileDrop: true,
+      MinWidth: 1000, MinHeight: 640, Frameless: true, EnableFileDrop: true,
       BackgroundColour: application.NewRGB(11,16,23),
       Windows: application.WindowsWindow{
         NonClientRegionSupport: true,
-        // Opt-in A/B experiment. Default HWND hosting remains unchanged.
-        WebView2CompositionHosting: os.Getenv("OPENSHELL_IME_VISUAL_HOSTING") == "1",
+        // Composition hosting keeps Windows IME candidate windows correctly anchored after Alt+Tab.
+        WebView2CompositionHosting: true,
       },
     })
     // A WindowClosing hook must cancel the native close before WebView2 is destroyed.
