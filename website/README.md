@@ -43,7 +43,7 @@ node --check website/app.js
 ## 部署行为
 
 - 静态产物：`website/index.html`、`styles.css`、`app.js`、`assets/logo.svg`、`_headers`、`robots.txt`、`sitemap.xml`。
-- 真实软件截图临时引用仓库公开的 `docs/screenshots/02-ssh-sftp.webp`（`raw.githubusercontent.com`），不额外复制二进制文件到官网目录；若之后需要独立于 GitHub 的资源可用性，应将截图迁移到网站本地。
+- 产品截图引用仓库公开的 `docs/screenshots/` 资源，不额外复制二进制文件到官网目录。当前主界面图仍是早期版本截图；新截图的场景、尺寸、脱敏和文件命名规范见 [截图更新计划](../docs/screenshots/README.md)。新图通过真实 Windows 客户端验收后，再同步更新官网、README 和 OG 图片。
 - 下载入口优先使用 GitHub 最新**非预发布** Release 的 Windows x64 安装版和便携版文件；GitHub API 请求超时/限流时回退到 `/releases/latest`。网站不处理软件分发文件，也不会上传用户数据。
 - 中/英文内容在 `app.js` 的 `translations` 中维护；首次访问按照浏览器语言选择，也可以手动切换，偏好仅存浏览器本地。
 - 代码签名状态不应根据版本号自行推断。网站不再把 `v1.0.0` 的历史状态写成当前最新版本状态；所有版本均以对应 GitHub Release 的签名声明及实际 Authenticode 验证为准。
