@@ -131,8 +131,8 @@ function setLanguage(language) {
   toggle.setAttribute("aria-label", language === "zh" ? "Switch to English" : "切换至简体中文");
   const docs = document.getElementById("documentation-link");
   docs.href = language === "zh"
-    ? "https://github.com/hctty27/openshell/blob/main/README.zh-CN.md"
-    : "https://github.com/hctty27/openshell/blob/main/README.md";
+    ? "https://github.com/hctty27/openshell/blob/main/docs/user-guide.zh-CN.md"
+    : "https://github.com/hctty27/openshell/blob/main/docs/user-guide.md";
   if (currentVersion) updateVersionLabels(currentVersion);
   try { localStorage.setItem("openshell-website-language", language); } catch { /* storage may be disabled */ }
 }
