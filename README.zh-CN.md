@@ -1,251 +1,142 @@
 <div align="center">
-  <img src="build/openshell-icon.svg" alt="OpenShell" width="88" height="88" />
-  <h1>OpenShell</h1>
-  <p><strong>免费开源的 Windows AI 辅助 SSH 工作空间：多会话终端、SFTP、Rust 原生 ZMODEM 与 Xshell 导入。</strong></p>
-  <p>
-    <a href="https://github.com/hctty27/openshell/releases/latest"><img src="https://img.shields.io/github/v/release/hctty27/openshell?label=release" alt="最新版本" /></a>
-    <a href="https://github.com/hctty27/openshell/actions/workflows/ci.yml"><img src="https://github.com/hctty27/openshell/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
-    <a href="https://github.com/hctty27/openshell/releases/latest"><img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4" alt="Windows x64" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT 许可证" /></a>
-  </p>
-  <p><a href="README.md">English</a> · <strong>简体中文</strong></p>
-  <p>
-    <a href="https://openshell.testnb.me/">官方网站</a> ·
-    <a href="https://github.com/hctty27/openshell/releases/latest">下载</a> ·
-    <a href="#快速开始">快速开始</a> ·
-    <a href="CHANGELOG.md">更新记录</a> ·
-    <a href="https://github.com/hctty27/openshell/issues">反馈问题</a>
-  </p>
+
+<img src="build/openshell-icon.svg" alt="OpenShell" width="76" height="76" />
+
+# OpenShell
+
+**一个专注于服务器工作的 Windows SSH 工作空间。**
+
+SSH 多会话 · SFTP 文件管理 · Rust 原生 ZMODEM · 可选 AI 助手
+
+[下载最新版](https://github.com/hctty27/openshell/releases/latest) · [官方网站](https://openshell.testnb.me/) · [English](README.md) · [更新记录](CHANGELOG.md)
+
+[![Latest release](https://img.shields.io/github/v/release/hctty27/openshell?label=Release)](https://github.com/hctty27/openshell/releases/latest)
+[![CI](https://github.com/hctty27/openshell/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hctty27/openshell/actions/workflows/ci.yml)
+[![Windows x64](https://img.shields.io/badge/platform-Windows%20x64-202a25)](https://github.com/hctty27/openshell/releases/latest)
+[![MIT](https://img.shields.io/badge/license-MIT-176b52)](LICENSE)
+
 </div>
 
-OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH 工作空间，集成多会话终端、分屏操作、SFTP 文件管理、Rust 原生 ZMODEM、Xshell 会话导入与可选 AI 助手，让服务器连接、操作和文件传输集中在一个桌面应用中。
+OpenShell 将 SSH 终端、SFTP 文件管理、文件传输和 AI 辅助操作整合到一个 Windows 桌面应用中。无需在多个工具之间反复切换，就能连接服务器、管理会话、处理文件并完成日常运维工作。
 
-**项目状态：** 已进入 v1.0 正式版阶段，持续维护更新。已提供 Windows x64 安装版与便携版，各版本改动和实际签名状态见 [发布说明](https://github.com/hctty27/openshell/releases)。
+## 产品预览
 
-**政策文件：** [Code signing policy（代码签名政策）](CODE_SIGNING_POLICY.md) · [隐私政策](PRIVACY.md) · [第三方组件授权审查](docs/third-party-review.md) · [SBOM 与二进制清单](docs/sbom.md) · [SignPath 申请清单](docs/signpath-application-checklist.md)。
+<p align="center">
+  <img src="docs/screenshots/01-workspace-overview.png" alt="OpenShell 主工作空间" width="100%" />
+</p>
 
-## 界面预览
+<p align="center"><sub>SSH 会话、终端、SFTP 与 AI 助手集中在一个工作空间。</sub></p>
 
-### 主工作空间
+| SSH 多会话与分屏 | SFTP 文件管理 |
+|:---:|:---:|
+| ![SSH 多会话分屏](docs/screenshots/02-split-terminals.png) | ![SFTP 文件管理](docs/screenshots/04-sftp-file-manager.png) |
+| **全局 AI 助手** | **Rust 原生 ZMODEM** |
+| ![全局 AI 助手](docs/screenshots/03-ai-assistant.png) | ![原生 ZMODEM](docs/screenshots/05-native-zmodem-transfer.png) |
 
-![OpenShell 主工作空间：SSH 会话、终端、SFTP 与 AI 助手](docs/screenshots/01-workspace-overview.png)
+## 核心能力
 
-### SSH 多会话分屏
-
-![OpenShell 多 SSH 会话分屏界面](docs/screenshots/02-split-terminals.png)
-
-### 全局 AI 助手
-
-![OpenShell 全局 AI 助手同时处理选中的 SSH 会话](docs/screenshots/03-ai-assistant.png)
+### SSH 工作空间
+- 多会话标签、会话树、拖拽排序与会话复制。
+- 左右 / 上下分屏，同时操作多台服务器。
+- 异常断线重连、输出搜索和本地终端。
+- 支持密码与本地私钥认证，首次连接校验 SSH 主机指纹。
 
 ### SFTP 文件管理
+- 本地与远程文件浏览，批量上传和下载。
+- 传输队列、取消、重试与已验证前缀续传。
+- 远程文本编辑、权限管理和单向目录同步预览。
+- 根据终端上报的远程工作目录打开 SFTP。
 
-![OpenShell 本地与远程 SFTP 文件管理界面](docs/screenshots/04-sftp-file-manager.png)
+### 原生文件传输
+- Windows 使用 Rust 原生 ZMODEM 引擎处理 `rz` / `sz`。
+- 支持多文件传输、进度展示与任务取消。
+- 远端安装 `trzsz` 后可使用 `trz` / `tsz`。
+- 无需安装 Windows 版 lrzsz，也无需额外配置 PATH。
 
-### Rust 原生 ZMODEM
+### 可选 AI 助手
+- 配置兼容的模型 API 与模型 ID。
+- 全局 AI 助手可面向选定的 SSH 会话处理任务。
+- 终端 AI 在当前 SSH 终端中协助操作。
+- 支持 MySQL/MariaDB、Redis、PostgreSQL（`psql`）和 Python 等交互环境。
+- AI 不属于 SSH / SFTP 的运行前提；不配置模型也可以正常使用核心功能。
 
-![OpenShell Rust 原生 ZMODEM 多文件传输与实时进度](docs/screenshots/05-native-zmodem-transfer.png)
+### 会话管理与个性化
+- 导入 Xshell `.xts` / `.xsh` 会话。
+- 会话文件夹、快速命令、备份与恢复。
+- 英文 / 简体中文，浅色 / 深色应用主题及独立终端配色。
 
-### 终端 AI + MySQL
+## 下载与安装
 
-![OpenShell 在当前 SSH 终端中使用终端 AI 交互 MySQL](docs/screenshots/06-terminal-ai-database.png)
+前往 **[GitHub Releases](https://github.com/hctty27/openshell/releases/latest)** 下载最新 Windows x64 版本。
 
-## 为什么选择 OpenShell
+| 安装包 | 适用场景 |
+|---|---|
+| `OpenShell-vX.Y.Z-windows-x64-Setup.exe` | 推荐。正常安装并从开始菜单启动。 |
+| `OpenShell-vX.Y.Z-windows-x64-portable.zip` | 便携使用。请完整解压，并保留应用旁边的 `zmodem` 目录。 |
 
-- **多台服务器，一处管理。** 集中组织 SSH 会话，拖拽调整标签顺序，使用左右或上下分屏，并在异常断线后恢复工作。
-- **文件操作无需切换软件。** 在同一工作空间浏览本地和远程文件，编辑远程文本、管理传输队列并预览单向目录同步。
-- **AI 按需启用。** 配置兼容的模型 API 后，可使用全局 AI 助手或终端 AI；不配置 AI 也能完整使用 SSH 和 SFTP。
-- **Windows 原生文件传输。** Windows 端使用 Rust 原生 ZMODEM 引擎处理 `rz` / `sz`；远端安装 `trzsz` 后也可使用 `trz` / `tsz`。
+需要 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。
 
-## 功能亮点
-
-| 功能 | 可以做什么 |
-| --- | --- |
-| SSH 工作空间 | 多标签、复制连接、拖拽排序、左右或上下分屏及输出搜索，支持 vim、top 等交互式程序。 |
-| AI 助手与终端 AI | 配置兼容的模型 API 和模型 ID，使用全局助手处理已连接会话任务，或在当前 SSH 终端中使用终端 AI。 |
-| SFTP 文件管理 | 浏览本地与远程文件，批量上传下载、断点续传、远程文本编辑、单向目录同步预览及权限管理。 |
-| 原生文件传输 | Windows 使用 Rust 原生 ZMODEM 引擎处理 `rz` / `sz`；远端安装 `trzsz` 后支持 `trz` / `tsz`。 |
-| 会话管理 | 多级文件夹、搜索与编辑会话、密码与本地私钥认证、Xshell 会话导入、会话备份与恢复。 |
-| 快速命令 | 支持搜索、排序及全局 / 文件夹 / 会话作用范围，通过换行控制是否执行。 |
-| 外观与语言 | 英文与简体中文切换，浅色 / 深色应用主题，独立的经典黑色、深灰和白色终端配色。 |
-
-## 下载安装
-
-前往 **[GitHub Releases](https://github.com/hctty27/openshell/releases/latest)** 下载最新版本。
-
-| 安装包 | 使用方式 |
-| --- | --- |
-| `OpenShell-vX.Y.Z-windows-x64-Setup.exe` | Windows 安装版，运行安装程序即可。 |
-| `OpenShell-vX.Y.Z-windows-x64-portable.zip` | 完整解压后运行 `OpenShell-vX.Y.Z.exe`，保留旁边的 `zmodem` 目录。 |
-
-应用依赖 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。本地终端回退使用 Windows ConPTY；选择 PowerShell 7 或 WSL 时，需要先安装对应环境。
-
-便携版免安装，但配置和凭据仍保存在 Windows 用户目录与凭据管理器中。
+> 请查看每个 Release 的说明，确认该版本实际的代码签名状态。不要假设所有版本均已签名。
 
 ## 快速开始
 
-1. **添加会话。** 填写主机、端口、用户名及密码或私钥信息。单击会话查看详情，双击连接服务器。
-2. **核对服务器。** 首次连接时核对 SSH 主机指纹，确认后信任；已信任的指纹变化时会阻止连接。
-3. **选择工作方式。** 使用多标签与分屏操作终端，或点击终端工具栏中的 SFTP 入口管理文件。
-4. **调整偏好。** 设置中的「通用」管理语言与应用外观，「终端」管理终端选项，「连接」管理保活、重连及断开行为。
+1. 下载并启动 OpenShell。
+2. 新建 SSH 会话，填写主机、端口、用户名及认证信息。
+3. 首次连接时核对服务器 SSH 主机指纹。
+4. 连接后使用标签和分屏管理终端，或从终端工具栏打开 SFTP。
+5. 如需 AI 功能，在「设置 → AI」中配置模型服务。
 
-界面默认英文，可在「Settings → General」切换为简体中文。已经连接的会话也可以编辑：名称和分组立即同步，主机、端口、用户名与认证配置在下次连接时生效。
+详细操作说明见 [README 使用说明与功能文档](README.zh-CN.md) 及 [项目文档目录](docs/)。
 
-### 终端常用操作
+## 隐私与安全
 
-- 双击已连接标签，以相同名称新开独立连接；拖拽标签可调整顺序，也可使用 Alt+Shift+左右方向键。顶部 `+` 打开会话选择窗口。
-- 连接两个会话后选择分屏对象，可切换左右 / 上下布局，并拖动分隔线调整比例。
-- 可在设置中启用「选中自动复制」「鼠标右键粘贴」及多行粘贴确认。
-- 终端配色支持全局设置与单会话覆盖，无需重连即可生效；快速命令栏可选择单行横向滚动或多行布局。
-- 断开后可返回本地终端、保留已断开的标签或自动关闭标签。本地 Shell 支持 Windows PowerShell、PowerShell 7、CMD、WSL。自动重连只针对异常断线，主动断开不会自动连接。关闭活动 SSH 标签或退出仍有连接的应用时需要确认。
-- 点击快速命令栏的「管理」添加命令。每个换行对应一次 Enter；末尾不换行，最后一行只输入、不执行。使用前请确认终端处于可接收 Shell 命令的状态。
+- 会话、偏好设置和可信主机指纹保存在本地。
+- 密码与私钥口令使用 Windows 凭据管理器保存。
+- 私钥文件由用户自行保管，OpenShell 保存其路径。
+- 只有主动使用 AI 功能时，请求内容和必要上下文才会发送到用户配置的模型服务。
+- 首次连接验证 SSH 主机指纹；已信任指纹发生变化时会阻止连接。
 
-## AI 助手（可选）
+相关政策与供应链信息：
+[隐私政策](PRIVACY.md) · [代码签名政策](CODE_SIGNING_POLICY.md) · [第三方组件审查](docs/third-party-review.md) · [SBOM](docs/sbom.md)
 
-在 **设置 → AI** 中配置一个或多个模型服务。每个配置包含服务名称、API Base URL、API Key 和模型 ID。OpenShell 支持兼容的模型 API，实际工具调用能力取决于服务商和模型。
+## 项目状态与平台支持
 
-- **全局 AI 助手：** 可以选择一个或多个已连接的 SSH 会话，让 AI 协助检查、诊断或执行远程任务；在支持的连接环境中通过独立 SSH 执行通道工作。
-- **终端 AI：** 在当前激活的 SSH 终端中协助操作，支持 MySQL/MariaDB、Redis、PostgreSQL（`psql`）和 Python 等交互环境。当前终端模式仅针对当前激活会话。
-- **执行控制：** 可选择执行前审查或完全自动模式。发送命令前会检查终端状态；无法确认 Shell 安全就绪时会拒绝执行。终端 AI 提供「接管终端」操作，可随时停止 AI 并恢复手动控制。
+- 当前正式交付平台：Windows x64。
+- 提供安装版与便携版。
+- 项目采用 MIT License。
+- macOS / Linux 桌面版本暂未提供。
+- ProxyJump / 跳板机、SSH agent 认证、云同步等能力暂未支持。
 
-使用 AI 时，请求所需的提示词和上下文会发送到你配置的模型服务。发送敏感信息前，请阅读[隐私政策](PRIVACY.md)及所选服务商的数据处理条款。
+## 开发与构建
 
-## 文件管理与传输
+**技术栈：** Go · Wails v3 · React · TypeScript · xterm.js · SQLite · Rust。
 
-### SFTP
+Windows 开发环境需要 Go 1.26+、Node.js 22、npm 和 WebView2。
 
-在已连接的 SSH 标签中打开文件管理器，复用当前认证连接。支持本地 / 远程浏览、拖拽上传下载、任务队列、取消、重试及校验已传输内容前缀后的断点续传。
-
-- **远程编辑：** 支持不超过 1 MiB 的 UTF-8 文本，保存前校验远程文件版本。
-- **目录同步：** 预览本地到远程或远程到本地的单向变更，根据大小和修改时间判断差异，跳过较新的目标文件；当前同步流程不删除文件。
-- **权限管理：** 最多对 200 个选中项批量修改权限，执行前确认。
-
-### 打开 SFTP 时跟随终端目录
-
-OpenShell 支持通过 **OSC 7**、**OSC 1337** 及 **OSC 0/2 终端标题**（如 `user@host:/path`）识别工作目录。远程 Shell 已有目录上报时无需额外配置；否则使用已知的初始目录，上报路径不可访问时回退到 SFTP 默认目录。不会向正在运行的交互程序注入隐藏的 `pwd` 命令。
-
-<details>
-<summary>为远程 Bash 开启目录上报</summary>
-
-将以下内容添加一次到远程服务器的 `~/.bashrc`。它会保留已有 `PROMPT_COMMAND`，并转义路径中影响 URI 解析的字符。
-
-```bash
-__openshell_report_cwd() {
-  local path="${PWD//%/%25}"
-  path="${path//#/%23}"
-  path="${path//\?/%3F}"
-  printf '\033]7;file://%s%s\007' "${HOSTNAME:-localhost}" "$path"
-}
-if declare -p PROMPT_COMMAND 2>/dev/null | grep -q '^declare -a'; then
-  PROMPT_COMMAND+=(__openshell_report_cwd)
-else
-  PROMPT_COMMAND="${PROMPT_COMMAND:+${PROMPT_COMMAND};}__openshell_report_cwd"
-fi
-```
-
-重新连接后生效。每次显示新提示符都会报告当前目录，执行 `cd /some/path` 后打开 SFTP 即可使用该路径。
-
-</details>
-
-### ZMODEM：`rz` / `sz`
-
-在远程终端运行 `rz`，选择本地文件上传；运行 `sz /path/to/file`，选择本地下载位置。远程服务器需要安装 `lrzsz`。Windows 安装版和便携包均使用 **Rust 原生 ZMODEM**：`zmodem/native/zmodem-sidecar.exe` 为唯一的 Windows 本地 ZMODEM 协议引擎，`zmodem/rz.exe` 和 `sz.exe` 只是自研无控制台启动器。发行包不再附带 `lrzsz-win32` 或 `msys-2.0.dll`；远端 Linux 仍需安装 `lrzsz`。无需配置 Windows PATH。
-
-OpenShell 精简内嵌文件选择器可直接选择上传文件或下载目录，不会弹出 Windows 资源管理器。进度集中显示在工作区顶部的非模态传输中心，A 会话传输时仍可切换 B 会话继续操作；可通过传输中心或 Ctrl+C 取消。内置启动器不会额外弹出 CMD 窗口，下载遇到同名文件时使用 `rz -E` 重命名策略。协议数据在进入终端历史与 AI 上下文前过滤。ZMODEM 在 tmux/screen 中可能不稳定；目录与断点续传请使用 SFTP。
-
-### 原生 trzsz：`trz` / `tsz`
-
-远程服务器安装 `trzsz` 后，可以使用 `trz` 上传和 `tsz file` 下载；`trz -d` 支持从内嵌选择器选择文件夹上传。两套协议共用精简文件选择器和顶部传输中心。原生 trzsz 展示单文件百分比；传统 `rz` / `sz` 无法可靠获取总大小时使用动态进度条。各 SSH 会话传输状态相互独立，切换会话不会中断原传输。
-
-## 会话导入与备份
-
-| 来源 | 保留内容 | 需要重新配置 |
-| --- | --- | --- |
-| Xshell `.xts` / `.xsh` | SSH 连接配置和文件夹结构，支持 UTF-16 / UTF-8；可预览、勾选，重名时跳过或自动重命名。 | 密码与私钥认证。不导入 Xshell 加密凭据、Telnet、代理及跳板机配置。 |
-| OpenShell JSON 备份 | 已保存的 SSH 会话和多级文件夹，在「设置 → 通用 → 会话备份」中导出与恢复。 | 凭据及私钥文件。会话备份不包含 Windows 凭据和外观偏好。 |
-
-从 Xshell 迁移时，先导出会话，再点击 OpenShell 会话面板中的「导入 Xshell」，核对导入预览，重新填写认证信息后连接。
-
-## 本地数据与隐私
-
-| 数据 | 保存位置 |
-| --- | --- |
-| 会话、文件夹、偏好及可信主机指纹 | `%APPDATA%\OpenShell\state.db` |
-| 密码与私钥口令 | Windows 凭据管理器中的 OpenShell 项。 |
-| 私钥 | 用户选择的原文件，OpenShell 仅保存路径。 |
-
-OpenShell 仅按用户操作连接到配置的 SSH/SFTP 服务器。旧版 AI 配置与对话记录可能仍保留在升级前的本地数据库中，本版本不会自动删除，以避免数据丢失。
-
-## 本地开发
-
-**技术栈：** Go · Wails v3.1.0 · React · TypeScript · xterm.js · SQLite。
-
-请使用 Windows 开发环境，并准备 Go 1.26+、满足锁定 Vite 版本要求的较新 Node.js 22、npm 和 WebView2。依赖版本见 [go.mod](go.mod) 与 [frontend/package-lock.json](frontend/package-lock.json)。
-
-```sh
+```powershell
 git clone https://github.com/hctty27/openshell.git
 cd openshell
+
 go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
+
 cd frontend
 npm ci
 cd ..
+
 wails3 dev
 ```
 
-构建 Windows x64 可执行文件：
+测试、Windows 构建及发布流程见 [Windows 发布工作流](.github/workflows/windows-release.yml) 和 [CI 工作流](.github/workflows/ci.yml)。
 
-```sh
-wails3 generate bindings -names -ts
-wails3 generate syso -manifest build/windows/wails.exe.manifest -icon build/windows/icon.ico -info build/windows/info.json -arch amd64 -out rsrc_windows_amd64.syso
-go build -tags production -trimpath -ldflags="-H windowsgui -s -w" -o build/bin/OpenShell.exe .
-```
+## 反馈与参与
 
-产物为 `build/bin/OpenShell.exe`，构建前需要生成 `build/windows/icon.ico`。以上命令不打包 ZMODEM 工具；需要时在构建后通过 PowerShell 运行 [scripts/prepare_native_zmodem_windows.ps1](scripts/prepare_native_zmodem_windows.ps1)。完整图标生成、安装版与便携版打包流程见 [Windows 发布工作流](.github/workflows/windows-release.yml)。
+遇到问题请提交 [GitHub Issue](https://github.com/hctty27/openshell/issues)，并尽量附上：
+- OpenShell 版本与 Windows 版本。
+- 可复现的操作步骤和预期 / 实际结果。
+- 已脱敏的诊断日志。
 
-<details>
-<summary>验证与发布流程</summary>
+涉及功能行为变更时，请同步维护中英文 README。
 
-从仓库根目录执行：
+## 许可证
 
-```sh
-go test -race ./...
-go vet ./...
-cd frontend
-npm test -- --run
-npm run build
-npx playwright install chromium
-npx playwright test
-```
-
-后端测试使用可控 SSH 服务与模拟 API。浏览器测试使用模拟 Wails 桥接，不能替代 Windows 原生验收。
-
-- [CI](.github/workflows/ci.yml)：PR 和 `main` 推送运行 Go race 检测、`go vet`、前端测试、生产构建及选定的 Chromium 回归。
-- [Windows terminal smoke](.github/workflows/windows-terminal-smoke.yml)：对终端、SSH、SFTP、ConPTY 相关 PR 执行 Windows 冒烟验证。
-- [Windows release](.github/workflows/windows-release.yml)：只有 `main` 的版本标记变化且 CI 通过后才正式发布。保留最近 3 个 Release 及 v1.0.0 等大版本里程碑，旧 Git Tag 不删除，最终构建产物保留 7 天。手动运行仅生成 Artifacts，不发布 Release。
-
-**推荐一键发布：** 打开 GitHub Actions 中的 [Publish OpenShell (one click)](.github/workflows/publish.yml)，选择 `main` 分支，默认 `patch`（也可选 `minor` / `major`），点击 **Run workflow**。工作流自动同步版本标记、npm 版本文件、Windows 版本信息和更新日志，提交版本变更，并在固定提交上执行 Go / 前端验证；Windows 构建复用已验证的前端产物，最后发布安装包和便携 ZIP。若版本已准备好但打包失败，再次运行将继续发布该版本，不会重复升级版本号。请勿同时运行多个发布流程。
-
-**兼容原有方式：** 仍可手动同步 `.github/release-version.txt`、`frontend/package.json`、`frontend/package-lock.json`、`CHANGELOG.md`，合并到 `main` 后沿用版本标记触发的 CI 发布。
-
-</details>
-
-## 项目说明
-
-- 当前交付 Windows x64 桌面应用，暂未提供 macOS / Linux 桌面安装包。
-- 暂不支持 ProxyJump / 跳板机、SSH agent 认证、云同步及快速命令参数占位符。
-- Windows 原生输入法、剪贴板、凭据存储、异常传输和性能仍需实机验证；工具调用兼容性取决于具体 API 服务商及模型。
-- 终端上下文附件限制为 200 行 / 32 KiB。如果旧终端历史已经被裁剪，预览可能缺少截断提示。
-
-实现细节与验证范围见 [Windows 验收记录](docs/windows-acceptance.md)、[稳定性验收](docs/stability-acceptance.md) 与 [多语言说明](docs/internationalization.md)。
-
-欢迎提交问题和范围明确的 PR。反馈 [Issue](https://github.com/hctty27/openshell/issues) 时，请附上 OpenShell 版本、Windows 版本、复现步骤及脱敏日志。修改文档中的功能行为时，请同步维护中英文 README。
-
-## 许可证与代码签名
-
-OpenShell 使用 **[MIT 许可证](LICENSE)**。随包分发的第三方组件遵循各自许可证，Windows 本地 ZMODEM 只分发 Rust sidecar 与自研启动器，不再附带旧版 lrzsz/MSYS2 二进制文件。Go、Rust、npm 第三方依赖仍遵循各自许可证，具体清单见 [SBOM](docs/sbom.md)。
-
-免费代码签名由 [SignPath.io](https://about.signpath.io/) 提供，证书由 [SignPath Foundation](https://signpath.org/) 提供。 仅在申请获批且签名功能实际启用后适用；原始 **v1.0.0 Windows 安装包和便携版未经签名**，后续各版本应查看 Release 的实际签名状态，不能据此认为 SignPath 已批准。
-
-仅来自 main 分支的正式发布可提交签名请求。启用 `SIGNPATH_REQUIRED=true` 后，缺少签名配置会阻止正式发布；此前如未配置密钥则明确发布未签名版本。以每个 Release 的实际说明为准。应用可执行文件与安装程序由 GitHub Actions 构建，便携 ZIP 包含应用可执行文件。仅将本仓库源码构建的产物提交签名。
-
-**提交者、审核者及签名审批者：** [hctty27](https://github.com/hctty27)。
+OpenShell 使用 [MIT License](LICENSE)。第三方依赖和随包组件遵循各自许可证，详见 [第三方组件审查](docs/third-party-review.md) 与 [SBOM](docs/sbom.md)。
