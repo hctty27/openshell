@@ -6,23 +6,23 @@ const RELEASE_API_URL = "https://api.github.com/repos/hctty27/openshell/releases
 const translations = {
   zh: {
     skip: "跳转到主要内容", navFeatures: "功能", navPreview: "产品预览", navTrust: "隐私与安全", navDownload: "下载", headerCta: "立即下载",
-    heroTag: "免费开源 · Windows x64", heroLine1: "你的服务器，", heroLine2: "尽在掌控。",
-    heroDescription: "将 SSH 终端、SFTP 文件管理与可选的 AI 助手放在同一个工作空间。连接更顺手，操作更专注。",
+    heroTag: "免费开源 · Windows x64", heroLine1: "服务器管理，", heroLine2: "尽在一个工作空间。",
+    heroDescription: "将 SSH 多会话终端、SFTP 文件管理、Rust 原生 ZMODEM 与可选 AI 助手整合到同一个 Windows 工作空间。",
     heroDownload: "下载 Windows 版", heroSource: "查看源代码", heroTrust: "MIT 开源许可", heroNoAccount: "无需注册账号",
-    heroLatest: "获取最新版本", previewLabel: "真实产品截图", previewAlt: "OpenShell SSH 终端和 SFTP 文件管理器界面",
-    featuresEyebrow: "BUILT FOR YOUR WORKFLOW", featuresHeading: "更少切换，更多专注。",
-    featuresIntro: "从连接服务器到管理文件，把日常操作整合到一个轻量工作空间。",
-    f1Title: "多会话 SSH 终端", f1Text: "标签管理、左右与上下分屏、断线重连，让多台服务器始终有序。",
-    f2Title: "完整的 SFTP 文件管理", f2Text: "上传、下载、远程编辑、传输队列与目录同步预览，文件操作无需换软件。",
-    f3Title: "按需启用的 AI 助手", f3Text: "接入你自己的模型 API，结合终端上下文进行辅助分析；不配置 AI 也能完整使用 SSH/SFTP。",
-    f4Title: "熟悉又高效的操作", f4Text: "快速命令、终端搜索、Xshell 会话导入、rz/sz 与 trzsz，减少重复操作。",
-    f5Title: "本地优先的设计", f5Text: "会话存储在本机，敏感凭据由 Windows 凭据管理器保存；诊断报告不会自动上传。",
-    f6Title: "简单、克制的工作空间", f6Text: "可调整的布局和中英文界面，让终端始终是工作重点。",
-    workflowEyebrow: "ONE WORKSPACE", workflowHeading: "从连接到交付，\n不必来回切换。",
-    workflowBody: "连接服务器、浏览远程目录、编辑配置、传输文件。OpenShell 让这些工作发生在同一个窗口内。",
+    heroLatest: "获取最新版本", previewLabel: "真实产品界面", previewAlt: "OpenShell Windows SSH 工作空间，展示终端与 SFTP 文件管理",
+    featuresEyebrow: "BUILT FOR YOUR WORKFLOW", featuresHeading: "连接、操作、传输，一处完成。",
+    featuresIntro: "从多服务器终端到远程文件传输，再到 AI 辅助操作，让日常运维保持连贯。",
+    f1Title: "多会话 SSH 终端", f1Text: "管理多台服务器，使用标签、左右与上下分屏、输出搜索和异常重连。",
+    f2Title: "内置 SFTP 文件管理器", f2Text: "批量上传下载、远程编辑、目录同步预览，以及传输任务取消与重试。",
+    f3Title: "可选 AI 助手与终端 AI", f3Text: "配置兼容的模型 API，使用全局助手处理多会话任务，或让终端 AI 在当前 SSH Shell 中协助操作。",
+    f4Title: "Rust 原生 ZMODEM", f4Text: "Windows 使用 Rust 原生 sidecar 处理 rz/sz；远端安装 trzsz 后也可使用 trz/tsz。",
+    f5Title: "Xshell 迁移与快捷命令", f5Text: "导入 Xshell SSH 会话，并管理全局、文件夹或会话级快捷命令。",
+    f6Title: "本地优先与透明安全", f6Text: "会话保存在本机，敏感凭据使用 Windows 凭据管理器；AI 请求仅发送到你配置的模型服务。",
+    workflowEyebrow: "ONE WORKSPACE", workflowHeading: "连接服务器，\n专注完成工作。",
+    workflowBody: "连接服务器、管理终端、浏览远程目录、传输文件，并在需要时使用 AI 辅助操作。OpenShell 让这些工作发生在同一个窗口内。",
     workflowDocs: "阅读使用文档", wf1Title: "连接", wf1Desc: "SSH 会话与安全主机验证",
     wf2Title: "操作", wf2Desc: "终端分屏、搜索和快捷命令", wf3Title: "传输", wf3Desc: "SFTP 管理、远程编辑与任务队列",
-    wf4Title: "扩展", wf4Desc: "可选 AI 辅助与诊断工具", trustEyebrow: "OPEN BY DESIGN", trustHeading: "透明，才能值得信赖。",
+    wf4Title: "辅助", wf4Desc: "全局 AI 助手、终端 AI 与诊断工具", trustEyebrow: "OPEN BY DESIGN", trustHeading: "透明，才能值得信赖。",
     trustIntro: "公开源代码、明确数据流向和发布签名状态。安全不是一句营销口号。",
     trust1Title: "免费开源", trust1Text: "代码公开可审查，开发与发布记录可追溯。",
     trust2Stat: "本地", trust2Title: "本地存储与诊断", trust2Text: "会话数据留在设备上。AI 请求仅在启用并配置模型时发往所选服务。",
@@ -38,23 +38,23 @@ const translations = {
   },
   en: {
     skip: "Skip to main content", navFeatures: "Features", navPreview: "Preview", navTrust: "Privacy & security", navDownload: "Download", headerCta: "Download",
-    heroTag: "Free & open source · Windows x64", heroLine1: "Your servers.", heroLine2: "Your command.",
-    heroDescription: "SSH terminals, SFTP file management, and an optional AI assistant in one workspace. Less friction, more focus.",
+    heroTag: "Free & open source · Windows x64", heroLine1: "Your servers.", heroLine2: "One workspace.",
+    heroDescription: "Bring multi-session SSH, split terminals, SFTP, native Rust ZMODEM and optional AI assistance into one focused Windows workspace.",
     heroDownload: "Download for Windows", heroSource: "View source code", heroTrust: "MIT licensed", heroNoAccount: "No account required",
-    heroLatest: "Get the latest release", previewLabel: "Actual application screenshot", previewAlt: "OpenShell SSH terminal and SFTP file manager interface",
-    featuresEyebrow: "BUILT FOR YOUR WORKFLOW", featuresHeading: "Less switching. More doing.",
-    featuresIntro: "From SSH connections to remote files, streamline daily server work in one lightweight app.",
-    f1Title: "Multi-session SSH terminals", f1Text: "Tabs, side-by-side and stacked splits, and reconnection keep your servers organized.",
-    f2Title: "Built-in SFTP file manager", f2Text: "Upload, download, edit remote files, manage transfers, and preview directory sync without changing apps.",
-    f3Title: "Optional AI assistant", f3Text: "Connect your own model API to work with terminal context. SSH and SFTP work fully without AI configured.",
-    f4Title: "Familiar, efficient tools", f4Text: "Quick commands, terminal search, Xshell import, rz/sz, and trzsz reduce repetitive work.",
-    f5Title: "Local-first by design", f5Text: "Session data stays on your device; sensitive credentials use Windows Credential Manager. Diagnostics are not uploaded automatically.",
-    f6Title: "A focused workspace", f6Text: "Adjustable layouts and bilingual UI keep your terminal front and center.",
-    workflowEyebrow: "ONE WORKSPACE", workflowHeading: "Connect. Work. Ship.\nStay in flow.",
-    workflowBody: "Connect to a server, explore directories, edit configuration and transfer files—all from the same window.",
+    heroLatest: "Get the latest release", previewLabel: "Actual application interface", previewAlt: "OpenShell Windows SSH workspace with terminal and SFTP file management",
+    featuresEyebrow: "BUILT FOR YOUR WORKFLOW", featuresHeading: "Connect. Operate. Transfer.",
+    featuresIntro: "Keep server sessions, remote files, native transfers and optional AI assistance in one workflow.",
+    f1Title: "Multi-session SSH terminals", f1Text: "Manage servers with tabs, horizontal and vertical splits, output search, and reconnection.",
+    f2Title: "Built-in SFTP file manager", f2Text: "Batch transfers, remote editing, directory-sync previews, and transfer cancellation and retry.",
+    f3Title: "Optional AI assistant & Terminal AI", f3Text: "Connect a compatible model API for multi-session tasks or AI assistance inside the active SSH terminal.",
+    f4Title: "Native Rust ZMODEM", f4Text: "Use the Rust-native Windows sidecar for rz/sz; trz/tsz is also supported when installed on the remote host.",
+    f5Title: "Xshell import & quick commands", f5Text: "Import Xshell SSH sessions and manage reusable global, folder, or session-level commands.",
+    f6Title: "Local-first data handling", f6Text: "Sessions stay on your device, credentials use Windows Credential Manager, and AI requests go to the model service you configure.",
+    workflowEyebrow: "ONE WORKSPACE", workflowHeading: "Connect. Operate.\nStay in flow.",
+    workflowBody: "Connect to servers, manage terminals, browse remote files, transfer data and use AI assistance when needed—all in one window.",
     workflowDocs: "Read the documentation", wf1Title: "Connect", wf1Desc: "SSH sessions and host-key verification",
     wf2Title: "Operate", wf2Desc: "Split panes, search and quick commands", wf3Title: "Transfer", wf3Desc: "SFTP, remote editing and transfer queue",
-    wf4Title: "Extend", wf4Desc: "Optional AI support and diagnostics", trustEyebrow: "OPEN BY DESIGN", trustHeading: "Trust starts with transparency.",
+    wf4Title: "Assist", wf4Desc: "Global AI assistant, Terminal AI and diagnostics", trustEyebrow: "OPEN BY DESIGN", trustHeading: "Trust starts with transparency.",
     trustIntro: "Public source code, clear data flows and honest signing disclosures—not just security promises.",
     trust1Title: "Free and open source", trust1Text: "Reviewable source, traceable changes and public release history.",
     trust2Stat: "Local", trust2Title: "Local data and diagnostics", trust2Text: "Sessions stay on your device. AI messages go only to the provider you configure when you use AI.",
@@ -95,12 +95,17 @@ function setLanguage(language) {
   document.querySelectorAll("[data-i18n-alt]").forEach((element) => {
     element.setAttribute("alt", words[element.dataset.i18nAlt] || "");
   });
-  document.querySelector('meta[name="description"]').content = language === "zh"
-    ? "OpenShell — 免费开源的 Windows SSH/SFTP 客户端。多会话、分屏终端、文件传输和可选的 AI 助手。"
-    : "OpenShell is a free, open-source SSH/SFTP client for Windows with tabs, split terminals, file transfer and optional AI assistance.";
+  const description = language === "zh"
+    ? "OpenShell — 免费开源的 Windows SSH 工作空间，集成多会话终端、SFTP、Rust 原生 ZMODEM 与可选 AI 助手。"
+    : "OpenShell is a free, open-source Windows SSH workspace with multi-session terminals, SFTP, native Rust ZMODEM, Xshell import and optional AI assistance.";
   document.title = language === "zh"
-    ? "OpenShell — 轻量、现代的 SSH 工作空间"
-    : "OpenShell — A modern SSH workspace for Windows";
+    ? "OpenShell — AI 辅助的 Windows SSH 工作空间"
+    : "OpenShell — AI-assisted SSH workspace for Windows";
+  document.querySelector('meta[name="description"]').content = description;
+  document.querySelector('meta[property="og:title"]').content = document.title;
+  document.querySelector('meta[property="og:description"]').content = description;
+  document.querySelector('meta[name="twitter:title"]').content = document.title;
+  document.querySelector('meta[name="twitter:description"]').content = description;
   const toggle = document.getElementById("language-toggle");
   toggle.textContent = language === "zh" ? "EN" : "中文";
   toggle.setAttribute("aria-label", language === "zh" ? "Switch to English" : "切换至简体中文");
