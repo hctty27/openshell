@@ -1,92 +1,10 @@
 # OpenShell User Guide
 
-This guide preserves the detailed usage, configuration, transfer, privacy, development, validation, and release information previously maintained in the repository README.
+Detailed instructions for configuring and using OpenShell. For the product overview and downloads, see the [project README](../README.md).
+
+[简体中文](user-guide.zh-CN.md) · [Official website](https://openshell.testnb.me/) · [GitHub Releases](https://github.com/hctty27/openshell/releases/latest)
 
 ---
-
-<div align="center">
-  <img src="build/openshell-icon.svg" alt="OpenShell" width="88" height="88" />
-  <h1>OpenShell</h1>
-  <p><strong>Free, open-source AI-assisted SSH workspace for Windows — multi-session terminals, SFTP, native Rust ZMODEM and Xshell import.</strong></p>
-  <p>
-    <a href="https://github.com/hctty27/openshell/releases/latest"><img src="https://img.shields.io/github/v/release/hctty27/openshell?label=release" alt="Latest release" /></a>
-    <a href="https://github.com/hctty27/openshell/actions/workflows/ci.yml"><img src="https://github.com/hctty27/openshell/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
-    <a href="https://github.com/hctty27/openshell/releases/latest"><img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4" alt="Windows x64" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license" /></a>
-  </p>
-  <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
-  <p>
-    <a href="https://openshell.testnb.me/">Official website</a> ·
-    <a href="https://github.com/hctty27/openshell/releases/latest">Download</a> ·
-    <a href="#quick-start">Quick start</a> ·
-    <a href="CHANGELOG.md">Changelog</a> ·
-    <a href="https://github.com/hctty27/openshell/issues">Report an issue</a>
-  </p>
-</div>
-
-OpenShell is a free, open-source SSH workspace for Windows, built for developers and server administrators. Manage multiple SSH sessions in tabs and split panes, transfer files with SFTP or native Rust ZMODEM (`rz` / `sz`), import Xshell sessions, and optionally use AI assistance for remote operations—all in one desktop app.
-
-**Status:** v1.0 stable release, with ongoing maintenance. Windows x64 installers and portable packages are available. See the [release notes](https://github.com/hctty27/openshell/releases) for the changes and signing status of each build.
-
-**Policies:** [Code signing policy](../CODE_SIGNING_POLICY.md) · [Privacy policy](../PRIVACY.md) · [Third-party license review](third-party-review.md) · [SBOM and binary inventory](sbom.md) · [SignPath application checklist](signpath-application-checklist.md).
-
-## Screenshots
-
-### Workspace overview
-
-![OpenShell workspace overview: SSH sessions, terminal, SFTP and AI assistant](screenshots/01-workspace-overview.png)
-
-### SSH split terminals
-
-![OpenShell multiple SSH sessions in split terminals](screenshots/02-split-terminals.png)
-
-### Global AI assistant
-
-![OpenShell global AI assistant working with selected SSH sessions](screenshots/03-ai-assistant.png)
-
-### SFTP file manager
-
-![OpenShell local and remote SFTP file manager](screenshots/04-sftp-file-manager.png)
-
-### Native Rust ZMODEM
-
-![OpenShell native Rust ZMODEM multi-file transfer with live progress](screenshots/05-native-zmodem-transfer.png)
-
-### Terminal AI with MySQL
-
-![OpenShell Terminal AI interacting with MySQL in the active SSH terminal](screenshots/06-terminal-ai-database.png)
-
-## Why OpenShell
-
-- **Keep multiple servers in view.** Organize SSH sessions, rearrange tabs, split terminals, and reconnect without rebuilding your workspace.
-- **Manage files without switching apps.** Browse local and remote files, edit remote text, queue transfers, and preview one-way directory sync with SFTP.
-- **Use AI when it helps.** Configure your own compatible model API for a global assistant or Terminal AI; SSH and SFTP remain fully usable without AI.
-- **Transfer through a native Windows engine.** Windows uses OpenShell's Rust-native ZMODEM sidecar for `rz` / `sz`, with `trz` / `tsz` also supported when installed on the remote host.
-
-## Highlights
-
-| Area | What you can do |
-| --- | --- |
-| SSH workspace | Manage multiple SSH sessions with tabs, duplicate connections, drag-reordering, horizontal or vertical splits, output search, and interactive programs such as vim and top. |
-| AI assistance | Configure an OpenAI-compatible provider and model for the global AI assistant or Terminal AI. Target selected connected sessions or work with the active terminal. |
-| SFTP | Browse local and remote files, batch upload and download, resume transfers, edit remote text, preview one-way directory sync, and manage permissions. |
-| Native file transfer | Use the Rust-native Windows ZMODEM engine for `rz` / `sz`; use `trz` / `tsz` when `trzsz` is installed on the remote host. |
-| Session management | Organize nested folders, search and edit sessions, authenticate with a password or local private key, import Xshell sessions, and export session backups. |
-| Quick commands | Save reusable commands with search, ordering, and global, folder, or session scope. Line breaks control when commands execute. |
-| Appearance and language | Switch between English and Simplified Chinese, light and dark application themes, and independent classic, dark, or light terminal palettes. |
-
-## Download
-
-Get the latest build from **[GitHub Releases](https://github.com/hctty27/openshell/releases/latest)**.
-
-| Package | Use |
-| --- | --- |
-| `OpenShell-vX.Y.Z-windows-x64-Setup.exe` | Install OpenShell on Windows. |
-| `OpenShell-vX.Y.Z-windows-x64-portable.zip` | Extract the entire archive and run `OpenShell-vX.Y.Z.exe`. Keep the bundled `zmodem` directory beside it. |
-
-The application requires [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). The local terminal fallback uses Windows ConPTY. PowerShell 7 and WSL must be installed separately if you select them.
-
-The portable package skips installation; settings and credentials still use your Windows user profile.
 
 ## Quick start
 
