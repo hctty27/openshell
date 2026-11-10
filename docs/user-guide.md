@@ -28,33 +28,33 @@ OpenShell is a free, open-source SSH workspace for Windows, built for developers
 
 **Status:** v1.0 stable release, with ongoing maintenance. Windows x64 installers and portable packages are available. See the [release notes](https://github.com/hctty27/openshell/releases) for the changes and signing status of each build.
 
-**Policies:** [Code signing policy](CODE_SIGNING_POLICY.md) · [Privacy policy](PRIVACY.md) · [Third-party license review](docs/third-party-review.md) · [SBOM and binary inventory](docs/sbom.md) · [SignPath application checklist](docs/signpath-application-checklist.md).
+**Policies:** [Code signing policy](../CODE_SIGNING_POLICY.md) · [Privacy policy](../PRIVACY.md) · [Third-party license review](third-party-review.md) · [SBOM and binary inventory](sbom.md) · [SignPath application checklist](signpath-application-checklist.md).
 
 ## Screenshots
 
 ### Workspace overview
 
-![OpenShell workspace overview: SSH sessions, terminal, SFTP and AI assistant](docs/screenshots/01-workspace-overview.png)
+![OpenShell workspace overview: SSH sessions, terminal, SFTP and AI assistant](screenshots/01-workspace-overview.png)
 
 ### SSH split terminals
 
-![OpenShell multiple SSH sessions in split terminals](docs/screenshots/02-split-terminals.png)
+![OpenShell multiple SSH sessions in split terminals](screenshots/02-split-terminals.png)
 
 ### Global AI assistant
 
-![OpenShell global AI assistant working with selected SSH sessions](docs/screenshots/03-ai-assistant.png)
+![OpenShell global AI assistant working with selected SSH sessions](screenshots/03-ai-assistant.png)
 
 ### SFTP file manager
 
-![OpenShell local and remote SFTP file manager](docs/screenshots/04-sftp-file-manager.png)
+![OpenShell local and remote SFTP file manager](screenshots/04-sftp-file-manager.png)
 
 ### Native Rust ZMODEM
 
-![OpenShell native Rust ZMODEM multi-file transfer with live progress](docs/screenshots/05-native-zmodem-transfer.png)
+![OpenShell native Rust ZMODEM multi-file transfer with live progress](screenshots/05-native-zmodem-transfer.png)
 
 ### Terminal AI with MySQL
 
-![OpenShell Terminal AI interacting with MySQL in the active SSH terminal](docs/screenshots/06-terminal-ai-database.png)
+![OpenShell Terminal AI interacting with MySQL in the active SSH terminal](screenshots/06-terminal-ai-database.png)
 
 ## Why OpenShell
 
@@ -114,7 +114,7 @@ Configure one or more model profiles in **Settings → AI**. Each profile uses a
 - **Terminal AI:** work with the active SSH terminal. Supported interactive workflows include MySQL/MariaDB, Redis, PostgreSQL (`psql`), and Python. Current-terminal execution is limited to the active session.
 - **Execution control:** choose review-before-execution or fully automatic mode. Terminal readiness is checked before commands are sent; when a safe shell state cannot be verified, execution is refused. Terminal AI also provides a take-control action to stop AI operation and return control to the user.
 
-AI prompts and the context needed for a request are sent to the model provider you configured when you use AI. Review the [privacy policy](PRIVACY.md) and your provider's data-handling terms before sending sensitive information.
+AI prompts and the context needed for a request are sent to the model provider you configured when you use AI. Review the [privacy policy](../PRIVACY.md) and your provider's data-handling terms before sending sensitive information.
 
 ## Files and transfers
 
@@ -186,7 +186,7 @@ OpenShell connects to configured SSH/SFTP servers when requested. Legacy AI conf
 
 **Stack:** Go · Wails v3.1.0 · React · TypeScript · xterm.js · SQLite.
 
-Use a Windows development environment with Go 1.26+, a current Node.js 22 release compatible with the locked Vite version, npm, and WebView2. Dependency versions are recorded in [go.mod](go.mod) and [frontend/package-lock.json](frontend/package-lock.json).
+Use a Windows development environment with Go 1.26+, a current Node.js 22 release compatible with the locked Vite version, npm, and WebView2. Dependency versions are recorded in [go.mod](../go.mod) and [frontend/package-lock.json](../frontend/package-lock.json).
 
 ```sh
 git clone https://github.com/hctty27/openshell.git
@@ -206,7 +206,7 @@ wails3 generate syso -manifest build/windows/wails.exe.manifest -icon build/wind
 go build -tags production -trimpath -ldflags="-H windowsgui -s -w" -o build/bin/OpenShell.exe .
 ```
 
-Output: `build/bin/OpenShell.exe`. Ensure `build/windows/icon.ico` has been generated before building. This build does not package the ZMODEM helpers. For the bundled utilities, run [scripts/prepare_native_zmodem_windows.ps1](scripts/prepare_native_zmodem_windows.ps1) in PowerShell after building. The [Windows release workflow](.github/workflows/windows-release.yml) contains the full icon-generation, installer, and portable-package steps.
+Output: `build/bin/OpenShell.exe`. Ensure `build/windows/icon.ico` has been generated before building. This build does not package the ZMODEM helpers. For the bundled utilities, run [scripts/prepare_native_zmodem_windows.ps1](../scripts/prepare_native_zmodem_windows.ps1) in PowerShell after building. The [Windows release workflow](../.github/workflows/windows-release.yml) contains the full icon-generation, installer, and portable-package steps.
 
 <details>
 <summary>Validation and release workflow</summary>
@@ -225,11 +225,11 @@ npx playwright test
 
 Backend tests use controlled SSH servers and mock APIs. Browser tests use a mock Wails bridge and do not replace native Windows acceptance testing.
 
-- [CI](.github/workflows/ci.yml) runs Go race tests, `go vet`, frontend tests, a production frontend build, and selected Chromium regressions on pull requests and `main` pushes.
-- [Windows terminal smoke](.github/workflows/windows-terminal-smoke.yml) covers relevant terminal, SSH, SFTP, and ConPTY pull requests.
-- [Windows release](.github/workflows/windows-release.yml) publishes only after the release marker changes on `main` and CI passes. It retains the three newest Releases plus v1.0.0 and later major-version milestones, keeps older Git tags, and retains final build artifacts for seven days. Manual runs create artifacts without publishing a Release.
+- [CI](../.github/workflows/ci.yml) runs Go race tests, `go vet`, frontend tests, a production frontend build, and selected Chromium regressions on pull requests and `main` pushes.
+- [Windows terminal smoke](../.github/workflows/windows-terminal-smoke.yml) covers relevant terminal, SSH, SFTP, and ConPTY pull requests.
+- [Windows release](../.github/workflows/windows-release.yml) publishes only after the release marker changes on `main` and CI passes. It retains the three newest Releases plus v1.0.0 and later major-version milestones, keeps older Git tags, and retains final build artifacts for seven days. Manual runs create artifacts without publishing a Release.
 
-**Recommended:** Open [Publish OpenShell (one click)](.github/workflows/publish.yml) in GitHub Actions, select `main`, choose `patch` (default), `minor`, or `major`, and click **Run workflow**. It synchronizes the version marker, npm metadata, Windows version info and changelog; commits the release metadata; runs Go/frontend verification on that exact commit; reuses the tested frontend bundle for the Windows build; then publishes the installer and portable ZIP. If packaging fails after version preparation, rerun the workflow to resume the unpublished version without incrementing it twice. Use only one release workflow at a time.
+**Recommended:** Open [Publish OpenShell (one click)](../.github/workflows/publish.yml) in GitHub Actions, select `main`, choose `patch` (default), `minor`, or `major`, and click **Run workflow**. It synchronizes the version marker, npm metadata, Windows version info and changelog; commits the release metadata; runs Go/frontend verification on that exact commit; reuses the tested frontend bundle for the Windows build; then publishes the installer and portable ZIP. If packaging fails after version preparation, rerun the workflow to resume the unpublished version without incrementing it twice. Use only one release workflow at a time.
 
 **Legacy/manual:** You may still update `.github/release-version.txt`, `frontend/package.json`, `frontend/package-lock.json`, and `CHANGELOG.md` together, then merge to `main`; the existing release-marker CI path remains supported.
 
@@ -242,13 +242,13 @@ Backend tests use controlled SSH servers and mock APIs. Browser tests use a mock
 - Native Windows input methods, clipboard behavior, credential storage, transfer edge cases, and performance require real-device validation. Tool-call compatibility depends on your API provider and model.
 - Terminal-context attachments are limited to 200 lines / 32 KiB. A preview may omit a truncation notice if older terminal history was already trimmed.
 
-For implementation details and verification scope, see [Windows acceptance](docs/windows-acceptance.md), [stability acceptance](docs/stability-acceptance.md), and [internationalization](docs/internationalization.md). These supporting documents currently include Chinese content.
+For implementation details and verification scope, see [Windows acceptance](windows-acceptance.md), [stability acceptance](stability-acceptance.md), and [internationalization](internationalization.md). These supporting documents currently include Chinese content.
 
 Bug reports and focused pull requests are welcome. Include the OpenShell version, Windows version, reproduction steps, and redacted logs in an [issue](https://github.com/hctty27/openshell/issues). Keep the English and Chinese READMEs aligned when changing documented behavior.
 
 ## License and code signing
 
-OpenShell is licensed under the **[MIT License](LICENSE)**. Bundled third-party components retain their own licenses; The Windows ZMODEM distribution includes only first-party launchers and the native Rust sidecar, not legacy lrzsz/MSYS2 binaries. Go, Rust and npm dependencies retain their respective third-party licenses; see the [SBOM](docs/sbom.md).
+OpenShell is licensed under the **[MIT License](../LICENSE)**. Bundled third-party components retain their own licenses; The Windows ZMODEM distribution includes only first-party launchers and the native Rust sidecar, not legacy lrzsz/MSYS2 binaries. Go, Rust and npm dependencies retain their respective third-party licenses; see the [SBOM](sbom.md).
 
 Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). This is the intended provider attribution **if the application is approved and signing is enabled**. The original v1.0.0 Windows downloads are unsigned. Foundation approval and the first signed release have not been confirmed; consult each Release for the actual signing state.
 
