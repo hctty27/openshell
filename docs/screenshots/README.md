@@ -1,34 +1,36 @@
-# OpenShell screenshot refresh
+# OpenShell screenshot assets
 
-This folder contains real screenshots of the shipped Windows application. Do not use generated or composited mock interfaces.
+This directory contains the approved screenshots of the shipped Windows application. The six product screenshots are the original PNG files supplied by the maintainer.
 
-## Capture baseline
+## Approved assets
 
-- Capture from the current stable Windows build after confirming the feature works.
-- Use a 1600 × 900 (16:9) application window where possible.
-- Prefer WebP, quality 82–88, with a target of 300–450 KB per image.
-- Keep the complete application frame visible for the main overview; crop only when a detail view needs a closer look.
-- Use a dedicated demo server and synthetic file names. Remove real hostnames, IP addresses, usernames, file paths, tokens, API keys, database contents, and personal data.
-- Keep the same application theme, window size, and scale across the set.
-- Do not add fake UI, fake progress, fabricated model output, or unsupported feature claims.
+| File | Scene | Dimensions |
+| --- | --- | ---: |
+| `01-workspace-overview.png` | Main workspace: SSH, SFTP and AI | 1600 × 900 |
+| `02-split-terminals.png` | Multiple SSH sessions in split panes | 1600 × 900 |
+| `03-ai-assistant.png` | Global AI assistant | 1600 × 900 |
+| `04-sftp-file-manager.png` | Local and remote SFTP manager | 1600 × 900 |
+| `05-native-zmodem-transfer.png` | Native Rust ZMODEM multi-file transfer | 1600 × 900 |
+| `06-terminal-ai-database.png` | Terminal AI with MySQL | 1600 × 900 |
+| `github-social-preview.png` | GitHub and website social preview | 1280 × 640 |
 
-## Required capture set
+## Asset handling
 
-| File | Scene | What it should prove |
-| --- | --- | --- |
-| `01-workspace-overview.webp` | Main workspace | Session tree, SSH tabs, terminal, and overall application layout |
-| `02-split-terminals.webp` | Split workspace | Two real SSH sessions in horizontal or vertical split view |
-| `03-ai-assistant.webp` | Global AI assistant | Configured model label, selected SSH session(s), and a short non-sensitive task/result |
-| `04-sftp-file-manager.webp` | SFTP manager | Local and remote panes, multi-selection, and transfer queue |
-| `05-native-zmodem-transfer.webp` | Transfer center | Real multi-file `rz` / `sz` transfer with file names, sizes, and progress |
-| `06-terminal-ai-database.webp` | Terminal AI | A safe read-only interaction in MySQL, Redis, PostgreSQL (`psql`), or Python |
+- Keep the six approved product screenshots byte-for-byte as supplied.
+- Do not redact, blur, crop, retouch, composite, or re-encode these approved images.
+- Do not replace the real application interface with generated or mock UI.
+- Link to the PNG files directly from the README and the website.
+- The website is deployed from the `website/` directory, so it references the repository screenshots through `raw.githubusercontent.com`.
+- The social preview is a separate 1280 × 640 PNG under 1 MB. The website uses it for Open Graph and Twitter cards; GitHub repository Social Preview is configured separately in repository settings.
 
-## Where each image is used
+## Public placements
 
-- `01-workspace-overview.webp`: README first screenshot and website hero.
-- `02-split-terminals.webp`, `03-ai-assistant.webp`, `04-sftp-file-manager.webp`, `05-native-zmodem-transfer.webp`, `06-terminal-ai-database.webp`: README feature gallery and website showcase.
-- GitHub repository Social Preview: a separate 1280 × 640 PNG/JPG/GIF under 1 MB. Prefer the approved workspace screenshot with a concise brand treatment; this image is uploaded in repository Settings and is separate from the website's `og:image`.
+- `01-workspace-overview.png`: README lead image and website hero.
+- `02-split-terminals.png`: SSH split-terminal feature.
+- `03-ai-assistant.png`: global AI assistant feature.
+- `04-sftp-file-manager.png`: SFTP file manager feature.
+- `05-native-zmodem-transfer.png`: native ZMODEM feature.
+- `06-terminal-ai-database.png`: Terminal AI feature.
+- `github-social-preview.png`: website Open Graph / Twitter image and GitHub repository Social Preview upload.
 
-## Current status
-
-The existing `02-ssh-sftp.webp` is retained so current README and website links do not break. It was added on 2026-10-26 and predates the v1.0 release and subsequent feature and UI updates. Replace its references only after the new real screenshots have been captured and reviewed. Do not rename or remove it before all public references have moved.
+The legacy `02-ssh-sftp.webp` remains in the repository for backward compatibility, but it is no longer used by the current README or website.
