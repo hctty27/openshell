@@ -8,6 +8,7 @@ import (
     "errors"
     "fmt"
     "io"
+    "math"
     "os"
     "path/filepath"
     "runtime"
@@ -25,6 +26,21 @@ const (
     maxOperations = 128
 )
 
+// IMEGeometry contains only UI geometry and coarse focus state, never typed text.
+// Values are CSS pixels from the focused element, not native TSF caret coordinates.
+type IMEGeometry struct {
+    Target string `json:"target"`
+    HasFocus bool `json:"hasFocus"`
+    Composing bool `json:"composing"`
+    RectX float64 `json:"rectX"`
+    RectY float64 `json:"rectY"`
+    RectWidth float64 `json:"rectWidth"`
+    RectHeight float64 `json:"rectHeight"`
+    ScreenX float64 `json:"screenX"`
+    ScreenY float64 `json:"screenY"`
+    DPR float64 `json:"dpr"`
+}
+
 type Event struct {
     Time time.Time `json:"time"`
     Level string `json:"level"`
@@ -34,6 +50,7 @@ type Event struct {
     Code string `json:"code,omitempty"`
     DurationMS float64 `json:"durationMs,omitempty"`
     Count int `json:"count,omitempty"`
+    IME *IMEGeometry `json:"ime,omitempty"`
 }
 
 type OperationStat struct {
@@ -135,8 +152,36 @@ func allowedOperation(module, operation string) bool {
         return operation == "xterm_write_batch"
     case "frontend":
         return operation == "uncaught_error" || operation == "unhandled_rejection"
+    case "ime":
+        switch operation {
+        case "window_active", "window_inactive", "window_set_focus", "window_kill_focus",
+            "dom_focus", "dom_blur", "focus_change", "composition_start", "composition_end",
+            "after_activation":
+            return true
+        }
     }
     return false
+}
+
+func sanitizeIMEGeometry(input *IMEGeometry) *IMEGeometry {
+    if input == nil { return nil }
+    result := *input
+    switch result.Target {
+    case "xterm", "input", "textarea", "contenteditable", "other", "none":
+    default: result.Target = "other"
+    }
+    bounded := func(value float64, max float64) float64 {
+        if math.IsNaN(value) || math.IsInf(value, 0) || math.Abs(value) > max { return 0 }
+        return math.Round(value*100) / 100
+    }
+    result.RectX = bounded(result.RectX, 100000)
+    result.RectY = bounded(result.RectY, 100000)
+    result.RectWidth = bounded(result.RectWidth, 100000)
+    result.RectHeight = bounded(result.RectHeight, 100000)
+    result.ScreenX = bounded(result.ScreenX, 100000)
+    result.ScreenY = bounded(result.ScreenY, 100000)
+    result.DPR = bounded(result.DPR, 10)
+    return &result
 }
 
 func normalize(input Event) Event {
@@ -161,6 +206,7 @@ func normalize(input Event) Event {
     if result.Count < 0 { result.Count = 0 }
     if result.Count > 1000000 { result.Count = 1000000 }
     if result.DurationMS < 0 || result.DurationMS > 600000 { result.DurationMS = 0 }
+    if result.Module == "ime" { result.IME = sanitizeIMEGeometry(input.IME) }
     switch result.Status {
     case "error": result.Level = "ERROR"
     case "slow": result.Level = "WARN"
