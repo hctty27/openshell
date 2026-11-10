@@ -88,13 +88,25 @@ h1, h2, h3, p { margin-top: 0; }
 .feature-icon svg, .download-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; stroke-linecap: round; }
 .feature-card-primary { grid-column: span 2; min-height: 245px; padding-right: 45%; }
 .feature-card-primary p { max-width: 330px; }
-.terminal-visual { position: absolute; right: 0; bottom: 0; top: 56px; width: 42%; background: #111a15; border-left: 1px solid #dce5d5; border-top: 1px solid #dce5d5; border-top-left-radius: 9px; padding: 14px 15px; color: #9eb1a0; }
-.terminal-visual div { font-size: 9px; border-bottom: 1px solid rgba(174,198,180,.12); padding-bottom: 10px; white-space: nowrap; }
-.terminal-visual b { color: #c7f36b; font-size: 8px; }
-.terminal-visual code { display: block; margin-top: 17px; font-size: 10px; white-space: nowrap; color: #91a394; }
-.terminal-visual code em { color: #c7f36b; font-style: normal; margin-right: 7px; }
-.terminal-visual code span { color: #87998b; }
-.terminal-visual code .green { color: #c7f36b; }
+.terminal-visual {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  top: 56px;
+  width: 42%;
+  overflow: hidden;
+  background: #101713;
+  border-left: 1px solid #dce5d5;
+  border-top: 1px solid #dce5d5;
+  border-top-left-radius: 9px;
+}
+.terminal-visual img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left top;
+}
 .workflow-section { padding: 88px 0 94px; border-top: 1px solid #e5e9e2; background: #f5f6f2; }
 .workflow { display: grid; grid-template-columns: 1fr 1fr; gap: 85px; align-items: center; }
 .workflow-copy h2 { margin-bottom: 18px; white-space: pre-line; }
