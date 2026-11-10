@@ -28,33 +28,33 @@ OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH 工
 
 **项目状态：** 已进入 v1.0 正式版阶段，持续维护更新。已提供 Windows x64 安装版与便携版，各版本改动和实际签名状态见 [发布说明](https://github.com/hctty27/openshell/releases)。
 
-**政策文件：** [Code signing policy（代码签名政策）](CODE_SIGNING_POLICY.md) · [隐私政策](PRIVACY.md) · [第三方组件授权审查](docs/third-party-review.md) · [SBOM 与二进制清单](docs/sbom.md) · [SignPath 申请清单](docs/signpath-application-checklist.md)。
+**政策文件：** [Code signing policy（代码签名政策）](../CODE_SIGNING_POLICY.md) · [隐私政策](../PRIVACY.md) · [第三方组件授权审查](third-party-review.md) · [SBOM 与二进制清单](sbom.md) · [SignPath 申请清单](signpath-application-checklist.md)。
 
 ## 界面预览
 
 ### 主工作空间
 
-![OpenShell 主工作空间：SSH 会话、终端、SFTP 与 AI 助手](docs/screenshots/01-workspace-overview.png)
+![OpenShell 主工作空间：SSH 会话、终端、SFTP 与 AI 助手](screenshots/01-workspace-overview.png)
 
 ### SSH 多会话分屏
 
-![OpenShell 多 SSH 会话分屏界面](docs/screenshots/02-split-terminals.png)
+![OpenShell 多 SSH 会话分屏界面](screenshots/02-split-terminals.png)
 
 ### 全局 AI 助手
 
-![OpenShell 全局 AI 助手同时处理选中的 SSH 会话](docs/screenshots/03-ai-assistant.png)
+![OpenShell 全局 AI 助手同时处理选中的 SSH 会话](screenshots/03-ai-assistant.png)
 
 ### SFTP 文件管理
 
-![OpenShell 本地与远程 SFTP 文件管理界面](docs/screenshots/04-sftp-file-manager.png)
+![OpenShell 本地与远程 SFTP 文件管理界面](screenshots/04-sftp-file-manager.png)
 
 ### Rust 原生 ZMODEM
 
-![OpenShell Rust 原生 ZMODEM 多文件传输与实时进度](docs/screenshots/05-native-zmodem-transfer.png)
+![OpenShell Rust 原生 ZMODEM 多文件传输与实时进度](screenshots/05-native-zmodem-transfer.png)
 
 ### 终端 AI + MySQL
 
-![OpenShell 在当前 SSH 终端中使用终端 AI 交互 MySQL](docs/screenshots/06-terminal-ai-database.png)
+![OpenShell 在当前 SSH 终端中使用终端 AI 交互 MySQL](screenshots/06-terminal-ai-database.png)
 
 ## 为什么选择 OpenShell
 
@@ -114,7 +114,7 @@ OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH 工
 - **终端 AI：** 在当前激活的 SSH 终端中协助操作，支持 MySQL/MariaDB、Redis、PostgreSQL（`psql`）和 Python 等交互环境。当前终端模式仅针对当前激活会话。
 - **执行控制：** 可选择执行前审查或完全自动模式。发送命令前会检查终端状态；无法确认 Shell 安全就绪时会拒绝执行。终端 AI 提供「接管终端」操作，可随时停止 AI 并恢复手动控制。
 
-使用 AI 时，请求所需的提示词和上下文会发送到你配置的模型服务。发送敏感信息前，请阅读[隐私政策](PRIVACY.md)及所选服务商的数据处理条款。
+使用 AI 时，请求所需的提示词和上下文会发送到你配置的模型服务。发送敏感信息前，请阅读[隐私政策](../PRIVACY.md)及所选服务商的数据处理条款。
 
 ## 文件管理与传输
 
@@ -186,7 +186,7 @@ OpenShell 仅按用户操作连接到配置的 SSH/SFTP 服务器。旧版 AI �
 
 **技术栈：** Go · Wails v3.1.0 · React · TypeScript · xterm.js · SQLite。
 
-请使用 Windows 开发环境，并准备 Go 1.26+、满足锁定 Vite 版本要求的较新 Node.js 22、npm 和 WebView2。依赖版本见 [go.mod](go.mod) 与 [frontend/package-lock.json](frontend/package-lock.json)。
+请使用 Windows 开发环境，并准备 Go 1.26+、满足锁定 Vite 版本要求的较新 Node.js 22、npm 和 WebView2。依赖版本见 [go.mod](../go.mod) 与 [frontend/package-lock.json](../frontend/package-lock.json)。
 
 ```sh
 git clone https://github.com/hctty27/openshell.git
@@ -206,7 +206,7 @@ wails3 generate syso -manifest build/windows/wails.exe.manifest -icon build/wind
 go build -tags production -trimpath -ldflags="-H windowsgui -s -w" -o build/bin/OpenShell.exe .
 ```
 
-产物为 `build/bin/OpenShell.exe`，构建前需要生成 `build/windows/icon.ico`。以上命令不打包 ZMODEM 工具；需要时在构建后通过 PowerShell 运行 [scripts/prepare_native_zmodem_windows.ps1](scripts/prepare_native_zmodem_windows.ps1)。完整图标生成、安装版与便携版打包流程见 [Windows 发布工作流](.github/workflows/windows-release.yml)。
+产物为 `build/bin/OpenShell.exe`，构建前需要生成 `build/windows/icon.ico`。以上命令不打包 ZMODEM 工具；需要时在构建后通过 PowerShell 运行 [scripts/prepare_native_zmodem_windows.ps1](../scripts/prepare_native_zmodem_windows.ps1)。完整图标生成、安装版与便携版打包流程见 [Windows 发布工作流](../.github/workflows/windows-release.yml)。
 
 <details>
 <summary>验证与发布流程</summary>
@@ -225,11 +225,11 @@ npx playwright test
 
 后端测试使用可控 SSH 服务与模拟 API。浏览器测试使用模拟 Wails 桥接，不能替代 Windows 原生验收。
 
-- [CI](.github/workflows/ci.yml)：PR 和 `main` 推送运行 Go race 检测、`go vet`、前端测试、生产构建及选定的 Chromium 回归。
-- [Windows terminal smoke](.github/workflows/windows-terminal-smoke.yml)：对终端、SSH、SFTP、ConPTY 相关 PR 执行 Windows 冒烟验证。
-- [Windows release](.github/workflows/windows-release.yml)：只有 `main` 的版本标记变化且 CI 通过后才正式发布。保留最近 3 个 Release 及 v1.0.0 等大版本里程碑，旧 Git Tag 不删除，最终构建产物保留 7 天。手动运行仅生成 Artifacts，不发布 Release。
+- [CI](../.github/workflows/ci.yml)：PR 和 `main` 推送运行 Go race 检测、`go vet`、前端测试、生产构建及选定的 Chromium 回归。
+- [Windows terminal smoke](../.github/workflows/windows-terminal-smoke.yml)：对终端、SSH、SFTP、ConPTY 相关 PR 执行 Windows 冒烟验证。
+- [Windows release](../.github/workflows/windows-release.yml)：只有 `main` 的版本标记变化且 CI 通过后才正式发布。保留最近 3 个 Release 及 v1.0.0 等大版本里程碑，旧 Git Tag 不删除，最终构建产物保留 7 天。手动运行仅生成 Artifacts，不发布 Release。
 
-**推荐一键发布：** 打开 GitHub Actions 中的 [Publish OpenShell (one click)](.github/workflows/publish.yml)，选择 `main` 分支，默认 `patch`（也可选 `minor` / `major`），点击 **Run workflow**。工作流自动同步版本标记、npm 版本文件、Windows 版本信息和更新日志，提交版本变更，并在固定提交上执行 Go / 前端验证；Windows 构建复用已验证的前端产物，最后发布安装包和便携 ZIP。若版本已准备好但打包失败，再次运行将继续发布该版本，不会重复升级版本号。请勿同时运行多个发布流程。
+**推荐一键发布：** 打开 GitHub Actions 中的 [Publish OpenShell (one click)](../.github/workflows/publish.yml)，选择 `main` 分支，默认 `patch`（也可选 `minor` / `major`），点击 **Run workflow**。工作流自动同步版本标记、npm 版本文件、Windows 版本信息和更新日志，提交版本变更，并在固定提交上执行 Go / 前端验证；Windows 构建复用已验证的前端产物，最后发布安装包和便携 ZIP。若版本已准备好但打包失败，再次运行将继续发布该版本，不会重复升级版本号。请勿同时运行多个发布流程。
 
 **兼容原有方式：** 仍可手动同步 `.github/release-version.txt`、`frontend/package.json`、`frontend/package-lock.json`、`CHANGELOG.md`，合并到 `main` 后沿用版本标记触发的 CI 发布。
 
@@ -242,13 +242,13 @@ npx playwright test
 - Windows 原生输入法、剪贴板、凭据存储、异常传输和性能仍需实机验证；工具调用兼容性取决于具体 API 服务商及模型。
 - 终端上下文附件限制为 200 行 / 32 KiB。如果旧终端历史已经被裁剪，预览可能缺少截断提示。
 
-实现细节与验证范围见 [Windows 验收记录](docs/windows-acceptance.md)、[稳定性验收](docs/stability-acceptance.md) 与 [多语言说明](docs/internationalization.md)。
+实现细节与验证范围见 [Windows 验收记录](windows-acceptance.md)、[稳定性验收](stability-acceptance.md) 与 [多语言说明](internationalization.md)。
 
 欢迎提交问题和范围明确的 PR。反馈 [Issue](https://github.com/hctty27/openshell/issues) 时，请附上 OpenShell 版本、Windows 版本、复现步骤及脱敏日志。修改文档中的功能行为时，请同步维护中英文 README。
 
 ## 许可证与代码签名
 
-OpenShell 使用 **[MIT 许可证](LICENSE)**。随包分发的第三方组件遵循各自许可证，Windows 本地 ZMODEM 只分发 Rust sidecar 与自研启动器，不再附带旧版 lrzsz/MSYS2 二进制文件。Go、Rust、npm 第三方依赖仍遵循各自许可证，具体清单见 [SBOM](docs/sbom.md)。
+OpenShell 使用 **[MIT 许可证](../LICENSE)**。随包分发的第三方组件遵循各自许可证，Windows 本地 ZMODEM 只分发 Rust sidecar 与自研启动器，不再附带旧版 lrzsz/MSYS2 二进制文件。Go、Rust、npm 第三方依赖仍遵循各自许可证，具体清单见 [SBOM](sbom.md)。
 
 免费代码签名由 [SignPath.io](https://about.signpath.io/) 提供，证书由 [SignPath Foundation](https://signpath.org/) 提供。 仅在申请获批且签名功能实际启用后适用；原始 **v1.0.0 Windows 安装包和便携版未经签名**，后续各版本应查看 Release 的实际签名状态，不能据此认为 SignPath 已批准。
 
