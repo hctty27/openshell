@@ -26,9 +26,29 @@ OpenShell is a free, open-source SSH workspace for Windows, built for developers
 
 ## Screenshots
 
-**SSH terminal and SFTP file manager**
+### Workspace overview
 
-![OpenShell SSH terminal and SFTP file manager](docs/screenshots/02-ssh-sftp.webp)
+![OpenShell workspace overview: SSH sessions, terminal, SFTP and AI assistant](docs/screenshots/01-workspace-overview.png)
+
+### SSH split terminals
+
+![OpenShell multiple SSH sessions in split terminals](docs/screenshots/02-split-terminals.png)
+
+### Global AI assistant
+
+![OpenShell global AI assistant working with selected SSH sessions](docs/screenshots/03-ai-assistant.png)
+
+### SFTP file manager
+
+![OpenShell local and remote SFTP file manager](docs/screenshots/04-sftp-file-manager.png)
+
+### Native Rust ZMODEM
+
+![OpenShell native Rust ZMODEM multi-file transfer with live progress](docs/screenshots/05-native-zmodem-transfer.png)
+
+### Terminal AI with MySQL
+
+![OpenShell Terminal AI interacting with MySQL in the active SSH terminal](docs/screenshots/06-terminal-ai-database.png)
 
 ## Why OpenShell
 
