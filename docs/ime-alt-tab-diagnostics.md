@@ -15,7 +15,8 @@
 1. 在 Windows WebView2 运行环境下，监听 Wails 窗口激活与焦点事件，以及 DOM focus / composition 事件。
 2. 将输入目标类别、页面焦点状态、输入框或 contenteditable 选区矩形、窗口位置、DPR 写入现有本地诊断日志。
 3. 提供环境变量 `OPENSHELL_IME_VISUAL_HOSTING=1`，**仅用于比较** WebView2 DirectComposition 托管模式。默认值保持原来的 HWND 模式。
-4. 不调用 `blur()`、`focus()`、`MoveFocus()`，不更改输入法行为。
+4. 提供 `OPENSHELL_IME_NATIVE_FRAME=1`，**仅用于比较** Wails 无边框窗口的 DWM 激活路径。默认仍保持现有 Frameless 模式。
+5. 不调用 `blur()`、`focus()`、`MoveFocus()`，不更改输入法行为。
 
 诊断日志**不记录**输入文本、选中内容、文件路径、服务器信息或按键。仅存储光标所处控件的几何坐标、粗分类和系统事件。DOM 矩形不等于 Windows TSF 的原生候选窗口矩形。
 
@@ -58,6 +59,20 @@ $env:OPENSHELL_IME_VISUAL_HOSTING = "1"
 
 按照测试 A 的相同步骤复测并导出第二份 ZIP。此模式只是对照实验，可能影响窗口拖拽、命中检测或其他非客户端区域交互；任何异常都应视为测试失败，而非推荐启用。
 
+## 测试 C：系统原生窗口边框
+
+彻底退出 OpenShell 后，恢复 HWND 托管，但使用原生窗口边框：
+
+```powershell
+$env:OPENSHELL_IME_VISUAL_HOSTING = "0"
+$env:OPENSHELL_IME_NATIVE_FRAME = "1"
+.\\build\\bin\\OpenShell.exe
+```
+
+由于应用内部还包含自己的标题栏，本模式可能出现双标题栏，仅供问题隔离。不应作为正式发行的 UI。
+
+这个实验用于验证 Wails 在 `Frameless=true` 时的 `WM_ACTIVATE` → DWM 边框扩展路径是否与候选框错位有关。Windows 默认边框正常不能单独证明 DWM 就是根因。
+
 ## 如何解读日志
 
 在导出的 `logs/app.jsonl` 中查找 `"module":"ime"`。常见事件：
@@ -83,6 +98,7 @@ $env:OPENSHELL_IME_VISUAL_HOSTING = "1"
 
 - **若页面输入框 rect 正确但候选框在 (0,0)：** 优先检查 WebView2/TSF 原生 caret 同步，继续验证原生焦点时机，不再叠加前端 blur/focus。
 - **若仅默认 HWND 失败而 Visual Hosting 不失败：** 值得进一步研究 WebView2 托管路径；还必须确保输入、鼠标、拖拽和窗口调整无回归。
-- **若两种模式都失败：** 暂不更换托管模式，收集具体 Windows 版本、WebView2 Runtime 版本以及同屏幕/跨屏幕测试数据。
+- **若原生窗口边框正常但默认 Frameless 失败：** 进一步检查无边框模式下的 DWM 激活与 WebView2 焦点事件时序，避免直接替换正式 UI。
+- **若两种托管模式都失败：** 暂不更换托管模式，收集具体 Windows 版本、WebView2 Runtime 版本以及同屏幕/跨屏幕测试数据。
 
 这个分支只完成无侵入诊断和托管模式 A/B，**尚未修改 Wails 内部同步 MoveFocus 的执行时机，也没有 Windows 实机验收结果。**
