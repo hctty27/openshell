@@ -27,7 +27,7 @@ func currentDiagnostics() (*diagnostics.Manager, error) {
     return diagnosticManager, diagnosticError
 }
 
-// DiagnosticsRecordBatch accepts only categorical metadata, never terminal contents.
+// DiagnosticsRecordBatch accepts categorical metadata and bounded IME UI geometry, never typed text or terminal contents.
 func (a *App) DiagnosticsRecordBatch(events []diagnostics.Event) {
     manager, err := currentDiagnostics()
     if err == nil { manager.RecordBatch(events) }
