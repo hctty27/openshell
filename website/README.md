@@ -43,7 +43,7 @@ node --check website/app.js
 ## 部署行为
 
 - 静态产物：`website/index.html`、`styles.css`、`app.js`、`assets/logo.svg`、`_headers`、`robots.txt`、`sitemap.xml`。
-- 产品截图直接引用仓库公开的 `docs/screenshots/*.png`，不复制二进制文件到 `website/`。官网 Hero 使用 `01-workspace-overview.png`，产品展示区使用六张真实界面截图；Open Graph 与 Twitter 卡片使用 `github-social-preview.png`。当前已批准截图按原始 PNG 保留，不做打码、模糊、裁剪或二次编码。素材清单见 [截图资源说明](../docs/screenshots/README.md)。
+- 产品截图直接引用仓库公开的 `docs/screenshots/*.png`，不复制二进制文件到 `website/`。官网 Hero 使用 `01-workspace-overview.png`，SSH 功能卡片使用 `02-split-terminals.png`，产品展示区使用 `03` 至 `06` 四张真实界面截图；Open Graph 与 Twitter 卡片使用 `github-social-preview.png`。当前已批准截图按原始 PNG 保留，不做打码、模糊、裁剪或二次编码。素材清单见 [截图资源说明](../docs/screenshots/README.md)。
 - 下载入口优先使用 GitHub 最新**非预发布** Release 的 Windows x64 安装版和便携版文件；GitHub API 请求超时/限流时回退到 `/releases/latest`。网站不处理软件分发文件，也不会上传用户数据。
 - 中/英文内容在 `app.js` 的 `translations` 中维护；首次访问按照浏览器语言选择，也可以手动切换，偏好仅存浏览器本地。
 - 代码签名状态不应根据版本号自行推断。网站不再把 `v1.0.0` 的历史状态写成当前最新版本状态；所有版本均以对应 GitHub Release 的签名声明及实际 Authenticode 验证为准。
