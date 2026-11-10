@@ -1,7 +1,6 @@
 import { t } from "./i18n";
 import { Call, Events } from "@wailsio/runtime";
 import { installGlobalErrorDiagnostics, isTrackedBackendOperation, recordBackendOperation } from "./features/diagnostics/collector";
-import { installImeDiagnostics } from "./features/ime/imeDiagnostics";
 import type {
   AppState,
   SessionRequest,
@@ -153,4 +152,3 @@ export function listen(name: string, callback: (payload: any) => void): () => vo
 export { errorText } from "./i18n/errors";
 
 installGlobalErrorDiagnostics();
-installImeDiagnostics();
