@@ -26,9 +26,29 @@ OpenShell 是面向开发者与服务器管理员的免费开源 Windows SSH 工
 
 ## 界面预览
 
-**SSH 终端与 SFTP 文件管理**
+### 主工作空间
 
-![OpenShell SSH 终端与 SFTP 文件管理](docs/screenshots/02-ssh-sftp.webp)
+![OpenShell 主工作空间：SSH 会话、终端、SFTP 与 AI 助手](docs/screenshots/01-workspace-overview.png)
+
+### SSH 多会话分屏
+
+![OpenShell 多 SSH 会话分屏界面](docs/screenshots/02-split-terminals.png)
+
+### 全局 AI 助手
+
+![OpenShell 全局 AI 助手同时处理选中的 SSH 会话](docs/screenshots/03-ai-assistant.png)
+
+### SFTP 文件管理
+
+![OpenShell 本地与远程 SFTP 文件管理界面](docs/screenshots/04-sftp-file-manager.png)
+
+### Rust 原生 ZMODEM
+
+![OpenShell Rust 原生 ZMODEM 多文件传输与实时进度](docs/screenshots/05-native-zmodem-transfer.png)
+
+### 终端 AI + MySQL
+
+![OpenShell 在当前 SSH 终端中使用终端 AI 交互 MySQL](docs/screenshots/06-terminal-ai-database.png)
 
 ## 为什么选择 OpenShell
 
