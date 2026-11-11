@@ -43,9 +43,8 @@ const WIRE_READ_BUFFER_SIZE: usize = 32 * 1024;
 const DEFAULT_STREAMING_WINDOW_SUBPACKETS: usize = usize::MAX;
 const MAX_STREAMING_WINDOW_SUBPACKETS: usize = 65_536;
 
-// The native sidecar remains explicitly experimental. The batching strategy
-// defaults to 16 KiB only when this sidecar is invoked; it never enables native
-// rz/sz takeover in the application. An explicit zero restores per-frame flush.
+// Wire batching is independently tunable for the native ZMODEM sidecar.
+// The default coalesces small consecutive writes; zero restores per-frame flush.
 fn parse_wire_batch_bytes(raw: Option<&str>) -> io::Result<usize> {
     let Some(raw) = raw else { return Ok(DEFAULT_EXPERIMENT_BATCH) };
     let bytes = raw.parse::<usize>().map_err(|_| {
@@ -549,8 +548,7 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 // Flush any pending acknowledgement before handling more data.
                 // lrzsz-win32 may stop sending until the control frame arrives.
                 output.flush_pending()?;
-                // poll() borrows receiver; copy into one reusable owned buffer
-                // before file_written() mutably borrows receiver again.
+                // Write the borrowed protocol payload before acknowledging it.
                 let received = data.len();
                 let (file, _, _, bytes, max) = open_file.as_mut().ok_or("unexpected file data")?;
                 *bytes += received as u64;
