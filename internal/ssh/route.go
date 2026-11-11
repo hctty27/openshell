@@ -175,7 +175,18 @@ func (m *Manager) handshake(ctx context.Context, raw net.Conn, addr, user string
   trusted, err := m.keys.Lookup(addr)
   if err != nil { return err }
   if len(trusted) == 0 || string(trusted) != string(key.Marshal()) {
-   hostErr = &HostKeyError{Address: addr, Fingerprint: ssh.FingerprintSHA256(key), Key: key.Marshal(), Changed: len(trusted) != 0}
+   previousFingerprint := ""
+   if previousKey, parseErr := ssh.ParsePublicKey(trusted); parseErr == nil {
+    previousFingerprint = ssh.FingerprintSHA256(previousKey)
+   }
+   hostErr = &HostKeyError{
+    Address: addr,
+    Fingerprint: ssh.FingerprintSHA256(key),
+    PreviousFingerprint: previousFingerprint,
+    Key: append([]byte(nil), key.Marshal()...),
+    PreviousKey: append([]byte(nil), trusted...),
+    Changed: len(trusted) != 0,
+   }
    return hostErr
   }
   return nil
