@@ -113,6 +113,7 @@ type nativeStressOptions struct {
  Workers int `json:"workers"`
  LatencyMS int `json:"latencyMs"`
  WireBatchBytes int `json:"wireBatchBytes"`
+ StreamingWindow string `json:"streamingWindow"`
 }
 
 func readNativeStressOptions(t *testing.T) nativeStressOptions {
@@ -135,6 +136,17 @@ func readNativeStressOptions(t *testing.T) nativeStressOptions {
  opts.Workers = number("OPENSHELL_ZMODEM_STRESS_WORKERS", 3, 1, 4)
  opts.LatencyMS = number("OPENSHELL_ZMODEM_STRESS_LATENCY_MS", 3, 0, 10)
  opts.WireBatchBytes = number("OPENSHELL_ZMODEM_WIRE_BATCH_BYTES", 16*1024, 0, 32*1024)
+ opts.StreamingWindow = os.Getenv("OPENSHELL_ZMODEM_STREAMING_WINDOW")
+ if opts.StreamingWindow == "" {
+  opts.StreamingWindow = "max"
+ }
+ if opts.StreamingWindow != "max" {
+  value, err := strconv.Atoi(opts.StreamingWindow)
+  if err != nil || value < 1 || value > 65_536 {
+   t.Fatalf("invalid OPENSHELL_ZMODEM_STREAMING_WINDOW=%q (valid max or 1..65536)", opts.StreamingWindow)
+  }
+  opts.StreamingWindow = strconv.Itoa(value)
+ }
  return opts
 }
 
