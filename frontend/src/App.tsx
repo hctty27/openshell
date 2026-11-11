@@ -223,8 +223,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
       host: HostChallenge;
       tab: Tab;
       secret: string;
+      confirmed: boolean;
     } | null>(null),
     [login, setLogin] = useState<{ tab: Tab; secret: string } | null>(null);
+  const [fingerprintActionPending, setFingerprintActionPending] = useState(false);
   const [sessionPanels, setSessionPanels] = useState<Record<string, "sftp" | "terminalAI" | null>>({});
   const [terminalAIMounted, setTerminalAIMounted] = useState<Record<string, boolean>>({});
   const terminalHistoryScopes = useRef<Record<string, string>>({});
@@ -602,7 +604,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
         return;
       }
       if (result.challenge) {
-        setChallenge({ host: result.challenge, tab, secret });
+        setChallenge({ host: result.challenge, tab, secret, confirmed: false });
         update(tab.id, (t) => ({
           ...t,
           ref: result.ref,
@@ -654,7 +656,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     update,
     enabled: state.autoReconnect !== false,
     maxReconnectAttempts: state.maxReconnectAttempts ?? 10,
-    onChallenge: (host, tab) => setChallenge({ host, tab, secret: "" }),
+    onChallenge: (host, tab) => setChallenge({ host, tab, secret: "", confirmed: false }),
   });
   const autoClosingTabs = useRef(new Set<string>());
   useEffect(() => {
@@ -1687,16 +1689,29 @@ function Workspace({ initialState }: { initialState: AppState }) {
         <ModalSurface
           className="compact-dialog host-fingerprint-dialog"
           aria-label={challenge.host.changed ? tr("common:serverFingerprintChanged") : tr("common:verifyServerFingerprint")}
-          onDismiss={() => setChallenge(null)}
+          onDismiss={() => {
+            if (!fingerprintActionPending) setChallenge(null);
+          }}
           closeOnBackdrop={false}
+          locked={fingerprintActionPending}
         >
-            <ShieldCheck className="dialog-icon" size={25} />
-            <h2>
-              {challenge.host.changed
-                ? tr("common:serverFingerprintChanged")
-                : tr("common:verifyServerFingerprint")}
-            </h2>
-            <p className="muted">{challenge.host.address}</p>
+          <ShieldCheck className="dialog-icon" size={25} />
+          <h2>
+            {challenge.host.changed
+              ? tr("common:serverFingerprintChanged")
+              : tr("common:verifyServerFingerprint")}
+          </h2>
+          <p className="muted">{challenge.host.address}</p>
+          {challenge.host.changed && challenge.host.previousFingerprint && (
+            <div className="fingerprint-section">
+              <span className="fingerprint-label">{tr("common:previousTrustedFingerprint")}</span>
+              <div className="fingerprint-previous">
+                <code>{challenge.host.previousFingerprint}</code>
+              </div>
+            </div>
+          )}
+          <div className="fingerprint-section">
+            <span className="fingerprint-label">{tr("common:presentedFingerprint")}</span>
             <div className="fingerprint-field">
               <code className="fingerprint">{challenge.host.fingerprint}</code>
               <button
@@ -1716,35 +1731,62 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 <Copy size={15} />
               </button>
             </div>
-            <p>
-              {challenge.host.changed
-                ? tr("common:connectionBlockedVerifyWhyTheServerKeyChanged")
-                : tr(
-                    "common:verifyTheFingerprintWithYourServerAdministratorOr",
-                  )}
-            </p>
-            <footer>
-              <button className="secondary" onClick={() => setChallenge(null)}>
-                {tr("common:cancel")}
-              </button>
-              {!challenge.host.changed && (
-                <button
-                  className="primary"
-                  onClick={async () => {
-                    const value = challenge;
-                    setChallenge(null);
-                    try {
-                      await api.TrustHost(value.host.id);
-                      await connect(value.tab, value.secret);
-                    } catch (e) {
-                      notify(e);
-                    }
-                  }}
-                >
-                  {tr("common:trustAndConnect")}
-                </button>
-              )}
-            </footer>
+          </div>
+          <p>
+            {challenge.host.changed
+              ? tr("common:connectionBlockedVerifyWhyTheServerKeyChanged")
+              : tr("common:verifyTheFingerprintWithYourServerAdministratorOr")}
+          </p>
+          {challenge.host.changed && (
+            <label className="fingerprint-confirmation">
+              <input
+                type="checkbox"
+                checked={challenge.confirmed}
+                disabled={fingerprintActionPending}
+                onChange={event => {
+                  const confirmed = event.target.checked;
+                  setChallenge(current => current ? { ...current, confirmed } : current);
+                }}
+              />
+              <span>{tr("common:confirmFingerprintReplacement")}</span>
+            </label>
+          )}
+          <footer>
+            <button
+              className="secondary"
+              disabled={fingerprintActionPending}
+              onClick={() => setChallenge(null)}
+            >
+              {tr("common:cancel")}
+            </button>
+            <button
+              className="primary"
+              disabled={fingerprintActionPending || (challenge.host.changed && !challenge.confirmed)}
+              onClick={async () => {
+                const value = challenge;
+                setFingerprintActionPending(true);
+                try {
+                  if (value.host.changed) {
+                    await api.UpdateHostFingerprint(value.host.id, true);
+                  } else {
+                    await api.TrustHost(value.host.id);
+                  }
+                  setChallenge(null);
+                  await connect(value.tab, value.secret);
+                } catch (error) {
+                  notify(error);
+                } finally {
+                  setFingerprintActionPending(false);
+                }
+              }}
+            >
+              {fingerprintActionPending
+                ? tr("common:updatingFingerprint")
+                : challenge.host.changed
+                  ? tr("common:updateFingerprintAndConnect")
+                  : tr("common:trustAndConnect")}
+            </button>
+          </footer>
         </ModalSurface>
       )}
       <ZmodemFilePicker activeRef={active?.ref ?? undefined} onNotice={notify}

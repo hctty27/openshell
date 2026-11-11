@@ -222,5 +222,10 @@
   "aiEmptyResponse": "AI API returned an empty response",
   "aiExecutionProbeFailed": "Could not determine SSH execution capabilities",
   "sftpInvalidBatchSize": "SFTP batch must contain 1–4000 files",
-  "sftpInvalidConcurrentTransferLimit": "SFTP concurrency must be 1, 2, 3, 4 or 6"
+  "sftpInvalidConcurrentTransferLimit": "SFTP concurrency must be 1, 2, 3, 4 or 6",
+  "fingerprintUpdateRequiresConfirmation": "Explicit confirmation is required before updating a server fingerprint.",
+  "fingerprintUpdateNotAllowed": "This fingerprint challenge cannot replace an existing trusted key.",
+  "fingerprintUpdateConflict": "The saved server fingerprint changed while confirmation was pending. Reconnect and verify it again.",
+  "fingerprintUpdateFailed": "Could not update the trusted server fingerprint.",
+  "fingerprintTrustFailed": "Could not save the server fingerprint."
 }

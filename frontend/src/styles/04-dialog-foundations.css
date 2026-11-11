@@ -225,6 +225,46 @@
   border: 1px solid var(--border);
   background: var(--raised);
 }
+.host-fingerprint-dialog .fingerprint-section {
+  margin-top: 14px;
+}
+.host-fingerprint-dialog .fingerprint-label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.host-fingerprint-dialog .fingerprint-previous {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+}
+.host-fingerprint-dialog .fingerprint-previous code {
+  display: block;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  font: 11px/1.75 "Cascadia Mono", Consolas, monospace;
+}
+.host-fingerprint-dialog .fingerprint-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 16px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.65;
+  cursor: pointer;
+}
+.host-fingerprint-dialog .fingerprint-confirmation input {
+  flex: none;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+.host-fingerprint-dialog footer button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
 .context-dialog {
   width: 650px;
   padding: 0 24px;

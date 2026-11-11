@@ -154,6 +154,30 @@ func (s *Store) Trust(address string, key []byte) error {
 	_, e := s.db.Exec("INSERT INTO hostkeys(address,key)VALUES(?,?) ON CONFLICT(address)DO UPDATE SET key=excluded.key", address, key)
 	return e
 }
+
+func (s *Store) TrustIfAbsent(address string, key []byte) (bool, error) {
+	result, err := s.db.Exec(
+		"INSERT INTO hostkeys(address,key)VALUES(?,?) ON CONFLICT(address)DO NOTHING",
+		address, key,
+	)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	return affected == 1, err
+}
+
+func (s *Store) ReplaceTrustedHostKey(address string, expected, replacement []byte) (bool, error) {
+	result, err := s.db.Exec(
+		"UPDATE hostkeys SET key=? WHERE address=? AND key=?",
+		replacement, address, expected,
+	)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	return affected == 1, err
+}
 func (s *Store) SaveSessionWithSecret(ctx context.Context, v domain.Session, value string, save bool, secret domain.SecretStore) (domain.Session, error) {
 	if e := domain.ValidateSession(v); e != nil {
 		return v, e

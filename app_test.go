@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/hctty27/openshell/internal/domain"
+	sshclient "github.com/hctty27/openshell/internal/ssh"
 	"path/filepath"
 	"testing"
 )
@@ -322,3 +323,154 @@ func TestTerminalClipboardPreferencesPersistAcrossRestart(t *testing.T) {
     }
 }
 
+
+
+func TestTrustHostOnlyAddsFirstFingerprint(t *testing.T) {
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+
+	a.challenges["first"] = &sshclient.HostKeyError{
+		Address: "server:22",
+		Key:     []byte("first-key"),
+	}
+	if err := a.TrustHost("first"); err != nil {
+		t.Fatal(err)
+	}
+	key, err := a.store.Lookup("server:22")
+	if err != nil || string(key) != "first-key" {
+		t.Fatalf("first key not trusted: key=%q err=%v", key, err)
+	}
+
+	a.challenges["racing-first-use"] = &sshclient.HostKeyError{
+		Address: "server:22",
+		Key:     []byte("replacement-key"),
+	}
+	if err := a.TrustHost("racing-first-use"); err == nil {
+		t.Fatal("first-use confirmation overwrote a key added by another connection")
+	}
+	key, err = a.store.Lookup("server:22")
+	if err != nil || string(key) != "first-key" {
+		t.Fatalf("existing key was overwritten: key=%q err=%v", key, err)
+	}
+}
+
+func TestTrustHostAcceptsFingerprintAlreadyTrustedByAnotherTab(t *testing.T) {
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+
+	if err := a.store.Trust("server:22", []byte("same-key")); err != nil {
+		t.Fatal(err)
+	}
+	a.challenges["duplicate"] = &sshclient.HostKeyError{
+		Address: "server:22",
+		Key:     []byte("same-key"),
+	}
+	if err := a.TrustHost("duplicate"); err != nil {
+		t.Fatalf("same key trusted by another tab should be idempotent: %v", err)
+	}
+	if _, ok := a.challenges["duplicate"]; ok {
+		t.Fatal("successful challenge was not consumed")
+	}
+}
+
+func TestUpdateHostFingerprintAcceptsSameKeyAlreadyUpdatedByAnotherChallenge(t *testing.T) {
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+
+	const address = "server:22"
+	if err := a.store.Trust(address, []byte("old-key")); err != nil {
+		t.Fatal(err)
+	}
+	a.challenges["duplicate-change"] = &sshclient.HostKeyError{
+		Address:     address,
+		PreviousKey: []byte("old-key"),
+		Key:         []byte("new-key"),
+		Changed:     true,
+	}
+	if _, err := a.store.ReplaceTrustedHostKey(address, []byte("old-key"), []byte("new-key")); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.UpdateHostFingerprint("duplicate-change", true); err != nil {
+		t.Fatalf("same replacement already applied by another challenge should be idempotent: %v", err)
+	}
+	if _, ok := a.challenges["duplicate-change"]; ok {
+		t.Fatal("successful challenge was not consumed")
+	}
+}
+
+func TestUpdateHostFingerprintRequiresConfirmationAndExpectedOldKey(t *testing.T) {
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+
+	const address = "server:22"
+	if err := a.store.Trust(address, []byte("old-key")); err != nil {
+		t.Fatal(err)
+	}
+	a.challenges["change"] = &sshclient.HostKeyError{
+		Address:     address,
+		Fingerprint: "new-fingerprint",
+		PreviousKey: []byte("old-key"),
+		Key:         []byte("new-key"),
+		Changed:     true,
+	}
+
+	if err := a.UpdateHostFingerprint("change", false); err == nil {
+		t.Fatal("fingerprint update accepted without explicit confirmation")
+	}
+	key, err := a.store.Lookup(address)
+	if err != nil || string(key) != "old-key" {
+		t.Fatalf("unconfirmed update changed key: key=%q err=%v", key, err)
+	}
+
+	if err := a.UpdateHostFingerprint("change", true); err != nil {
+		t.Fatal(err)
+	}
+	key, err = a.store.Lookup(address)
+	if err != nil || string(key) != "new-key" {
+		t.Fatalf("confirmed update not persisted: key=%q err=%v", key, err)
+	}
+	if _, ok := a.challenges["change"]; ok {
+		t.Fatal("successful challenge was not consumed")
+	}
+}
+
+func TestUpdateHostFingerprintRejectsStaleChallenge(t *testing.T) {
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+
+	const address = "server:22"
+	if err := a.store.Trust(address, []byte("old-key")); err != nil {
+		t.Fatal(err)
+	}
+	a.challenges["stale"] = &sshclient.HostKeyError{
+		Address:     address,
+		PreviousKey: []byte("old-key"),
+		Key:         []byte("challenged-key"),
+		Changed:     true,
+	}
+	if err := a.store.Trust(address, []byte("newer-key")); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.UpdateHostFingerprint("stale", true); err == nil {
+		t.Fatal("stale challenge replaced a newer trusted key")
+	}
+	key, err := a.store.Lookup(address)
+	if err != nil || string(key) != "newer-key" {
+		t.Fatalf("stale challenge overwrote trusted key: key=%q err=%v", key, err)
+	}
+}

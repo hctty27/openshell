@@ -104,10 +104,11 @@ type SaveSessionRequest struct {
 	SaveSecret bool           `json:"saveSecret"`
 }
 type HostChallenge struct {
-	ID          string `json:"id"`
-	Address     string `json:"address"`
-	Fingerprint string `json:"fingerprint"`
-	Changed     bool   `json:"changed"`
+	ID                  string `json:"id"`
+	Address             string `json:"address"`
+	Fingerprint         string `json:"fingerprint"`
+	PreviousFingerprint string `json:"previousFingerprint,omitempty"`
+	Changed             bool   `json:"changed"`
 }
 type ConnectResult struct {
 	Ref            domain.ConnectionRef `json:"ref"`
@@ -625,7 +626,10 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 				}
 			}
 			a.mu.Unlock()
-			return ConnectResult{Ref: ref, Challenge: &HostChallenge{ID: id, Address: h.Address, Fingerprint: h.Fingerprint, Changed: h.Changed}}, nil
+			return ConnectResult{Ref: ref, Challenge: &HostChallenge{
+				ID: id, Address: h.Address, Fingerprint: h.Fingerprint,
+				PreviousFingerprint: h.PreviousFingerprint, Changed: h.Changed,
+			}}, nil
 		}
 		return ConnectResult{Ref: ref}, e
 	}
@@ -647,7 +651,6 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 func (a *App) TrustHost(challengeID string) error {
 	a.mu.Lock()
 	h := a.challenges[challengeID]
-	delete(a.challenges, challengeID)
 	a.mu.Unlock()
 	if h == nil {
 		return apperror.New("fingerprintConfirmationExpiredReconnect", nil)
@@ -655,7 +658,61 @@ func (a *App) TrustHost(challengeID string) error {
 	if h.Changed {
 		return apperror.New("fingerprintChangedVerifyTheServerOverwritingTrustedFingerprints", nil)
 	}
-	return a.store.Trust(h.Address, h.Key)
+	created, err := a.store.TrustIfAbsent(h.Address, h.Key)
+	if err != nil {
+		return apperror.Wrap("fingerprintTrustFailed", err, nil)
+	}
+	if !created {
+		current, lookupErr := a.store.Lookup(h.Address)
+		if lookupErr != nil {
+			return apperror.Wrap("fingerprintTrustFailed", lookupErr, nil)
+		}
+		if string(current) != string(h.Key) {
+			return apperror.New("fingerprintUpdateConflict", nil)
+		}
+	}
+	a.mu.Lock()
+	if a.challenges[challengeID] == h {
+		delete(a.challenges, challengeID)
+	}
+	a.mu.Unlock()
+	return nil
+}
+
+// UpdateHostFingerprint replaces a previously trusted key only after explicit
+// confirmation and only if the stored key still matches the challenged key.
+func (a *App) UpdateHostFingerprint(challengeID string, confirmed bool) error {
+	if !confirmed {
+		return apperror.New("fingerprintUpdateRequiresConfirmation", nil)
+	}
+	a.mu.Lock()
+	h := a.challenges[challengeID]
+	a.mu.Unlock()
+	if h == nil {
+		return apperror.New("fingerprintConfirmationExpiredReconnect", nil)
+	}
+	if !h.Changed || len(h.PreviousKey) == 0 {
+		return apperror.New("fingerprintUpdateNotAllowed", nil)
+	}
+	replaced, err := a.store.ReplaceTrustedHostKey(h.Address, h.PreviousKey, h.Key)
+	if err != nil {
+		return apperror.Wrap("fingerprintUpdateFailed", err, nil)
+	}
+	if !replaced {
+		current, lookupErr := a.store.Lookup(h.Address)
+		if lookupErr != nil {
+			return apperror.Wrap("fingerprintUpdateFailed", lookupErr, nil)
+		}
+		if string(current) != string(h.Key) {
+			return apperror.New("fingerprintUpdateConflict", nil)
+		}
+	}
+	a.mu.Lock()
+	if a.challenges[challengeID] == h {
+		delete(a.challenges, challengeID)
+	}
+	a.mu.Unlock()
+	return nil
 }
 func (a *App) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	return a.ssh.OpenTerminal(ref, cols, rows)
