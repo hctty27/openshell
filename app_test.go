@@ -357,6 +357,56 @@ func TestTrustHostOnlyAddsFirstFingerprint(t *testing.T) {
 	}
 }
 
+func TestTrustHostAcceptsFingerprintAlreadyTrustedByAnotherTab(t *testing.T) {
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+
+	if err := a.store.Trust("server:22", []byte("same-key")); err != nil {
+		t.Fatal(err)
+	}
+	a.challenges["duplicate"] = &sshclient.HostKeyError{
+		Address: "server:22",
+		Key:     []byte("same-key"),
+	}
+	if err := a.TrustHost("duplicate"); err != nil {
+		t.Fatalf("same key trusted by another tab should be idempotent: %v", err)
+	}
+	if _, ok := a.challenges["duplicate"]; ok {
+		t.Fatal("successful challenge was not consumed")
+	}
+}
+
+func TestUpdateHostFingerprintAcceptsSameKeyAlreadyUpdatedByAnotherChallenge(t *testing.T) {
+	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.shutdown(context.Background())
+
+	const address = "server:22"
+	if err := a.store.Trust(address, []byte("old-key")); err != nil {
+		t.Fatal(err)
+	}
+	a.challenges["duplicate-change"] = &sshclient.HostKeyError{
+		Address:     address,
+		PreviousKey: []byte("old-key"),
+		Key:         []byte("new-key"),
+		Changed:     true,
+	}
+	if _, err := a.store.ReplaceTrustedHostKey(address, []byte("old-key"), []byte("new-key")); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.UpdateHostFingerprint("duplicate-change", true); err != nil {
+		t.Fatalf("same replacement already applied by another challenge should be idempotent: %v", err)
+	}
+	if _, ok := a.challenges["duplicate-change"]; ok {
+		t.Fatal("successful challenge was not consumed")
+	}
+}
+
 func TestUpdateHostFingerprintRequiresConfirmationAndExpectedOldKey(t *testing.T) {
 	a, err := newApp(filepath.Join(t.TempDir(), "state.db"), &vault{m: map[string]string{}}, nil)
 	if err != nil {
