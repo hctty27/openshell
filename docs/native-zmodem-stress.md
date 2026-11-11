@@ -270,3 +270,22 @@ tmp/native-zmodem-stress/logs/<run-id>/stress-<profile>.log
 - 开始自动接管终端输入的 `rz/sz` 之前，还需真实 GUI 上传/下载、长时间并发、不同 Shell、权限与第三方许可证复核。
 
 测试代码：`internal/ssh/native_zmodem_stress_test.go`。
+
+## Sender streaming-window A/B
+
+The native sender now defaults to `max` streaming when the remote receiver advertises both a zero-byte receive window and `CANOVIO`. This is the intended mode for reliable SSH/TCP pipes: the previous `zmodem2` default of 10 subpackets can add one full round-trip wait per window. Receivers that do not advertise those capabilities retain their negotiated pacing.
+
+Use the same isolated Windows-to-Linux Docker SSH fixture to compare the previous conservative window with full streaming. Keep the wire batch fixed at 16 KiB and use at least five rounds:
+
+```powershell
+# Previous zmodem2 default: 10 subpackets per acknowledgement window
+.\\scripts\\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow 10
+
+# Full streaming: no sender-side acknowledgement-window limit
+.\\scripts\\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow max
+```
+
+The JSON report records `options.streamingWindow`. Compare median throughput and P95 duration by direction, and require every SHA-256 check to pass. Run both configurations on the same host and fixture; do not compare results collected under different CPU, disk, Docker or network load.
+
+The sidecar also now reads up to 32 KiB per input operation through a single-slot bounded channel. The input allocation is recycled after the protocol state machine consumes it, and incoming bytes are submitted directly from that buffer instead of being copied through a queue and a second 2 KiB scratch buffer. Receiver file payloads are written directly from the protocol buffer. These changes do not alter ZMODEM frame encoding, CRC validation, retry behavior, or file publication checks.
+
