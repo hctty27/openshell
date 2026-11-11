@@ -75,6 +75,7 @@ type Backend = {
     secret: string,
   ): Promise<ConnectResult>;
   TrustHost(id: string): Promise<void>;
+  UpdateHostFingerprint(id: string, confirmed: boolean): Promise<void>;
   OpenTerminal(ref: Ref, cols: number, rows: number): Promise<void>;
   StartLocalTerminal(tabID: string, terminalID: string, shell: string, cols: number, rows: number): Promise<void>;
   WriteLocalTerminal(tabID: string, terminalID: string, data: string): Promise<void>;
