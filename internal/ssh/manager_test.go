@@ -39,6 +39,9 @@ func TestHostKeyTrust(t *testing.T) {
 	if !errors.As(e, &challenge) || !challenge.Changed {
 		t.Fatalf("expected changed key: %v", e)
 	}
+	if string(challenge.PreviousKey) != "other key" {
+		t.Fatalf("previous trusted key was not retained: %q", challenge.PreviousKey)
+	}
 }
 func TestStaleGeneration(t *testing.T) {
 	s := testssh.Start(t)
