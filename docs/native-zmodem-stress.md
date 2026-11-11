@@ -279,10 +279,10 @@ Use the same isolated Windows-to-Linux Docker SSH fixture to compare the previou
 
 ```powershell
 # Previous zmodem2 default: 10 subpackets per acknowledgement window
-.\\scripts\\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow 10
+.\scripts\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow 10
 
 # Full streaming: no sender-side acknowledgement-window limit
-.\\scripts\\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow max
+.\scripts\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow max
 ```
 
 The JSON report records `options.streamingWindow`. Compare median throughput and P95 duration by direction, and require every SHA-256 check to pass. Run both configurations on the same host and fixture; do not compare results collected under different CPU, disk, Docker or network load.
