@@ -18,10 +18,12 @@ type HostKeyStore interface {
 	Trust(string, []byte) error
 }
 type HostKeyError struct {
-	Address     string `json:"address"`
-	Fingerprint string `json:"fingerprint"`
-	Key         []byte `json:"key"`
-	Changed     bool   `json:"changed"`
+	Address             string `json:"address"`
+	Fingerprint         string `json:"fingerprint"`
+	PreviousFingerprint string `json:"previousFingerprint,omitempty"`
+	Key                 []byte `json:"key"`
+	PreviousKey         []byte `json:"-"`
+	Changed             bool   `json:"changed"`
 }
 
 func (e *HostKeyError) Error() string {
