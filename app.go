@@ -663,7 +663,13 @@ func (a *App) TrustHost(challengeID string) error {
 		return apperror.Wrap("fingerprintTrustFailed", err, nil)
 	}
 	if !created {
-		return apperror.New("fingerprintUpdateConflict", nil)
+		current, lookupErr := a.store.Lookup(h.Address)
+		if lookupErr != nil {
+			return apperror.Wrap("fingerprintTrustFailed", lookupErr, nil)
+		}
+		if string(current) != string(h.Key) {
+			return apperror.New("fingerprintUpdateConflict", nil)
+		}
 	}
 	a.mu.Lock()
 	if a.challenges[challengeID] == h {
@@ -693,7 +699,13 @@ func (a *App) UpdateHostFingerprint(challengeID string, confirmed bool) error {
 		return apperror.Wrap("fingerprintUpdateFailed", err, nil)
 	}
 	if !replaced {
-		return apperror.New("fingerprintUpdateConflict", nil)
+		current, lookupErr := a.store.Lookup(h.Address)
+		if lookupErr != nil {
+			return apperror.Wrap("fingerprintUpdateFailed", lookupErr, nil)
+		}
+		if string(current) != string(h.Key) {
+			return apperror.New("fingerprintUpdateConflict", nil)
+		}
 	}
 	a.mu.Lock()
 	if a.challenges[challengeID] == h {
