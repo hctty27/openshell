@@ -222,5 +222,10 @@
   "aiEmptyResponse": "AI API 返回了空响应",
   "aiExecutionProbeFailed": "检测 SSH 执行能力失败",
   "sftpInvalidBatchSize": "SFTP 批次文件数量必须在 1–4000 之间",
-  "sftpInvalidConcurrentTransferLimit": "SFTP 并发数只支持 1、2、3、4 或 6"
+  "sftpInvalidConcurrentTransferLimit": "SFTP 并发数只支持 1、2、3、4 或 6",
+  "fingerprintUpdateRequiresConfirmation": "更新服务器指纹前必须明确确认。",
+  "fingerprintUpdateNotAllowed": "当前指纹确认不能用于替换已有信任密钥。",
+  "fingerprintUpdateConflict": "等待确认期间，已保存的服务器指纹发生变化。请重新连接并核验。",
+  "fingerprintUpdateFailed": "无法更新已信任的服务器指纹。",
+  "fingerprintTrustFailed": "无法保存服务器指纹。"
 }
