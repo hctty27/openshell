@@ -279,10 +279,10 @@ tmp/native-zmodem-stress/logs/<run-id>/stress-<profile>.log
 
 ```powershell
 # 旧版 zmodem2 默认值：每 10 个子包等待一次确认
-.\\scripts\\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow 10
+.\scripts\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow 10
 
 # 完整连续发送：不限制发送端确认窗口
-.\\scripts\\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow max
+.\scripts\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow max
 ```
 
 JSON 报告会记录 `options.streamingWindow`。按传输方向比较中位吞吐量和 P95 耗时，并要求所有 SHA-256 校验通过。两组测试必须使用相同主机和测试环境；不要比较 CPU、磁盘、Docker 或网络负载不同的样本。
