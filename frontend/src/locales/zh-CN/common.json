@@ -64,7 +64,7 @@
   "cancel": "取消",
   "serverFingerprintChanged": "服务器指纹已变化",
   "verifyServerFingerprint": "确认服务器指纹",
-  "connectionBlockedVerifyWhyTheServerKeyChanged": "连接已阻止。请核验服务器重装或密钥变化原因，第一版不直接覆盖已信任指纹。",
+  "connectionBlockedVerifyWhyTheServerKeyChanged": "服务器当前提供的 SSH 公钥与已保存指纹不同。可能是服务器重装或密钥轮换，也可能存在中间人攻击；请先通过 VPS 控制台或其他可信渠道核对。",
   "verifyTheFingerprintWithYourServerAdministratorOr": "请与服务器管理员或已知记录核对指纹，确认后保存并继续连接。",
   "trustAndConnect": "信任并连接",
   "copyFingerprint": "复制指纹",
@@ -174,5 +174,10 @@
   "closeTabsToRight": "关闭右侧会话",
   "closeAllTabs": "关闭全部会话",
   "closeMultipleSessionsTitle": "关闭所选会话？",
-  "closeMultipleSessionsDescription": "即将关闭 {{count}} 个会话，其中 {{protectedCount}} 个存在终端操作或运行中的任务。关闭将断开对应 SSH 连接。"
+  "closeMultipleSessionsDescription": "即将关闭 {{count}} 个会话，其中 {{protectedCount}} 个存在终端操作或运行中的任务。关闭将断开对应 SSH 连接。",
+  "previousTrustedFingerprint": "已信任的指纹",
+  "presentedFingerprint": "服务器当前提供的指纹",
+  "confirmFingerprintReplacement": "我已通过可信渠道核对新指纹，确认用它替换已保存的指纹。",
+  "updateFingerprintAndConnect": "更新指纹并连接",
+  "updatingFingerprint": "正在更新指纹…"
 }
