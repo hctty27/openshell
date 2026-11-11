@@ -174,6 +174,7 @@ export interface HostChallenge {
   id: string;
   address: string;
   fingerprint: string;
+  previousFingerprint?: string;
   changed: boolean;
 }
 export interface ConnectResult {
