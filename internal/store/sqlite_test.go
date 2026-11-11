@@ -51,6 +51,40 @@ func TestPersistenceAcrossRestart(t *testing.T) {
 		t.Fatal(string(k))
 	}
 }
+func TestHostKeyTrustOperationsAreConditional(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	created, err := store.TrustIfAbsent("server:22", []byte("first"))
+	if err != nil || !created {
+		t.Fatalf("first trust: created=%v err=%v", created, err)
+	}
+	created, err = store.TrustIfAbsent("server:22", []byte("second"))
+	if err != nil || created {
+		t.Fatalf("duplicate trust must not overwrite: created=%v err=%v", created, err)
+	}
+	key, err := store.Lookup("server:22")
+	if err != nil || string(key) != "first" {
+		t.Fatalf("trusted key changed unexpectedly: key=%q err=%v", key, err)
+	}
+
+	replaced, err := store.ReplaceTrustedHostKey("server:22", []byte("stale"), []byte("third"))
+	if err != nil || replaced {
+		t.Fatalf("stale replacement must fail: replaced=%v err=%v", replaced, err)
+	}
+	replaced, err = store.ReplaceTrustedHostKey("server:22", []byte("first"), []byte("third"))
+	if err != nil || !replaced {
+		t.Fatalf("matching replacement failed: replaced=%v err=%v", replaced, err)
+	}
+	key, err = store.Lookup("server:22")
+	if err != nil || string(key) != "third" {
+		t.Fatalf("replacement not persisted: key=%q err=%v", key, err)
+	}
+}
+
 func TestNoSecretsInDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.db")
 	s, _ := Open(path)
