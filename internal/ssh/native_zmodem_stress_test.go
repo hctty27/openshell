@@ -62,7 +62,11 @@ func TestNativeZmodemStressInteractivePTY(t *testing.T) {
  if shouldRun("large") {
   t.Run("large", func(t *testing.T) {
    peer := openNativeStressPeer(t, manager, "large", 0)
-   if err := runNativeStressPair(peer, report, "large", opts.LargeMiB*1024*1024, 0, true); err != nil { t.Fatal(err) }
+   for i := 0; i < opts.Rounds; i++ {
+    if err := runNativeStressPair(peer, report, "large", opts.LargeMiB*1024*1024, i, true); err != nil {
+     t.Fatalf("round %d/%d: %v", i+1, opts.Rounds, err)
+    }
+   }
   })
  }
  if shouldRun("repeat") {
