@@ -64,7 +64,7 @@
   "cancel": "Cancel",
   "serverFingerprintChanged": "Server fingerprint changed",
   "verifyServerFingerprint": "Verify server fingerprint",
-  "connectionBlockedVerifyWhyTheServerKeyChanged": "Connection blocked. Verify why the server key changed. Overwriting a trusted fingerprint is not supported.",
+  "connectionBlockedVerifyWhyTheServerKeyChanged": "The SSH key presented by this server differs from the saved key. This may be caused by a reinstall or key rotation, but it can also indicate a man-in-the-middle attack. Verify it through your VPS console or another trusted channel before continuing.",
   "verifyTheFingerprintWithYourServerAdministratorOr": "Verify the fingerprint with your server administrator or a trusted record before continuing.",
   "trustAndConnect": "Trust and connect",
   "copyFingerprint": "Copy fingerprint",
@@ -174,5 +174,10 @@
   "closeTabsToRight": "Close tabs to the right",
   "closeAllTabs": "Close all tabs",
   "closeMultipleSessionsTitle": "Close selected sessions?",
-  "closeMultipleSessionsDescription": "Close {{count}} sessions? {{protectedCount}} have terminal activity or running tasks. Their SSH connections will be disconnected."
+  "closeMultipleSessionsDescription": "Close {{count}} sessions? {{protectedCount}} have terminal activity or running tasks. Their SSH connections will be disconnected.",
+  "previousTrustedFingerprint": "Previously trusted fingerprint",
+  "presentedFingerprint": "Fingerprint presented by server",
+  "confirmFingerprintReplacement": "I verified the new fingerprint through a trusted channel and want to replace the saved fingerprint.",
+  "updateFingerprintAndConnect": "Update fingerprint and connect",
+  "updatingFingerprint": "Updating fingerprint…"
 }
