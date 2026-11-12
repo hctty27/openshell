@@ -343,6 +343,62 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   await expect(page.getByText("AI 助手", { exact: true })).toHaveCount(0);
 });
 
+test("auto-hide sidebars ignore pointer entry while mouse buttons are held", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTitle("新建会话", { exact: true }).first().click();
+  await page.getByLabel("会话名称", { exact: true }).fill("测试服务器");
+  await page.getByLabel("主机地址").fill("127.0.0.1");
+  await page.getByLabel("登录密码").fill("fixture-password");
+  await page.getByText("保存到 Windows 凭据管理器").click();
+  await page.getByRole("button", { name: "保存会话", exact: true }).click();
+  await page.getByText("测试服务器", { exact: true }).dblclick();
+  await page.getByRole("button", { name: "信任并连接" }).click();
+  await expect(page.locator(".terminal-tab.active .connection-state-connected"))
+    .toHaveAttribute("aria-label", "SSH 已连接");
+
+  const terminal = page.locator(".terminal-container");
+  const sessionDock = page.locator(".session-sidebar-dock");
+  await page.locator(".session-sidebar .sidebar-pin-toggle").click();
+  await expect(sessionDock).toHaveClass(/session-sidebar-dock--auto/);
+  await expect(sessionDock).toHaveClass(/is-open/);
+  await terminal.click();
+  await expect(sessionDock).not.toHaveClass(/is-open/);
+
+  const dragIntoDock = async (selector: string) => {
+    const dock = page.locator(selector);
+    const [dockBounds, screenBounds] = await Promise.all([
+      dock.boundingBox(),
+      page.locator(".terminal-pane.active .xterm-screen").boundingBox(),
+    ]);
+    expect(dockBounds).not.toBeNull();
+    expect(screenBounds).not.toBeNull();
+    const startX = screenBounds!.x + Math.min(80, screenBounds!.width / 2);
+    const startY = screenBounds!.y + Math.min(12, screenBounds!.height / 2);
+    const edgeX = dockBounds!.x + dockBounds!.width / 2;
+    const edgeY = dockBounds!.y + dockBounds!.height / 2;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(edgeX, edgeY, { steps: 12 });
+    await expect(dock).not.toHaveClass(/is-open/);
+    await page.mouse.up();
+    await page.waitForTimeout(220);
+    await expect(dock).not.toHaveClass(/is-open/);
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.move(edgeX, edgeY, { steps: 12 });
+    await expect(dock).toHaveClass(/is-open/);
+  };
+
+  await dragIntoDock(".session-sidebar-dock");
+  await terminal.click();
+  await expect(sessionDock).not.toHaveClass(/is-open/);
+
+  const aiDock = page.locator(".ai-dock");
+  await expect(aiDock).toHaveClass(/ai-dock--auto/);
+  await dragIntoDock(".ai-dock");
+});
+
 async function pointerDrag(page: import("@playwright/test").Page,
   source: import("@playwright/test").Locator, x: number, y: number) {
   const bounds = await source.boundingBox();

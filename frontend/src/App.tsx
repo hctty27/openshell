@@ -1042,7 +1042,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
               sidebarPointerFocused.current = true;
               sidebarKeyboardFocused.current = false;
             }}
-            onMouseEnter={() => {
+            onMouseEnter={event => {
+              if (event.buttons !== 0) return;
               sidebarHovered.current = true;
               clearSidebarTimer(sidebarCloseTimer);
               if (sidebarMode === "auto-hide") {
@@ -1476,7 +1477,8 @@ function Workspace({ initialState }: { initialState: AppState }) {
           aiPointerFocused.current = true;
           aiKeyboardFocused.current = false;
         }}
-        onMouseEnter={() => {
+        onMouseEnter={event => {
+          if (event.buttons !== 0) return;
           aiHovered.current = true;
           clearAITimer(aiCloseTimer);
           if (aiSidebarMode === "auto-hide") {
