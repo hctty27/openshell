@@ -1028,3 +1028,77 @@ test("floating global AI overlays without moving or hiding terminal AI and SFTP"
   await expect(terminalAI).toBeHidden();
   await verifyFloatingBehavior(".workspace-file-panel:not(.workspace-terminal-ai-panel)");
 });
+
+
+test("auto-hide side rails stay inside the frameless resize-safe area", async ({ page }) => {
+  await page.goto("/");
+  const viewport = await page.evaluate(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
+  const appBody = await page.locator(".app-body").boundingBox();
+  expect(appBody).not.toBeNull();
+
+  await page.getByRole("button", { name: "自动隐藏会话栏" }).click();
+  const sessionDock = page.locator(".session-sidebar-dock--auto");
+  const sessionDockBounds = await sessionDock.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const rail = element.querySelector(".session-sidebar-rail")!.getBoundingClientRect();
+    return {
+      left: rect.left,
+      top: rect.top,
+      bottom: rect.bottom,
+      railLeft: rail.left,
+      railTop: rail.top,
+      railBottom: rail.bottom,
+    };
+  });
+  expect(sessionDockBounds.left).toBeGreaterThanOrEqual(18);
+  expect(sessionDockBounds.top - appBody!.y).toBeGreaterThanOrEqual(18);
+  expect(appBody!.y + appBody!.height - sessionDockBounds.bottom).toBeGreaterThanOrEqual(18);
+  expect(sessionDockBounds.railLeft).toBeGreaterThanOrEqual(18);
+  expect(sessionDockBounds.railTop - appBody!.y).toBeGreaterThanOrEqual(18);
+  expect(appBody!.y + appBody!.height - sessionDockBounds.railBottom).toBeGreaterThanOrEqual(18);
+
+  await page.getByRole("button", { name: "展开会话栏" }).click();
+  const sessionPanel = page.locator("#session-sidebar-panel");
+  await expect(sessionPanel).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  const sessionPanelBounds = await sessionPanel.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return { left: rect.left, top: rect.top, bottom: rect.bottom };
+  });
+  expect(sessionPanelBounds.left).toBeCloseTo(0, 0);
+  expect(sessionPanelBounds.top).toBeCloseTo(appBody!.y, 0);
+  expect(sessionPanelBounds.bottom).toBeCloseTo(appBody!.y + appBody!.height, 0);
+
+  const aiDock = page.locator(".ai-dock--auto");
+  const aiDockBounds = await aiDock.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const rail = element.querySelector(".ai-rail")!.getBoundingClientRect();
+    return {
+      right: rect.right,
+      top: rect.top,
+      bottom: rect.bottom,
+      railRight: rail.right,
+      railTop: rail.top,
+      railBottom: rail.bottom,
+    };
+  });
+  expect(viewport.width - aiDockBounds.right).toBeGreaterThanOrEqual(18);
+  expect(aiDockBounds.top - appBody!.y).toBeGreaterThanOrEqual(18);
+  expect(appBody!.y + appBody!.height - aiDockBounds.bottom).toBeGreaterThanOrEqual(18);
+  expect(viewport.width - aiDockBounds.railRight).toBeGreaterThanOrEqual(18);
+  expect(aiDockBounds.railTop - appBody!.y).toBeGreaterThanOrEqual(18);
+  expect(appBody!.y + appBody!.height - aiDockBounds.railBottom).toBeGreaterThanOrEqual(18);
+
+  await page.getByRole("button", { name: "展开 AI 助手" }).click();
+  const aiPanel = page.locator("#global-ai-panel");
+  await expect(aiPanel).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  const aiPanelBounds = await aiPanel.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return { right: rect.right, top: rect.top, bottom: rect.bottom };
+  });
+  expect(aiPanelBounds.right).toBeCloseTo(viewport.width, 0);
+  expect(aiPanelBounds.top).toBeCloseTo(appBody!.y, 0);
+  expect(aiPanelBounds.bottom).toBeCloseTo(appBody!.y + appBody!.height, 0);
+});

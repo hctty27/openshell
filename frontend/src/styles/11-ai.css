@@ -11,12 +11,19 @@
 .ai-dock--auto {
   flex: 0 0 12px;
   width: 12px;
+  height: calc(100% - var(--window-resize-safe-area) - var(--window-resize-safe-area));
+  align-self: center;
+  margin-right: var(--window-resize-safe-area);
   z-index: 13;
 }
 .ai-dock--auto .ai-panel {
   position: absolute;
-  inset: 0 0 0 auto;
+  top: calc(0px - var(--window-resize-safe-area));
+  right: calc(0px - var(--window-resize-safe-area));
+  bottom: calc(0px - var(--window-resize-safe-area));
+  left: auto;
   width: min(var(--ai-width), calc(100vw - 40px));
+  height: auto;
   visibility: hidden;
   pointer-events: none;
   transform: translateX(calc(100% + 2px));
