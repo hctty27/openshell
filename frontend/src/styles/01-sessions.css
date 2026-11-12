@@ -13,19 +13,13 @@
 .session-sidebar-dock--auto {
   flex: 0 0 12px;
   width: 12px;
-  height: calc(100% - var(--window-resize-safe-area) - var(--window-resize-safe-area));
-  align-self: center;
-  margin-left: var(--window-resize-safe-area);
   z-index: 12;
   background: var(--panel);
   border-right: 1px solid var(--border);
 }
 .session-sidebar-dock--auto .session-sidebar {
   position: absolute;
-  top: calc(0px - var(--window-resize-safe-area));
-  right: auto;
-  bottom: calc(0px - var(--window-resize-safe-area));
-  left: calc(0px - var(--window-resize-safe-area));
+  inset: 0 auto 0 0;
   width: min(var(--session-width), calc(100vw - 40px));
   transform: translateX(calc(-100% - 2px));
   visibility: hidden;

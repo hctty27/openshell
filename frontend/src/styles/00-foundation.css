@@ -1,7 +1,5 @@
 :root {
   --chrome-bar-height: 30px;
-  /* Keep auto-hide rails outside Wails' 5px edge + 10px corner resize zone. */
-  --window-resize-safe-area: 18px;
   --surface: #1B2028;
   --panel: #222933;
   --raised: #2D3642;
