@@ -1060,7 +1060,6 @@ test("auto-hide side rails stay inside the frameless resize-safe area", async ({
   expect(sessionDockBounds.railTop - appBody!.y).toBeGreaterThanOrEqual(18);
   expect(appBody!.y + appBody!.height - sessionDockBounds.railBottom).toBeGreaterThanOrEqual(18);
 
-  await page.getByRole("button", { name: "展开会话栏" }).click();
   const sessionPanel = page.locator("#session-sidebar-panel");
   await expect(sessionPanel).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
   const sessionPanelBounds = await sessionPanel.evaluate(element => {
