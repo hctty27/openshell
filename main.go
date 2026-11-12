@@ -87,6 +87,7 @@ func main() {
         event.Cancel()
       }
     })
+    // The native HWND is created during Run, so install hit testing after runtime initialization on the UI thread.
     window.OnWindowEvent(events.Common.WindowRuntimeReady, func(event *application.WindowEvent) {
       application.InvokeSync(func() {
         if err := installCornerOnlyResize(window.NativeWindow()); err != nil {
