@@ -21,7 +21,7 @@ var (
 	setWindowSubclassProc       = commonControls.NewProc("SetWindowSubclass")
 	removeWindowSubclassProc    = commonControls.NewProc("RemoveWindowSubclass")
 	defSubclassProc             = commonControls.NewProc("DefSubclassProc")
-	cornerOnlyResizeCallback    = syscall.NewCallback(cornerOnlyResizeSubclassProc)
+	cornerOnlyResizeCallback uintptr
 )
 
 func installCornerOnlyResize(hwnd unsafe.Pointer) error {
@@ -54,4 +54,8 @@ func cornerOnlyResizeSubclassProc(hwnd uintptr, message uint32, wParam, lParam u
 		return cornerOnlyResizeHitTest(result)
 	}
 	return result
+}
+
+func init() {
+	cornerOnlyResizeCallback = syscall.NewCallback(cornerOnlyResizeSubclassProc)
 }
