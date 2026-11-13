@@ -52,6 +52,7 @@ import { assignTerminalHistoryScopes } from "./features/ai/terminalScope";
 import WindowTitleBar from "./components/WindowTitleBar";
 import ZmodemFilePicker from "./components/ZmodemFilePicker";
 import { useWorkspaceTabs } from "./features/sessions/useWorkspaceTabs";
+import { resolveSFTPInitialDirectory } from "./features/sessions/sftpDirectory";
 import { useTabActivity } from "./features/sessions/useTabActivity";
 import { useAutoReconnect } from "./features/sessions/useAutoReconnect";
 import { useSplitWorkspace } from "./features/terminal/useSplitWorkspace";
@@ -801,6 +802,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
           return next;
         });
         for (const tabID of closed) {
+          delete remoteUploadDirs.current[tabID];
           userInputMarked.current.delete(tabID);
           executedActionMarked.current.delete(tabID);
         }
@@ -1435,7 +1437,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   style={visible ? undefined : { display: "none" }}>
                   {visible && (
                     <SFTPView refID={tab.ref!} onNotice={notify}
-                      initialRemoteDirectory={tab.cwdReported ? tab.cwd : tab.cloneCwd ?? tab.cwd}
+                      initialRemoteDirectory={resolveSFTPInitialDirectory(remoteUploadDirs.current[tab.id], tab)}
                       cwdReported={tab.cwdReported === true}
                       onRemoteDirectoryChange={directory => {
                         remoteUploadDirs.current[tab.id] = directory;
