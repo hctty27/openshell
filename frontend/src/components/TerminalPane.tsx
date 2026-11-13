@@ -117,6 +117,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       mouseEventsRequireAlt: true,
       scrollback: 10000,
       scrollOnEraseInDisplay: true,
+      scrollOnUserInput: false,
       allowProposedApi: false,
     });
     const search = new SearchAddon();
@@ -385,6 +386,11 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       if (terminalMode === "offline" || nativeTransferActive.current ||
         (terminalMode === "ssh" && callbacks.current.aiControlled)) return;
       if (terminalMode === "ssh" && ref && data.length > 0) callbacks.current.onUserInput?.(ref);
+      // Keep the viewport anchored while inspecting history. Return to the live
+      // prompt on Enter, Ctrl+C, or Ctrl+L rather than on every typed character.
+      if (term.buffer.active.type === "normal" && /[\r\n\x03\x0c]/.test(data)) {
+        term.scrollToBottom();
+      }
       // Never inject an automatic cd after the user has started interacting.
       if (terminalMode === "ssh" && callbacks.current.tab.cloneCwd) cloneCwdSent.current = true;
       inputQueue.push(data);
