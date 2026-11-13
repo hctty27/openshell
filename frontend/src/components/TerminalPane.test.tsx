@@ -35,6 +35,11 @@ vi.mock("@xterm/xterm", () => ({
     dimensions = { css: { cell: { width: 9, height: 18 } } };
     parser = {
       handlers: new Map<number, (payload: string) => boolean>(),
+      csiHandlers: new Map<string, (params: (number | number[])[]) => boolean>(),
+      registerCsiHandler: vi.fn((id: { final: string }, cb: (params: (number | number[])[]) => boolean) => {
+        this.parser.csiHandlers.set(id.final, cb);
+        return { dispose: vi.fn(() => this.parser.csiHandlers.delete(id.final)) };
+      }),
       registerOscHandler: vi.fn((id: number, cb: (payload: string) => boolean) => {
         this.parser.handlers.set(id, cb);
         return { dispose: vi.fn(() => this.parser.handlers.delete(id)) };
@@ -223,6 +228,24 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+
+test("soft clear keeps 10000 lines and preserves history only on normal screen", () => {
+  const { unmount } = renderTerminal();
+  const term = refs.terms[0];
+  expect(term.options.scrollback).toBe(10000);
+  expect(term.options.scrollOnEraseInDisplay).toBe(true);
+
+  const eraseHandler = term.parser.csiHandlers.get("J");
+  expect(eraseHandler).toBeDefined();
+  expect(eraseHandler([3])).toBe(true);
+  expect(eraseHandler([2])).toBe(false);
+  expect(eraseHandler([3, 0])).toBe(false);
+
+  term.buffer.active.type = "alternate";
+  expect(eraseHandler([3])).toBe(false);
+  unmount();
+  expect(term.parser.csiHandlers.size).toBe(0);
 });
 
 test("copies selected text on left mouse release, but not when disabled", async () => {
