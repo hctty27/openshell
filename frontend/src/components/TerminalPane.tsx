@@ -116,6 +116,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       // Prefer text selection in mouse-aware TUIs; Alt forwards mouse actions.
       mouseEventsRequireAlt: true,
       scrollback: 10000,
+      scrollOnEraseInDisplay: true,
       allowProposedApi: false,
     });
     const search = new SearchAddon();
@@ -250,7 +251,11 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       }
       return Boolean(directory);
     };
-    const cwdHooks = [
+    const parserHooks = [
+      // Keep cleared content in the normal scrollback when remote `clear` sends ED3.
+      term.parser.registerCsiHandler({ final: "J" }, params =>
+        params.length === 1 && params[0] === 3 && term.buffer.active.type === "normal"
+      ),
       term.parser.registerOscHandler(7, payload => reportDirectory(parseOsc7Directory(payload))),
       term.parser.registerOscHandler(1337, payload => reportDirectory(parseOsc1337Directory(payload))),
       // Return false to preserve normal title handling in xterm.js.
@@ -608,7 +613,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       paneElement.removeEventListener("contextmenu", onContextMenu, true);
       input.dispose();
       bufferListener.dispose();
-      for (const hook of cwdHooks) hook.dispose();
+      for (const hook of parserHooks) hook.dispose();
       resizeSubscription.dispose();
       selection.dispose();
       const buffer = term.buffer.normal;
