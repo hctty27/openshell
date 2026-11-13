@@ -55,6 +55,7 @@ vi.mock("@xterm/xterm", () => ({
       }),
     };
     scrollToLine = vi.fn();
+    scrollToBottom = vi.fn();
     clearSelection = vi.fn();
     selected = "";
     onDataCallback = (_data: string) => {};
@@ -246,6 +247,32 @@ test("soft clear keeps 10000 lines and preserves history only on normal screen",
   expect(eraseHandler([3])).toBe(false);
   unmount();
   expect(term.parser.csiHandlers.size).toBe(0);
+});
+
+test("keeps history viewport on typing and returns to live output on submission", async () => {
+  renderTerminal();
+  const term = refs.terms[0];
+  expect(term.options.scrollback).toBe(10000);
+  expect(term.options.scrollOnEraseInDisplay).toBe(true);
+  expect(term.options.scrollOnUserInput).toBe(false);
+
+  term.onDataCallback("pwd");
+  term.onDataCallback("\x1b[A");
+  term.onDataCallback("\x7f");
+  expect(term.scrollToBottom).not.toHaveBeenCalled();
+
+  term.onDataCallback("\r");
+  term.onDataCallback("\x03");
+  term.onDataCallback("\x0c");
+  expect(term.scrollToBottom).toHaveBeenCalledTimes(3);
+
+  term.buffer.active.type = "alternate";
+  term.onDataCallback("\r");
+  expect(term.scrollToBottom).toHaveBeenCalledTimes(3);
+
+  await act(async () => {
+    await Promise.resolve();
+  });
 });
 
 test("copies selected text on left mouse release, but not when disabled", async () => {
