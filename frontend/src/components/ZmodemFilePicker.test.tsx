@@ -140,7 +140,7 @@ test("trz -d selects a local directory using the embedded picker", async () => {
 });
 
 
-test("submission is single-flight and closes the picker after backend acknowledgement", async () => {
+test("legacy rz picker closes immediately, without waiting for a slow backend acknowledgement", async () => {
   let acknowledge!: () => void;
   vi.mocked(api.SubmitZmodemSelection).mockImplementationOnce(
     () => new Promise<void>(resolve => { acknowledge = resolve; }),
@@ -149,29 +149,23 @@ test("submission is single-flight and closes the picker after backend acknowledg
   render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} onClosed={onClosed} />);
   emit("ssh:zmodem-pick", { ref, id: 6, direction: "upload" });
   fireEvent.click(await screen.findByText("hello.txt"));
-  const send = screen.getByRole("button", { name: "上传选中文件" });
-  fireEvent.click(send);
-  fireEvent.click(send);
+  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
   expect(api.SubmitZmodemSelection).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole("dialog")).toBeTruthy();
-
-  await act(async () => { acknowledge(); });
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(onClosed).toHaveBeenCalledWith(ref);
+  await act(async () => { acknowledge(); });
 });
 
-test("submission errors keep the picker open and allow retry", async () => {
+test("backend submission errors notify after the picker has closed", async () => {
   vi.mocked(api.SubmitZmodemSelection).mockRejectedValueOnce(new Error("file not found"));
-  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  const onNotice = vi.fn();
+  render(<ZmodemFilePicker activeRef={ref} onNotice={onNotice} />);
   emit("ssh:zmodem-pick", { ref, id: 7, direction: "upload" });
   fireEvent.click(await screen.findByText("hello.txt"));
   fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
-  expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Error: file not found");
-  expect(screen.getByRole("dialog")).toBeTruthy();
-
-  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
-  await waitFor(() => expect(api.SubmitZmodemSelection).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  await waitFor(() => expect(onNotice).toHaveBeenCalledOnce());
+  expect(String(onNotice.mock.calls[0][0])).toContain("file not found");
 });
 
 test("a delayed acknowledgement cannot close the next picker request", async () => {
