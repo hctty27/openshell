@@ -283,18 +283,14 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	autoSidecar := m.nativeAutoSidecar
 	m.mu.Unlock()
 
-	wire := p
-	direction, remotePath := "", ""
-	if autoSidecar != "" {
-		// MySQL may also have a verified prompt; it is not a POSIX Shell.
-		ready := c.readiness.readyProgram() == "shell" && c.readiness.checkReady() == nil
-		wire, direction, remotePath = c.nativeAutoInput.prepare(p, ready)
-		if direction != "" && direction != "reject-multi" {
-			// Never intercept Enter unless a real sidecar and the exact SSH
-			// generation are still ready to accept an explicit GUI transfer.
-			if status := m.NativeZmodemExperimentalReadiness(ref, autoSidecar, true); !status.Ready {
-				wire, direction, remotePath = p, "", ""
-			}
+	// Even without a usable native sidecar, never forward a recognized
+	// rz/sz command into an unsupported fallback protocol handler.
+	ready := c.readiness.readyProgram() == "shell" && c.readiness.checkReady() == nil
+	wire, direction, remotePath := c.nativeAutoInput.prepare(p, ready)
+	if direction == "upload" || direction == "download" {
+		if status := m.NativeZmodemExperimentalReadiness(ref, autoSidecar, true); !status.Ready {
+			autoError = status.Message
+			direction = "reject-unavailable"
 		}
 	}
 	// Mark the terminal busy before writing. The remote process can return a
@@ -308,6 +304,10 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 
 	if direction == "reject-multi" {
 		autoError = "ZMODEM 每次只能传输一个文件；批量传输请使用 SFTP"
+	} else if direction == "reject-unsupported" {
+		autoError = "仅支持原生单文件 rz、rz -q、sz 文件名；rz -y、trz/tsz 和复杂 Shell 语法已不再兼容，请使用 SFTP"
+	} else if direction == "reject-unavailable" {
+		// The readiness error was set before writing Ctrl-U.
 	} else if direction != "" {
 		m.mu.Lock()
 		if current := m.connections[ref.TabID]; current == c && c.ref == ref {
