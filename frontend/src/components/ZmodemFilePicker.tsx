@@ -177,19 +177,48 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       return next;
     });
   };
-  const submit = async (paths: string[]) => {
-    if (busy || submittingKey.current === requestKey) return;
+  // The picker owns only the selection, never the lifetime of a transfer.
+  // Close on acceptance instead of awaiting backend work: a slow Wails call
+  // must not leave a modal over an already-running rz/sz transfer.
+  const submit = (paths: string[]) => {
+    if (busy || submittingKey.current === requestKey ||
+      currentRequestKey.current !== requestKey) return;
     submittingKey.current = requestKey;
-    setBusy(true);
     setError("");
-    if (request.native) {
-      if (currentRequestKey.current !== requestKey) return;
-      if (paths.length === 0) {
-        closeRequest();
-        return;
+    try {
+      let pending: Promise<unknown> | undefined;
+      if (request.native) {
+        if (paths.length > 0) {
+          const download = request.direction === "download";
+          if (!download && paths.length !== 1) {
+            throw new Error("ZMODEM 每次只能上传一个文件");
+          }
+          const remotePath = request.remotePath ?? "";
+          if (download && (!remotePath || /[\r\n]/.test(remotePath))) {
+            throw new Error("ZMODEM 每次只能下载一个远程文件");
+          }
+          pending = api.StartNativeZmodemInteractiveTransfer(
+            request.ref, request.direction,
+            download ? directory : paths[0], download ? remotePath : "",
+          );
+        }
+      } else {
+        // Submission only acknowledges the chosen paths. Transfer completion
+        // comes through its own events; even a delayed acknowledgment must not
+        // leave the picker open.
+        pending = api.SubmitZmodemSelection(request.ref, request.id, paths);
       }
-      try {
-        const download = request.direction === "download";
+      if (paths.length > 0) {
+        void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
+      }
+      closeRequest();
+      if (pending) void Promise.resolve(pending).catch(onNotice);
+    } catch (err) {
+      setError(errorText(err));
+      submittingKey.current = "";
+    }
+  };
+  const download = request.direction === "download";
         if (!download && paths.length !== 1) throw new Error("ZMODEM 每次只能上传一个文件");
         const remotePath = request.remotePath ?? "";
         if (download && (!remotePath || /[\r\n]/.test(remotePath))) {
