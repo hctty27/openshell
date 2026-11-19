@@ -10,7 +10,7 @@ import (
 )
 
 // nativeTerminalTransferTask is scoped to one exact ConnectionRef and
-// interactive PTY. No Wails binding or UI invokes this experiment yet.
+// interactive PTY.
 type nativeTerminalTransferTask struct {
 	ref domain.ConnectionRef
 	cancel context.CancelFunc
@@ -35,8 +35,7 @@ func (m *Manager) CancelExperimentalNativeTerminalTransfer(ref domain.Connection
 	return true
 }
 
-// runNativeTerminalExperiment is an internal, explicit opt-in test entrypoint.
-// It deliberately does not expose an API to Wails or auto-detect rz/sz output.
+// runNativeTerminalExperiment is an internal single-file test entrypoint.
 func (m *Manager) runNativeTerminalExperiment(
 	parent context.Context,
 	ref domain.ConnectionRef,
@@ -49,17 +48,6 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 	parent context.Context,
 	ref domain.ConnectionRef,
 	sidecar, direction, localPath, remotePath string,
-	progress func(uint64, uint64),
-) error {
-	return m.runNativeTerminalBatchExperimentWithProgress(
-		parent, ref, sidecar, direction, []string{localPath}, []string{remotePath}, progress,
-	)
-}
-
-func (m *Manager) runNativeTerminalBatchExperimentWithProgress(
-	parent context.Context,
-	ref domain.ConnectionRef,
-	sidecar, direction string, localPaths, remotePaths []string,
 	progress func(uint64, uint64),
 ) error {
 	if parent == nil {
@@ -104,7 +92,7 @@ func (m *Manager) runNativeTerminalBatchExperimentWithProgress(
 		input: input, output: output,
 		runner: nativeTerminalExecutableRunnerWithProgress(sidecar, progress),
 	}
-	result := coordinator.runBatch(ctx, direction, localPaths, remotePaths)
+	result := coordinator.run(ctx, direction, localPath, remotePath)
 	// Reading the gate before taking Manager.mu avoids lock inversion with
 	// user-input writes. A stuck lease means the terminal is unsafe to reuse.
 	input.mu.Lock()
@@ -128,10 +116,8 @@ func (m *Manager) runNativeTerminalBatchExperimentWithProgress(
 }
 
 
-// RunExperimentalNativeTerminalTransfer is the explicit application-facing
-// entrypoint for the real interactive PTY coordinator. The caller must
-// enforce the developer opt-in flag; this method does not sniff terminal
-// output, switch the default transfer engine or bypass connection ownership.
+// RunExperimentalNativeTerminalTransfer starts the production interactive
+// PTY path. Readiness and exact connection ownership are rechecked.
 func (m *Manager) RunExperimentalNativeTerminalTransfer(
 	ctx context.Context,
 	ref domain.ConnectionRef,
@@ -140,27 +126,14 @@ func (m *Manager) RunExperimentalNativeTerminalTransfer(
 	return m.RunExperimentalNativeTerminalTransferWithProgress(ctx, ref, sidecar, direction, localPath, remotePath, nil)
 }
 
+// One transfer lease, one Rust sidecar, one source and one target.
 func (m *Manager) RunExperimentalNativeTerminalTransferWithProgress(
 	ctx context.Context,
 	ref domain.ConnectionRef,
 	sidecar, direction, localPath, remotePath string,
 	progress func(uint64, uint64),
 ) error {
-	return m.RunExperimentalNativeTerminalBatchTransferWithProgress(
-		ctx, ref, sidecar, direction, []string{localPath}, []string{remotePath}, progress,
-	)
-}
-
-// One transfer lease, one Rust protocol process and one remote rz/sz session.
-// Each source and remote target is independently validated before the PTY
-// is taken over; the sidecar receives a private manifest for multi-upload.
-func (m *Manager) RunExperimentalNativeTerminalBatchTransferWithProgress(
-	ctx context.Context,
-	ref domain.ConnectionRef,
-	sidecar, direction string, localPaths, remotePaths []string,
-	progress func(uint64, uint64),
-) error {
 	status := m.NativeZmodemExperimentalReadiness(ref, sidecar, true)
 	if !status.Ready { return errors.New(status.Message) }
-	return m.runNativeTerminalBatchExperimentWithProgress(ctx, ref, sidecar, direction, localPaths, remotePaths, progress)
+	return m.runNativeTerminalExperimentWithProgress(ctx, ref, sidecar, direction, localPath, remotePath, progress)
 }
