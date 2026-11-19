@@ -1,6 +1,6 @@
 import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Info, Eye, EyeOff, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, ArrowLeftRight } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Info, Eye, EyeOff, FolderSymlink, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, ArrowLeftRight } from "lucide-react";
 import { api, listen, errorText } from "../bridge";
 import type { Ref, SFTPEntry, SFTPTask, SFTPDocument, SFTPTransferRequest } from "../types";
 import { mergeTransferHistory, sameTransferRef } from "../features/transfers/transferHistory";
@@ -10,7 +10,7 @@ import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMe
 import ModalSurface from "./ModalSurface";
 import { i18n, t } from "../i18n";
 import { Clipboard } from "@wailsio/runtime";
-import { BASH_CWD_REPORT_COMMAND } from "../terminalCwd";
+import { BASH_CWD_REPORT_COMMAND, normalizeRemoteDirectory } from "../terminalCwd";
 const SFTPFileEditor = lazy(() => import("./editor/SFTPFileEditor"));
 
 type Side = "local" | "remote";
@@ -47,7 +47,7 @@ const niceSize = (value: number) => {
   do { num /= 1024; idx++; } while(num >= 1024 && idx < units.length-1);
   return `${num.toFixed(num < 10 ? 1 : 0)} ${units[idx]}`;
 };
-interface Props { refID: Ref; onNotice(error: unknown): void; hideTaskQueue?: boolean; onRemoteDirectoryChange?(directory: string): void; initialRemoteDirectory?: string; cwdReported?: boolean; }
+interface Props { refID: Ref; onNotice(error: unknown): void; hideTaskQueue?: boolean; onRemoteDirectoryChange?(directory: string): void; initialRemoteDirectory?: string; cwdReported?: boolean; terminalDirectory?: string; }
 interface PanelProps {
   side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: unknown; showHidden: boolean;
   onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void;
@@ -56,6 +56,8 @@ interface PanelProps {
   onOpenFile?(entry:SFTPEntry): void; onTransfer(): void; onOperate(operation: Operation): void;
   onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLElement>): void;
   onCwdHelp?(): void;
+  onJumpToTerminalDirectory?(): void;
+  canJumpToTerminalDirectory?: boolean;
 }
 interface FileRowProps {
   entry: SFTPEntry;
@@ -216,6 +218,13 @@ function FilePanel(p: PanelProps) {
           <button title={t("sftp:newFolder")} onClick={() => p.onOperate("mkdir")}><FolderPlus size={14}/></button>
           <button title={t("sftp:delete")} aria-label={t("sftp:delete")} disabled={!p.selected.length || Boolean(p.deleting?.running)} onClick={() => p.onOperate("delete")}><Trash2 size={14}/></button>
           <button title={t(p.showHidden ? "sftp:hideHidden" : "sftp:showHidden")} onClick={p.onToggleHidden}>{p.showHidden ? <EyeOff size={14}/> : <Eye size={14}/>}</button>
+          {p.onJumpToTerminalDirectory && (
+            <button type="button" aria-label={t("sftp:jumpToTerminalDirectory")}
+              title={t(p.canJumpToTerminalDirectory ? "sftp:jumpToTerminalDirectory" : "sftp:jumpToTerminalDirectoryUnavailable")}
+              disabled={!p.canJumpToTerminalDirectory} onClick={p.onJumpToTerminalDirectory}>
+              <FolderSymlink size={14}/>
+            </button>
+          )}
           <button title={t("sftp:refresh")} onClick={p.onReload}><RefreshCw size={14}/></button>
           {p.loading && p.entries.length > 0 && <LoaderCircle size={13} className="spin" aria-label={t("sftp:loading")}/>} 
         </div>
@@ -269,12 +278,14 @@ function FilePanel(p: PanelProps) {
     </section>
   );
 }
-export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteDirectoryChange,initialRemoteDirectory,cwdReported = false}:Props) {
+export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteDirectoryChange,initialRemoteDirectory,cwdReported = false,terminalDirectory}:Props) {
   useTranslation();
   const dialogs = useDialogs();
   const [localDir,setLocalDir] = useState("");
   const navigatedLocalDir = useRef("");
   const [remoteDir,setRemoteDir] = useState("");
+  const remoteNavigationSerial = useRef(0);
+  const validatedRemoteListing = useRef<{ key: string; entries: SFTPEntry[] } | null>(null);
   const [localFiles,setLocalFiles] = useState<SFTPEntry[]>([]);
   const [remoteFiles,setRemoteFiles] = useState<SFTPEntry[]>([]);
   const [localBusy,setLocalBusy] = useState(false);
@@ -307,6 +318,8 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
 
   useEffect(() => {
     let alive=true;
+    remoteNavigationSerial.current++;
+    validatedRemoteListing.current = null;
     editorRequestID.current++;
     editorLoadInProgress.current=false;
     setEditorLoadingPath(null);
@@ -337,6 +350,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     }).catch(()=>{});
     return ()=>{
       alive=false;
+      remoteNavigationSerial.current++;
       const active = editorReadRequest.current;
       if (active) {
         editorReadRequest.current=null;
@@ -361,6 +375,16 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   },[refID.tabId,refID.sessionId,refID.generation,localDir,versions.local]);
   useEffect(()=>{
     if(!remoteDir)return;
+    // The jump already fetched this directory to validate it: reuse the result.
+    const cached = validatedRemoteListing.current;
+    validatedRemoteListing.current = null;
+    if (cached?.key === directoryCacheKey(refID, remoteDir)) {
+      setRemoteFiles(cached.entries);
+      setRemoteListedKey(cached.key);
+      setRemoteError("");
+      setRemoteBusy(false);
+      return;
+    }
     let alive=true;setRemoteBusy(true);setRemoteError("");
     api.SFTPList(refID,"remote",remoteDir).then(items=>{if(alive){setRemoteFiles(items??[]);setRemoteListedKey(directoryCacheKey(refID,remoteDir));}})
       .catch(error=>{if(alive){setRemoteFiles([]);setRemoteError(error);}})
@@ -457,10 +481,32 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     if(side==="local"){
       navigatedLocalDir.current = directory;
       setLocalDir(directory);
-    } else setRemoteDir(directory);
+    } else {
+      remoteNavigationSerial.current++;
+      validatedRemoteListing.current = null;
+      setRemoteDir(directory);
+    }
     selectionAnchor.current[side] = null;
     setSelection(s=>({...s,[side]:[]}));
     setDeleting(s=>({...s,[side]:null}));
+  };
+  const jumpToTerminalDirectory = async () => {
+    const target = cwdReported ? normalizeRemoteDirectory(terminalDirectory ?? "") : null;
+    if (!target) return;
+    if (target === remoteDir) {
+      refresh("remote");
+      return;
+    }
+    const request = ++remoteNavigationSerial.current;
+    try {
+      // Validate before changing SFTP navigation state or its remembered directory.
+      const entries = await api.SFTPList(refID, "remote", target);
+      if (remoteNavigationSerial.current !== request) return;
+      changeDir("remote", target);
+      validatedRemoteListing.current = { key: directoryCacheKey(refID, target), entries: entries ?? [] };
+    } catch (error) {
+      if (remoteNavigationSerial.current === request) onNotice(error);
+    }
   };
   const choose = (side:Side,item:SFTPEntry,mode:SelectionMode) => {
     // Only Shift-range selection needs to scan the directory. Ordinary
@@ -717,6 +763,8 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
           onFileDrop={event=>drop("local",event)}/>
         <FilePanel side="remote" directory={remoteDir} entries={remoteListedKey===directoryCacheKey(refID,remoteDir)?remoteFiles:[]} selected={selection.remote} loading={remoteBusy} error={remoteError} showHidden={hidden.remote}
           onToggleHidden={()=>{setHidden(s=>({...s,remote:!s.remote}));clearSelection("remote");}} onDir={dir=>changeDir("remote",dir)} onReload={()=>refresh("remote")}
+          onJumpToTerminalDirectory={() => void jumpToTerminalDirectory()}
+          canJumpToTerminalDirectory={cwdReported && Boolean(normalizeRemoteDirectory(terminalDirectory ?? ""))}
           onCwdHelp={!cwdReported ? () => void Clipboard.SetText(BASH_CWD_REPORT_COMMAND)
             .then(() => onNotice(t("sftp:cwdCommandCopied")))
             .catch(onNotice) : undefined}
