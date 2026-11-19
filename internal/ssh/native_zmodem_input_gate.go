@@ -8,12 +8,11 @@ import (
 
 var (
 	errNativeTerminalInputBusy = errors.New("native terminal input busy")
-	errTerminalFileTransferBusy = errors.New("terminal file transfer input busy")
 	errNativeTerminalInputLease = errors.New("终端输入独占令牌已失效")
 )
 
 // terminalInputGate keeps interactive input separate from the native protocol.
-// Normal writes go through trzsz-go. Once leased, only the holder of the
+// Normal writes go directly to the SSH PTY. Once leased, only the holder of the
 // current token can write raw protocol responses directly to the SSH PTY.
 type terminalInputGate struct {
 	mu sync.Mutex
