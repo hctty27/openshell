@@ -9,7 +9,7 @@ const connectionKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generat
 export function useTransferActivity() {
   const sftpJobs = useRef(new Map<string, Set<string>>());
   const zmodemActive = useRef(new Set<string>());
-  const nativeZmodemActive = useRef(new Set<string>());
+  const nativeZmodemActive = useRef(new Map<string, string>());
   const zmodemFinished = useRef(new Map<string, string>());
   const currentTransferIds = useRef(new Map<string, string>());
 
@@ -60,8 +60,8 @@ export function useTransferActivity() {
     }) => {
       if (!payload?.ref || !payload.id) return;
       const key = connectionKey(payload.ref);
-      if (payload.active) nativeZmodemActive.current.add(key);
-      else nativeZmodemActive.current.delete(key);
+      if (payload.active) nativeZmodemActive.current.set(key, payload.id);
+      else if (nativeZmodemActive.current.get(key) === payload.id) nativeZmodemActive.current.delete(key);
     });
     const offDisconnected = listen("ssh:disconnected", (ref: Ref) => {
       if (!ref?.tabId) return;
