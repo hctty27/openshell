@@ -464,3 +464,68 @@ test("identified failed state can close an unmatched id-less legacy row", () => 
   expect(container.querySelector(".transfer-center-count")).toBeNull();
   expect(screen.getByText("失败")).toBeTruthy();
 });
+
+test("late ZMODEM progress cannot resurrect a completed task after the UI cleanup", () => {
+  vi.useFakeTimers();
+  try {
+    const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+    emit("ssh:transfer-details", {
+      ref: refA, transferId: "completed-then-late-progress",
+      direction: "download", protocol: "zmodem",
+    });
+    emit("ssh:transfer-progress", {
+      ref: refA, transferId: "completed-then-late-progress",
+      transferred: "301 MB", speed: "49.6 MB/s",
+    });
+    emit("ssh:transfer-finished", {
+      ref: refA, transferId: "completed-then-late-progress",
+      status: "completed",
+    });
+    act(() => vi.advanceTimersByTime(25000));
+    emit("ssh:transfer-progress", {
+      ref: refA, transferId: "completed-then-late-progress",
+      transferred: "301 MB", speed: "49.6 MB/s",
+    });
+    emit("ssh:transfer-state", {
+      ref: refA, transferId: "completed-then-late-progress", active: true,
+    });
+    expect(container.querySelector(".transfer-center-count")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+    expect(container.querySelector(".transfer-center-job")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("legacy Ctrl+C stop is shown as cancelling then cancelled, not forever transferring", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "stopped-1", direction: "upload", protocol: "zmodem",
+  });
+  emit("ssh:transfer-state", {
+    ref: refA, transferId: "stopped-1", active: true, status: "cancelling",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(container.querySelector(".transfer-center-count")?.textContent).toBe("1");
+  emit("ssh:transfer-finished", {
+    ref: refA, transferId: "stopped-1", status: "cancelled",
+  });
+  emit("ssh:transfer-state", {
+    ref: refA, transferId: "stopped-1", active: false, status: "cancelled",
+  });
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  expect(screen.getByText("已取消")).toBeTruthy();
+});
+
+test("a refused legacy cancellation does not restore an already stale task to running", async () => {
+  vi.mocked(api.CancelZmodem).mockRejectedValueOnce(new Error("no active transfer"));
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "stale-cancel", direction: "download", protocol: "zmodem",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
+  await waitFor(() => expect(screen.getByText("失败")).toBeTruthy());
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  expect(screen.getByText(/取消请求未确认/)).toBeTruthy();
+});

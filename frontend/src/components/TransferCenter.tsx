@@ -104,6 +104,21 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
   const [savingConcurrency, setSavingConcurrency] = useState(false);
   const finished = useRef(new Set<string>());
   const finishResults = useRef(new Map<string, { status: TransferStatus; error?: string }>());
+  // Completed rows are transient; their terminal outcomes are not.
+  // A delayed old progress/state event must never resurrect a finished task.
+  const rememberTerminalFinish = (key: string, result: { status: TransferStatus; error?: string }) => {
+    finished.current.delete(key);
+    finished.current.add(key);
+    finishResults.current.delete(key);
+    finishResults.current.set(key, result);
+    // Keep a bounded, session-scoped tombstone history (transfer IDs do not repeat).
+    while (finished.current.size > 512) {
+      const oldest = finished.current.values().next().value;
+      if (!oldest) break;
+      finished.current.delete(oldest);
+      finishResults.current.delete(oldest);
+    }
+  };
   const terminalCleanupTimers = useRef(new Map<string, number>());
   const panel = useRef<HTMLDivElement>(null);
   const liveRefs = tabs.filter(tab => tab.ref).map(tab => tab.ref!);
@@ -121,8 +136,8 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         if (!job || (job.status !== "completed" && job.status !== "cancelled" && job.status !== "failed")) return previous;
         const next = { ...previous };
         delete next[key];
-        finished.current.delete(key);
-        finishResults.current.delete(key);
+        // Keep the transfer-ID tombstone until the connection closes or it
+        // ages out of the bounded history. Old progress can arrive later.
         return next;
       });
     }, delayMs);
@@ -177,7 +192,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           (job.status === "running" || job.status === "cancelling"))
         .map(([oldKey]) => oldKey);
       for (const oldKey of stale) {
-        finished.current.add(oldKey);
+        rememberTerminalFinish(oldKey, {
+          status: "failed",
+          error: "上一笔 ZMODEM 已被新传输取代，但未收到可靠的结束确认",
+        });
         scheduleTerminalCleanup(oldKey, 12000);
       }
       setTerminalJobs(previous => {
@@ -239,7 +257,8 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
               ref: event.ref, transferId: event.transferId || job?.transferId || "legacy",
               protocol: event.protocol ?? job?.protocol ?? "trzsz",
               direction: event.direction ?? job?.direction,
-              status: job?.status === "cancelling" ? "cancelling" : "running",
+              status: event.status === "cancelling" || job?.status === "cancelling"
+                ? "cancelling" : "running",
               files: job?.files ?? [],
             },
           };
@@ -252,8 +271,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         const key = completionKey;
         const existing = terminalJobsRef.current[key];
         const status = event.status ?? (existing?.status === "cancelling" ? "cancelled" : "completed");
-        finished.current.add(key);
-        finishResults.current.set(key, { status, error: event.error });
+        rememberTerminalFinish(key, { status, error: event.error });
         setTerminalJobs(previous => {
           const job = previous[key];
           if (!job) return previous;
@@ -306,8 +324,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId, true);
       const previousJob = terminalJobsRef.current[key];
       const status = event.status ?? (previousJob?.status === "cancelling" ? "cancelled" : "completed");
-      finished.current.add(key);
-      finishResults.current.set(key, { status, error: event.error });
+      rememberTerminalFinish(key, { status, error: event.error });
       setTerminalJobs(previous => {
         const job = previous[key];
         if (!job) return previous;
@@ -504,8 +521,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         const next = { ...previous };
         for (const [key] of ended) {
           delete next[key];
-          finished.current.delete(key);
-          finishResults.current.delete(key);
+          // Preserve finish markers against late backend events after cleanup.
         }
         return next;
       });
@@ -572,8 +588,8 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       ...previous, [key]: { ...previous[key], status: "cancelling" },
     }) : previous);
     void api.CancelNativeZmodemInteractiveTransfer(batch.ref).catch(error => {
-      setNativeBatches(previous => previous[key] ? ({
-        ...previous, [key]: { ...previous[key], status: "running" },
+      setNativeBatches(previous => previous[key]?.status === "cancelling" ? ({
+        ...previous, [key]: { ...previous[key], status: "failed", error: "取消请求未确认：" + errorText(error) },
       }) : previous);
       onNotice(error);
     });
@@ -582,9 +598,16 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
   const cancelTerminal = (key: string, job: TerminalTransfer) => {
     setTerminalJobs(previous => ({ ...previous, [key]: { ...job, status: "cancelling" } }));
     void api.CancelZmodem(job.ref).catch(error => {
-      setTerminalJobs(previous => previous[key] ? ({
-        ...previous, [key]: { ...previous[key], status: "running" },
+      // The backend may report "no active transfer" if the local process has
+      // exited but its final event was delayed. Never tell users it is still
+      // transferring after cancellation has been rejected.
+      setTerminalJobs(previous => previous[key]?.status === "cancelling" ? ({
+        ...previous, [key]: {
+          ...previous[key], status: "failed",
+          error: "取消请求未确认：" + errorText(error),
+        },
       }) : previous);
+      scheduleTerminalCleanup(key, 12000);
       onNotice(error);
     });
   };
