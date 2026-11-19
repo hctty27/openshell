@@ -285,6 +285,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   const navigatedLocalDir = useRef("");
   const [remoteDir,setRemoteDir] = useState("");
   const remoteNavigationSerial = useRef(0);
+  const validatedRemoteListing = useRef<{ key: string; entries: SFTPEntry[] } | null>(null);
   const [localFiles,setLocalFiles] = useState<SFTPEntry[]>([]);
   const [remoteFiles,setRemoteFiles] = useState<SFTPEntry[]>([]);
   const [localBusy,setLocalBusy] = useState(false);
@@ -318,6 +319,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   useEffect(() => {
     let alive=true;
     remoteNavigationSerial.current++;
+    validatedRemoteListing.current = null;
     editorRequestID.current++;
     editorLoadInProgress.current=false;
     setEditorLoadingPath(null);
@@ -373,6 +375,16 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   },[refID.tabId,refID.sessionId,refID.generation,localDir,versions.local]);
   useEffect(()=>{
     if(!remoteDir)return;
+    // The jump already fetched this directory to validate it: reuse the result.
+    const cached = validatedRemoteListing.current;
+    validatedRemoteListing.current = null;
+    if (cached?.key === directoryCacheKey(refID, remoteDir)) {
+      setRemoteFiles(cached.entries);
+      setRemoteListedKey(cached.key);
+      setRemoteError("");
+      setRemoteBusy(false);
+      return;
+    }
     let alive=true;setRemoteBusy(true);setRemoteError("");
     api.SFTPList(refID,"remote",remoteDir).then(items=>{if(alive){setRemoteFiles(items??[]);setRemoteListedKey(directoryCacheKey(refID,remoteDir));}})
       .catch(error=>{if(alive){setRemoteFiles([]);setRemoteError(error);}})
@@ -471,6 +483,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
       setLocalDir(directory);
     } else {
       remoteNavigationSerial.current++;
+      validatedRemoteListing.current = null;
       setRemoteDir(directory);
     }
     selectionAnchor.current[side] = null;
@@ -487,9 +500,10 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     const request = ++remoteNavigationSerial.current;
     try {
       // Validate before changing SFTP navigation state or its remembered directory.
-      await api.SFTPList(refID, "remote", target);
+      const entries = await api.SFTPList(refID, "remote", target);
       if (remoteNavigationSerial.current !== request) return;
       changeDir("remote", target);
+      validatedRemoteListing.current = { key: directoryCacheKey(refID, target), entries: entries ?? [] };
     } catch (error) {
       if (remoteNavigationSerial.current === request) onNotice(error);
     }
