@@ -316,6 +316,15 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       : terminalOutputDispatcher.onSSH(ref!, onOutput);
     const encoder = new TextEncoder();
     const inputQueue: string[] = [];
+    let legacyTransferActive = false;
+    let legacySelectionActive = false;
+    const transferInputBlocked = () => nativeTransferActive.current ||
+      legacyTransferActive || legacySelectionActive;
+    const syncTransferInput = () => {
+      const blocked = transferInputBlocked();
+      if (blocked) inputQueue.length = 0;
+      term.options.disableStdin = blocked;
+    };
     const matchesConnection = (candidate: Ref) =>
       !!ref && candidate.tabId === ref.tabId &&
       candidate.sessionId === ref.sessionId &&
@@ -328,8 +337,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       if (event.active) {
         nativeTransferIDs.current.add(transferID);
         nativeTransferActive.current = true;
-        inputQueue.length = 0;
-        term.options.disableStdin = true;
+        syncTransferInput();
         return;
       }
       const terminalSafe = event.terminalSafe === true ||
@@ -337,13 +345,41 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       if (terminalSafe) nativeTransferIDs.current.delete(transferID);
       else nativeTransferIDs.current.add(transferID);
       nativeTransferActive.current = nativeTransferIDs.current.size > 0;
-      term.options.disableStdin = nativeTransferActive.current;
+      syncTransferInput();
+    });
+    // The compatibility filter also owns SSH PTY input while rz/sz or
+    // trz/tsz is choosing files and transferring. Ctrl+C is not a
+    // user-visible cancellation shortcut: only the transfer center can stop.
+    const offLegacyPick = listen("ssh:zmodem-pick", (event: { ref?: Ref }) => {
+      if (!event?.ref || !matchesConnection(event.ref)) return;
+      legacySelectionActive = true;
+      syncTransferInput();
+    });
+    const offLegacyPickEnded = listen("ssh:zmodem-pick-ended", (event: {
+      ref?: Ref; accepted?: boolean;
+    }) => {
+      if (!event?.ref || !matchesConnection(event.ref)) return;
+      // A successful selection holds the lock until the transfer's own
+      // active=false callback; transfer startup is asynchronous upstream.
+      legacySelectionActive = event.accepted === true;
+      syncTransferInput();
+    });
+    const offLegacyState = listen("ssh:transfer-state", (event: {
+      ref?: Ref; active: boolean;
+    }) => {
+      if (!event?.ref || !matchesConnection(event.ref)) return;
+      legacyTransferActive = event.active === true;
+      if (event.active) legacySelectionActive = false;
+      else legacySelectionActive = false;
+      syncTransferInput();
     });
     const offDisconnected = listen("ssh:disconnected", (disconnectedRef: Ref) => {
       if (!matchesConnection(disconnectedRef)) return;
       nativeTransferActive.current = false;
       nativeTransferIDs.current.clear();
-      term.options.disableStdin = false;
+      legacyTransferActive = false;
+      legacySelectionActive = false;
+      syncTransferInput();
     });
     let inputFlushing = false;
     let inputScheduled = false;
@@ -352,8 +388,13 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       inputFlushing = true;
       try {
         while (inputQueue.length && !disposed) {
+          if (transferInputBlocked()) {
+            inputQueue.length = 0;
+            break;
+          }
           const bytes = encoder.encode(inputQueue.splice(0).join(""));
           for (let offset = 0; offset < bytes.length && !disposed; offset += 64 * 1024) {
+            if (transferInputBlocked()) break;
             const chunk = bytes.subarray(offset, offset + 64 * 1024);
             let binary = "";
             for (let i = 0; i < chunk.length; i += 8192) {
@@ -366,7 +407,8 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       } catch (error) {
         inputQueue.length = 0;
         const reason = errorText(error);
-        if (!disposed && !reason.includes("native terminal input busy")) {
+        if (!disposed && !reason.includes("native terminal input busy") &&
+          !reason.includes("terminal file transfer input busy")) {
           callbacks.current.onError(error);
         }
       } finally {
@@ -383,7 +425,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       });
     };
     const input = term.onData((data) => {
-      if (terminalMode === "offline" || nativeTransferActive.current ||
+      if (terminalMode === "offline" || transferInputBlocked() ||
         (terminalMode === "ssh" && callbacks.current.aiControlled)) return;
       if (terminalMode === "ssh" && ref && data.length > 0) callbacks.current.onUserInput?.(ref);
       // Keep the viewport anchored while inspecting history. Return to the live
@@ -459,11 +501,11 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
     };
     const pasteFromClipboard = async () => {
       if (pastePending || disposed || !callbacks.current.active || callbacks.current.aiControlled ||
-        nativeTransferActive.current) return;
+        transferInputBlocked()) return;
       pastePending = true;
       try {
         const text = await Clipboard.Text();
-        if (disposed || !callbacks.current.active || nativeTransferActive.current || !text) return;
+        if (disposed || !callbacks.current.active || transferInputBlocked() || !text) return;
         if (callbacks.current.confirmMultilinePaste && /[\r\n]/.test(text)) {
           const accepted = await dialogsRef.current.confirm({
             title: message("terminal:confirmMultilinePaste"),
@@ -488,7 +530,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
           disposed ||
           !callbacks.current.active ||
           terminalMode === "offline" ||
-          nativeTransferActive.current ||
+          transferInputBlocked() ||
           (!local && (currentRef?.tabId !== ref?.tabId ||
           currentRef?.sessionId !== ref?.sessionId ||
           currentRef?.generation !== ref?.generation))
@@ -612,6 +654,9 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       offWindowGeometryEvents.forEach(off => off());
       off();
       offNativeBatch();
+      offLegacyPick();
+      offLegacyPickEnded();
+      offLegacyState();
       offDisconnected();
       if (local) void api.CloseLocalTerminal(p.tab.id, localID).catch(() => {});
       paneElement.removeEventListener("mousedown", onMouseDown, true);
