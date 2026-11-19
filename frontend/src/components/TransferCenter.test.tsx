@@ -124,7 +124,7 @@ test("native ZMODEM renders one file and does not report completion before remot
   emit("ssh:native-zmodem-batch", {
     ref: refA, id: "transfer-1", direction: "upload", active: false,
   });
-  expect(screen.getByText("100%")).toBeTruthy();
+  expect(screen.getByText("已完成")).toBeTruthy();
 });
 
 test("native ZMODEM cancellation affects only the active single-file task", async () => {
