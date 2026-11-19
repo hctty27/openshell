@@ -25,7 +25,7 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		{"upload", []string{"r", "z", "\r"}, true, "rz\x15", "upload", ""},
 		{"download", []string{"sz /tmp/report.bin\r"}, true, "sz /tmp/report.bin\x15", "download", "/tmp/report.bin"},
 		{"missing prompt", []string{"rz\r"}, false, "rz\r", "", ""},
-		{"unsupported options", []string{"rz -y\r"}, true, "rz -y\r", "", ""},
+		{"unsupported options", []string{"rz -y\r"}, true, "rz -y\x15", "reject-unsupported", ""},
 		{"relative path", []string{"sz report.bin\r"}, true, "sz report.bin\x15", "download", "report.bin"},
 		{"unsafe command", []string{"sz /tmp/a;rm -rf /\r"}, true, "sz /tmp/a;rm -rf /\r", "", ""},
 		{"quoted spaces", []string{"sz '/tmp/a b'\r"}, true, "sz '/tmp/a b'\x15", "download", "/tmp/a b"},
@@ -34,7 +34,7 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		{"unicode download", []string{"sz '中文 文件.bin'\r"}, true, "sz '中文 文件.bin'\x15", "download", "中文 文件.bin"},
 		{"escaped space", []string{"sz name\\ with\\ spaces.bin\r"}, true, "sz name\\ with\\ spaces.bin\x15", "download", "name with spaces.bin"},
 		{"upload quiet", []string{"rz -q\r"}, true, "rz -q\x15", "upload", ""},
-		{"overwrite option remains legacy", []string{"rz -y\r"}, true, "rz -y\r", "", ""},
+		{"overwrite option rejected", []string{"rz -y\r"}, true, "rz -y\x15", "reject-unsupported", ""},
 		{"shell expansion remains legacy", []string{"sz \"$HOME/a.bin\"\r"}, true, "sz \"$HOME/a.bin\"\r", "", ""},
 		{"glob remains legacy", []string{"sz *.bin\r"}, true, "sz *.bin\r", "", ""},
 		{"home expansion remains legacy", []string{"sz ~/file.bin\r"}, true, "sz ~/file.bin\r", "", ""},
@@ -107,7 +107,7 @@ func TestNativeAutoCommandRequiresReadyExactSessionAndWorkingSidecar(t *testing.
 	}{
 		{"ready", true, true, "rz\x15", true},
 		{"unknown shell", false, true, "rz\r", false},
-		{"disabled", true, false, "rz\r", false},
+		{"disabled", true, false, "rz\x15", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m, ref, input, events := nativeAutoTestManager(t, tc.ready, tc.enabled)
@@ -129,12 +129,12 @@ func TestNativeAutoCommandRequiresReadyExactSessionAndWorkingSidecar(t *testing.
 	}
 }
 
-func TestNativeAutoCommandMissingSidecarFallsBackBeforeEnter(t *testing.T) {
+func TestNativeAutoCommandMissingSidecarRejectsBeforeEnter(t *testing.T) {
 	m, ref, input, events := nativeAutoTestManager(t, true, true)
 	m.ConfigureNativeZmodemAuto(filepath.Join(t.TempDir(), "not-found.exe"))
 	nativeAutoType(t, m, ref, "rz\r")
-	if input.String() != "rz\r" || len(events) != 0 {
-		t.Fatalf("unavailable sidecar intercepted the legacy rz command: %q", input.String())
+	if input.String() != "rz\x15" || len(events) != 0 {
+		t.Fatalf("unavailable sidecar was not rejected before remote execution: %q", input.String())
 	}
 }
 
