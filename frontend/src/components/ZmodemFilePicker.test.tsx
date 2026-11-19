@@ -98,7 +98,7 @@ test("native download rejects a multi-file intent without starting a transfer", 
   });
   expect(await screen.findByText("hello.txt")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "保存到此处" }));
-  expect(await screen.findByText("ZMODEM 每次只能下载一个远程文件")).toBeTruthy();
+  expect((await screen.findByRole("alert")).textContent).toContain("ZMODEM 每次只能下载一个远程文件");
   expect(api.StartNativeZmodemInteractiveTransfer).not.toHaveBeenCalled();
 });
 
