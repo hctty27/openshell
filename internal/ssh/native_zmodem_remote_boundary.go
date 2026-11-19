@@ -40,6 +40,10 @@ func nativeInteractiveFencedCommand(direction, remotePath, token string) (string
 	switch direction {
 	case "upload":
 		command, action = "rz -q", "send"
+	case "upload-overwrite":
+		// lrzsz -y intentionally permits overwriting a remote file of
+		// the same name. Do not change the local Rust sidecar action.
+		command, action = "rz -q -y", "send"
 	case "download":
 		if remotePath == "" || strings.IndexFunc(remotePath, func(r rune) bool {
 			return r < 32 || r == 127

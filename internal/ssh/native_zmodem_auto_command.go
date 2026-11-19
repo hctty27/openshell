@@ -83,10 +83,27 @@ func parseNativeAutoCommand(line string) (direction, remotePath string) {
 	if !ok || len(args) == 0 { return "", "" }
 	switch args[0] {
 	case "rz":
-		if len(args) == 1 || (len(args) == 2 && (args[1] == "-q" || args[1] == "--")) {
-			return "upload", ""
+		// Only options whose meaning is preserved by our own remote command
+		// generator may be intercepted. Overwrite is an explicit mode and
+		// must not be silently downgraded to ordinary upload.
+		quiet, overwrite, terminated := false, false, false
+		for i, arg := range args[1:] {
+			switch arg {
+			case "-q":
+				if quiet || terminated { return "reject-unsupported", "" }
+				quiet = true
+			case "-y", "--overwrite":
+				if overwrite || terminated { return "reject-unsupported", "" }
+				overwrite = true
+			case "--":
+				if terminated || i != len(args)-2 { return "reject-unsupported", "" }
+				terminated = true
+			default:
+				return "reject-unsupported", ""
+			}
 		}
-		return "reject-unsupported", ""
+		if overwrite { return "upload-overwrite", "" }
+		return "upload", ""
 	case "trz", "tsz":
 		return "reject-unsupported", ""
 	case "sz":

@@ -25,7 +25,14 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		{"upload", []string{"r", "z", "\r"}, true, "rz\x15", "upload", ""},
 		{"download", []string{"sz /tmp/report.bin\r"}, true, "sz /tmp/report.bin\x15", "download", "/tmp/report.bin"},
 		{"missing prompt", []string{"rz\r"}, false, "rz\r", "", ""},
-		{"unsupported options", []string{"rz -y\r"}, true, "rz -y\x15", "reject-unsupported", ""},
+		{"overwrite short option", []string{"rz -y\r"}, true, "rz -y\x15", "upload-overwrite", ""},
+		{"overwrite long option", []string{"rz --overwrite\r"}, true, "rz --overwrite\x15", "upload-overwrite", ""},
+		{"overwrite quiet first", []string{"rz -q -y\r"}, true, "rz -q -y\x15", "upload-overwrite", ""},
+		{"overwrite quiet last", []string{"rz -y -q\r"}, true, "rz -y -q\x15", "upload-overwrite", ""},
+		{"overwrite with long option and quiet", []string{"rz --overwrite -q\r"}, true, "rz --overwrite -q\x15", "upload-overwrite", ""},
+		{"duplicate overwrite rejected", []string{"rz -y --overwrite\r"}, true, "rz -y --overwrite\x15", "reject-unsupported", ""},
+		{"unsupported upload option", []string{"rz -a\r"}, true, "rz -a\x15", "reject-unsupported", ""},
+		{"overwrite after option terminator rejected", []string{"rz -- -y\r"}, true, "rz -- -y\x15", "reject-unsupported", ""},
 		{"relative path", []string{"sz report.bin\r"}, true, "sz report.bin\x15", "download", "report.bin"},
 		{"unsafe command", []string{"sz /tmp/a;rm -rf /\r"}, true, "sz /tmp/a;rm -rf /\r", "", ""},
 		{"quoted spaces", []string{"sz '/tmp/a b'\r"}, true, "sz '/tmp/a b'\x15", "download", "/tmp/a b"},
@@ -34,7 +41,7 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		{"unicode download", []string{"sz '中文 文件.bin'\r"}, true, "sz '中文 文件.bin'\x15", "download", "中文 文件.bin"},
 		{"escaped space", []string{"sz name\\ with\\ spaces.bin\r"}, true, "sz name\\ with\\ spaces.bin\x15", "download", "name with spaces.bin"},
 		{"upload quiet", []string{"rz -q\r"}, true, "rz -q\x15", "upload", ""},
-		{"overwrite option rejected", []string{"rz -y\r"}, true, "rz -y\x15", "reject-unsupported", ""},
+		{"overwrite split input", []string{"r", "z", " ", "-", "y", "\r"}, true, "rz -y\x15", "upload-overwrite", ""},
 		{"shell expansion remains legacy", []string{"sz \"$HOME/a.bin\"\r"}, true, "sz \"$HOME/a.bin\"\r", "", ""},
 		{"glob remains legacy", []string{"sz *.bin\r"}, true, "sz *.bin\r", "", ""},
 		{"home expansion remains legacy", []string{"sz ~/file.bin\r"}, true, "sz ~/file.bin\r", "", ""},
@@ -169,5 +176,24 @@ func TestNativeAutoCommandDoesNotInterceptMySQLPrompt(t *testing.T) {
 	nativeAutoType(t, m, ref, "rz\r")
 	if input.String() != "rz\r" || len(events) != 0 {
 		t.Fatalf("MySQL command was incorrectly treated as shell ZMODEM: %q", input.String())
+	}
+}
+
+// Overwrite must survive the actual terminal input gate and arrive at the
+// file picker as a distinct mode, never as a silent normal upload.
+func TestNativeAutoCommandOverwriteEmitsExactIntent(t *testing.T) {
+	m, ref, input, events := nativeAutoTestManager(t, true, true)
+	nativeAutoType(t, m, ref, "rz -y\r")
+	if got := input.String(); got != "rz -y\x15" {
+		t.Fatalf("remote command was not intercepted: %q", got)
+	}
+	select {
+	case event := <-events:
+		if event["direction"] != "upload-overwrite" || event["ref"] != ref ||
+			event["remotePath"] != "" {
+			t.Fatalf("overwrite intent lost: %+v", event)
+		}
+	default:
+		t.Fatal("missing overwrite picker intent")
 	}
 }

@@ -94,6 +94,21 @@ func TestNativeZmodemLiveInteractivePTY(t *testing.T) {
 		verifyNativeLiveFile(t, remoteSource, filepath.Join(localDownload, filepath.Base(remoteSource)))
 		t.Logf("real interactive SSH PTY roundtrip %s: upload and download SHA-256 matched", item.name)
 	}
+	// The remote shell starts with an existing file. rz -y must replace it
+	// using the same Rust sidecar and restore the PTY normally afterward.
+	overwriteName := fmt.Sprintf("openshell-native-overwrite-%d.bin", time.Now().UnixNano())
+	localOverwrite := filepath.Join(workspace, overwriteName)
+	remoteOverwrite := filepath.Join(remoteHome, overwriteName)
+	t.Cleanup(func() { _ = os.Remove(remoteOverwrite) })
+	if err := os.WriteFile(remoteOverwrite, []byte("old remote contents"), 0600); err != nil { t.Fatal(err) }
+	if err := os.WriteFile(localOverwrite, nativeLivePayload(64*1024+41), 0600); err != nil { t.Fatal(err) }
+	overwriteCtx, cancelOverwrite := context.WithTimeout(context.Background(), 45*time.Second)
+	err = manager.runNativeTerminalExperiment(overwriteCtx, ref, sidecar, "upload-overwrite", localOverwrite, "")
+	cancelOverwrite()
+	if err != nil { t.Fatalf("real PTY rz -y overwrite failed: %v", err) }
+	verifyNativeLiveFile(t, localOverwrite, remoteOverwrite)
+	if !manager.Valid(ref) { t.Fatal("rz -y disconnected the restored SSH terminal") }
+
 	if !manager.Valid(ref) { t.Fatal("successful native transfer disconnected the interactive SSH terminal") }
 	// End with normal manual input: both native leases must have been released.
 	if err := manager.Write(ref, "cHJpbnRmICdyZXN0b3JlZCdcbg0="); err != nil {

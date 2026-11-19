@@ -18,6 +18,7 @@ interface NativeBatch {
   id: string;
   ref: Ref;
   direction: Direction;
+  overwrite?: boolean;
   status: "running" | "cancelling" | "completed" | "failed" | "cancelled";
   files: NativeFile[];
   error?: string;
@@ -61,7 +62,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
   useEffect(() => {
     const offNativeBatch = listen("ssh:native-zmodem-batch", (event: {
       ref: Ref; id: string; direction: Direction; active: boolean;
-      files?: { name: string; total?: number }[]; error?: string; cancelled?: boolean; terminalSafe?: boolean;
+      files?: { name: string; total?: number }[]; error?: string; cancelled?: boolean; terminalSafe?: boolean; overwrite?: boolean;
     }) => {
       if (!event?.ref || !event.id || (event.active && event.files?.length !== 1)) return;
       const key = refKey(event.ref);
@@ -70,7 +71,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       setNativeBatches(previous => {
         if (event.active) {
           return { ...previous, [key]: {
-            id: event.id, ref: event.ref, direction: event.direction, status: "running",
+            id: event.id, ref: event.ref, direction: event.direction, overwrite: event.overwrite === true, status: "running",
             files: (event.files ?? []).map(file => ({
               name: file.name, total: typeof file.total === "number" ? file.total : null,
               bytes: 0, status: "queued",
@@ -281,7 +282,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                 <article key={"native-" + key} className="transfer-center-job">
                   <div className="transfer-center-line">
                     {batch.direction === "download" ? <ArrowDownToLine size={15}/> : <ArrowUpFromLine size={15}/>}
-                    <strong title={file?.name ?? "ZMODEM"}>{file?.name ?? "ZMODEM"}</strong>
+                    <strong title={file?.name ?? "ZMODEM"}>{file?.name ?? "ZMODEM"}{batch.overwrite ? " · " + t("sftp:zmodemOverwriteMode") : ""}</strong>
                     <span className="transfer-center-session" title={sessionName(batch.ref)}>{sessionName(batch.ref)}</span>
                     {active ?
                       <button type="button" disabled={batch.status === "cancelling"}
