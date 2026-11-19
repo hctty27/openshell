@@ -351,7 +351,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       nativeTransferIDs.current.add("unsafe-protocol");
       nativeTransferActive.current = true;
       syncTransferInput();
-      callbacks.current.onError(new Error(event.error ?? "未接管的 ZMODEM 协议，请重新连接"));
+      callbacks.current.onError(new Error(event.error ?? "Unclaimed ZMODEM protocol; reconnect SSH"));
     });
     const offDisconnected = listen("ssh:disconnected", (disconnectedRef: Ref) => {
       if (!matchesConnection(disconnectedRef)) return;
