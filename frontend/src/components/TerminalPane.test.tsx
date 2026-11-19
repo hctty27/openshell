@@ -1137,8 +1137,8 @@ test("legacy rz/sz prevents typing, Ctrl+C and clipboard paste until transfer fi
   expect(term.options.disableStdin).toBeFalsy();
   emit("ssh:zmodem-pick", { ref: tab.ref, id: 1, direction: "upload", protocol: "zmodem" });
   expect(term.options.disableStdin).toBe(true);
-  term.onDataCallback("echo should not run\\r");
-  term.onDataCallback("\\x03");
+  term.onDataCallback("echo should not run\r");
+  term.onDataCallback("\x03");
   fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
   expect(Clipboard.Text).not.toHaveBeenCalled();
   expect(api.WriteTerminal).not.toHaveBeenCalled();
@@ -1149,9 +1149,9 @@ test("legacy rz/sz prevents typing, Ctrl+C and clipboard paste until transfer fi
   expect(term.options.disableStdin).toBe(true);
   emit("ssh:transfer-state", { ref: tab.ref, active: false, protocol: "zmodem", status: "completed" });
   expect(term.options.disableStdin).toBe(false);
-  term.onDataCallback("pwd\\r");
+  term.onDataCallback("pwd\r");
   await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalledOnce());
-  expect(api.WriteTerminal).toHaveBeenCalledWith(tab.ref, btoa("pwd\\r"));
+  expect(api.WriteTerminal).toHaveBeenCalledWith(tab.ref, btoa("pwd\r"));
 });
 
 test("cancelled legacy picker restores input but native transfer still keeps it locked", async () => {
@@ -1170,8 +1170,8 @@ test("cancelled legacy picker restores input but native transfer still keeps it 
   expect(term.options.disableStdin).toBe(true);
   emit("ssh:native-zmodem-batch", { ref: tab.ref, id: "native-1", active: false, terminalSafe: true });
   expect(term.options.disableStdin).toBe(false);
-  term.onDataCallback("date\\r");
-  await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalledWith(tab.ref, btoa("date\\r")));
+  term.onDataCallback("date\r");
+  await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalledWith(tab.ref, btoa("date\r")));
 });
 
 test("compatibility transfer input ownership rejection does not disconnect SSH", async () => {
