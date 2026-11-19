@@ -408,3 +408,51 @@ func TestZmodemLocalExitCarriesTransferIdentityAndOutcome(t *testing.T) {
         })
     }
 }
+
+func TestZmodemLocalExitFinishesBothLifecycleStreamsWithoutRemoteOutput(t *testing.T) {
+	for _, item := range []struct{ message, wantStatus string }{
+		{"\r\x1b[2K\x1b[1;32mSuccess!!\x1b[0m\r\n", "completed"},
+		{"\r\x1b[2Kclient exit with 1\r\n", "failed"},
+	} {
+		t.Run(item.wantStatus, func(t *testing.T) {
+			events := make(chan map[string]any, 4)
+			ref := domain.ConnectionRef{TabID: "tab", SessionID: "session", Generation: 1}
+			manager := NewManager(nil, func(name string, payload any) {
+				if name == "ssh:transfer-state" || name == "ssh:transfer-finished" {
+					copy := map[string]any{"eventName": name}
+					for key, value := range payload.(map[string]any) { copy[key] = value }
+					events <- copy
+				}
+			})
+			writer := &terminalWriter{m: manager, c: &connection{
+				ref: ref, history: NewHistory(8192), transferID: 52,
+			}}
+			closer := &terminalOutputCloser{writer: writer, done: make(chan struct{})}
+			defer closer.Close()
+			// Feed every byte separately, including ANSI escapes and CRLF,
+			// to verify that the observer doesn't require another remote chunk.
+			for i := 0; i < len(item.message); i++ {
+				if _, err := closer.Write([]byte{item.message[i]}); err != nil { t.Fatal(err) }
+			}
+			seen := map[string]bool{}
+			for range 2 {
+				select {
+				case event := <-events:
+					name := event["eventName"].(string)
+					if event["transferId"] != "52" || event["status"] != item.wantStatus {
+						t.Fatalf("wrong ZMODEM completion event: %+v", event)
+					}
+					if name == "ssh:transfer-state" && event["active"] != false {
+						t.Fatalf("local client exit didn't end the task: %+v", event)
+					}
+					seen[name] = true
+				case <-time.After(time.Second):
+					t.Fatal("missing local child exit lifecycle event")
+				}
+			}
+			if !seen["ssh:transfer-state"] || !seen["ssh:transfer-finished"] {
+				t.Fatalf("missing completion stream: %+v", seen)
+			}
+		})
+	}
+}
