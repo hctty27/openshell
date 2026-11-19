@@ -568,7 +568,7 @@ func TestCompatibilityZmodemBlocksUserInputButAllowsInternalCancel(t *testing.T)
 			m.mu.Unlock()
 
 			for _, payload := range [][]byte{
-				[]byte("hello"), []byte("pasted\\ncommand"), {0x03}, {0x1b, 0x5b, 0x41},
+				[]byte("hello"), []byte("pasted\ncommand"), {0x03}, {0x1b, 0x5b, 0x41},
 			} {
 				err := m.Write(ref, base64.StdEncoding.EncodeToString(payload))
 				if !errors.Is(err, errTerminalFileTransferBusy) {
@@ -584,7 +584,7 @@ func TestCompatibilityZmodemBlocksUserInputButAllowsInternalCancel(t *testing.T)
 					t.Fatal("trzsz cancellation should use the filter's internal stop method")
 				}
 			} else {
-				if len(input.writes) != 1 || string(input.writes[0]) != "\\x03" {
+				if len(input.writes) != 1 || (len(input.writes[0]) != 1 || input.writes[0][0] != 0x03) {
 					t.Fatalf("ZMODEM button did not use the filter's internal cancel trigger: %x", input.writes)
 				}
 			}
@@ -592,7 +592,7 @@ func TestCompatibilityZmodemBlocksUserInputButAllowsInternalCancel(t *testing.T)
 			m.mu.Lock()
 			c.transferring = false
 			m.mu.Unlock()
-			if err := m.Write(ref, base64.StdEncoding.EncodeToString([]byte("after\\r"))); err != nil {
+			if err := m.Write(ref, base64.StdEncoding.EncodeToString([]byte("after\r"))); err != nil {
 				t.Fatalf("normal terminal input not restored after transfer: %v", err)
 			}
 		})
@@ -608,7 +608,7 @@ func TestCompatibilityZmodemFileSelectionBlocksTerminalInput(t *testing.T) {
 	c.stdin = input
 	c.zmodemSelection = &zmodemSelection{id: 7, response: make(chan []string, 1)}
 	m.mu.Unlock()
-	for _, data := range []string{"pwd", "\\x03", "pasted\\ncommand"} {
+	for _, data := range []string{"pwd", "\x03", "pasted\ncommand"} {
 		if err := m.Write(ref, base64.StdEncoding.EncodeToString([]byte(data))); !errors.Is(err, errTerminalFileTransferBusy) {
 			t.Fatalf("input during picker was not blocked: %q %v", data, err)
 		}
@@ -617,7 +617,7 @@ func TestCompatibilityZmodemFileSelectionBlocksTerminalInput(t *testing.T) {
 	m.mu.Lock()
 	c.zmodemSelection = nil
 	m.mu.Unlock()
-	if err := m.Write(ref, base64.StdEncoding.EncodeToString([]byte("echo resumed\\r"))); err != nil {
+	if err := m.Write(ref, base64.StdEncoding.EncodeToString([]byte("echo resumed\r"))); err != nil {
 		t.Fatalf("terminal input did not resume after picker cancellation: %v", err)
 	}
 }
