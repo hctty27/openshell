@@ -196,38 +196,6 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     }
   };
   const download = request.direction === "download";
-          if (!download && paths.length !== 1) {
-            throw new Error("ZMODEM 每次只能上传一个文件");
-          }
-          const remotePath = request.remotePath ?? "";
-          if (download && (!remotePath || /[\r\n]/.test(remotePath))) {
-            throw new Error("ZMODEM 每次只能下载一个远程文件");
-          }
-          pending = api.StartNativeZmodemInteractiveTransfer(
-            request.ref, request.direction,
-            download ? directory : paths[0], download ? remotePath : "",
-          );
-        }
-      } else {
-        // The backend only acknowledges paths. Progress/finish use their own events.
-        pending = api.SubmitZmodemSelection(request.ref, request.id, paths);
-      }
-      if (paths.length > 0) {
-        void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
-      }
-      closeRequest();
-      if (pending) void Promise.resolve(pending).catch(err => {
-        const message = errorText(err);
-        if (request.native && message.includes("终端已安全恢复") &&
-          message.includes("context canceled")) return;
-        onNotice(err);
-      });
-    } catch (err) {
-      setError(errorText(err));
-      submittingKey.current = "";
-    }
-  };
-  const download = request.direction === "download";
   return (
     <dialog ref={dialogRef} className="zmodem-picker-dialog"
       aria-label={t(download ? "sftp:zmodemPickDownload" : "sftp:zmodemPickUpload")}
