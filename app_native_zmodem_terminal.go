@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -73,6 +74,7 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 		payload := map[string]any{"ref": ref, "id": id, "direction": direction, "active": false}
 		if err != nil {
 			payload["error"] = err.Error()
+			payload["cancelled"] = errors.Is(err, context.Canceled)
 		}
 		payload["terminalSafe"] = a.NativeZmodemInteractiveReadiness(ref).Ready
 		a.emit("ssh:native-zmodem-batch", payload)
