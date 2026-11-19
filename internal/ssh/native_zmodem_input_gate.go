@@ -6,6 +6,10 @@ import (
 	"sync"
 )
 
+// Native-only ZMODEM cancel sequence (CAN followed by backspaces).
+// Ordinary terminal Ctrl+C must never reach this path.
+var zmodemCancelSequence = []byte("\x18\x18\x18\x18\x18\x18\x18\x18\x18\x18\x08\x08\x08\x08\x08\x08\x08\x08\x08\x08")
+
 var (
 	errNativeTerminalInputBusy = errors.New("native terminal input busy")
 	errNativeTerminalInputLease = errors.New("终端输入独占令牌已失效")
