@@ -137,6 +137,7 @@ test("SFTP jumps only on click and uses the latest reported terminal directory",
   await waitFor(() => expect(remotePathInput().value).toBe("/opt/latest"));
   expect(api.SFTPList).toHaveBeenCalledWith(ref, "remote", "/opt/latest");
   await waitFor(() => expect(onRemoteDirectoryChange).toHaveBeenCalledWith("/opt/latest"));
+  expect(vi.mocked(api.SFTPList).mock.calls.filter(([, side, path]) => side === "remote" && path === "/opt/latest")).toHaveLength(1);
 });
 
 test("SFTP terminal jump is disabled without a reported valid directory", async () => {
