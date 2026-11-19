@@ -177,9 +177,8 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       return next;
     });
   };
-  // The picker owns only the selection, never the lifetime of a transfer.
-  // Close on acceptance instead of awaiting backend work: a slow Wails call
-  // must not leave a modal over an already-running rz/sz transfer.
+  // The picker owns the selection, not the duration of the transfer.
+  // A slow native or legacy Wails call must not strand the modal.
   const submit = (paths: string[]) => {
     if (busy || submittingKey.current === requestKey ||
       currentRequestKey.current !== requestKey) return;
@@ -190,38 +189,34 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       if (request.native) {
         if (paths.length > 0) {
           const download = request.direction === "download";
-        if (!download && paths.length !== 1) throw new Error("ZMODEM 每次只能上传一个文件");
-        const remotePath = request.remotePath ?? "";
-        if (download && (!remotePath || /[\r\n]/.test(remotePath))) {
-          throw new Error("ZMODEM 每次只能下载一个远程文件");
+          if (!download && paths.length !== 1) {
+            throw new Error("ZMODEM 每次只能上传一个文件");
+          }
+          const remotePath = request.remotePath ?? "";
+          if (download && (!remotePath || /[\r\n]/.test(remotePath))) {
+            throw new Error("ZMODEM 每次只能下载一个远程文件");
+          }
+          pending = api.StartNativeZmodemInteractiveTransfer(
+            request.ref, request.direction,
+            download ? directory : paths[0], download ? remotePath : "",
+          );
         }
-        const transfer = api.StartNativeZmodemInteractiveTransfer(
-          request.ref,
-          request.direction,
-          download ? directory : paths[0],
-          download ? remotePath : "",
-        );
-        void transfer.catch(onNotice);
-        void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
-        closeRequest();
-      } catch (err) {
-        if (currentRequestKey.current !== requestKey) return;
-        setError(errorText(err));
-        setBusy(false);
-        submittingKey.current = "";
+      } else {
+        // The backend only acknowledges paths. Progress/finish use their own events.
+        pending = api.SubmitZmodemSelection(request.ref, request.id, paths);
       }
-      return;
-    }
-    try {
-      await api.SubmitZmodemSelection(request.ref, request.id, paths);
-      if (currentRequestKey.current !== requestKey) return;
-      if (paths.length > 0) void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
-      // Submission only acknowledges the paths. The transfer continues after the picker closes.
+      if (paths.length > 0) {
+        void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
+      }
       closeRequest();
+      if (pending) void Promise.resolve(pending).catch(err => {
+        const message = errorText(err);
+        if (request.native && message.includes("终端已安全恢复") &&
+          message.includes("context canceled")) return;
+        onNotice(err);
+      });
     } catch (err) {
-      if (currentRequestKey.current !== requestKey) return;
       setError(errorText(err));
-      setBusy(false);
       submittingKey.current = "";
     }
   };
