@@ -58,10 +58,24 @@ const refKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generation}`;
 const transferKey = (ref: Ref, transferId?: string) => `${refKey(ref)}:${transferId || "legacy"}`;
 const resolveTerminalTransferKey = (
   jobs: Record<string, TerminalTransfer>, ref: Ref, transferId?: string,
+  allowUnidentifiedFinish = false,
 ) => {
-  if (transferId) return transferKey(ref, transferId);
   const prefix = refKey(ref) + ":";
   const legacyKey = transferKey(ref);
+  if (transferId) {
+    const identified = transferKey(ref, transferId);
+    if (jobs[identified] || !allowUnidentifiedFinish) return identified;
+    const legacy = jobs[legacyKey];
+    // Progress or start can reach the frontend before details have supplied
+    // the transfer ID. Reconcile ONLY a final event to the sole unidentified
+    // active task; never hijack a distinct identified job on this connection.
+    if (legacy && (legacy.status === "running" || legacy.status === "cancelling") &&
+        !Object.entries(jobs).some(([key, job]) => key.startsWith(prefix) &&
+          key !== legacyKey && (job.status === "running" || job.status === "cancelling"))) {
+      return legacyKey;
+    }
+    return identified;
+  }
   const candidates = Object.entries(jobs).filter(([key]) => key.startsWith(prefix) && key !== legacyKey);
   const active = candidates.filter(([, job]) => job.status === "running" || job.status === "cancelling");
   if (active.length === 1) return active[0][0];
@@ -231,7 +245,11 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           };
         });
       } else {
-        if (finished.current.has(key)) return;
+        const completionKey = resolveTerminalTransferKey(
+          terminalJobsRef.current, event.ref, event.transferId, true,
+        );
+        if (finished.current.has(completionKey)) return;
+        const key = completionKey;
         const existing = terminalJobsRef.current[key];
         const status = event.status ?? (existing?.status === "cancelling" ? "cancelled" : "completed");
         finished.current.add(key);
@@ -285,7 +303,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       ref: Ref; transferId?: string; status?: TransferStatus; error?: string;
     }) => {
       if (!event?.ref) return;
-      const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId);
+      const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId, true);
       const previousJob = terminalJobsRef.current[key];
       const status = event.status ?? (previousJob?.status === "cancelling" ? "cancelled" : "completed");
       finished.current.add(key);
