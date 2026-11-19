@@ -73,7 +73,9 @@ func nativeLiteralShellWords(line string) ([]string, bool) {
 	}
 	if quote != 0 || escaped { return nil, false }
 	if seen { words = append(words, word.String()) }
-	return words, len(words) > 0 && len(words) <= 102
+	// The line is already capped at 4096 bytes. Preserve all literal tokens
+	// so even an oversized multi-file sz command is explicitly rejected.
+	return words, len(words) > 0
 }
 
 func parseNativeAutoCommand(line string) (direction, remotePath string) {
