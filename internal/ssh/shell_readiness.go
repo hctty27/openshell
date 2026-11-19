@@ -289,6 +289,24 @@ func (r *terminalShellReadiness) aiREPLInputStarted() {
 	r.mu.Unlock()
 }
 
+// nativeZmodemInputState separates a verified Shell prompt from a possible
+// Shell command line. Unlike AI execution, typing a literal rz/sz command
+// must not be gated by the 250 ms post-output settling delay: the first
+// keystroke otherwise permanently disables interception. If the prompt is
+// unknown, track only a simple transfer candidate so Enter can be cancelled
+// before the remote ZMODEM protocol starts; do not authorize a picker.
+func (r *terminalShellReadiness) nativeZmodemInputState() (candidate, ready bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.alternate || r.psqlPasswordPrompt ||
+		(r.program != "" && r.program != "shell") {
+		return false, false
+	}
+	// In a possible ordinary Shell, a complete literal transfer can always
+	// be rejected safely, even while prompt readiness is still uncertain.
+	return true, r.prompt && !r.manualInput && !r.assetMenu && !r.jumpServer
+}
+
 // readyProgram must only be read after checkReady succeeds.
 func (r *terminalShellReadiness) readyProgram() string {
 	r.mu.Lock()

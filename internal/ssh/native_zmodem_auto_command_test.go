@@ -24,7 +24,8 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 	}{
 		{"upload", []string{"r", "z", "\r"}, true, "rz\x15", "upload", ""},
 		{"download", []string{"sz /tmp/report.bin\r"}, true, "sz /tmp/report.bin\x15", "download", "/tmp/report.bin"},
-		{"missing prompt", []string{"rz\r"}, false, "rz\r", "", ""},
+		{"missing prompt fails closed", []string{"rz\r"}, false, "rz\x15", "reject-unavailable", ""},
+		{"unknown prompt ordinary command unchanged", []string{"redis-cli\r"}, false, "redis-cli\r", "", ""},
 		{"overwrite short option", []string{"rz -y\r"}, true, "rz -y\x15", "upload-overwrite", ""},
 		{"overwrite long option", []string{"rz --overwrite\r"}, true, "rz --overwrite\x15", "upload-overwrite", ""},
 		{"overwrite quiet first", []string{"rz -q -y\r"}, true, "rz -q -y\x15", "upload-overwrite", ""},
@@ -57,7 +58,7 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 			var actual bytes.Buffer
 			var direction, remote string
 			for _, part := range tc.chunks {
-				wire, d, p := tracker.prepare([]byte(part), tc.ready)
+				wire, d, p := tracker.prepare([]byte(part), tc.ready, true)
 				actual.Write(wire)
 				if d != "" { direction, remote = d, p }
 			}
@@ -113,7 +114,7 @@ func TestNativeAutoCommandRequiresReadyExactSessionAndWorkingSidecar(t *testing.
 		intercept bool
 	}{
 		{"ready", true, true, "rz\x15", true},
-		{"unknown shell", false, true, "rz\r", false},
+		{"unknown shell", false, true, "rz\x15", false},
 		{"disabled", true, false, "rz\x15", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -195,5 +196,83 @@ func TestNativeAutoCommandOverwriteEmitsExactIntent(t *testing.T) {
 		}
 	default:
 		t.Fatal("missing overwrite picker intent")
+	}
+}
+
+// A newly emitted Bash prompt must allow native rz/sz interception
+// immediately. AI execution retains its separate 250 ms settle check.
+func TestNativeAutoCommandFreshShellPromptWithoutSettlingDelay(t *testing.T) {
+	for _, tc := range []struct {
+		name, command, direction, path string
+	}{
+		{"upload", "rz", "upload", ""},
+		{"overwrite", "rz -y", "upload-overwrite", ""},
+		{"download", "sz report.bin", "download", "report.bin"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, ref, input, events := nativeAutoTestManager(t, false, true)
+			c := m.connections[ref.TabID]
+			c.readiness.observe([]byte("file list\\r\\n[root@localhost hc]# "))
+			if err := c.readiness.checkReady(); err == nil {
+				t.Fatal("test fixture must still be inside the AI settle window")
+			}
+			for _, ch := range tc.command {
+				nativeAutoType(t, m, ref, string(ch))
+			}
+			nativeAutoType(t, m, ref, "\\r")
+			if got, want := input.String(), tc.command+"\\x15"; got != want {
+				t.Fatalf("unexpected remote input: got %q want %q", got, want)
+			}
+			select {
+			case event := <-events:
+				if event["direction"] != tc.direction || event["remotePath"] != tc.path {
+					t.Fatalf("incorrect picker intent: %+v", event)
+				}
+			default:
+				t.Fatal("fresh prompt did not trigger the native picker")
+			}
+		})
+	}
+}
+
+// A missing prompt may not trigger a picker, but sending Enter would start
+// remote lrzsz and cause unsolicited ZMODEM frames and terminal quarantine.
+func TestNativeAutoCommandUnknownPromptRejectsWithoutRemoteEnter(t *testing.T) {
+	var notices []string
+	m, ref, input, events := nativeAutoTestManager(t, false, true)
+	m.emit = func(name string, payload any) {
+		if name == "ssh:native-zmodem-command-error" {
+			notices = append(notices, payload.(map[string]any)["error"].(string))
+		}
+	}
+	for _, cmd := range []string{"rz", "rz -y", "sz report.bin"} {
+		input.Reset()
+		nativeAutoType(t, m, ref, cmd+"\\r")
+		if got := input.String(); got != cmd+"\\x15" {
+			t.Fatalf("%q escaped into remote program: %q", cmd, got)
+		}
+	}
+	if len(events) != 0 || len(notices) != 3 {
+		t.Fatalf("unexpected picker intents or rejection notices: events=%d notices=%v", len(events), notices)
+	}
+}
+
+// A recognized REPL or alternate-screen application must not be treated as
+// a verified POSIX Shell simply because its input resembles rz/sz.
+func TestNativeAutoCommandKnownREPLAndAlternateScreenBypass(t *testing.T) {
+	for _, name := range []string{"mysql", "alternate"} {
+		t.Run(name, func(t *testing.T) {
+			m, ref, input, events := nativeAutoTestManager(t, false, true)
+			c := m.connections[ref.TabID]
+			if name == "mysql" {
+				c.readiness.observe([]byte("Welcome to the MySQL monitor\\r\\nmysql> "))
+			} else {
+				c.readiness.observe([]byte("\\x1b[?1049h"))
+			}
+			nativeAutoType(t, m, ref, "rz\\r")
+			if input.String() != "rz\\r" || len(events) != 0 {
+				t.Fatalf("modified a non-Shell input: %q", input.String())
+			}
+		})
 	}
 }
