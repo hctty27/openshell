@@ -5,7 +5,7 @@ import { api, errorText, listen } from "../bridge";
 import { t } from "../i18n";
 import type { Ref, SFTPEntry } from "../types";
 
-type Direction = "upload" | "download";
+type Direction = "upload" | "upload-overwrite" | "download";
 interface PickerRequest { ref: Ref; id: number; direction: Direction; remotePath?: string }
 interface Places { home: string; roots: string[] }
 interface Props {
@@ -33,6 +33,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
   const [places, setPlaces] = useState<Places | null>(null);
   const [entries, setEntries] = useState<SFTPEntry[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [overwriteConfirmed, setOverwriteConfirmed] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,7 +54,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       direction?: Direction;
       remotePath?: string;
     }) => {
-      if (!event?.ref || (event.direction !== "upload" && event.direction !== "download")) return;
+      if (!event?.ref || (event.direction !== "upload" && event.direction !== "upload-overwrite" && event.direction !== "download")) return;
       const request: PickerRequest = {
         ref: event.ref,
         id: -(++nextNativeRequestID.current),
@@ -103,6 +104,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     setPlaces(null);
     setEntries([]);
     setSelected([]);
+    setOverwriteConfirmed(false);
     submittingKey.current = "";
     setBusy(false);
     setError("");
@@ -125,6 +127,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     setLoading(true);
     setError("");
     setSelected([]);
+    setOverwriteConfirmed(false);
     setDraft(directory);
     void api.SFTPList(activeRequest.ref, "local", directory).then((result: SFTPEntry[]) => {
       if (current) {
@@ -174,6 +177,9 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       if (paths.length > 0) {
         const download = request.direction === "download";
         if (!download && paths.length !== 1) throw new Error("ZMODEM 每次只能上传一个文件");
+        if (request.direction === "upload-overwrite" && !overwriteConfirmed) {
+          throw new Error(t("sftp:zmodemOverwriteConfirm"));
+        }
         const remotePath = request.remotePath ?? "";
         if (download && (!remotePath || /[\r\n]/.test(remotePath))) {
           throw new Error("ZMODEM 每次只能下载一个远程文件");
@@ -196,6 +202,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     }
   };
   const download = request.direction === "download";
+  const overwrite = request.direction === "upload-overwrite";
   return (
     <dialog ref={dialogRef} className="zmodem-picker-dialog"
       aria-label={t(download ? "sftp:zmodemPickDownload" : "sftp:zmodemPickUpload")}
@@ -237,11 +244,12 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
               disabled={busy || entry.isSymlink}
               onClick={() => {
                 if (download || entry.isDir) return;
+                setOverwriteConfirmed(false);
                 setSelected(previous => previous.includes(entry.path) ? [] : [entry.path]);
               }}
               onDoubleClick={() => {
                 if (entry.isDir) goTo(entry.path);
-                else if (!download) setSelected([entry.path]);
+                else if (!download) { setOverwriteConfirmed(false); setSelected([entry.path]); }
               }}>
               {entry.isDir ? <Folder size={16} /> : <File size={16} />}
               <span title={entry.path}>{entry.name}</span>
@@ -252,6 +260,16 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
             </button>
           ))}
       </div>
+      {overwrite && selected.length > 0 && (
+        <div className="zmodem-picker-overwrite">
+          <p role="alert">{t("sftp:zmodemOverwriteWarning")}</p>
+          <label>
+            <input type="checkbox" checked={overwriteConfirmed}
+              onChange={event => setOverwriteConfirmed(event.target.checked)} />
+            {t("sftp:zmodemOverwriteConfirm")}
+          </label>
+        </div>
+      )}
       <footer className="zmodem-picker-footer">
         <label>
           <input type="checkbox" checked={showHidden} onChange={event => setShowHidden(event.target.checked)} />
@@ -263,9 +281,11 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
         <button type="button" onClick={() => void submit([])} disabled={busy}>
           {t("sftp:zmodemPickCancel")}
         </button>
-        <button className="zmodem-picker-primary" type="button" disabled={busy || !directory || (!download && selected.length === 0)}
+        <button className="zmodem-picker-primary" type="button" disabled={busy || !directory || (!download && selected.length === 0) ||
+            (overwrite && !overwriteConfirmed)}
           onClick={() => void submit(download ? [directory] : selected)}>
-          {t(download ? "sftp:zmodemPickSaveHere" : "sftp:zmodemPickSend")}
+          {t(download ? "sftp:zmodemPickSaveHere" :
+            overwrite ? "sftp:zmodemOverwriteSend" : "sftp:zmodemPickSend")}
         </button>
       </footer>
     </dialog>
