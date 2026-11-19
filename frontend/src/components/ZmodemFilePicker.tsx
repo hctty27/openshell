@@ -15,7 +15,6 @@ interface Props {
 }
 
 const refKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generation}`;
-const splitFileLines = (raw: string) => raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 const parentPath = (directory: string) => {
   const trimmed = directory.replace(/[\\/]+$/, "");
   const index = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
@@ -191,12 +190,16 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       }
       try {
         const download = request.direction === "download";
-        const remotePaths = download ? splitFileLines(request.remotePath ?? "") : [];
-        const transfer = api.StartNativeZmodemInteractiveBatchTransfer(
+        if (!download && paths.length !== 1) throw new Error("ZMODEM 每次只能上传一个文件");
+        const remotePath = request.remotePath ?? "";
+        if (download && (!remotePath || /[\\r\\n]/.test(remotePath))) {
+          throw new Error("ZMODEM 每次只能下载一个远程文件");
+        }
+        const transfer = api.StartNativeZmodemInteractiveTransfer(
           request.ref,
           request.direction,
-          download ? [directory] : paths,
-          remotePaths,
+          download ? directory : paths[0],
+          download ? remotePath : "",
         );
         void transfer.catch(onNotice);
         void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
@@ -266,16 +269,20 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
                 if (download || (entry.isDir && !request.allowDirectories)) return;
                 setSelected(previous => previous.includes(entry.path)
                   ? previous.filter(file => file !== entry.path)
-                  : [...previous, entry.path]);
+                  : request.protocol === "trzsz" ? [...previous, entry.path] : [entry.path]);
               }}
               onDoubleClick={() => {
                 if (entry.isDir) goTo(entry.path);
-                else if (!download) setSelected(previous => previous.includes(entry.path) ? previous : [...previous, entry.path]);
+                else if (!download) setSelected(previous =>
+                  request.protocol === "trzsz"
+                    ? (previous.includes(entry.path) ? previous : [...previous, entry.path])
+                    : [entry.path]);
               }}>
               {entry.isDir ? <Folder size={16} /> : <File size={16} />}
               <span title={entry.path}>{entry.name}</span>
               <small>{entry.isDir ? t("sftp:zmodemPickFolder") : niceSize(entry.size)}</small>
-              {!download && (!entry.isDir || request.allowDirectories) && <input type="checkbox" tabIndex={-1} readOnly
+              {!download && (!entry.isDir || request.allowDirectories) && <input
+                type={request.protocol === "trzsz" ? "checkbox" : "radio"} tabIndex={-1} readOnly
                 checked={selected.includes(entry.path)} aria-label={entry.name} />}
             </button>
           ))}
