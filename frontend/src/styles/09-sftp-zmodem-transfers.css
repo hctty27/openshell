@@ -122,6 +122,17 @@
 .zmodem-picker-entry > input { pointer-events: none; }
 .zmodem-picker-placeholder { padding: 24px; text-align: center; font-size: 13px; color: var(--text-secondary); }
 .zmodem-picker-error { color: var(--danger); }
+.zmodem-picker-overwrite {
+  margin: 0 18px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 12px;
+}
+.zmodem-picker-overwrite p { margin: 0 0 8px; color: var(--text-secondary); line-height: 1.5; }
+.zmodem-picker-overwrite label { display: flex; gap: 8px; align-items: flex-start; color: var(--text-primary); }
+.zmodem-picker-overwrite input { flex-shrink: 0; margin-top: 2px; }
 .zmodem-picker-footer { border-top: 1px solid var(--border); flex-wrap: wrap; }
 .zmodem-picker-footer label { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12px; }
 .zmodem-picker-count { flex: 1; text-align: right; color: var(--text-secondary); font-size: 12px; }
