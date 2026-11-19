@@ -295,7 +295,6 @@ func (m *Manager) CancelTab(tab string) {
 	if c != nil {
 		cancelNativeTerminalTransferLocked(c)
 		delete(m.connections, tab)
-		releaseZmodemSelection(c)
 		if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	}
 	m.mu.Unlock()
