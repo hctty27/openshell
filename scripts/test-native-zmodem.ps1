@@ -289,14 +289,32 @@ try {
         $records = @($report.results)
         if ($records.Count -eq 0) { throw "Stress report contains no transfer results: $reportFile" }
         Write-Host "Native ZMODEM stress throughput summary (MiB/s):"
+        Write-Host "Streaming window: $StreamingWindow; wire batch: $($WireBatchKiB) KiB; rounds: $Rounds"
         $records | Group-Object profile, protocol, direction | ForEach-Object {
             $speeds = @($_.Group | Where-Object { $_.checksumOK })
             $statistics = $speeds | Measure-Object -Property miBPerSecond -Average -Minimum -Maximum
+            $sortedSpeeds = @($speeds | ForEach-Object { [double]$_.miBPerSecond } | Sort-Object)
+            $sortedDurations = @($speeds | ForEach-Object { [double]$_.durationMs } | Sort-Object)
+            $medianMiBps = 0
+            $p95DurationMs = 0
+            if ($sortedSpeeds.Count -gt 0) {
+                $middle = [int][math]::Floor($sortedSpeeds.Count / 2)
+                if ($sortedSpeeds.Count % 2 -eq 0) {
+                    $medianMiBps = ($sortedSpeeds[$middle - 1] + $sortedSpeeds[$middle]) / 2
+                }
+                else {
+                    $medianMiBps = $sortedSpeeds[$middle]
+                }
+                $p95Index = [int][math]::Ceiling($sortedDurations.Count * 0.95) - 1
+                $p95DurationMs = $sortedDurations[[math]::Max(0, $p95Index)]
+            }
             [PSCustomObject]@{
                 Profile = $_.Group[0].profile
                 Protocol = $_.Group[0].protocol
                 Direction = $_.Group[0].direction
                 Passed = "$($speeds.Count)/$($_.Count)"
+                MedianMiBps = [math]::Round($medianMiBps, 2)
+                P95DurationMs = [math]::Round($p95DurationMs, 1)
                 AvgMiBps = [math]::Round($statistics.Average, 2)
                 MinMiBps = [math]::Round($statistics.Minimum, 2)
                 MaxMiBps = [math]::Round($statistics.Maximum, 2)

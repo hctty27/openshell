@@ -2,7 +2,6 @@
 //! stdout is exclusively binary protocol bytes; diagnostics go to stderr.
 //! The Go SSH coordinator owns terminal takeovers, filesystem policy and packaging.
 
-use std::collections::VecDeque;
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -40,10 +39,12 @@ const READ_TIMEOUT: Duration = Duration::from_millis(150);
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
 const MAX_EXPERIMENT_BATCH: usize = 32 * 1024;
 const DEFAULT_EXPERIMENT_BATCH: usize = 16 * 1024;
+const WIRE_READ_BUFFER_SIZE: usize = 32 * 1024;
+const DEFAULT_STREAMING_WINDOW_SUBPACKETS: usize = usize::MAX;
+const MAX_STREAMING_WINDOW_SUBPACKETS: usize = 65_536;
 
-// The native sidecar remains explicitly experimental. The batching strategy
-// defaults to 16 KiB only when this sidecar is invoked; it never enables native
-// rz/sz takeover in the application. An explicit zero restores per-frame flush.
+// Wire batching is independently tunable for the native ZMODEM sidecar.
+// The default coalesces small consecutive writes; zero restores per-frame flush.
 fn parse_wire_batch_bytes(raw: Option<&str>) -> io::Result<usize> {
     let Some(raw) = raw else { return Ok(DEFAULT_EXPERIMENT_BATCH) };
     let bytes = raw.parse::<usize>().map_err(|_| {
@@ -60,6 +61,36 @@ fn experimental_wire_batch_bytes() -> io::Result<usize> {
         Err(env::VarError::NotPresent) => parse_wire_batch_bytes(None),
         Err(err) => Err(io::Error::new(io::ErrorKind::InvalidInput, err)),
         Ok(raw) => parse_wire_batch_bytes(Some(&raw)),
+    }
+}
+
+// A zero-buffer CANOVIO receiver can consume a continuous stream over SSH/TCP.
+// zmodem2 defaults to ten subpackets per acknowledgement window; on reliable
+// transports each window can otherwise add a full round-trip wait.
+fn parse_streaming_window_subpackets(raw: Option<&str>) -> io::Result<usize> {
+    let Some(raw) = raw else {
+        return Ok(DEFAULT_STREAMING_WINDOW_SUBPACKETS);
+    };
+    if raw.eq_ignore_ascii_case("max") || raw.eq_ignore_ascii_case("unlimited") {
+        return Ok(usize::MAX);
+    }
+    let value = raw.parse::<usize>().map_err(|_| {
+        io::Error::new(io::ErrorKind::InvalidInput, "invalid ZMODEM streaming window")
+    })?;
+    if !(1..=MAX_STREAMING_WINDOW_SUBPACKETS).contains(&value) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "ZMODEM streaming window must be max or 1..65536 subpackets",
+        ));
+    }
+    Ok(value)
+}
+
+fn streaming_window_subpackets() -> io::Result<usize> {
+    match env::var("OPENSHELL_ZMODEM_STREAMING_WINDOW") {
+        Err(env::VarError::NotPresent) => parse_streaming_window_subpackets(None),
+        Err(err) => Err(io::Error::new(io::ErrorKind::InvalidInput, err)),
+        Ok(raw) => parse_streaming_window_subpackets(Some(&raw)),
     }
 }
 
@@ -145,49 +176,96 @@ fn skip_requested(index: usize) -> bool {
     skip_requested_from_path(Path::new(&path), index)
 }
 
-fn incoming_wire() -> ChannelReceiver<io::Result<Vec<u8>>> {
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let mut input = io::stdin().lock();
-        loop {
-            let mut bytes = vec![0; 4096];
-            match input.read(&mut bytes) {
-                Ok(0) => break,
-                Ok(size) => {
-                    bytes.truncate(size);
-                    if tx.send(Ok(bytes)).is_err() {
+// One bounded input chunk is in flight at a time. The same allocation is
+// recycled after the protocol engine consumes it, avoiding per-read Vec
+// allocations, an unbounded queue, and copies through VecDeque/scratch buffers.
+struct IncomingWire {
+    rx: ChannelReceiver<io::Result<Vec<u8>>>,
+    recycle: mpsc::SyncSender<Vec<u8>>,
+    pending: Vec<u8>,
+    offset: usize,
+}
+
+impl IncomingWire {
+    fn new() -> Self {
+        let (tx, rx) = mpsc::sync_channel(1);
+        let (recycle, recycled) = mpsc::sync_channel(1);
+        thread::spawn(move || {
+            let mut input = io::stdin().lock();
+            let mut buffer = vec![0; WIRE_READ_BUFFER_SIZE];
+            loop {
+                match input.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(size) => {
+                        buffer.truncate(size);
+                        if tx.send(Ok(buffer)).is_err() {
+                            break;
+                        }
+                        buffer = match recycled.recv() {
+                            Ok(buffer) => buffer,
+                            Err(_) => break,
+                        };
+                        buffer.resize(WIRE_READ_BUFFER_SIZE, 0);
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(error) => {
+                        let _ = tx.send(Err(error));
                         break;
                     }
                 }
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Err(error) => {
-                    let _ = tx.send(Err(error));
-                    break;
-                }
             }
-        }
-    });
-    rx
-}
-
-fn receive_wire(
-    rx: &ChannelReceiver<io::Result<Vec<u8>>>,
-    pending: &mut VecDeque<u8>,
-) -> io::Result<bool> {
-    if !pending.is_empty() {
-        return Ok(true);
+        });
+        Self::from_channels(rx, recycle)
     }
-    match rx.recv_timeout(READ_TIMEOUT) {
-        Ok(Ok(bytes)) => {
-            pending.extend(bytes);
-            Ok(true)
+
+    fn from_channels(
+        rx: ChannelReceiver<io::Result<Vec<u8>>>,
+        recycle: mpsc::SyncSender<Vec<u8>>,
+    ) -> Self {
+        Self { rx, recycle, pending: Vec::new(), offset: 0 }
+    }
+
+    fn receive(&mut self) -> io::Result<bool> {
+        if !self.pending().is_empty() {
+            return Ok(true);
         }
-        Ok(Err(error)) => Err(error),
-        Err(mpsc::RecvTimeoutError::Timeout) => Ok(false),
-        Err(mpsc::RecvTimeoutError::Disconnected) => Err(io::Error::new(
-            io::ErrorKind::UnexpectedEof,
-            "transport disconnected before ZMODEM session ended",
-        )),
+        match self.rx.recv_timeout(READ_TIMEOUT) {
+            Ok(Ok(bytes)) => {
+                self.pending = bytes;
+                self.offset = 0;
+                Ok(true)
+            }
+            Ok(Err(error)) => Err(error),
+            Err(mpsc::RecvTimeoutError::Timeout) => Ok(false),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "transport disconnected before ZMODEM session ended",
+            )),
+        }
+    }
+
+    fn pending(&self) -> &[u8] {
+        &self.pending[self.offset..]
+    }
+
+    fn consume(&mut self, size: usize) -> io::Result<()> {
+        let available = self.pending().len();
+        if size > available {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "ZMODEM consumed more input than was available",
+            ));
+        }
+        if size == 0 {
+            return Ok(());
+        }
+        self.offset += size;
+        if self.offset == self.pending.len() {
+            self.offset = 0;
+            let buffer = std::mem::take(&mut self.pending);
+            let _ = self.recycle.send(buffer);
+        }
+        Ok(())
     }
 }
 
@@ -260,10 +338,9 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut sender = Sender::new()?;
+    sender.set_streaming_window(streaming_window_subpackets()?);
     sender.start_file(FileInfo::new(files[0].name.as_bytes(), Some(Position::new(files[0].size as u32))))?;
-    let rx = incoming_wire();
-    let mut waiting = VecDeque::<u8>::new();
-    let mut wire_scratch = Vec::<u8>::with_capacity(2048);
+    let mut incoming = IncomingWire::new();
     let mut output = ExperimentalWireWriter::new(io::stdout().lock(), experimental_wire_batch_bytes()?);
     let mut file_scratch = Vec::<u8>::new();
     let mut next_file_offset = 0u64;
@@ -329,12 +406,10 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
             Action::Idle => {
                 output.flush_pending()?;
                 if session_completed { return Ok(()); }
-                if receive_wire(&rx, &mut waiting)? {
-                    wire_scratch.clear();
-                    wire_scratch.extend(waiting.iter().take(2048).copied());
-                    let used = sender.submit_wire(&wire_scratch)?;
+                if incoming.receive()? {
+                    let used = sender.submit_wire(incoming.pending())?;
                     if used > 0 { activity.touch(); }
-                    waiting.drain(..used);
+                    incoming.consume(used)?;
                 }
             }
             _ => return Err("unsupported sender action".into()),
@@ -438,9 +513,7 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
     let mut receiver = Receiver::with_flow_control(0, true)?;
     let manual_accept = env::var_os("OPENSHELL_ZMODEM_SKIP_FILE").is_some();
     if manual_accept { receiver.set_manual_file_accept(true); }
-    let rx = incoming_wire();
-    let mut waiting = VecDeque::<u8>::new();
-    let mut wire_scratch = Vec::<u8>::with_capacity(2048);
+    let mut incoming = IncomingWire::new();
     let mut output = ExperimentalWireWriter::new(io::stdout().lock(), experimental_wire_batch_bytes()?);
     let mut open_file: Option<(File, PathBuf, PathBuf, u64, Option<u32>)> = None;
     let mut completed_files = 0usize;
@@ -450,7 +523,6 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
     let mut session_completed = false;
     let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
     let mut received_total = 0u64;
-    let mut file_write_scratch = Vec::<u8>::new();
     let mut diag = ReceiverDiagnostics::new();
     let mut activity = ActivityClock::new();
 
@@ -476,18 +548,15 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                 // Flush any pending acknowledgement before handling more data.
                 // lrzsz-win32 may stop sending until the control frame arrives.
                 output.flush_pending()?;
-                // poll() borrows receiver; copy into one reusable owned buffer
-                // before file_written() mutably borrows receiver again.
-                file_write_scratch.clear();
-                file_write_scratch.extend_from_slice(data);
-                let received = file_write_scratch.len();
+                // Write the borrowed protocol payload before acknowledging it.
+                let received = data.len();
                 let (file, _, _, bytes, max) = open_file.as_mut().ok_or("unexpected file data")?;
                 *bytes += received as u64;
                 if *bytes > MAX_SIZE || max.is_some_and(|size| *bytes > u64::from(size)) {
                     return Err("received file larger than advertised/allowed".into());
                 }
                 let started = if diag.enabled { Some(Instant::now()) } else { None };
-                file.write_all(&file_write_scratch)?;
+                file.write_all(data)?;
                 if let Some(started) = started {
                     diag.file_write_ns += started.elapsed().as_nanos();
                     diag.file_bytes += received as u64;
@@ -590,7 +659,7 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                     return Ok(());
                 }
                 let started = if diag.enabled { Some(Instant::now()) } else { None };
-                let have_wire = receive_wire(&rx, &mut waiting)?;
+                let have_wire = incoming.receive()?;
                 if let Some(started) = started {
                     let elapsed = started.elapsed().as_nanos();
                     diag.idle_calls += 1;
@@ -598,11 +667,9 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
                     diag.wait_max_ns = diag.wait_max_ns.max(elapsed);
                 }
                 if have_wire {
-                    wire_scratch.clear();
-                    wire_scratch.extend(waiting.iter().take(2048).copied());
-                    let used = receiver.submit_wire(&wire_scratch)?;
+                    let used = receiver.submit_wire(incoming.pending())?;
                     if used > 0 { activity.touch(); }
-                    waiting.drain(..used);
+                    incoming.consume(used)?;
                 }
             }
             _ => return Err("unsupported receiver action".into()),
@@ -692,9 +759,14 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_file_size, parse_wire_batch_bytes, read_source_chunk, safe_name, skip_requested_from_path, ActivityClock, ExperimentalWireWriter, INACTIVITY_TIMEOUT, MAX_SIZE};
+    use super::{
+        checked_file_size, parse_streaming_window_subpackets, parse_wire_batch_bytes,
+        read_source_chunk, safe_name, skip_requested_from_path, ActivityClock,
+        ExperimentalWireWriter, IncomingWire, INACTIVITY_TIMEOUT, MAX_SIZE,
+    };
     use std::fs::{self, OpenOptions};
     use std::io::{Seek, SeekFrom, Write};
+    use std::sync::mpsc;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -753,6 +825,48 @@ mod tests {
         assert!(clock.expired(), "a stalled peer must time out");
         clock.touch();
         assert!(!clock.expired(), "fresh protocol traffic must reset the idle window");
+    }
+
+    #[test]
+    fn streaming_window_defaults_to_full_streaming_and_accepts_bounded_overrides() {
+        assert_eq!(parse_streaming_window_subpackets(None).unwrap(), usize::MAX);
+        assert_eq!(parse_streaming_window_subpackets(Some("max")).unwrap(), usize::MAX);
+        assert_eq!(parse_streaming_window_subpackets(Some("unlimited")).unwrap(), usize::MAX);
+        assert_eq!(parse_streaming_window_subpackets(Some("10")).unwrap(), 10);
+        assert_eq!(parse_streaming_window_subpackets(Some("65536")).unwrap(), 65_536);
+        for invalid in ["", "0", "-1", "65537", "invalid"] {
+            assert!(parse_streaming_window_subpackets(Some(invalid)).is_err());
+        }
+    }
+
+    #[test]
+    fn incoming_wire_keeps_partial_data_and_recycles_the_same_allocation() {
+        let (tx, rx) = mpsc::sync_channel(1);
+        let (recycle, recycled) = mpsc::sync_channel(1);
+        let mut input = IncomingWire::from_channels(rx, recycle);
+        let bytes = vec![1, 2, 3, 4];
+        let original_ptr = bytes.as_ptr();
+        tx.send(Ok(bytes)).unwrap();
+
+        assert!(input.receive().unwrap());
+        assert_eq!(input.pending(), &[1, 2, 3, 4]);
+        input.consume(2).unwrap();
+        assert_eq!(input.pending(), &[3, 4]);
+        input.consume(2).unwrap();
+
+        let returned = recycled.recv_timeout(std::time::Duration::from_secs(1)).unwrap();
+        assert_eq!(returned.as_ptr(), original_ptr);
+        assert_eq!(returned, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn incoming_wire_rejects_consumption_beyond_the_pending_chunk() {
+        let (tx, rx) = mpsc::sync_channel(1);
+        let (recycle, _recycled) = mpsc::sync_channel(1);
+        let mut input = IncomingWire::from_channels(rx, recycle);
+        tx.send(Ok(vec![1, 2])).unwrap();
+        assert!(input.receive().unwrap());
+        assert!(input.consume(3).is_err());
     }
 
     #[test]

@@ -23,6 +23,9 @@ param(
     [ValidateSet(0, 4, 8, 16, 32)]
     [int]$WireBatchKiB = 16,
 
+    [ValidateSet("10", "32", "64", "128", "256", "512", "1024", "max")]
+    [string]$StreamingWindow = "max",
+
     [switch]$SkipBaseline
 )
 
@@ -31,9 +34,12 @@ $ErrorActionPreference = "Stop"
 # Keep the experimental batch setting process-local and restore it even if
 # Docker, Go or Rust exits with an error. Zero uses the original per-frame path.
 $batchEnvironmentName = "OPENSHELL_ZMODEM_WIRE_BATCH_BYTES"
+$streamingWindowEnvironmentName = "OPENSHELL_ZMODEM_STREAMING_WINDOW"
 $previousBatchValue = [Environment]::GetEnvironmentVariable($batchEnvironmentName, "Process")
+$previousStreamingWindowValue = [Environment]::GetEnvironmentVariable($streamingWindowEnvironmentName, "Process")
 try {
     [Environment]::SetEnvironmentVariable($batchEnvironmentName, "$($WireBatchKiB * 1024)", "Process")
+    [Environment]::SetEnvironmentVariable($streamingWindowEnvironmentName, $StreamingWindow, "Process")
 
     # Reuse the existing ephemeral Docker SSH fixture and its strict host-key pinning.
     # The stress suite must never fall back to a user's production SSH profile.
@@ -54,4 +60,5 @@ try {
 }
 finally {
     [Environment]::SetEnvironmentVariable($batchEnvironmentName, $previousBatchValue, "Process")
+    [Environment]::SetEnvironmentVariable($streamingWindowEnvironmentName, $previousStreamingWindowValue, "Process")
 }

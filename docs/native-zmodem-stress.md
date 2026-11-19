@@ -270,3 +270,21 @@ tmp/native-zmodem-stress/logs/<run-id>/stress-<profile>.log
 - 开始自动接管终端输入的 `rz/sz` 之前，还需真实 GUI 上传/下载、长时间并发、不同 Shell、权限与第三方许可证复核。
 
 测试代码：`internal/ssh/native_zmodem_stress_test.go`。
+
+## ZMODEM 发送窗口 A/B 测试
+
+当远端接收端同时声明零字节接收窗口和 `CANOVIO` 时，原生发送端现在默认启用 `max` 连续发送模式。该模式适合可靠的 SSH/TCP 管道：此前 `zmodem2` 默认每 10 个子包等待一次确认，在有实际 RTT 的链路上可能引入额外往返等待。如果远端没有声明这些能力，仍遵循远端协商出的流控方式。
+
+建议使用同一套隔离的 Windows → Linux Docker SSH 测试环境，对比原来的 10 子包窗口和完整连续发送。固定 wire batch 为 16 KiB，每组重复 5 轮：
+
+```powershell
+# 旧版 zmodem2 默认值：每 10 个子包等待一次确认
+.\scripts\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow 10
+
+# 完整连续发送：不限制发送端确认窗口
+.\scripts\test-native-zmodem-stress.ps1 -Profile large -LargeMiB 128 -Rounds 5 -WireBatchKiB 16 -StreamingWindow max
+```
+
+JSON 报告会记录 `options.streamingWindow`。这项参数只改变本机 ZMODEM **上传发送端**的确认窗口，因此重点比较 upload 的中位吞吐量和 P95 耗时；download 结果不受该参数影响，可作为接收链路观察值。每轮上传、下载和 SFTP 对照都必须通过 SHA-256 校验。两组测试必须使用相同主机和测试环境；不要比较 CPU、磁盘、Docker 或网络负载不同的样本。
+
+sidecar 的输入链路也已调整为单槽有界通道，单次最多读取 32 KiB，并在协议状态机消费完成后复用同一块内存。收到的数据直接从复用缓冲区提交给协议引擎，不再经过队列和第二个 2 KiB 临时缓冲区。接收文件数据也直接写入文件，不再复制整个数据块。这些调整不修改 ZMODEM 帧格式、CRC 校验、重传逻辑或文件发布保护。
