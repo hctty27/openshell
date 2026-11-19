@@ -287,7 +287,7 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	// rz/sz command into an unsupported fallback protocol handler.
 	ready := c.readiness.readyProgram() == "shell" && c.readiness.checkReady() == nil
 	wire, direction, remotePath := c.nativeAutoInput.prepare(p, ready)
-	if direction == "upload" || direction == "download" {
+	if direction == "upload" || direction == "upload-overwrite" || direction == "download" {
 		if status := m.NativeZmodemExperimentalReadiness(ref, autoSidecar, true); !status.Ready {
 			autoError = status.Message
 			direction = "reject-unavailable"
@@ -305,7 +305,7 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	if direction == "reject-multi" {
 		autoError = "ZMODEM 每次只能传输一个文件；批量传输请使用 SFTP"
 	} else if direction == "reject-unsupported" {
-		autoError = "仅支持原生单文件 rz、rz -q、sz 文件名；rz -y、trz/tsz 和复杂 Shell 语法已不再兼容，请使用 SFTP"
+		autoError = "仅支持原生单文件 rz、rz -y、rz --overwrite、rz -q 及 sz 文件名；其他不支持的参数或复杂 Shell 语法请使用 SFTP"
 	} else if direction == "reject-unavailable" {
 		// The readiness error was set before writing Ctrl-U.
 	} else if direction != "" {
