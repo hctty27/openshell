@@ -159,9 +159,11 @@ func TestNativeZmodemLiveInterruptedInteractivePTY(t *testing.T) {
 			case "disconnect":
 				_ = client.Close()
 			}
+			safelyRecovered := false
 			select {
 			case err := <-done:
 				if err == nil { t.Fatal("interrupted native transfer reported success") }
+				safelyRecovered = kind == "cancel" && strings.Contains(err.Error(), "终端已安全恢复")
 				if kind == "cancel" && !errors.Is(err, context.Canceled) {
 					t.Fatalf("cancel did not propagate: %v", err)
 				}
@@ -176,14 +178,23 @@ func TestNativeZmodemLiveInterruptedInteractivePTY(t *testing.T) {
 			remaining := connRecord.nativeTerminalTransfer
 			poisoned := connRecord.nativeTerminalPoisoned
 			manager.mu.Unlock()
-			if remaining != nil || !poisoned {
-				t.Fatalf("failed terminal cleanup: task=%v poisoned=%v", remaining != nil, poisoned)
+			if remaining != nil || poisoned == safelyRecovered {
+				t.Fatalf("incorrect terminal cleanup: task=%v poisoned=%v recovered=%v",
+					remaining != nil, poisoned, safelyRecovered)
 			}
-			if _, err := manager.AcquireAITerminal(ref); err == nil {
-				t.Fatal("AI obtained terminal input after unsafe native interruption")
-			}
-			if err := manager.runNativeTerminalExperiment(context.Background(), ref, sidecar, "download", localDir, remoteSource); err == nil {
-				t.Fatal("unsafe SSH terminal accepted another native transfer")
+			if safelyRecovered {
+				// A valid remote shell-exit marker permits subsequent terminal use.
+				connRecord.inputGate.mu.Lock()
+				leased := connRecord.inputGate.leased
+				connRecord.inputGate.mu.Unlock()
+				if leased { t.Fatal("verified remote cancellation left terminal input locked") }
+			} else {
+				if _, err := manager.AcquireAITerminal(ref); err == nil {
+					t.Fatal("AI obtained terminal input after unsafe native interruption")
+				}
+				if err := manager.runNativeTerminalExperiment(context.Background(), ref, sidecar, "download", localDir, remoteSource); err == nil {
+					t.Fatal("unsafe SSH terminal accepted another native transfer")
+				}
 			}
 			files, err := os.ReadDir(localDir)
 			if err != nil { t.Fatal(err) }
