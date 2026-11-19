@@ -186,6 +186,7 @@ func TestAITerminalCanBeReacquiredAfterCommand(t *testing.T) {
 	lease.program = "shell"
 	lease.ready = true
 	lease.connection.terminal = &ssh.Session{}
+	lease.connection.inputGate = newTerminalInputGate(input, input)
 	lease.connection.readiness.observe([]byte("\x1b]133;B\x07"))
 	input.onWrite = func(p []byte) {
 		source := string(p)
