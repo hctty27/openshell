@@ -212,15 +212,15 @@ func TestNativeAutoCommandFreshShellPromptWithoutSettlingDelay(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m, ref, input, events := nativeAutoTestManager(t, false, true)
 			c := m.connections[ref.TabID]
-			c.readiness.observe([]byte("file list\\r\\n[root@localhost hc]# "))
+			c.readiness.observe([]byte("file list\r\n[root@localhost hc]# "))
 			if err := c.readiness.checkReady(); err == nil {
 				t.Fatal("test fixture must still be inside the AI settle window")
 			}
 			for _, ch := range tc.command {
 				nativeAutoType(t, m, ref, string(ch))
 			}
-			nativeAutoType(t, m, ref, "\\r")
-			if got, want := input.String(), tc.command+"\\x15"; got != want {
+			nativeAutoType(t, m, ref, "\r")
+			if got, want := input.String(), tc.command+"\x15"; got != want {
 				t.Fatalf("unexpected remote input: got %q want %q", got, want)
 			}
 			select {
@@ -247,8 +247,8 @@ func TestNativeAutoCommandUnknownPromptRejectsWithoutRemoteEnter(t *testing.T) {
 	}
 	for _, cmd := range []string{"rz", "rz -y", "sz report.bin"} {
 		input.Reset()
-		nativeAutoType(t, m, ref, cmd+"\\r")
-		if got := input.String(); got != cmd+"\\x15" {
+		nativeAutoType(t, m, ref, cmd+"\r")
+		if got := input.String(); got != cmd+"\x15" {
 			t.Fatalf("%q escaped into remote program: %q", cmd, got)
 		}
 	}
@@ -265,12 +265,12 @@ func TestNativeAutoCommandKnownREPLAndAlternateScreenBypass(t *testing.T) {
 			m, ref, input, events := nativeAutoTestManager(t, false, true)
 			c := m.connections[ref.TabID]
 			if name == "mysql" {
-				c.readiness.observe([]byte("Welcome to the MySQL monitor\\r\\nmysql> "))
+				c.readiness.observe([]byte("Welcome to the MySQL monitor\r\nmysql> "))
 			} else {
-				c.readiness.observe([]byte("\\x1b[?1049h"))
+				c.readiness.observe([]byte("\x1b[?1049h"))
 			}
-			nativeAutoType(t, m, ref, "rz\\r")
-			if input.String() != "rz\\r" || len(events) != 0 {
+			nativeAutoType(t, m, ref, "rz\r")
+			if input.String() != "rz\r" || len(events) != 0 {
 				t.Fatalf("modified a non-Shell input: %q", input.String())
 			}
 		})

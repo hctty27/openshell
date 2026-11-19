@@ -126,7 +126,7 @@ func TestShellReadinessNativeZmodemPromptState(t *testing.T) {
 	state.userInput([]byte("r"))
 	candidate, ready = state.nativeZmodemInputState()
 	if !candidate || ready { t.Fatalf("input in progress candidate=%v ready=%v", candidate, ready) }
-	state.observe([]byte("\\x1b[?1049h"))
+	state.observe([]byte("\x1b[?1049h"))
 	candidate, ready = state.nativeZmodemInputState()
 	if candidate || ready { t.Fatalf("alternate buffer candidate=%v ready=%v", candidate, ready) }
 }
