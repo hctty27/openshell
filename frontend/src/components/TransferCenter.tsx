@@ -257,7 +257,8 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
               ref: event.ref, transferId: event.transferId || job?.transferId || "legacy",
               protocol: event.protocol ?? job?.protocol ?? "trzsz",
               direction: event.direction ?? job?.direction,
-              status: job?.status === "cancelling" ? "cancelling" : "running",
+              status: event.status === "cancelling" || job?.status === "cancelling"
+                ? "cancelling" : "running",
               files: job?.files ?? [],
             },
           };
