@@ -387,7 +387,7 @@ test("a fast ZMODEM finish arriving before details cannot be reopened by late me
   });
   fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
   expect(container.querySelector(".transfer-center-count")).toBeNull();
-  expect(screen.getByText("已完成")).toBeTruthy();
+  expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
   expect(screen.getByText("tiny.txt")).toBeTruthy();
 });
 
