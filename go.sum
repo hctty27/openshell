@@ -92,12 +92,6 @@ github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/trzsz/go-arg v1.5.4 h1:8cuwV8F1UvlKRXJcdLG1cSZNGXkRped+U1rz17M7Kac=
-github.com/trzsz/go-arg v1.5.4/go.mod h1:IC6Z/FiVH7uYvcbp1/gJhDYCFPS/GkL0APYakVvgY4I=
-github.com/trzsz/promptui v0.10.8 h1:kM1GbE3hFt9puk7GIeI458Ea/V7yt95NcQEbC3164EQ=
-github.com/trzsz/promptui v0.10.8/go.mod h1:9dp59ixe32qBV9GjDxQ1PDWwbzHjTzveZenQwEoVHbg=
-github.com/trzsz/trzsz-go v1.2.1-0.20261010161529-351cf747d8f9 h1:toidn3jVZtZYGc8ZNPEMsit7VGlc2WZkXDzv9A21Poc=
-github.com/trzsz/trzsz-go v1.2.1-0.20261010161529-351cf747d8f9/go.mod h1:OxT8FSP64MSE13VkXcVmQvx2eV0qJKU1CM03rJs/aY4=
 github.com/wailsapp/wails/v3 v3.1.0 h1:ld0AXSicXiTTsIvmTq3qNn9FzCP8vIHRSJdkRLgaAo8=
 github.com/wailsapp/wails/v3 v3.1.0/go.mod h1:tzDY3W1jzN3ksSqfGalTt7K3PwnGfIqtl+IgIXlXz0I=
 github.com/xo/terminfo v1.2.0 h1:d0ZTOCpuGE0lwSAOs0zcJjwz3jWQyqcRt9XbGJpCOl4=
