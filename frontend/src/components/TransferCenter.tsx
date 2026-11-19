@@ -58,10 +58,24 @@ const refKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generation}`;
 const transferKey = (ref: Ref, transferId?: string) => `${refKey(ref)}:${transferId || "legacy"}`;
 const resolveTerminalTransferKey = (
   jobs: Record<string, TerminalTransfer>, ref: Ref, transferId?: string,
+  allowUnidentifiedFinish = false,
 ) => {
-  if (transferId) return transferKey(ref, transferId);
   const prefix = refKey(ref) + ":";
   const legacyKey = transferKey(ref);
+  if (transferId) {
+    const identified = transferKey(ref, transferId);
+    if (jobs[identified] || !allowUnidentifiedFinish) return identified;
+    const legacy = jobs[legacyKey];
+    // Progress or start can reach the frontend before details have supplied
+    // the transfer ID. Reconcile ONLY a final event to the sole unidentified
+    // active task; never hijack a distinct identified job on this connection.
+    if (legacy && (legacy.status === "running" || legacy.status === "cancelling") &&
+        !Object.entries(jobs).some(([key, job]) => key.startsWith(prefix) &&
+          key !== legacyKey && (job.status === "running" || job.status === "cancelling"))) {
+      return legacyKey;
+    }
+    return identified;
+  }
   const candidates = Object.entries(jobs).filter(([key]) => key.startsWith(prefix) && key !== legacyKey);
   const active = candidates.filter(([, job]) => job.status === "running" || job.status === "cancelling");
   if (active.length === 1) return active[0][0];
@@ -89,6 +103,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
   const [sftpConcurrency, setSftpConcurrency] = useState(3);
   const [savingConcurrency, setSavingConcurrency] = useState(false);
   const finished = useRef(new Set<string>());
+  const finishResults = useRef(new Map<string, { status: TransferStatus; error?: string }>());
   const terminalCleanupTimers = useRef(new Map<string, number>());
   const panel = useRef<HTMLDivElement>(null);
   const liveRefs = tabs.filter(tab => tab.ref).map(tab => tab.ref!);
@@ -97,19 +112,20 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     if (timer != null) window.clearTimeout(timer);
     terminalCleanupTimers.current.delete(key);
   };
-  const scheduleTerminalCleanup = (key: string) => {
+  const scheduleTerminalCleanup = (key: string, delayMs = 4000) => {
     clearTerminalCleanup(key);
     const timer = window.setTimeout(() => {
       terminalCleanupTimers.current.delete(key);
       setTerminalJobs(previous => {
         const job = previous[key];
-        if (!job || (job.status !== "completed" && job.status !== "cancelled")) return previous;
+        if (!job || (job.status !== "completed" && job.status !== "cancelled" && job.status !== "failed")) return previous;
         const next = { ...previous };
         delete next[key];
         finished.current.delete(key);
+        finishResults.current.delete(key);
         return next;
       });
-    }, 4000);
+    }, delayMs);
     terminalCleanupTimers.current.set(key, timer);
   };
   useEffect(() => () => {
@@ -138,18 +154,46 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       const legacyKey = transferKey(event.ref);
       const mergeLegacy = key !== legacyKey;
       const legacyFinished = mergeLegacy && finished.current.has(legacyKey);
+      const alreadyFinished = finished.current.has(key);
+      const finalResult = finishResults.current.get(key) ??
+        (legacyFinished ? finishResults.current.get(legacyKey) : undefined);
       clearTerminalCleanup(key);
       if (mergeLegacy) {
         clearTerminalCleanup(legacyKey);
         finished.current.delete(legacyKey);
+        finishResults.current.delete(legacyKey);
       }
-      finished.current.delete(key);
-      if (legacyFinished) finished.current.add(key);
+      // A tiny file may finish before its details event arrives. Never
+      // discard the completion marker when enriching that same transfer ID.
+      if (alreadyFinished || legacyFinished) finished.current.add(key);
+      if (finalResult) finishResults.current.set(key, finalResult);
+      // A single SSH PTY can execute only one rz/sz transfer at a time.
+      // If the previous filter missed its final callback, retire that task
+      // rather than accumulate multiple forever-"running" ZMODEM rows.
+      const prefix = refKey(event.ref) + ":";
+      const stale = Object.entries(terminalJobsRef.current)
+        .filter(([oldKey, job]) => oldKey.startsWith(prefix) &&
+          oldKey !== key && oldKey !== legacyKey &&
+          (job.status === "running" || job.status === "cancelling"))
+        .map(([oldKey]) => oldKey);
+      for (const oldKey of stale) {
+        finished.current.add(oldKey);
+        scheduleTerminalCleanup(oldKey, 12000);
+      }
       setTerminalJobs(previous => {
         const legacy = mergeLegacy ? previous[legacyKey] : undefined;
+        const existing = previous[key];
         const next = { ...previous };
+        for (const oldKey of stale) {
+          const old = next[oldKey];
+          if (old) next[oldKey] = {
+            ...old, status: "failed",
+            error: old.error || "上一笔 ZMODEM 已被新传输取代，但未收到可靠的结束确认",
+          };
+          finishResults.current.set(oldKey, { status: "failed", error: next[oldKey].error });
+        }
         if (mergeLegacy) delete next[legacyKey];
-        const status = legacy?.status ?? "running";
+        const status = finalResult?.status ?? existing?.status ?? legacy?.status ?? "running";
         const files = event.files
           ? event.files.map(file => ({
             name: file.name,
@@ -158,23 +202,25 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
               status === "failed" ? "failed" as const :
               status === "cancelled" ? "cancelled" as const : "queued" as const,
           }))
-          : legacy?.files ?? [];
+          : existing?.files ?? legacy?.files ?? [];
         return {
           ...next,
           [key]: {
             ref: event.ref, transferId, direction: event.direction,
             protocol: event.protocol === "trzsz" ? "trzsz" : "zmodem",
             status,
-            transferred: legacy?.transferred,
-            speed: legacy?.speed,
-            processed: legacy?.processed,
-            percent: legacy?.percent,
+            transferred: existing?.transferred ?? legacy?.transferred,
+            speed: existing?.speed ?? legacy?.speed,
+            processed: existing?.processed ?? legacy?.processed,
+            percent: status === "completed" ? 100 : existing?.percent ?? legacy?.percent,
             files,
-            error: legacy?.error,
+            error: finalResult?.error ?? existing?.error ?? legacy?.error,
           },
         };
       });
-      if (legacyFinished) scheduleTerminalCleanup(key);
+      if (alreadyFinished || legacyFinished) {
+        scheduleTerminalCleanup(key, finalResult?.status === "failed" ? 12000 : 4000);
+      }
     });
     const offState = listen("ssh:transfer-state", (event: {
       ref: Ref; transferId?: string; active: boolean; status?: TransferStatus;
@@ -199,12 +245,18 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           };
         });
       } else {
-        if (finished.current.has(key)) return;
+        const completionKey = resolveTerminalTransferKey(
+          terminalJobsRef.current, event.ref, event.transferId, true,
+        );
+        if (finished.current.has(completionKey)) return;
+        const key = completionKey;
+        const existing = terminalJobsRef.current[key];
+        const status = event.status ?? (existing?.status === "cancelling" ? "cancelled" : "completed");
         finished.current.add(key);
+        finishResults.current.set(key, { status, error: event.error });
         setTerminalJobs(previous => {
           const job = previous[key];
           if (!job) return previous;
-          const status = event.status ?? (job.status === "cancelling" ? "cancelled" : "completed");
           return {
             ...previous,
             [key]: {
@@ -215,7 +267,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
             },
           };
         });
-        if (event.status !== "failed") scheduleTerminalCleanup(key);
+        scheduleTerminalCleanup(key, status === "failed" ? 12000 : 4000);
       }
     });
     const offProgress = listen("ssh:transfer-progress", (event: {
@@ -251,12 +303,14 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       ref: Ref; transferId?: string; status?: TransferStatus; error?: string;
     }) => {
       if (!event?.ref) return;
-      const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId);
+      const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId, true);
+      const previousJob = terminalJobsRef.current[key];
+      const status = event.status ?? (previousJob?.status === "cancelling" ? "cancelled" : "completed");
       finished.current.add(key);
+      finishResults.current.set(key, { status, error: event.error });
       setTerminalJobs(previous => {
         const job = previous[key];
         if (!job) return previous;
-        const status = event.status ?? (job.status === "cancelling" ? "cancelled" : "completed");
         return {
           ...previous,
           [key]: {
@@ -268,8 +322,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           },
         };
       });
-      if (event.status !== "failed") scheduleTerminalCleanup(key);
-      else clearTerminalCleanup(key);
+      scheduleTerminalCleanup(key, status === "failed" ? 12000 : 4000);
     });
     const offFile = listen("ssh:transfer-file", (event: {
       ref: Ref; transferId: string; kind: "start" | "completed";
@@ -386,7 +439,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       if (!ref) return;
       const prefix = refKey(ref) + ":";
       for (const key of finished.current) {
-        if (key.startsWith(prefix)) finished.current.delete(key);
+        if (key.startsWith(prefix)) {
+          finished.current.delete(key);
+          finishResults.current.delete(key);
+        }
       }
       for (const key of terminalCleanupTimers.current.keys()) {
         if (key.startsWith(prefix)) clearTerminalCleanup(key);
@@ -449,6 +505,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         for (const [key] of ended) {
           delete next[key];
           finished.current.delete(key);
+          finishResults.current.delete(key);
         }
         return next;
       });

@@ -496,7 +496,17 @@ func (o *terminalOutputCloser) Write(p []byte) (int, error) {
             "error": exitError,
         }
         if transferIDText != "" { event["transferId"] = transferIDText }
+        // The trzsz-go ZMODEM filter may delay its state=false callback
+        // until another SSH output chunk arrives after local sz/rz exits.
+        // Publish the locally observed terminal outcome now, without waiting
+        // for a subsequent remote prompt or unrelated command output.
+        state := map[string]any{
+            "ref": o.writer.c.ref, "active": false, "protocol": "zmodem",
+            "status": status, "error": exitError,
+        }
+        if transferIDText != "" { state["transferId"] = transferIDText }
         o.writer.m.emit("ssh:transfer-finished", event)
+        o.writer.m.emit("ssh:transfer-state", state)
     }
     o.mu.Unlock()
     return o.writer.Write(p)
