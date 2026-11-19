@@ -326,3 +326,46 @@ test("identified lifecycle events preserve transfer direction before details arr
   expect(screen.getByText("ZMODEM")).toBeTruthy();
   expect(container.querySelector(".transfer-center-job .lucide-arrow-down-to-line")).not.toBeNull();
 });
+
+test("new rz/sz on one SSH PTY retires prior task when its finish event was lost", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  for (const [id, size] of [["old-upload", "1.0 MB"], ["new-upload", "70 B"], ["latest", "161 KB"]] as const) {
+    emit("ssh:transfer-details", {
+      ref: refA, transferId: id, direction: "upload", protocol: "zmodem",
+    });
+    emit("ssh:transfer-progress", {
+      ref: refA, transferId: id, transferred: size, speed: "10 KB/s",
+    });
+  }
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  // A terminal session runs at most one ZMODEM task at a time.
+  expect(container.querySelector(".transfer-center-count")?.textContent).toBe("1");
+  expect(screen.getAllByText("失败")).toHaveLength(2);
+  expect(screen.getAllByText("上一笔 ZMODEM 已被新传输取代，但未收到可靠的结束确认")).toHaveLength(2);
+
+  emit("ssh:transfer-finished", {
+    ref: refA, transferId: "latest", status: "completed",
+  });
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  expect(screen.getByText("已完成")).toBeTruthy();
+});
+
+test("explicit ZMODEM client exit status clears the active count even without a filter callback", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "legacy-finish", direction: "download", protocol: "zmodem",
+  });
+  emit("ssh:transfer-progress", {
+    ref: refA, transferId: "legacy-finish", transferred: "1.0 MB", speed: "550 KB/s",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(container.querySelector(".transfer-center-count")?.textContent).toBe("1");
+  emit("ssh:transfer-finished", {
+    ref: refA, transferId: "legacy-finish", status: "failed", error: "本地 ZMODEM 进程退出，代码 1",
+  });
+  emit("ssh:transfer-state", {
+    ref: refA, transferId: "legacy-finish", active: false, status: "failed",
+  });
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  expect(screen.getByText("失败")).toBeTruthy();
+});
