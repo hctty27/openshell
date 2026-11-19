@@ -11,8 +11,6 @@ on:
       - 'frontend/package-lock.json'
       - 'scripts/audit_sbom.py'
       - 'scripts/test_audit_sbom.py'
-      - 'scripts/generate_zmodem_manifest.py'
-      - 'scripts/test_generate_zmodem_manifest.py'
       - 'scripts/prepare_zmodem_windows.ps1'
       - '.github/workflows/sbom.yml'
   pull_request:
@@ -25,8 +23,6 @@ on:
       - 'frontend/package-lock.json'
       - 'scripts/audit_sbom.py'
       - 'scripts/test_audit_sbom.py'
-      - 'scripts/generate_zmodem_manifest.py'
-      - 'scripts/test_generate_zmodem_manifest.py'
       - 'scripts/prepare_zmodem_windows.ps1'
       - '.github/workflows/sbom.yml'
   workflow_dispatch:
@@ -57,7 +53,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Test SBOM and ZMODEM inventory validators
-        run: python3 -m unittest scripts.test_audit_sbom scripts.test_generate_zmodem_manifest
+        run: python3 -m unittest scripts.test_audit_sbom scripts.test_generate_native_zmodem_manifest
       - name: Build the frontend assets embedded in the Go application
         working-directory: frontend
         run: |
