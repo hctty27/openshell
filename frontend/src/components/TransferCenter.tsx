@@ -89,6 +89,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
   const [sftpConcurrency, setSftpConcurrency] = useState(3);
   const [savingConcurrency, setSavingConcurrency] = useState(false);
   const finished = useRef(new Set<string>());
+  const finishResults = useRef(new Map<string, { status: TransferStatus; error?: string }>());
   const terminalCleanupTimers = useRef(new Map<string, number>());
   const panel = useRef<HTMLDivElement>(null);
   const liveRefs = tabs.filter(tab => tab.ref).map(tab => tab.ref!);
@@ -107,6 +108,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         const next = { ...previous };
         delete next[key];
         finished.current.delete(key);
+        finishResults.current.delete(key);
         return next;
       });
     }, delayMs);
@@ -138,13 +140,19 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       const legacyKey = transferKey(event.ref);
       const mergeLegacy = key !== legacyKey;
       const legacyFinished = mergeLegacy && finished.current.has(legacyKey);
+      const alreadyFinished = finished.current.has(key);
+      const finalResult = finishResults.current.get(key) ??
+        (legacyFinished ? finishResults.current.get(legacyKey) : undefined);
       clearTerminalCleanup(key);
       if (mergeLegacy) {
         clearTerminalCleanup(legacyKey);
         finished.current.delete(legacyKey);
+        finishResults.current.delete(legacyKey);
       }
-      finished.current.delete(key);
-      if (legacyFinished) finished.current.add(key);
+      // A tiny file may finish before its details event arrives. Never
+      // discard the completion marker when enriching that same transfer ID.
+      if (alreadyFinished || legacyFinished) finished.current.add(key);
+      if (finalResult) finishResults.current.set(key, finalResult);
       // A single SSH PTY can execute only one rz/sz transfer at a time.
       // If the previous filter missed its final callback, retire that task
       // rather than accumulate multiple forever-"running" ZMODEM rows.
@@ -160,6 +168,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       }
       setTerminalJobs(previous => {
         const legacy = mergeLegacy ? previous[legacyKey] : undefined;
+        const existing = previous[key];
         const next = { ...previous };
         for (const oldKey of stale) {
           const old = next[oldKey];
@@ -167,9 +176,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
             ...old, status: "failed",
             error: old.error || "上一笔 ZMODEM 已被新传输取代，但未收到可靠的结束确认",
           };
+          finishResults.current.set(oldKey, { status: "failed", error: next[oldKey].error });
         }
         if (mergeLegacy) delete next[legacyKey];
-        const status = legacy?.status ?? "running";
+        const status = finalResult?.status ?? existing?.status ?? legacy?.status ?? "running";
         const files = event.files
           ? event.files.map(file => ({
             name: file.name,
@@ -178,23 +188,25 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
               status === "failed" ? "failed" as const :
               status === "cancelled" ? "cancelled" as const : "queued" as const,
           }))
-          : legacy?.files ?? [];
+          : existing?.files ?? legacy?.files ?? [];
         return {
           ...next,
           [key]: {
             ref: event.ref, transferId, direction: event.direction,
             protocol: event.protocol === "trzsz" ? "trzsz" : "zmodem",
             status,
-            transferred: legacy?.transferred,
-            speed: legacy?.speed,
-            processed: legacy?.processed,
-            percent: legacy?.percent,
+            transferred: existing?.transferred ?? legacy?.transferred,
+            speed: existing?.speed ?? legacy?.speed,
+            processed: existing?.processed ?? legacy?.processed,
+            percent: status === "completed" ? 100 : existing?.percent ?? legacy?.percent,
             files,
-            error: legacy?.error,
+            error: finalResult?.error ?? existing?.error ?? legacy?.error,
           },
         };
       });
-      if (legacyFinished) scheduleTerminalCleanup(key);
+      if (alreadyFinished || legacyFinished) {
+        scheduleTerminalCleanup(key, finalResult?.status === "failed" ? 12000 : 4000);
+      }
     });
     const offState = listen("ssh:transfer-state", (event: {
       ref: Ref; transferId?: string; active: boolean; status?: TransferStatus;
