@@ -212,7 +212,14 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
         void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
       }
       closeRequest();
-      if (pending) void Promise.resolve(pending).catch(onNotice);
+      if (pending) void Promise.resolve(pending).catch(err => {
+        // Explicit cancel with confirmed remote shell recovery is not a
+        // failed operation. The transfer center still records "cancelled".
+        const message = errorText(err);
+        if (request.native && message.includes("终端已安全恢复") &&
+          message.includes("context canceled")) return;
+        onNotice(err);
+      });
     } catch (err) {
       setError(errorText(err));
       submittingKey.current = "";
