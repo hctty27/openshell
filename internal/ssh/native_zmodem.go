@@ -128,7 +128,7 @@ func (m *Manager) nativeZmodemClient(ref domain.ConnectionRef) (*ssh.Client, err
 	if isJumpServerVersion(c.serverVersion) || c.readiness.isJumpServer() {
 		return nil, errors.New("JumpServer 暂不支持原生 ZMODEM 独立执行")
 	}
-	if c.zmodemSelection != nil || c.transferring {
+	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.aiController != nil {
 		return nil, errors.New("请先完成当前终端文件传输")
 	}
 	return c.client, nil
