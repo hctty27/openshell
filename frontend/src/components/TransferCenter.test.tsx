@@ -127,7 +127,7 @@ test("native ZMODEM renders one file and does not report completion before remot
   expect(screen.getByText("已完成")).toBeTruthy();
 });
 
-test("native ZMODEM cancellation affects only the active single-file task", async () => {
+test("native ZMODEM confirmed cancellation is distinct from failed transfers", async () => {
   render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
   emit("ssh:native-zmodem-batch", {
     ref: refA, id: "transfer-cancel", direction: "upload", active: true,
@@ -137,10 +137,26 @@ test("native ZMODEM cancellation affects only the active single-file task", asyn
   fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
   await waitFor(() => expect(api.CancelNativeZmodemInteractiveTransfer).toHaveBeenCalledWith(refA));
   emit("ssh:native-zmodem-batch", {
-    ref: refA, id: "transfer-cancel", direction: "upload", active: false, error: "cancelled",
+    ref: refA, id: "transfer-cancel", direction: "upload", active: false,
+    cancelled: true, terminalSafe: true, error: "原生 ZMODEM 已中止，终端已安全恢复",
   });
   expect(screen.getByText("已取消")).toBeTruthy();
   expect(screen.queryByText("100%")).toBeNull();
+});
+
+test("native timeout must not masquerade as a user cancellation", async () => {
+  render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "transfer-timeout", direction: "upload", active: true,
+    files: [{ name: "timeout.bin", total: 1024 }],
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "transfer-timeout", direction: "upload", active: false,
+    cancelled: false, terminalSafe: false, error: "原生传输超时，终端需要重新连接",
+  });
+  expect(screen.getByText("失败")).toBeTruthy();
 });
 
 test("SFTP batch cancellation is scoped and concurrency is saved", async () => {

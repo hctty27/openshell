@@ -309,7 +309,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     });
     const offNativeBatch = listen("ssh:native-zmodem-batch", (event: {
       ref: Ref; id: string; direction: Direction; active: boolean;
-      files?: { name: string; total?: number }[]; error?: string;
+      files?: { name: string; total?: number }[]; error?: string; cancelled?: boolean; terminalSafe?: boolean;
     }) => {
       if (!event?.ref || !event.id || (event.active && event.files?.length !== 1)) return;
       const key = refKey(event.ref);
@@ -327,13 +327,12 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         }
         const existing = previous[key];
         if (!existing || existing.id !== event.id) return previous;
-        const status = event.error ? (existing.status === "cancelling" ? "cancelled" : "failed")
-          : "completed";
+        const status = event.cancelled ? "cancelled" : event.error ? "failed" : "completed";
         return { ...previous, [key]: { ...existing, status, error: event.error,
           files: existing.files.map(file =>
             file.status === "queued" || file.status === "running" ||
             (event.error && existing.direction === "download" && file.status === "completed")
-              ? { ...file, status: status === "completed" ? "completed" : "failed" } : file),
+              ? { ...file, status: status === "completed" ? "completed" : status === "cancelled" ? "cancelled" : "failed" } : file),
         }};
       });
     });

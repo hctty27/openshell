@@ -117,7 +117,12 @@ func (m *Manager) runNativeTerminalBatchExperimentWithProgress(
 	}
 	m.mu.Unlock()
 	if result != nil {
-		return fmt.Errorf("交互式原生 ZMODEM 失败，当前终端需要重新连接：%w", result)
+		if unsafe {
+			return fmt.Errorf("交互式原生 ZMODEM 未安全结束，当前终端需要重新连接：%w", result)
+		}
+		// A nonce-bound remote exit marker already proved the shell is back.
+		// Do not demand reconnect after a safely recovered cancellation.
+		return result
 	}
 	return nil
 }

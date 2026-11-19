@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -71,10 +72,14 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	})
 	defer func() {
 		payload := map[string]any{"ref": ref, "id": id, "direction": direction, "active": false}
+		terminalSafe := a.NativeZmodemInteractiveReadiness(ref).Ready
+		payload["terminalSafe"] = terminalSafe
 		if err != nil {
 			payload["error"] = err.Error()
+			// An interrupted but unverified SSH session is a failure that
+			// needs reconnection, not a completed user cancellation.
+			payload["cancelled"] = terminalSafe && errors.Is(err, context.Canceled)
 		}
-		payload["terminalSafe"] = a.NativeZmodemInteractiveReadiness(ref).Ready
 		a.emit("ssh:native-zmodem-batch", payload)
 	}()
 

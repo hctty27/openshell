@@ -265,6 +265,45 @@ func (c *nativeTerminalCoordinator) runBatch(
 		case <-time.After(nativeZmodemShutdownTimeout):
 		}
 	}
+	// Restore on cancellation only after the exact remote shell command has
+	// exited. Sidecar termination and byte counts alone are not proof. The
+	// output gate continues discarding binary tail bytes until that marker.
+	recoverInterrupted := func(cause error) error {
+		if cause == nil { cause = context.Canceled }
+		if !sink.seenHeader() {
+			return fmt.Errorf("原生 ZMODEM 已中止，但未确认远端协议启动（需重连）：%w", cause)
+		}
+		var remote nativeRemoteExit
+		var confirmed bool
+		select {
+		case remote = <-fence.completion:
+			confirmed = true
+		default:
+		}
+		if !confirmed {
+			// ZMODEM cancel (CAN + backspace), not an ordinary shell Ctrl+C.
+			// Only send it after the remote ZMODEM header has been recognized.
+			if _, err := c.input.writeNative(inputLease, zmodemCancelSequence); err != nil {
+				return fmt.Errorf("原生 ZMODEM 中止通知发送失败（需重连）：%w", err)
+			}
+			select {
+			case remote = <-fence.completion:
+				confirmed = true
+			case <-time.After(2 * time.Second):
+				return fmt.Errorf("原生 ZMODEM 已中止，但远端未确认退出（需重连）：%w", cause)
+			}
+		}
+		if !confirmed || remote.err != nil {
+			return fmt.Errorf("原生 ZMODEM 已中止，远端状态不确定（需重连）：%w", cause)
+		}
+		if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil {
+			return fmt.Errorf("远端已退出，但恢复终端输出失败（需重连）：%w", err)
+		}
+		if err := c.input.restore(inputLease); err != nil {
+			return fmt.Errorf("远端已退出，但恢复终端输入失败（需重连）：%w", err)
+		}
+		return fmt.Errorf("原生 ZMODEM 已中止，终端已安全恢复：%w", cause)
+	}
 	// Start the remote command only after both ownership leases are held
 	// and the local sidecar reader has been launched.
 	n, err := c.input.writeNative(inputLease, []byte(command))
@@ -288,12 +327,14 @@ func (c *nativeTerminalCoordinator) runBatch(
 		return fmt.Errorf("原生 ZMODEM 启动或转发失败（需要重连终端）：%w", err)
 	case <-ctx.Done():
 		stopSidecar()
-		return fmt.Errorf("原生 ZMODEM 已取消或无活动超时（需要重连终端）：%w", nativeZmodemContextError(ctx))
+		return recoverInterrupted(nativeZmodemContextError(ctx))
 	}
 	observeNativeZmodemStage(parent, "protocol", protocolStarted)
 	sink.finish(reader)
 	if err != nil {
-		if cause := nativeZmodemContextError(ctx); cause != nil { err = cause }
+		if cause := nativeZmodemContextError(ctx); cause != nil {
+			return recoverInterrupted(cause)
+		}
 		return fmt.Errorf("原生 ZMODEM sidecar 执行失败（需要重连终端）：%w", err)
 	}
 	if !sink.seenHeader() {
@@ -310,7 +351,7 @@ func (c *nativeTerminalCoordinator) runBatch(
 		if remote.code != 0 { return fmt.Errorf("远端 rz/sz 退出状态为 %d，终端需要重连", remote.code) }
 		if ctxErr := nativeZmodemContextError(ctx); ctxErr != nil { return ctxErr }
 	case <-ctx.Done():
-		return fmt.Errorf("等待远端传输结束标记无活动超时（需要重连终端）：%w", nativeZmodemContextError(ctx))
+		return recoverInterrupted(nativeZmodemContextError(ctx))
 	}
 
 	observeNativeZmodemStage(parent, "remoteConfirm", confirmationStarted)
