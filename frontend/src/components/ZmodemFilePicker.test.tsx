@@ -98,7 +98,7 @@ test("native picker opens the remembered directory and saves navigation", async 
 test("native picker surfaces unsupported and unavailable errors", () => {
   const onNotice = vi.fn();
   render(<ZmodemFilePicker activeRef={ref} onNotice={onNotice} />);
-  emit("ssh:native-zmodem-command-error", { ref, error: "rz -y 不支持" });
+  emit("ssh:native-zmodem-command-error", { ref, error: "rz -a 不支持" });
   emit("ssh:native-zmodem-unsupported", { ref, error: "未接管协议，需重连" });
   expect(onNotice).toHaveBeenCalledTimes(2);
 });
