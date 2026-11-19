@@ -8,6 +8,7 @@ import (
 
 var (
 	errNativeTerminalInputBusy = errors.New("native terminal input busy")
+	errTerminalFileTransferBusy = errors.New("terminal file transfer input busy")
 	errNativeTerminalInputLease = errors.New("终端输入独占令牌已失效")
 )
 

@@ -230,21 +230,23 @@ func TestNativeZmodemInteractiveCoordinatorCancelBeforeHeaderKeepsTerminalIsolat
 }
 
 func TestNativeZmodemInteractiveCoordinatorValidationRejectsUnsafeCommands(t *testing.T) {
+	const token = "00112233445566778899aabbccddeeff"
 	for _, item := range []struct{ direction, remote string }{
-		{"download", ""}, {"download", "/tmp/new\n"}, {"invalid", "x"},
+		{"download", ""}, {"download", "/tmp/new\n"},
+		{"download", "/tmp/a\n/tmp/b"}, {"invalid", "x"},
 	} {
-		if _, _, err := nativeInteractiveCommand(item.direction, item.remote); err == nil {
+		if _, _, err := nativeInteractiveFencedCommand(item.direction, item.remote, token); err == nil {
 			t.Fatalf("accepted invalid remote command: %+v", item)
 		}
 	}
-	for _, item := range []struct{ direction, remote, command, action string }{
-		{"upload", "", "rz -q\r", "send"},
-		{"download", "x y", "sz -q -- 'x y'\r", "receive"},
-		{"download", "/tmp/a\n/tmp/b c", "sz -q -- '/tmp/a' '/tmp/b c'\r", "receive"},
+	for _, item := range []struct{ direction, remote, fragment, action string }{
+		{"upload", "", "{ rz -q;", "send"},
+		{"download", "x y", "sz -q -- 'x y'", "receive"},
+		{"download", "/tmp/a'file", "sz -q -- '/tmp/a'\\''file'", "receive"},
 	} {
-		cmd, action, err := nativeInteractiveCommand(item.direction, item.remote)
-		if err != nil || cmd != item.command || action != item.action {
-			t.Fatalf("invalid generated command: %q %q %v", cmd, action, err)
+		cmd, action, err := nativeInteractiveFencedCommand(item.direction, item.remote, token)
+		if err != nil || !strings.Contains(cmd, item.fragment) || action != item.action {
+			t.Fatalf("invalid fenced command: %q %q %v", cmd, action, err)
 		}
 	}
 	var legacy bytes.Buffer

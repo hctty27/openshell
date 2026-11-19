@@ -606,9 +606,16 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		m.mu.Unlock()
 		return errAITerminalBusy
 	}
-	if c.nativeTerminalTransfer != nil {
+	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned {
 		m.mu.Unlock()
 		return errNativeTerminalInputBusy
+	}
+	// A compatibility rz/sz or trz/tsz transfer owns the same SSH PTY.
+	// This is the user/AI-visible write entrypoint, not the internal
+	// cancellation path: no keys, paste or Ctrl+C may enter the filter.
+	if c.transferring || c.zmodemSelection != nil {
+		m.mu.Unlock()
+		return errTerminalFileTransferBusy
 	}
 	stdin := c.stdin
 	autoSidecar := m.nativeAutoSidecar
@@ -648,8 +655,10 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	}
 	return nil
 }
-// CancelZmodem requests cancellation through the filter for trzsz, or sends
-// an interrupt for legacy ZMODEM, where the filter exposes no stop method.
+// CancelZmodem is the internal cancel-button path. The upstream filter
+// handles trzsz via StopTransferringFiles; for legacy ZMODEM it converts a
+// private Ctrl+C control byte into the protocol CAN cancellation sequence.
+// Regular terminal input is blocked independently in Manager.Write.
 func (m *Manager) CancelZmodem(ref domain.ConnectionRef) error {
     m.mu.Lock()
     c := m.connections[ref.TabID]

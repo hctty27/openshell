@@ -1125,3 +1125,61 @@ test("does not report a native ZMODEM input ownership rejection as an SSH failur
   expect(onError).not.toHaveBeenCalled();
   expect(api.Disconnect).not.toHaveBeenCalled();
 });
+
+
+test("legacy rz/sz prevents typing, Ctrl+C and clipboard paste until transfer finishes", async () => {
+  const { container } = renderTerminal();
+  const term = refs.terms[0];
+  const emit = (name: string, payload: unknown) =>
+    act(() => events.listeners.get(name)?.(payload));
+
+  emit("ssh:transfer-state", { ref: { ...tab.ref!, generation: 999 }, active: true });
+  expect(term.options.disableStdin).toBeFalsy();
+  emit("ssh:zmodem-pick", { ref: tab.ref, id: 1, direction: "upload", protocol: "zmodem" });
+  expect(term.options.disableStdin).toBe(true);
+  term.onDataCallback("echo should not run\r");
+  term.onDataCallback("\x03");
+  fireEvent.contextMenu(container.querySelector(".terminal-pane")!);
+  expect(Clipboard.Text).not.toHaveBeenCalled();
+  expect(api.WriteTerminal).not.toHaveBeenCalled();
+
+  emit("ssh:zmodem-pick-ended", { ref: tab.ref, id: 1, accepted: true });
+  expect(term.options.disableStdin).toBe(true);
+  emit("ssh:transfer-state", { ref: tab.ref, active: true, protocol: "zmodem" });
+  expect(term.options.disableStdin).toBe(true);
+  emit("ssh:transfer-state", { ref: tab.ref, active: false, protocol: "zmodem", status: "completed" });
+  expect(term.options.disableStdin).toBe(false);
+  term.onDataCallback("pwd\r");
+  await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalledOnce());
+  expect(api.WriteTerminal).toHaveBeenCalledWith(tab.ref, btoa("pwd\r"));
+});
+
+test("cancelled legacy picker restores input but native transfer still keeps it locked", async () => {
+  renderTerminal();
+  const term = refs.terms[0];
+  const emit = (name: string, payload: unknown) =>
+    act(() => events.listeners.get(name)?.(payload));
+
+  emit("ssh:zmodem-pick", { ref: tab.ref, id: 2, direction: "upload", protocol: "zmodem" });
+  emit("ssh:zmodem-pick-ended", { ref: tab.ref, id: 2, accepted: false });
+  expect(term.options.disableStdin).toBe(false);
+
+  emit("ssh:native-zmodem-batch", { ref: tab.ref, id: "native-1", active: true });
+  emit("ssh:transfer-state", { ref: tab.ref, active: true, protocol: "zmodem" });
+  emit("ssh:transfer-state", { ref: tab.ref, active: false, protocol: "zmodem" });
+  expect(term.options.disableStdin).toBe(true);
+  emit("ssh:native-zmodem-batch", { ref: tab.ref, id: "native-1", active: false, terminalSafe: true });
+  expect(term.options.disableStdin).toBe(false);
+  term.onDataCallback("date\r");
+  await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalledWith(tab.ref, btoa("date\r")));
+});
+
+test("compatibility transfer input ownership rejection does not disconnect SSH", async () => {
+  const onError = vi.fn();
+  vi.mocked(api.WriteTerminal).mockRejectedValueOnce(new Error("terminal file transfer input busy"));
+  renderTerminal({ onError });
+  act(() => refs.terms[0].onDataCallback("x"));
+  await waitFor(() => expect(api.WriteTerminal).toHaveBeenCalledOnce());
+  expect(onError).not.toHaveBeenCalled();
+  expect(api.Disconnect).not.toHaveBeenCalled();
+});

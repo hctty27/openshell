@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
@@ -25,29 +24,6 @@ type nativeTerminalCoordinator struct {
 	input  *terminalInputGate
 	output *terminalOutputGate
 	runner nativeTerminalSidecarRunner
-}
-
-func nativeInteractiveCommand(direction, remotePath string) (string, string, error) {
-	switch direction {
-	case "upload":
-		// Existing interactive shell cwd is the destination. Unlike the
-		// independent SSH exec bridge, we must not exec away the login shell.
-		return "rz -q\r", "send", nil
-	case "download":
-		if remotePath == "" { return "", "", errors.New("缺少远程文件路径") }
-		paths := strings.Split(remotePath, "\n")
-		if len(paths) < 1 || len(paths) > 100 { return "", "", errors.New("每次仅支持 1–100 个远程文件") }
-		quoted := make([]string, 0, len(paths))
-		for _, path := range paths {
-			if path == "" || strings.IndexFunc(path, func(r rune) bool { return r < 32 || r == 127 }) >= 0 {
-				return "", "", errors.New("下载文件的远程路径无效")
-			}
-			quoted = append(quoted, "'" + strings.ReplaceAll(path, "'", "'\\''") + "'")
-		}
-		return "sz -q -- " + strings.Join(quoted, " ") + "\r", "receive", nil
-	default:
-		return "", "", fmt.Errorf("不支持的原生 ZMODEM 方向：%s", direction)
-	}
 }
 
 type nativeTerminalInboundSink struct {
@@ -177,15 +153,10 @@ func (w *nativeTerminalOutboundBarrier) Write(p []byte) (int, error) {
 // If an error occurs after the command is sent, the existing PTY is not
 // recoverable without independent remote completion proof. In that case the
 // gates stay exclusively owned until the whole terminal disconnects.
+// Single-file interactive PTY transfer. The transport and cancellation gates
+// are unchanged; batch manifests are not part of the runtime path.
 func (c *nativeTerminalCoordinator) run(
-	parent context.Context,
-	direction, localPath, remotePath string,
-) error {
-	return c.runBatch(parent, direction, []string{localPath}, []string{remotePath})
-}
-
-func (c *nativeTerminalCoordinator) runBatch(
-	parent context.Context, direction string, localPaths, remotePaths []string,
+	parent context.Context, direction, localPath, remotePath string,
 ) error {
 	if parent == nil || c == nil || c.input == nil || c.output == nil || c.runner == nil {
 		return errors.New("缺少原生终端传输协调参数")
@@ -196,23 +167,16 @@ func (c *nativeTerminalCoordinator) runBatch(
 	preparationStarted := time.Now()
 	token, err := newNativeRemoteBoundaryToken()
 	if err != nil { return fmt.Errorf("远端传输结束令牌创建失败：%w", err) }
-	command, action, err := nativeInteractiveFencedCommand(direction, strings.Join(remotePaths, "\n"), token)
+	command, action, err := nativeInteractiveFencedCommand(direction, remotePath, token)
 	if err != nil { return err }
 
 	var path string
 	if action == "send" {
-		var paths []string
-		paths, err = nativeZmodemUploadPaths(localPaths)
-		if err != nil { return err }
-		var cleanup func()
-		path, action, cleanup, err = nativeZmodemUploadManifest(paths)
-		if err != nil { return err }
-		defer cleanup()
+		path, err = nativeZmodemLocalPath("upload", localPath)
 	} else {
-		if len(localPaths) != 1 { return errors.New("下载只允许选择一个本地保存目录") }
-		path, err = nativeZmodemLocalPath("download", localPaths[0])
-		if err != nil { return err }
+		path, err = nativeZmodemLocalPath("download", localPath)
 	}
+	if err != nil { return err }
 	publishDestination := path
 	stage := ""
 	if action == "receive" {

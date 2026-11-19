@@ -541,3 +541,83 @@ func TestLegacyZmodemStoppedThenNonzeroExitIsCancellation(t *testing.T) {
 		t.Fatalf("incomplete cancellation signals: pending=%v finished=%v inactive=%v", seenCancelling, seenCancelledFinish, seenCancelledState)
 	}
 }
+
+
+type recordingTerminalInput struct {
+	writes [][]byte
+}
+func (w *recordingTerminalInput) Write(data []byte) (int, error) {
+	w.writes = append(w.writes, append([]byte(nil), data...))
+	return len(data), nil
+}
+
+func TestCompatibilityZmodemBlocksUserInputButAllowsInternalCancel(t *testing.T) {
+	for _, protocol := range []string{"zmodem", "trzsz"} {
+		t.Run(protocol, func(t *testing.T) {
+			m, ref := connected(t)
+			defer m.Close()
+			input := &recordingTerminalInput{}
+			filter := &recordingTransferFilter{}
+			m.mu.Lock()
+			c := m.connections[ref.TabID]
+			c.stdin = input
+			c.transferring = true
+			c.transferProtocol = protocol
+			c.transferID = 101
+			if protocol == "trzsz" { c.filter = filter }
+			m.mu.Unlock()
+
+			for _, payload := range [][]byte{
+				[]byte("hello"), []byte("pasted\ncommand"), {0x03}, {0x1b, 0x5b, 0x41},
+			} {
+				err := m.Write(ref, base64.StdEncoding.EncodeToString(payload))
+				if !errors.Is(err, errTerminalFileTransferBusy) {
+					t.Fatalf("user input %x was not blocked during %s: %v", payload, protocol, err)
+				}
+			}
+			if len(input.writes) != 0 {
+				t.Fatalf("user input reached SSH while transfer active: %x", input.writes)
+			}
+			if err := m.CancelZmodem(ref); err != nil { t.Fatal(err) }
+			if protocol == "trzsz" {
+				if !filter.stopped || len(input.writes) != 0 {
+					t.Fatal("trzsz cancellation should use the filter's internal stop method")
+				}
+			} else {
+				if len(input.writes) != 1 || (len(input.writes[0]) != 1 || input.writes[0][0] != 0x03) {
+					t.Fatalf("ZMODEM button did not use the filter's internal cancel trigger: %x", input.writes)
+				}
+			}
+
+			m.mu.Lock()
+			c.transferring = false
+			m.mu.Unlock()
+			if err := m.Write(ref, base64.StdEncoding.EncodeToString([]byte("after\r"))); err != nil {
+				t.Fatalf("normal terminal input not restored after transfer: %v", err)
+			}
+		})
+	}
+}
+
+func TestCompatibilityZmodemFileSelectionBlocksTerminalInput(t *testing.T) {
+	m, ref := connected(t)
+	defer m.Close()
+	input := &recordingTerminalInput{}
+	m.mu.Lock()
+	c := m.connections[ref.TabID]
+	c.stdin = input
+	c.zmodemSelection = &zmodemSelection{id: 7, response: make(chan []string, 1)}
+	m.mu.Unlock()
+	for _, data := range []string{"pwd", "\x03", "pasted\ncommand"} {
+		if err := m.Write(ref, base64.StdEncoding.EncodeToString([]byte(data))); !errors.Is(err, errTerminalFileTransferBusy) {
+			t.Fatalf("input during picker was not blocked: %q %v", data, err)
+		}
+	}
+	if len(input.writes) != 0 { t.Fatalf("input leaked into picker: %x", input.writes) }
+	m.mu.Lock()
+	c.zmodemSelection = nil
+	m.mu.Unlock()
+	if err := m.Write(ref, base64.StdEncoding.EncodeToString([]byte("echo resumed\r"))); err != nil {
+		t.Fatalf("terminal input did not resume after picker cancellation: %v", err)
+	}
+}

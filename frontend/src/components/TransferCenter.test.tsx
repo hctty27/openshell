@@ -17,7 +17,6 @@ vi.mock("../bridge", () => ({
     SFTPTransfer: vi.fn(async () => {}),
     CancelZmodem: vi.fn(async () => {}),
     CancelNativeZmodemInteractiveTransfer: vi.fn(async () => {}),
-    SkipNativeZmodemPendingFile: vi.fn(async () => {}),
   },
   listen: (name: string, callback: (value: any) => void) => {
     events.callbacks.set(name, callback);
