@@ -289,7 +289,7 @@ func (c *nativeTerminalCoordinator) runBatch(
 			select {
 			case remote = <-fence.completion:
 				confirmed = true
-			case <-time.After(3 * time.Second):
+			case <-time.After(2 * time.Second):
 				return fmt.Errorf("原生 ZMODEM 已中止，但远端未确认退出（需重连）：%w", cause)
 			}
 		}
