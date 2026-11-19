@@ -78,3 +78,19 @@ test("late completion from an earlier transfer cannot deactivate the next transf
   emit("ssh:transfer-finished", { ref, transferId: "transfer-1", status: "failed" });
   expect(activity.hasActiveTransfers(ref)).toBe(true);
 });
+
+
+test("native ZMODEM protects the active SSH tab while transferring and ignores stale finishes", () => {
+  render(<Probe />);
+  emit("ssh:native-zmodem-batch", { ref, id: "first", active: true });
+  expect(activity.hasActiveTransfers(ref)).toBe(true);
+  expect(activity.hasActiveTransfers(nextRef)).toBe(false);
+  emit("ssh:native-zmodem-batch", { ref, id: "first", active: false });
+  expect(activity.hasActiveTransfers(ref)).toBe(false);
+
+  emit("ssh:native-zmodem-batch", { ref, id: "second", active: true });
+  emit("ssh:native-zmodem-batch", { ref, id: "first", active: false });
+  expect(activity.hasActiveTransfers(ref)).toBe(true);
+  emit("ssh:disconnected", ref);
+  expect(activity.hasActiveTransfers(ref)).toBe(false);
+});
