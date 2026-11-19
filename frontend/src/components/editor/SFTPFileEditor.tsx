@@ -7,6 +7,7 @@ import { indentWithTab, toggleComment } from "@codemirror/commands";
 import { indentUnit, LanguageDescription } from "@codemirror/language";
 import { openSearchPanel, search, gotoLine } from "@codemirror/search";
 import { sftpLanguages } from "./sftpLanguages";
+import { detectLineEnding, normalizeLineEndings, serializeLineEndings } from "./sftpEditorLineEndings";
 import { i18n, t } from "../../i18n";
 import {
   detectIndentation,
@@ -40,6 +41,7 @@ export default function SFTPFileEditor({
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   const [languageName, setLanguageName] = useState(t("sftp:editorPlainText"));
   const initialRef = useRef(initialContent);
+  const originalLineEnding = detectLineEnding(initialRef.current);
   const indentation = preferences.indentMode === "auto"
     ? detectIndentation(initialRef.current, preferences.indentSize)
     : { mode: preferences.indentMode, size: preferences.indentSize };
@@ -58,13 +60,13 @@ export default function SFTPFileEditor({
       ? detectIndentation(initialRef.current, current.indentSize)
       : { mode: current.indentMode, size: current.indentSize };
     const onSaveKey = (view: EditorView) => {
-      actionsRef.current.onSave(view.state.doc.toString());
+      actionsRef.current.onSave(serializeLineEndings(view.state.doc.toString(), originalLineEnding));
       return true;
     };
     const view = new EditorView({
       parent,
       state: EditorState.create({
-        doc: initialRef.current,
+        doc: normalizeLineEndings(initialRef.current),
         extensions: [
           basicSetup,
           search({ top: true }),
@@ -81,14 +83,14 @@ export default function SFTPFileEditor({
             { key: "Mod-/", run: toggleComment },
             indentWithTab,
           ])),
-          EditorState.lineSeparator.of(initialRef.current.includes("\r\n") ? "\r\n" : "\n"),
+          EditorView.clipboardInputFilter.of(normalizeLineEndings),
           indentCompartment.current.of(indentUnit.of(resolved.mode === "tabs" ? "\t" : " ".repeat(resolved.size))),
           tabCompartment.current.of(EditorState.tabSize.of(resolved.size)),
           wrapCompartment.current.of(current.wordWrap ? EditorView.lineWrapping : []),
           languageCompartment.current.of([]),
           EditorView.contentAttributes.of({ "aria-label": t("sftp:editText"), spellcheck: "false" }),
           EditorView.updateListener.of(update => {
-            if (update.docChanged) actionsRef.current.onChange(update.state.doc.toString());
+            if (update.docChanged) actionsRef.current.onChange(serializeLineEndings(update.state.doc.toString(), originalLineEnding));
             if (update.selectionSet || update.docChanged) {
               const point = update.state.selection.main.head;
               const line = update.state.doc.lineAt(point);
@@ -146,7 +148,7 @@ export default function SFTPFileEditor({
     changePreferences({ indentMode: mode as "spaces" | "tabs", indentSize: Number(size) as IndentSize });
   };
   const indentValue = preferences.indentMode === "auto" ? "auto" : preferences.indentMode + ":" + preferences.indentSize;
-  const newline = initialRef.current.includes("\r\n") ? "CRLF" : "LF";
+  const newline = originalLineEnding === "\r\n" ? "CRLF" : originalLineEnding === "\r" ? "CR" : "LF";
 
   return (
     <section className="sftp-editor">
@@ -154,7 +156,7 @@ export default function SFTPFileEditor({
           <strong title={path}><FileText size={15} /><span>{path}</span>{dirty && <span className="sftp-editor-dirty" title={t("sftp:editorUnsaved")}>●</span>}</strong>
           <div className="sftp-editor-tools">
             <button type="button" title={t("sftp:editorSearchReplace")} onClick={() => { const view = viewRef.current; if (view) openSearchPanel(view); }}><Search size={16} /></button>
-            <button type="button" title={t("sftp:saveFile")} disabled={saving || !dirty} onClick={() => onSave(viewRef.current?.state.doc.toString() ?? initialRef.current)}><Save size={16} /></button>
+            <button type="button" title={t("sftp:saveFile")} disabled={saving || !dirty} onClick={() => onSave(serializeLineEndings(viewRef.current?.state.doc.toString() ?? normalizeLineEndings(initialRef.current), originalLineEnding))}><Save size={16} /></button>
             <button type="button" title={t("common:close")} disabled={saving} onClick={onClose}><X size={17} /></button>
           </div>
         </header>
@@ -176,7 +178,7 @@ export default function SFTPFileEditor({
         <footer>
           <small>{t("sftp:utf8EditorLimit")}</small>
           <button type="button" disabled={saving} onClick={onClose}>{t("common:cancel")}</button>
-          <button type="button" disabled={saving || !dirty} className="sftp-editor-save" onClick={() => onSave(viewRef.current?.state.doc.toString() ?? initialRef.current)}><Save size={14} />{t("sftp:saveFile")}</button>
+          <button type="button" disabled={saving || !dirty} className="sftp-editor-save" onClick={() => onSave(serializeLineEndings(viewRef.current?.state.doc.toString() ?? normalizeLineEndings(initialRef.current), originalLineEnding))}><Save size={14} />{t("sftp:saveFile")}</button>
         </footer>
     </section>
   );
