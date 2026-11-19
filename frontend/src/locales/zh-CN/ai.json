@@ -95,5 +95,7 @@
   "currentConversation": "当前对话",
   "contextEstimateShort": "估算",
   "compactAction": "压缩上下文",
-  "contextCompactBusy": "任务进行中不可压缩"
+  "contextCompactBusy": "任务进行中不可压缩",
+  "resizeTerminalAiPanel": "调整终端 AI 侧栏宽度",
+  "resetTerminalAiPanelWidth": "拖动调整宽度，双击恢复默认宽度"
 }

@@ -143,6 +143,8 @@ export interface AIStartResponse {
 export interface AppState {
   aiSidebarMode?: "pinned" | "auto-hide";
   aiSidebarWidth?: number;
+  workspaceSFTPWidth?: number;
+  workspaceTerminalAIWidth?: number;
   aiVisible?: boolean;
   language?: import("./i18n/languages").Language;
   quickCommands?: QuickCommand[];

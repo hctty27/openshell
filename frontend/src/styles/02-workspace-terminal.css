@@ -374,14 +374,34 @@
   --wails-drop-target: drop;
 }
 .workspace-file-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
-  flex: 0 0 clamp(310px, 43%, 440px);
+  flex: 0 0 min(var(--workspace-panel-width, 420px), 65%, max(0px, calc(100% - 400px)));
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   border-left: 1px solid var(--border);
 }
+.workspace-panel-resize-handle {
+  position: absolute;
+  inset: 0 auto 0 -4px;
+  width: 8px;
+  z-index: 10;
+  cursor: col-resize;
+  touch-action: none;
+}
+.workspace-panel-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 3px;
+  width: 2px;
+  background: var(--accent-fill);
+  opacity: 0;
+  pointer-events: none;
+}
+.workspace-panel-resize-handle:hover::after,
+.workspace-panel-resize-handle:focus-visible::after { opacity: 0.85; }
 .workspace-file-panel .sftp-panes {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
@@ -400,7 +420,8 @@
     position: absolute;
     z-index: 8;
     inset: 0 0 0 auto;
-    width: min(430px, 62%);
+    flex: none;
+    width: min(var(--workspace-panel-width, 420px), 62%, calc(100% - 24px));
     background: var(--surface);
     box-shadow: -8px 0 24px #0003;
   }
