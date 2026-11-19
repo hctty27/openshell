@@ -6,7 +6,6 @@ require (
 	github.com/UserExistsError/conpty v0.1.4
 	github.com/creack/pty v1.1.24
 	github.com/pkg/sftp v1.13.10
-	github.com/trzsz/trzsz-go v1.2.1-0.20261010161529-351cf747d8f9
 	github.com/wailsapp/wails/v3 v3.1.0
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.58.0
@@ -48,8 +47,6 @@ require (
 	github.com/randall77/makefat v0.0.0-20260406194835-1b91746796b7 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/trzsz/go-arg v1.5.4 // indirect
-	github.com/trzsz/promptui v0.10.8 // indirect
 	github.com/xo/terminfo v1.2.0 // indirect
 	golang.org/x/image v0.47.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
