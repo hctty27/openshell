@@ -1439,6 +1439,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                     <SFTPView refID={tab.ref!} onNotice={notify}
                       initialRemoteDirectory={resolveSFTPInitialDirectory(remoteUploadDirs.current[tab.id], tab)}
                       cwdReported={tab.cwdReported === true}
+                      terminalDirectory={tab.cwdReported ? tab.cwd : undefined}
                       onRemoteDirectoryChange={directory => {
                         remoteUploadDirs.current[tab.id] = directory;
                       }} hideTaskQueue />
