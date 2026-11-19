@@ -13,12 +13,14 @@ type nativeAutoInputTracker struct {
 	line    []byte
 	started bool
 	blocked bool
+	authorized bool
 }
 
 func (t *nativeAutoInputTracker) reset() {
 	t.line = nil
 	t.started = false
 	t.blocked = false
+	t.authorized = false
 }
 
 // Interpret only literal shell tokens, not expressions that would change
@@ -128,22 +130,30 @@ func parseNativeAutoCommand(line string) (direction, remotePath string) {
 
 // Previous keystrokes have already reached the remote line editor. A
 // recognized Enter becomes Ctrl-U, followed by a separate GUI authorization.
-func (t *nativeAutoInputTracker) prepare(p []byte, shellReady bool) (wire []byte, direction, remotePath string) {
+func (t *nativeAutoInputTracker) prepare(p []byte, shellReady, shellCandidate bool) (wire []byte, direction, remotePath string) {
 	wire = append([]byte(nil), p...)
 	for index, b := range p {
 		switch b {
 		case '\r', '\n':
 			if b == '\r' && index == len(p)-1 && t.started && !t.blocked {
 				direction, remotePath = parseNativeAutoCommand(string(t.line))
-				if direction != "" { wire[index] = 0x15 }
+				if direction != "" {
+					// The command was typed into the remote line editor. Never
+					// send Enter unless a verified Shell prompt authorized it.
+					wire[index] = 0x15
+					if !t.authorized {
+						direction, remotePath = "reject-unavailable", ""
+					}
+				}
 			}
 			t.reset()
 			shellReady = false
 		default:
 			if t.blocked { continue }
 			if !t.started {
-				if shellReady && (b == 'r' || b == 's' || b == 't') {
+				if shellCandidate && (b == 'r' || b == 's' || b == 't') {
 					t.started = true
+					t.authorized = shellReady
 					t.line = append(t.line, b)
 				} else { t.blocked = true }
 				continue

@@ -285,8 +285,8 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 
 	// Even without a usable native sidecar, never forward a recognized
 	// rz/sz command into an unsupported fallback protocol handler.
-	ready := c.readiness.readyProgram() == "shell" && c.readiness.checkReady() == nil
-	wire, direction, remotePath := c.nativeAutoInput.prepare(p, ready)
+	candidate, ready := c.readiness.nativeZmodemInputState()
+	wire, direction, remotePath := c.nativeAutoInput.prepare(p, ready, candidate)
 	if direction == "upload" || direction == "upload-overwrite" || direction == "download" {
 		if status := m.NativeZmodemExperimentalReadiness(ref, autoSidecar, true); !status.Ready {
 			autoError = status.Message
@@ -307,7 +307,11 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	} else if direction == "reject-unsupported" {
 		autoError = "仅支持原生单文件 rz、rz -y、rz --overwrite、rz -q 及 sz 文件名；其他不支持的参数或复杂 Shell 语法请使用 SFTP"
 	} else if direction == "reject-unavailable" {
-		// The readiness error was set before writing Ctrl-U.
+		// A missing/unstable prompt (or a missing sidecar) is never permission
+		// to start the remote rz/sz program. Ctrl-U already erased its line.
+		if autoError == "" {
+			autoError = "当前无法确认安全的 Shell 提示符；已阻止 rz/sz 在服务器启动，请等待提示符稳定后重新输入命令"
+		}
 	} else if direction != "" {
 		m.mu.Lock()
 		if current := m.connections[ref.TabID]; current == c && c.ref == ref {

@@ -111,3 +111,22 @@ func TestJumpServerMenuCannotBeUsedAsAIShell(t *testing.T) {
 	if err := state.checkReady(); err != nil { t.Fatalf("asset shell did not become ready: %v", err) }
 	if !state.isJumpServer() { t.Fatal("bastion identity must survive asset changes") }
 }
+
+
+func TestShellReadinessNativeZmodemPromptState(t *testing.T) {
+	var state terminalShellReadiness
+	candidate, ready := state.nativeZmodemInputState()
+	if !candidate || ready { t.Fatalf("unknown shell state candidate=%v ready=%v", candidate, ready) }
+	state.observe([]byte("[root@localhost hc]# "))
+	candidate, ready = state.nativeZmodemInputState()
+	if !candidate || !ready { t.Fatalf("fresh prompt candidate=%v ready=%v", candidate, ready) }
+	if err := state.checkReady(); err == nil {
+		t.Fatal("AI shell readiness must still enforce the 250 ms settling delay")
+	}
+	state.userInput([]byte("r"))
+	candidate, ready = state.nativeZmodemInputState()
+	if !candidate || ready { t.Fatalf("input in progress candidate=%v ready=%v", candidate, ready) }
+	state.observe([]byte("\x1b[?1049h"))
+	candidate, ready = state.nativeZmodemInputState()
+	if candidate || ready { t.Fatalf("alternate buffer candidate=%v ready=%v", candidate, ready) }
+}
