@@ -41,9 +41,12 @@ func (a *App) NativeZmodemInteractiveReadiness(ref domain.ConnectionRef) sshclie
 func (a *App) StartNativeZmodemInteractiveTransfer(
 	ref domain.ConnectionRef, direction, localPath, remotePath string,
 ) (err error) {
-	if direction != "upload" && direction != "download" {
+	if direction != "upload" && direction != "upload-overwrite" && direction != "download" {
 		return errors.New("不支持的 ZMODEM 传输方向")
 	}
+	isUpload := direction != "download"
+	displayDirection := "download"
+	if isUpload { displayDirection = "upload" }
 	if localPath == "" || strings.ContainsAny(localPath, "\r\n") {
 		return errors.New("请选择一个本地文件或保存目录")
 	}
@@ -57,7 +60,7 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	id := domain.NewID()
 	name := filepath.Base(localPath)
 	file := map[string]any{"name": name}
-	if direction == "upload" {
+	if isUpload {
 		if info, statErr := os.Stat(localPath); statErr == nil && info.Mode().IsRegular() {
 			file["total"] = info.Size()
 		}
@@ -67,11 +70,12 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	}
 
 	a.emit("ssh:native-zmodem-batch", map[string]any{
-		"ref": ref, "id": id, "direction": direction, "active": true,
+		"ref": ref, "id": id, "direction": displayDirection, "active": true,
+		"overwrite": direction == "upload-overwrite",
 		"files": []map[string]any{file},
 	})
 	defer func() {
-		payload := map[string]any{"ref": ref, "id": id, "direction": direction, "active": false}
+		payload := map[string]any{"ref": ref, "id": id, "direction": displayDirection, "active": false}
 		terminalSafe := a.NativeZmodemInteractiveReadiness(ref).Ready
 		payload["terminalSafe"] = terminalSafe
 		if err != nil {
@@ -97,7 +101,7 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 		ctx, ref, nativeZmodemDesktopSidecarPath(), direction, localPath, remotePath,
 		func(processed, total uint64) {
 			a.emit("ssh:native-zmodem-progress", map[string]any{
-				"ref": ref, "batchId": id, "direction": direction,
+				"ref": ref, "batchId": id, "direction": displayDirection,
 				"processed": processed, "total": total,
 			})
 		},
