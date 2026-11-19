@@ -241,6 +241,7 @@ func TestNativeZmodemInteractiveCoordinatorValidationRejectsUnsafeCommands(t *te
 	}
 	for _, item := range []struct{ direction, remote, fragment, action string }{
 		{"upload", "", "{ rz -q;", "send"},
+		{"upload-overwrite", "", "{ rz -q -y;", "send"},
 		{"download", "x y", "sz -q -- 'x y'", "receive"},
 		{"download", "/tmp/a'file", "sz -q -- '/tmp/a'\\''file'", "receive"},
 	} {
