@@ -57,6 +57,7 @@ vi.mock("./bridge", async () => ({
     SavePreference: vi.fn(async () => {}),
     SFTPTransfers: vi.fn(async () => []),
     SFTPConcurrency: vi.fn(async () => 3),
+    CancelNativeZmodemInteractiveTransfer: vi.fn(async () => {}),
     Disconnect: vi.fn(async () => {}),
     Connect: vi.fn(async (tabId: string, sessionId: string) => ({
       ref: { tabId, sessionId, generation: 1 },
