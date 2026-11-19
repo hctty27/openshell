@@ -75,7 +75,7 @@ func TestAcquireAITerminalRejectsUnknownStateWithoutWriting(t *testing.T) {
 	m := NewManager(nil,nil)
 	ref := domain.ConnectionRef{TabID:"test", SessionID:"session", Generation:1}
 	input := &aiCaptureInput{}
-	c := &connection{ref:ref,terminal:&ssh.Session{},stdin:input,filter:aiReadyFilter{}}
+	c := &connection{ref:ref,terminal:&ssh.Session{},stdin:input,inputGate:newTerminalInputGate(input,input)}
 	m.connections[ref.TabID] = c
 
 	if _,err:=m.AcquireAITerminal(ref);err==nil {
