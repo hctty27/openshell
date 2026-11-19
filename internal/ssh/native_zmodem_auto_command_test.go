@@ -30,7 +30,7 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		{"unsafe command", []string{"sz /tmp/a;rm -rf /\r"}, true, "sz /tmp/a;rm -rf /\r", "", ""},
 		{"quoted spaces", []string{"sz '/tmp/a b'\r"}, true, "sz '/tmp/a b'\x15", "download", "/tmp/a b"},
 		{"empty line", []string{"\r"}, true, "\r", "", ""},
-		{"multi download", []string{"sz -q -- one.bin 'two files.bin'\r"}, true, "sz -q -- one.bin 'two files.bin'\x15", "download", "one.bin\ntwo files.bin"},
+		{"multi download rejected before remote command", []string{"sz -q -- one.bin 'two files.bin'\r"}, true, "sz -q -- one.bin 'two files.bin'\x15", "reject-multi", ""},
 		{"unicode download", []string{"sz '中文 文件.bin'\r"}, true, "sz '中文 文件.bin'\x15", "download", "中文 文件.bin"},
 		{"escaped space", []string{"sz name\\ with\\ spaces.bin\r"}, true, "sz name\\ with\\ spaces.bin\x15", "download", "name with spaces.bin"},
 		{"upload quiet", []string{"rz -q\r"}, true, "rz -q\x15", "upload", ""},
