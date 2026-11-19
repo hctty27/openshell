@@ -39,44 +39,10 @@ test("active SFTP tasks are scoped by the full connection reference", () => {
   expect(activity.hasActiveTransfers(ref)).toBe(false);
 });
 
-test("ZMODEM completion ignores late start events and accepts the next handshake", () => {
-  render(<Probe />);
-  emit("ssh:transfer-state", { ref, active: true });
-  expect(activity.hasActiveTransfers(ref)).toBe(true);
-  emit("ssh:transfer-finished", { ref });
-  emit("ssh:transfer-state", { ref, active: true });
-  expect(activity.hasActiveTransfers(ref)).toBe(false);
-  emit("ssh:transfer-details", { ref, direction: "upload" });
-  emit("ssh:transfer-state", { ref, active: true });
-  expect(activity.hasActiveTransfers(ref)).toBe(true);
-  emit("ssh:disconnected", ref);
-  expect(activity.hasActiveTransfers(ref)).toBe(false);
-  expect(activity.hasActiveTransfers(nextRef)).toBe(false);
-});
-
 test("listeners are unregistered on unmount", () => {
   const { unmount } = render(<Probe />);
   unmount();
   for (const callbacks of events.listeners.values()) expect(callbacks.size).toBe(0);
-});
-
-
-test("late completion from an earlier transfer cannot deactivate the next transfer", () => {
-  render(<Probe />);
-  emit("ssh:transfer-details", { ref, transferId: "transfer-1", direction: "upload" });
-  emit("ssh:transfer-state", { ref, transferId: "transfer-1", active: true });
-  expect(activity.hasActiveTransfers(ref)).toBe(true);
-
-  emit("ssh:transfer-finished", { ref, transferId: "transfer-1", status: "completed" });
-  expect(activity.hasActiveTransfers(ref)).toBe(false);
-
-  emit("ssh:transfer-details", { ref, transferId: "transfer-2", direction: "download" });
-  emit("ssh:transfer-state", { ref, transferId: "transfer-2", active: true });
-  expect(activity.hasActiveTransfers(ref)).toBe(true);
-
-  emit("ssh:transfer-state", { ref, transferId: "transfer-1", active: false });
-  emit("ssh:transfer-finished", { ref, transferId: "transfer-1", status: "failed" });
-  expect(activity.hasActiveTransfers(ref)).toBe(true);
 });
 
 

@@ -6,7 +6,7 @@ import { t } from "../i18n";
 import type { Ref, SFTPEntry } from "../types";
 
 type Direction = "upload" | "download";
-interface PickerRequest { ref: Ref; id: number; direction: Direction; protocol?: "zmodem" | "trzsz"; allowDirectories?: boolean; native?: boolean; remotePath?: string }
+interface PickerRequest { ref: Ref; id: number; direction: Direction; remotePath?: string }
 interface Places { home: string; roots: string[] }
 interface Props {
   activeRef?: Ref;
@@ -48,10 +48,6 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
   onClosedRef.current = onClosed;
 
   useEffect(() => {
-    const offPick = listen("ssh:zmodem-pick", (request: PickerRequest) => {
-      if (!request?.ref || !["upload", "download"].includes(request.direction)) return;
-      setRequests(previous => ({ ...previous, [refKey(request.ref)]: request }));
-    });
     const offNativeIntent = listen("ssh:native-zmodem-auto-intent", (event: {
       ref?: Ref;
       direction?: Direction;
@@ -62,21 +58,9 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
         ref: event.ref,
         id: -(++nextNativeRequestID.current),
         direction: event.direction,
-        protocol: "zmodem",
-        native: true,
         remotePath: event.remotePath ?? "",
       };
       setRequests(previous => ({ ...previous, [refKey(request.ref)]: request }));
-    });
-    const offEnded = listen("ssh:zmodem-pick-ended", (event: {ref: Ref; id: number}) => {
-      if (!event?.ref) return;
-      setRequests(previous => {
-        const key = refKey(event.ref);
-        if (previous[key]?.id !== event.id) return previous;
-        const next = { ...previous };
-        delete next[key];
-        return next;
-      });
     });
     const offDisconnected = listen("ssh:disconnected", (ref: Ref) => {
       if (!ref) return;
@@ -86,10 +70,13 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
         return next;
       });
     });
-    const offError = listen("ssh:zmodem-pick-error", (event: {error: string}) => {
+    const offError = listen("ssh:native-zmodem-command-error", (event: { error?: string }) => {
       if (event?.error) onNotice(event.error);
     });
-    return () => { offPick(); offNativeIntent(); offEnded(); offDisconnected(); offError(); };
+    const offUnsupported = listen("ssh:native-zmodem-unsupported", (event: { error?: string }) => {
+      if (event?.error) onNotice(event.error);
+    });
+    return () => { offNativeIntent(); offDisconnected(); offError(); offUnsupported(); };
   }, [onNotice]);
 
   useEffect(() => {
@@ -177,42 +164,30 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       return next;
     });
   };
-  // The picker owns the selection, not the duration of the transfer.
-  // A slow native or legacy Wails call must not strand the modal.
   const submit = (paths: string[]) => {
     if (busy || submittingKey.current === requestKey ||
       currentRequestKey.current !== requestKey) return;
     submittingKey.current = requestKey;
     setError("");
     try {
-      let pending: Promise<unknown> | undefined;
-      if (request.native) {
-        if (paths.length > 0) {
-          const download = request.direction === "download";
-          if (!download && paths.length !== 1) {
-            throw new Error("ZMODEM 每次只能上传一个文件");
-          }
-          const remotePath = request.remotePath ?? "";
-          if (download && (!remotePath || /[\r\n]/.test(remotePath))) {
-            throw new Error("ZMODEM 每次只能下载一个远程文件");
-          }
-          pending = api.StartNativeZmodemInteractiveTransfer(
-            request.ref, request.direction,
-            download ? directory : paths[0], download ? remotePath : "",
-          );
-        }
-      } else {
-        // The backend only acknowledges paths. Progress/finish use their own events.
-        pending = api.SubmitZmodemSelection(request.ref, request.id, paths);
-      }
+      let pending: Promise<void> | undefined;
       if (paths.length > 0) {
+        const download = request.direction === "download";
+        if (!download && paths.length !== 1) throw new Error("ZMODEM 每次只能上传一个文件");
+        const remotePath = request.remotePath ?? "";
+        if (download && (!remotePath || /[\r\n]/.test(remotePath))) {
+          throw new Error("ZMODEM 每次只能下载一个远程文件");
+        }
+        pending = api.StartNativeZmodemInteractiveTransfer(
+          request.ref, request.direction,
+          download ? directory : paths[0], download ? remotePath : "",
+        );
         void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
       }
       closeRequest();
-      if (pending) void Promise.resolve(pending).catch(err => {
+      if (pending) void pending.catch(err => {
         const message = errorText(err);
-        if (request.native && message.includes("终端已安全恢复") &&
-          message.includes("context canceled")) return;
+        if (message.includes("终端已安全恢复") && message.includes("context canceled")) return;
         onNotice(err);
       });
     } catch (err) {
@@ -261,23 +236,18 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
               className={`zmodem-picker-entry ${selected.includes(entry.path) ? "selected" : ""}`}
               disabled={busy || entry.isSymlink}
               onClick={() => {
-                if (download || (entry.isDir && !request.allowDirectories)) return;
-                setSelected(previous => previous.includes(entry.path)
-                  ? previous.filter(file => file !== entry.path)
-                  : request.protocol === "trzsz" ? [...previous, entry.path] : [entry.path]);
+                if (download || entry.isDir) return;
+                setSelected(previous => previous.includes(entry.path) ? [] : [entry.path]);
               }}
               onDoubleClick={() => {
                 if (entry.isDir) goTo(entry.path);
-                else if (!download) setSelected(previous =>
-                  request.protocol === "trzsz"
-                    ? (previous.includes(entry.path) ? previous : [...previous, entry.path])
-                    : [entry.path]);
+                else if (!download) setSelected([entry.path]);
               }}>
               {entry.isDir ? <Folder size={16} /> : <File size={16} />}
               <span title={entry.path}>{entry.name}</span>
               <small>{entry.isDir ? t("sftp:zmodemPickFolder") : niceSize(entry.size)}</small>
-              {!download && (!entry.isDir || request.allowDirectories) && <input
-                type={request.protocol === "trzsz" ? "checkbox" : "radio"} tabIndex={-1} readOnly
+              {!download && !entry.isDir && <input
+                type="radio" tabIndex={-1} readOnly
                 checked={selected.includes(entry.path)} aria-label={entry.name} />}
             </button>
           ))}

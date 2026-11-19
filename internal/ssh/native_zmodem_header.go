@@ -1,8 +1,13 @@
 package sshclient
 
+import "regexp"
+
+// Only a native lease is allowed to consume protocol data.
+var zmodemDirectionPattern = regexp.MustCompile(`\*\*\x18B0([01])[0-9a-f]{12}`)
+
 // nativeZmodemStartScanner recognizes the same ZMODEM header signature as
-// zmodemDirectionWriter, while preserving every byte across SSH Write calls.
-// It only runs after an explicit output-gate arm; production stays on legacy.
+// the ZMODEM start signature while preserving bytes across SSH Write calls.
+// Both native handoff and the unclaimed-protocol safety guard use it.
 type nativeZmodemStartScanner struct {
 	tail []byte
 }

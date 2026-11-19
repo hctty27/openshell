@@ -316,10 +316,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       : terminalOutputDispatcher.onSSH(ref!, onOutput);
     const encoder = new TextEncoder();
     const inputQueue: string[] = [];
-    let legacyTransferActive = false;
-    let legacySelectionActive = false;
-    const transferInputBlocked = () => nativeTransferActive.current ||
-      legacyTransferActive || legacySelectionActive;
+    const transferInputBlocked = () => nativeTransferActive.current;
     const syncTransferInput = () => {
       const blocked = transferInputBlocked();
       if (blocked) inputQueue.length = 0;
@@ -347,38 +344,19 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       nativeTransferActive.current = nativeTransferIDs.current.size > 0;
       syncTransferInput();
     });
-    // The compatibility filter also owns SSH PTY input while rz/sz or
-    // trz/tsz is choosing files and transferring. Ctrl+C is not a
-    // user-visible cancellation shortcut: only the transfer center can stop.
-    const offLegacyPick = listen("ssh:zmodem-pick", (event: { ref?: Ref }) => {
-      if (!event?.ref || !matchesConnection(event.ref)) return;
-      legacySelectionActive = true;
-      syncTransferInput();
-    });
-    const offLegacyPickEnded = listen("ssh:zmodem-pick-ended", (event: {
-      ref?: Ref; accepted?: boolean;
+    const offUnsupported = listen("ssh:native-zmodem-unsupported", (event: {
+      ref?: Ref; error?: string;
     }) => {
       if (!event?.ref || !matchesConnection(event.ref)) return;
-      // A successful selection holds the lock until the transfer's own
-      // active=false callback; transfer startup is asynchronous upstream.
-      legacySelectionActive = event.accepted === true;
+      nativeTransferIDs.current.add("unsafe-protocol");
+      nativeTransferActive.current = true;
       syncTransferInput();
-    });
-    const offLegacyState = listen("ssh:transfer-state", (event: {
-      ref?: Ref; active: boolean;
-    }) => {
-      if (!event?.ref || !matchesConnection(event.ref)) return;
-      legacyTransferActive = event.active === true;
-      if (event.active) legacySelectionActive = false;
-      else legacySelectionActive = false;
-      syncTransferInput();
+      callbacks.current.onError(new Error(event.error ?? "Unclaimed ZMODEM protocol; reconnect SSH"));
     });
     const offDisconnected = listen("ssh:disconnected", (disconnectedRef: Ref) => {
       if (!matchesConnection(disconnectedRef)) return;
       nativeTransferActive.current = false;
       nativeTransferIDs.current.clear();
-      legacyTransferActive = false;
-      legacySelectionActive = false;
       syncTransferInput();
     });
     let inputFlushing = false;
@@ -407,8 +385,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       } catch (error) {
         inputQueue.length = 0;
         const reason = errorText(error);
-        if (!disposed && !reason.includes("native terminal input busy") &&
-          !reason.includes("terminal file transfer input busy")) {
+        if (!disposed && !reason.includes("native terminal input busy")) {
           callbacks.current.onError(error);
         }
       } finally {
@@ -654,9 +631,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       offWindowGeometryEvents.forEach(off => off());
       off();
       offNativeBatch();
-      offLegacyPick();
-      offLegacyPickEnded();
-      offLegacyState();
+      offUnsupported();
       offDisconnected();
       if (local) void api.CloseLocalTerminal(p.tab.id, localID).catch(() => {});
       paneElement.removeEventListener("mousedown", onMouseDown, true);

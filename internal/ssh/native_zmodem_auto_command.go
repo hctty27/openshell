@@ -6,7 +6,7 @@ import (
 )
 
 // Only unedited commands at verified POSIX shell prompts can be intercepted.
-// Expansions, pipelines, history editing and globs remain on the legacy path.
+// Unsupported syntax is explicitly rejected rather than using a legacy engine.
 const nativeAutoCommandMaxLength = 4096
 
 type nativeAutoInputTracker struct {
@@ -86,21 +86,26 @@ func parseNativeAutoCommand(line string) (direction, remotePath string) {
 		if len(args) == 1 || (len(args) == 2 && (args[1] == "-q" || args[1] == "--")) {
 			return "upload", ""
 		}
+		return "reject-unsupported", ""
+	case "trz", "tsz":
+		return "reject-unsupported", ""
 	case "sz":
 		start := 1
 		// -q and -- preserve filename semantics. Other switches may change
 		// overwrite or conversion behavior and are left to the legacy path.
 		if len(args) > start && args[start] == "-q" { start++ }
 		if len(args) > start && args[start] == "--" { start++ }
-		if len(args)-start < 1 { return "", "" }
+		if len(args)-start < 1 { return "reject-unsupported", "" }
 		if len(args)-start > 1 { return "reject-multi", "" }
 		for _, file := range args[start:] {
 			if file == "" || strings.HasPrefix(file, "-") || strings.ContainsAny(file, "\r\n\x00") {
-				return "", ""
+				return "reject-unsupported", ""
 			}
 		}
 		return "download", args[start]
 	}
+	// A recognized transfer command never falls back to another engine.
+	// Reject non-literal globs/expansions/pipes when the shell is verified.
 	return "", ""
 }
 
@@ -120,7 +125,7 @@ func (t *nativeAutoInputTracker) prepare(p []byte, shellReady bool) (wire []byte
 		default:
 			if t.blocked { continue }
 			if !t.started {
-				if shellReady && (b == 'r' || b == 's') {
+				if shellReady && (b == 'r' || b == 's' || b == 't') {
 					t.started = true
 					t.line = append(t.line, b)
 				} else { t.blocked = true }

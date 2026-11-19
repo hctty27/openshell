@@ -31,8 +31,6 @@ on:
       - "scripts/test_generate_native_zmodem_manifest.py"
       - "cmd/zmodem-launcher/**"
       - "build/windows/installer/openshell.nsi"
-      - "scripts/generate_zmodem_manifest.py"
-      - "scripts/test_generate_zmodem_manifest.py"
       - ".github/workflows/windows-release.yml"
       - "scripts/verify_windows_signature.ps1"
       - ".signpath/artifact-configurations/**"

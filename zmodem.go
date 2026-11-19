@@ -4,7 +4,6 @@ import (
     "os"
     "path/filepath"
 
-    "github.com/hctty27/openshell/internal/domain"
 )
 
 type ZmodemLocalPlaces struct {
@@ -33,6 +32,3 @@ func (a *App) ZmodemLocalPlaces() (ZmodemLocalPlaces, error) {
     return places, nil
 }
 
-func (a *App) SubmitZmodemSelection(ref domain.ConnectionRef, id uint64, paths []string) error {
-    return a.ssh.SubmitZmodemSelection(ref, id, paths)
-}

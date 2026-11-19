@@ -73,9 +73,11 @@ Reconnect to apply the change. Each new prompt reports the current directory; op
 
 ### ZMODEM: `rz` / `sz`
 
-Run `rz` on the remote host to choose local files to upload, or `sz /path/to/file` to choose a local destination for downloads. The remote host must have `lrzsz` installed. Official Windows installer and portable packages use **native Rust ZMODEM**: `zmodem/native/zmodem-sidecar.exe` is the sole local Windows ZMODEM engine. `zmodem/rz.exe` and `sz.exe` are first-party GUI-subsystem launchers that forward the protocol stream to Rust. No `lrzsz-win32` binaries or `msys-2.0.dll` are bundled; remote Linux hosts still require `lrzsz`. No Windows PATH setup or additional console window is needed.
+OpenShell Windows uses only its **Go + native Rust** ZMODEM engine. Install `lrzsz` on the remote Linux host. At a verified ordinary POSIX Shell prompt, enter `rz` to upload one local file or `sz /path/to/file` to download one remote file. OpenShell's built-in picker appears and its transfer center shows progress. Windows releases include the Rust sidecar and first-party `rz.exe` / `sz.exe` launcher helpers; these launcher stubs forward protocol data to the Rust sidecar and **are not** the old `trzsz-go` compatibility engine.
 
-OpenShell's compact embedded picker handles local file and destination selection without opening Windows Explorer. Progress appears in a non-modal transfer center in the workspace header; switch tabs freely while transfers continue, or cancel through the transfer center or Ctrl+C. The bundled launcher avoids a separate CMD window. Downloads use the `rz -E` rename strategy for existing filenames. Protocol payloads are filtered before terminal history and AI context. ZMODEM can be unreliable inside tmux/screen; use SFTP for directories and resumable transfers.
+Normal terminal input and paste remain blocked while native transfer owns the SSH PTY. Cancel **only** with the transfer center cancel button, not terminal Ctrl+C. The SSH input/output gates restore ordinary terminal interaction after verified remote completion. If a remote ZMODEM handshake appears without a native authorized lease, OpenShell quarantines binary output and requires reconnect, rather than letting protocol bytes reach terminal history or Terminal AI.
+
+The `trzsz-go` filter, `trz`/`tsz` and legacy rz/sz fallback are no longer available. `rz -y`, wildcard, pipeline, multi-file and complex-shell transfers are not covered by native automatic takeover. Use the SFTP panel for these cases, non-POSIX shells, directories, batch transfers, JumpServer, tmux/screen, or resume/overwrite workflows. Ordinary SSH output, text copy and session switching remain available.
 
 ### Native trzsz: `trz` / `tsz`
 
@@ -166,7 +168,7 @@ Bug reports and focused pull requests are welcome. Include the OpenShell version
 
 ## License and code signing
 
-OpenShell is licensed under the **[MIT License](../LICENSE)**. Bundled third-party components retain their own licenses; The Windows ZMODEM distribution includes only first-party launchers and the native Rust sidecar, not legacy lrzsz/MSYS2 binaries. Go, Rust and npm dependencies retain their respective third-party licenses; see the [SBOM](sbom.md).
+OpenShell is licensed under the **[MIT License](../LICENSE)**. Bundled third-party components retain their own licenses; The Windows ZMODEM distribution includes only first-party launchers and the native Rust sidecar, not legacy lrzsz/MSYS2 binaries or the trzsz-go filter. Go, Rust and npm dependencies retain their respective third-party licenses; see the [SBOM](sbom.md).
 
 Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). This is the intended provider attribution **if the application is approved and signing is enabled**. The original v1.0.0 Windows downloads are unsigned. Foundation approval and the first signed release have not been confirmed; consult each Release for the actual signing state.
 

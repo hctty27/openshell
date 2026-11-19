@@ -115,13 +115,7 @@ func TestNativeZmodemHeaderDisarmReplaysUnconfirmedPrefix(t *testing.T) {
 func TestNativeZmodemHeaderHandoffSkipsLegacyZmodemObserver(t *testing.T) {
 	var terminal, native bytes.Buffer
 	detected := false
-	legacy := &zmodemDirectionWriter{
-		dst: &terminal,
-		onDirection: func(string) bool {
-			detected = true
-			return true
-		},
-	}
+	legacy := newNativeOnlyOutputGuard(&terminal, func() { detected = true })
 	gate := newTerminalOutputGate(legacy)
 	if _, err := gate.armOnZmodemHeader(&native); err != nil {
 		t.Fatal(err)

@@ -11,7 +11,7 @@ import (
 
 // NativeZmodemExperimentReadiness is a read-only preflight for a future
 // explicitly enabled developer UI. It does NOT start the sidecar, run rz/sz,
-// or change the default trzsz-go/MSYS2 transfer path.
+// and never starts a transfer without native PTY authorization.
 type NativeZmodemExperimentReadiness struct {
 	Ready bool `json:"ready"`
 	Code string `json:"code"`
@@ -30,7 +30,7 @@ func (m *Manager) NativeZmodemExperimentalReadiness(
 	ref domain.ConnectionRef, sidecarPath string, optedIn bool,
 ) NativeZmodemExperimentReadiness {
 	if !optedIn {
-		return nativeZmodemReadiness("disabled", "原生 ZMODEM 实验未启用，继续使用现有 rz/sz")
+		return nativeZmodemReadiness("disabled", "当前平台未启用原生 ZMODEM")
 	}
 	if m == nil {
 		return nativeZmodemReadiness("no_connection", "SSH 连接管理器不可用")
@@ -65,9 +65,8 @@ func (m *Manager) NativeZmodemExperimentalReadiness(
 	if isJumpServerVersion(c.serverVersion) || c.readiness.isJumpServer() {
 		return nativeZmodemReadiness("jumpserver_unsupported", "JumpServer 暂不支持原生 ZMODEM 接管")
 	}
-	if c.transferring || c.zmodemSelection != nil ||
-		c.aiController != nil || c.nativeTerminalTransfer != nil {
+	if c.aiController != nil || c.nativeTerminalTransfer != nil {
 		return nativeZmodemReadiness("busy", "当前终端存在文件传输或 AI 独占任务")
 	}
-	return nativeZmodemReadiness("ready", "实验环境已就绪，仍需显式选择文件和方向")
+	return nativeZmodemReadiness("ready", "原生 ZMODEM 已就绪，仍需选择文件和方向")
 }
