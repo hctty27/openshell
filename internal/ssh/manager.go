@@ -47,7 +47,6 @@ type connection struct {
 	terminal *ssh.Session
 	stdin    interface{ Write([]byte) (int, error) }
 	stdinMu sync.Mutex
-	filter   interface { Close(); SetTerminalColumns(int32); IsTransferringFiles() bool; StopTransferringFiles(bool) }
 	writer   *terminalWriter
 	outputGate *terminalOutputGate
 	inputGate *terminalInputGate
@@ -59,14 +58,6 @@ type connection struct {
 	serverVersion string
 	aiExecProbed bool
 	aiExecSupported bool
-	transferring bool
-	transferID uint64
-	transferProtocol string
-	transferDirection string
-	transferCancelled bool
-	transferFinished bool
-	transferStatus string
-	zmodemSelection *zmodemSelection
 	history  *History
 	sequence uint64
 	keepaliveCancel context.CancelFunc
@@ -78,7 +69,6 @@ type Manager struct {
 	emit        EmitFunc
 	connections map[string]*connection
 	generations map[string]uint64
-	nextZmodemSelectionID uint64
 	nativeAutoSidecar string
 	connecting  map[string]context.CancelFunc
 	keepaliveInterval time.Duration
@@ -247,7 +237,6 @@ func (m *Manager) Disconnect(ref domain.ConnectionRef) error {
 	}
 	cancelNativeTerminalTransferLocked(c)
 	delete(m.connections, ref.TabID)
-	releaseZmodemSelection(c)
 	if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	m.mu.Unlock()
 	if c.aiController != nil { c.aiController.Release() }
@@ -266,7 +255,6 @@ func (m *Manager) Close() {
 	m.connections = map[string]*connection{}
 	for _, c := range live {
 		cancelNativeTerminalTransferLocked(c)
-		releaseZmodemSelection(c)
 		if c.keepaliveCancel != nil { c.keepaliveCancel() }
 	}
 	m.mu.Unlock()
