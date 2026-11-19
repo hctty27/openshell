@@ -192,7 +192,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
         const download = request.direction === "download";
         if (!download && paths.length !== 1) throw new Error("ZMODEM 每次只能上传一个文件");
         const remotePath = request.remotePath ?? "";
-        if (download && (!remotePath || /[\\r\\n]/.test(remotePath))) {
+        if (download && (!remotePath || /[\r\n]/.test(remotePath))) {
           throw new Error("ZMODEM 每次只能下载一个远程文件");
         }
         const transfer = api.StartNativeZmodemInteractiveTransfer(
