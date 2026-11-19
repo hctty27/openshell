@@ -456,3 +456,88 @@ func TestZmodemLocalExitFinishesBothLifecycleStreamsWithoutRemoteOutput(t *testi
 		})
 	}
 }
+
+func TestLegacyZmodemLocalExitAcceptsLFAndANSIRewrites(t *testing.T) {
+	for _, tc := range []struct { name, msg, want string }{
+		{"success LF", "\x1b[2KSuccess!!\n", "completed"},
+		{"success color LF", "\r\x1b[2K\x1b[1;32mSuccess!!\x1b[0m\n", "completed"},
+		{"success CR-only", "\r\x1b[2KSuccess!!\r", "completed"},
+		{"failed LF", "\x1b[2Kclient exit with 1\n", "failed"},
+		{"failed color CRLF", "\x1b[2K\x1b[31mclient exit with 1\x1b[0m\r\n", "failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			results := make(chan map[string]any, 4)
+			ref := domain.ConnectionRef{TabID: "tab", SessionID: "session", Generation: 1}
+			manager := NewManager(nil, func(name string, payload any) {
+				if name == "ssh:transfer-finished" {
+					results <- payload.(map[string]any)
+				}
+			})
+			writer := &terminalWriter{m: manager, c: &connection{
+				ref: ref, history: NewHistory(8192), transferID: 44, transferProtocol: "zmodem",
+			}}
+			closer := &terminalOutputCloser{writer: writer, done: make(chan struct{})}
+			defer closer.Close()
+			for i := 0; i < len(tc.msg); i++ {
+				if _, err := closer.Write([]byte{tc.msg[i]}); err != nil { t.Fatal(err) }
+			}
+			select {
+			case result := <-results:
+				if result["transferId"] != "44" || result["status"] != tc.want {
+					t.Fatalf("unexpected local ZMODEM completion: %+v", result)
+				}
+			case <-time.After(time.Second):
+				t.Fatalf("missing local ZMODEM completion for %q", tc.msg)
+			}
+		})
+	}
+}
+
+func TestLegacyZmodemStoppedThenNonzeroExitIsCancellation(t *testing.T) {
+	results := make(chan map[string]any, 8)
+	ref := domain.ConnectionRef{TabID: "tab", SessionID: "session", Generation: 1}
+	manager := NewManager(nil, func(name string, payload any) {
+		if name == "ssh:transfer-state" || name == "ssh:transfer-finished" {
+			event := map[string]any{"name": name}
+			for key, val := range payload.(map[string]any) { event[key] = val }
+			results <- event
+		}
+	})
+	c := &connection{ref: ref, history: NewHistory(8192), transferID: 45, transferProtocol: "zmodem"}
+	closer := &terminalOutputCloser{writer: &terminalWriter{m: manager, c: c}, done: make(chan struct{})}
+	defer closer.Close()
+	// The user can press Ctrl+C inside the terminal, bypassing CancelZmodem.
+	// The upstream filter prints "Stopped" then its child exits nonzero.
+	for _, chunk := range []string{
+		"\r\x1b[2KStopped\r\n",
+		"\r\x1b[2KTransferred 65.7 MB, Speed 8.98 MB/s.",
+		"\r\x1b[2Kclient exit with 1\r\n",
+	} {
+		if _, err := closer.Write([]byte(chunk)); err != nil { t.Fatal(err) }
+	}
+	if !c.transferCancelled { t.Fatal("local stop was not recorded as a cancellation") }
+	seenCancelling, seenCancelledFinish, seenCancelledState := false, false, false
+	for range 3 {
+		select {
+		case event := <-results:
+			switch event["name"] {
+			case "ssh:transfer-finished":
+				if event["status"] != "cancelled" { t.Fatalf("nonzero exit after local Stop was misclassified: %+v", event) }
+				seenCancelledFinish = true
+			case "ssh:transfer-state":
+				if event["active"] == true && event["status"] == "cancelling" {
+					seenCancelling = true
+				} else if event["active"] == false && event["status"] == "cancelled" {
+					seenCancelledState = true
+				} else {
+					t.Fatalf("unexpected state while stopping: %+v", event)
+				}
+			}
+		case <-time.After(time.Second):
+			t.Fatal("missing cancellation lifecycle event")
+		}
+	}
+	if !seenCancelling || !seenCancelledFinish || !seenCancelledState {
+		t.Fatalf("incomplete cancellation signals: pending=%v finished=%v inactive=%v", seenCancelling, seenCancelledFinish, seenCancelledState)
+	}
+}
