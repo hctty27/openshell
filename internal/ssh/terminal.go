@@ -420,7 +420,12 @@ var trzszProgressPattern = regexp.MustCompile(`([0-9]{1,3})% \| ([0-9]+(?:\.[0-9
 // Its transfer-state callback can be delayed until further remote SSH output.
 // Accept ANSI SGR variations while keeping the clear-line prefix to avoid
 // treating ordinary shell output such as "Success!!" as a transfer result.
-var zmodemLocalExitPattern = regexp.MustCompile(`\r\x1b\[2K(?:(?:\x1b\[[0-?]*[ -/]*m)*Success!!(?:\x1b\[[0-?]*[ -/]*m)*|(?:\x1b\[[0-?]*[ -/]*m)*client exit with ([0-9]+)(?:\x1b\[[0-?]*[ -/]*m)*)\r\n`)
+// trzsz-go writes local ZMODEM results with a clear-line CSI 2K prefix.
+// Keep that origin marker: ordinary remote shell text such as "Success!!"
+// must never complete a transfer. Accept CRLF/LF output translation and SGR
+// or cursor-reset sequences between the marker and the local result.
+var zmodemLocalExitPattern = regexp.MustCompile(`(?:\r|\n)?\x1b\[2K(?:\x1b\[[0-?]*[ -/]*[A-Za-z])*?(?:Success!!|client exit with ([0-9]+))(?:\x1b\[[0-?]*[ -/]*[A-Za-z])*(?:\r\n|\n|\r)`)
+var zmodemLocalStoppedPattern = regexp.MustCompile(`(?:\r|\n)?\x1b\[2K(?:\x1b\[[0-?]*[ -/]*[A-Za-z])*Stopped(?:\x1b\[[0-?]*[ -/]*[A-Za-z])*(?:\r\n|\n|\r)`)
 func (o *terminalOutputCloser) Write(p []byte) (int, error) {
     o.mu.Lock()
     oldTailSize := len(o.tail)
@@ -429,6 +434,13 @@ func (o *terminalOutputCloser) Write(p []byte) (int, error) {
     nativeMatches := trzszProgressPattern.FindAllSubmatch(data, -1)
     var exitStatus, exitError string
     locallyExited := false
+    locallyStopped := false
+    for _, loc := range zmodemLocalStoppedPattern.FindAllStringIndex(string(data), -1) {
+        if loc[1] > oldTailSize {
+            locallyStopped = true
+            break
+        }
+    }
     for _, loc := range zmodemLocalExitPattern.FindAllStringSubmatchIndex(string(data), -1) {
         if loc[1] <= oldTailSize {
             continue
@@ -446,6 +458,15 @@ func (o *terminalOutputCloser) Write(p []byte) (int, error) {
     o.tail = append(o.tail[:0], data...)
     o.writer.m.mu.Lock()
     transferID := o.writer.c.transferID
+    if locallyStopped && transferID != 0 &&
+        (o.writer.c.transferProtocol == "zmodem" || o.writer.c.transferProtocol == "") &&
+        !o.writer.c.transferFinished {
+        // Ctrl+C in trzsz-go's local ZMODEM filter prints "Stopped" even
+        // when cancellation was not initiated from the transfer-center UI.
+        o.writer.c.transferCancelled = true
+    } else {
+        locallyStopped = false
+    }
     o.writer.m.mu.Unlock()
     transferIDText := ""
     if transferID != 0 {
@@ -476,6 +497,14 @@ func (o *terminalOutputCloser) Write(p []byte) (int, error) {
         }
         if transferIDText != "" { event["transferId"] = transferIDText }
         o.writer.m.emit("ssh:transfer-progress", event)
+    }
+    if locallyStopped && !locallyExited {
+        event := map[string]any{
+            "ref": o.writer.c.ref, "active": true,
+            "protocol": "zmodem", "status": "cancelling",
+        }
+        if transferIDText != "" { event["transferId"] = transferIDText }
+        o.writer.m.emit("ssh:transfer-state", event)
     }
     if locallyExited {
         status := exitStatus
