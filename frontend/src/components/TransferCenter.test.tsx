@@ -421,3 +421,16 @@ test("ZMODEM details cannot reset an already finished identified transfer", () =
   expect(container.querySelector(".transfer-center-count")).toBeNull();
   expect(screen.getByText("已完成")).toBeTruthy();
 });
+
+test("id-less completion before identified details migrates its status instead of reactivating", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-state", { ref: refA, active: true, protocol: "zmodem" });
+  emit("ssh:transfer-finished", { ref: refA, status: "completed" });
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "identified-later", direction: "upload", protocol: "zmodem",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(container.querySelectorAll(".transfer-center-job")).toHaveLength(1);
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  expect(screen.getByText("已完成")).toBeTruthy();
+});
