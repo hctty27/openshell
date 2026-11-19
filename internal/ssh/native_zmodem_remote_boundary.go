@@ -36,11 +36,21 @@ func nativeInteractiveFencedCommand(direction, remotePath, token string) (string
 	if err != nil || len(rawToken) != 16 || hex.EncodeToString(rawToken) != token {
 		return "", "", errors.New("无效的原生 ZMODEM 远端结束令牌")
 	}
-	command, action, err := nativeInteractiveCommand(direction, remotePath)
-	if err != nil {
-		return "", "", err
+	var command, action string
+	switch direction {
+	case "upload":
+		command, action = "rz -q", "send"
+	case "download":
+		if remotePath == "" || strings.IndexFunc(remotePath, func(r rune) bool {
+			return r < 32 || r == 127
+		}) >= 0 {
+			return "", "", errors.New("下载文件的远程路径无效")
+		}
+		quoted := "'" + strings.ReplaceAll(remotePath, "'", "'\\''") + "'"
+		command, action = "sz -q -- " + quoted, "receive"
+	default:
+		return "", "", errors.New("不支持的原生 ZMODEM 方向")
 	}
-	command = strings.TrimSuffix(command, "\r")
 	// The shell echoes literal backslash sequences, not ESC/BEL, so its own
 	// command echo cannot look like the binary completion marker. The marker
 	// is emitted only after rz/sz has exited and its status is captured.
