@@ -57,7 +57,6 @@ vi.mock("./bridge", async () => ({
     SavePreference: vi.fn(async () => {}),
     SFTPTransfers: vi.fn(async () => []),
     SFTPConcurrency: vi.fn(async () => 3),
-    CancelZmodem: vi.fn(async () => {}),
     Disconnect: vi.fn(async () => {}),
     Connect: vi.fn(async (tabId: string, sessionId: string) => ({
       ref: { tabId, sessionId, generation: 1 },
@@ -837,17 +836,15 @@ test("SFTP opens beside the existing terminal and can close without reconnecting
   const tabID = screen.getByTestId("terminal-pane-stub").getAttribute("data-tab-id");
   const ref = { tabId: tabID, sessionId: "us-id", generation: 1 };
   act(() => {
-    for (const listener of transferEvents.listeners.get("ssh:transfer-details") ?? []) {
-      listener({ ref, direction: "upload", protocol: "zmodem" });
-    }
-    for (const listener of transferEvents.listeners.get("ssh:transfer-state") ?? []) {
-      listener({ ref, active: true });
+    for (const listener of transferEvents.listeners.get("ssh:native-zmodem-batch") ?? []) {
+      listener({ ref, id: "test-native", direction: "upload", active: true,
+        files: [{ name: "native.bin", total: 1024 }] });
     }
   });
   fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
-  expect(screen.getByText("ZMODEM")).toBeTruthy();
+  expect(screen.getByText("native.bin")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
-  await waitFor(() => expect(api.CancelZmodem).toHaveBeenCalledWith(ref));
+  await waitFor(() => expect(api.CancelNativeZmodemInteractiveTransfer).toHaveBeenCalledWith(ref));
 });
 
 test("closing an untouched connected tab does not prompt", async () => {
