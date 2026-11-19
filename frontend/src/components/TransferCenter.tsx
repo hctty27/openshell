@@ -97,19 +97,19 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     if (timer != null) window.clearTimeout(timer);
     terminalCleanupTimers.current.delete(key);
   };
-  const scheduleTerminalCleanup = (key: string) => {
+  const scheduleTerminalCleanup = (key: string, delayMs = 4000) => {
     clearTerminalCleanup(key);
     const timer = window.setTimeout(() => {
       terminalCleanupTimers.current.delete(key);
       setTerminalJobs(previous => {
         const job = previous[key];
-        if (!job || (job.status !== "completed" && job.status !== "cancelled")) return previous;
+        if (!job || (job.status !== "completed" && job.status !== "cancelled" && job.status !== "failed")) return previous;
         const next = { ...previous };
         delete next[key];
         finished.current.delete(key);
         return next;
       });
-    }, 4000);
+    }, delayMs);
     terminalCleanupTimers.current.set(key, timer);
   };
   useEffect(() => () => {
@@ -145,9 +145,29 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       }
       finished.current.delete(key);
       if (legacyFinished) finished.current.add(key);
+      // A single SSH PTY can execute only one rz/sz transfer at a time.
+      // If the previous filter missed its final callback, retire that task
+      // rather than accumulate multiple forever-"running" ZMODEM rows.
+      const prefix = refKey(event.ref) + ":";
+      const stale = Object.entries(terminalJobsRef.current)
+        .filter(([oldKey, job]) => oldKey.startsWith(prefix) &&
+          oldKey !== key && oldKey !== legacyKey &&
+          (job.status === "running" || job.status === "cancelling"))
+        .map(([oldKey]) => oldKey);
+      for (const oldKey of stale) {
+        finished.current.add(oldKey);
+        scheduleTerminalCleanup(oldKey, 12000);
+      }
       setTerminalJobs(previous => {
         const legacy = mergeLegacy ? previous[legacyKey] : undefined;
         const next = { ...previous };
+        for (const oldKey of stale) {
+          const old = next[oldKey];
+          if (old) next[oldKey] = {
+            ...old, status: "failed",
+            error: old.error || "上一笔 ZMODEM 已被新传输取代，但未收到可靠的结束确认",
+          };
+        }
         if (mergeLegacy) delete next[legacyKey];
         const status = legacy?.status ?? "running";
         const files = event.files
@@ -215,7 +235,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
             },
           };
         });
-        if (event.status !== "failed") scheduleTerminalCleanup(key);
+        scheduleTerminalCleanup(key, event.status === "failed" ? 12000 : 4000);
       }
     });
     const offProgress = listen("ssh:transfer-progress", (event: {
@@ -268,8 +288,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           },
         };
       });
-      if (event.status !== "failed") scheduleTerminalCleanup(key);
-      else clearTerminalCleanup(key);
+      scheduleTerminalCleanup(key, event.status === "failed" ? 12000 : 4000);
     });
     const offFile = listen("ssh:transfer-file", (event: {
       ref: Ref; transferId: string; kind: "start" | "completed";
