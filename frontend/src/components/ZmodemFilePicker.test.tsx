@@ -27,7 +27,7 @@ vi.mock("../bridge", () => ({
 const ref: Ref = { tabId: "tab-1", sessionId: "session-1", generation: 1 };
 const emit = (name: string, payload: unknown) =>
   act(() => { events.callbacks.get(name)?.(payload); });
-const intent = (direction: "upload" | "download" = "upload", remotePath = "") =>
+const intent = (direction: "upload" | "upload-overwrite" | "download" = "upload", remotePath = "") =>
   emit("ssh:native-zmodem-auto-intent", { ref, direction, remotePath });
 
 beforeEach(async () => {
@@ -101,4 +101,55 @@ test("native picker surfaces unsupported and unavailable errors", () => {
   emit("ssh:native-zmodem-command-error", { ref, error: "rz -y 不支持" });
   emit("ssh:native-zmodem-unsupported", { ref, error: "未接管协议，需重连" });
   expect(onNotice).toHaveBeenCalledTimes(2);
+});
+
+test("rz -y requires explicit confirmation before native overwrite upload", async () => {
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  intent("upload-overwrite");
+  fireEvent.click(await screen.findByText("hello.txt"));
+  expect(screen.getByRole("alert").textContent).toContain("取消或传输失败时");
+  const send = screen.getByRole("button", { name: "确认覆盖上传" });
+  expect((send as HTMLButtonElement).disabled).toBe(true);
+  expect(api.StartNativeZmodemInteractiveTransfer).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("checkbox", {
+    name: "我确认允许覆盖服务器上的同名文件",
+  }));
+  expect((send as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(send);
+  await waitFor(() => expect(api.StartNativeZmodemInteractiveTransfer)
+    .toHaveBeenCalledWith(ref, "upload-overwrite", "/home/user/hello.txt", ""));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+test("rz -y confirmation resets when a file is deselected or a new picker opens", async () => {
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  intent("upload-overwrite");
+  const item = await screen.findByText("hello.txt");
+  fireEvent.click(item);
+  fireEvent.click(screen.getByRole("checkbox", {
+    name: "我确认允许覆盖服务器上的同名文件",
+  }));
+  fireEvent.click(item);
+  fireEvent.click(item);
+  const send = screen.getByRole("button", { name: "确认覆盖上传" });
+  expect((send as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  intent("upload-overwrite");
+  fireEvent.click(await screen.findByText("hello.txt"));
+  expect((screen.getByRole("button", { name: "确认覆盖上传" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(api.StartNativeZmodemInteractiveTransfer).not.toHaveBeenCalled();
+});
+
+test("ordinary rz does not require overwrite confirmation", async () => {
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  intent("upload");
+  fireEvent.click(await screen.findByText("hello.txt"));
+  expect(screen.queryByRole("checkbox", {
+    name: "我确认允许覆盖服务器上的同名文件",
+  })).toBeNull();
+  const send = screen.getByRole("button", { name: "上传选中文件" });
+  expect((send as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(send);
+  await waitFor(() => expect(api.StartNativeZmodemInteractiveTransfer)
+    .toHaveBeenCalledWith(ref, "upload", "/home/user/hello.txt", ""));
 });
