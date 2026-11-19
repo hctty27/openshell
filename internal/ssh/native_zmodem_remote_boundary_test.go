@@ -19,6 +19,7 @@ func nativeRemoteBoundaryFixtureMarker(status int) []byte {
 func TestNativeRemoteBoundaryCommandUsesNonceAndRecordsShellExit(t *testing.T) {
 	for _, item := range []struct{ direction, remote, action, part string }{
 		{"upload", "", "send", "{ rz -q;"},
+		{"upload-overwrite", "", "send", "{ rz -q -y;"},
 		{"download", "hello's file.bin", "receive", "sz -q -- 'hello'\\''s file.bin';"},
 	} {
 		command, action, err := nativeInteractiveFencedCommand(
