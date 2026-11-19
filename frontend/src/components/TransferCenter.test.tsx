@@ -434,3 +434,33 @@ test("id-less completion before identified details migrates its status instead o
   expect(container.querySelector(".transfer-center-count")).toBeNull();
   expect(screen.getByText("已完成")).toBeTruthy();
 });
+
+test("identified finish can reconcile an earlier id-less progress task", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-progress", { ref: refA, transferred: "70 B", speed: "99 B/s" });
+  emit("ssh:transfer-finished", {
+    ref: refA, transferId: "known-after-progress", status: "completed",
+  });
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "known-after-progress", direction: "upload", protocol: "zmodem",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(container.querySelectorAll(".transfer-center-job")).toHaveLength(1);
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  expect(screen.getByText("已完成")).toBeTruthy();
+});
+
+test("identified failed state can close an unmatched id-less legacy row", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-progress", {
+    ref: refA, transferred: "161 KB", speed: "36 KB/s",
+  });
+  emit("ssh:transfer-state", {
+    ref: refA, transferId: "late-identity", active: false, status: "failed",
+    error: "本地 ZMODEM 进程退出，代码 1",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(container.querySelectorAll(".transfer-center-job")).toHaveLength(1);
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  expect(screen.getByText("失败")).toBeTruthy();
+});
