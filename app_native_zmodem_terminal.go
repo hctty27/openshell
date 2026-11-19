@@ -104,31 +104,6 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	)
 }
 
-// Compatibility entrypoint for older frontends. Reject multiple paths in Go,
-// not only in the picker: callers cannot bypass the single-file rule.
-func (a *App) StartNativeZmodemInteractiveBatchTransfer(
-	ref domain.ConnectionRef, direction string, localPaths, remotePaths []string,
-) error {
-	if len(localPaths) != 1 {
-		return errors.New("ZMODEM 每次只允许传输一个文件")
-	}
-	if direction == "upload" {
-		if len(remotePaths) > 1 || (len(remotePaths) == 1 && remotePaths[0] != "") {
-			return errors.New("ZMODEM 上传仅使用当前终端目录")
-		}
-		return a.StartNativeZmodemInteractiveTransfer(ref, direction, localPaths[0], "")
-	}
-	if direction == "download" && len(remotePaths) == 1 {
-		return a.StartNativeZmodemInteractiveTransfer(ref, direction, localPaths[0], remotePaths[0])
-	}
-	return errors.New("ZMODEM 每次只允许下载一个文件")
-}
-
-// Kept temporarily to return a clear error to an outdated UI binding.
-func (a *App) SkipNativeZmodemPendingFile(_ domain.ConnectionRef, _ string, _ int) error {
-	return errors.New("单文件 ZMODEM 不支持跳过文件，可直接取消传输")
-}
-
 func (a *App) CancelNativeZmodemInteractiveTransfer(ref domain.ConnectionRef) error {
 	if !a.ssh.CancelExperimentalNativeTerminalTransfer(ref) {
 		return errors.New("没有可取消的原生 ZMODEM 传输")
@@ -144,13 +119,4 @@ func (a *App) NativeZmodemChooseUploadFile() (string, error) {
 		return "", errors.New("当前环境没有可用的文件选择对话框")
 	}
 	return a.pickNativeZmodemFile()
-}
-
-// Retained only for older bindings; never opens a multi-file picker.
-func (a *App) NativeZmodemChooseUploadFiles() ([]string, error) {
-	file, err := a.NativeZmodemChooseUploadFile()
-	if err != nil || file == "" {
-		return nil, err
-	}
-	return []string{file}, nil
 }
