@@ -581,7 +581,7 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		// MySQL may also have a verified prompt; it is not a POSIX Shell.
 		ready := c.readiness.readyProgram() == "shell" && c.readiness.checkReady() == nil
 		wire, direction, remotePath = c.nativeAutoInput.prepare(p, ready)
-		if direction != "" {
+		if direction != "" && direction != "reject-multi" {
 			// Never intercept Enter unless a real sidecar and the exact SSH
 			// generation are still ready to accept an explicit GUI transfer.
 			if status := m.NativeZmodemExperimentalReadiness(ref, autoSidecar, true); !status.Ready {
