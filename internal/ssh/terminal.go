@@ -548,10 +548,14 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	// so pending manual writes cannot cross the ownership transition.
 	c.stdinMu.Lock()
 	var autoEvent map[string]any
+	var autoError string
 	defer func() {
 		c.stdinMu.Unlock()
 		if autoEvent != nil {
 			m.emit("ssh:native-zmodem-auto-intent", autoEvent)
+		}
+		if autoError != "" {
+			m.emit("ssh:zmodem-pick-error", map[string]any{"error": autoError})
 		}
 	}()
 	m.mu.Lock()
@@ -577,7 +581,7 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		// MySQL may also have a verified prompt; it is not a POSIX Shell.
 		ready := c.readiness.readyProgram() == "shell" && c.readiness.checkReady() == nil
 		wire, direction, remotePath = c.nativeAutoInput.prepare(p, ready)
-		if direction != "" {
+		if direction != "" && direction != "reject-multi" {
 			// Never intercept Enter unless a real sidecar and the exact SSH
 			// generation are still ready to accept an explicit GUI transfer.
 			if status := m.NativeZmodemExperimentalReadiness(ref, autoSidecar, true); !status.Ready {
@@ -594,7 +598,9 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	if err != nil { return err }
 	if n != len(wire) { return io.ErrShortWrite }
 
-	if direction != "" {
+	if direction == "reject-multi" {
+		autoError = "ZMODEM 每次只能传输一个文件；批量传输请使用 SFTP"
+	} else if direction != "" {
 		m.mu.Lock()
 		if current := m.connections[ref.TabID]; current == c && c.ref == ref {
 			autoEvent = map[string]any{"ref": ref, "direction": direction, "remotePath": remotePath, "sessionName": c.session.Name}

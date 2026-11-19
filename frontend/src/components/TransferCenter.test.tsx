@@ -104,53 +104,43 @@ test("badge counts only active jobs while failed transfers remain visible", () =
   expect(container.querySelector(".transfer-center-line button")).not.toBeNull();
 });
 
-test("native ZMODEM batch renders separate files and real byte progress", () => {
+test("native ZMODEM renders one file and does not report completion before remote confirmation", () => {
   render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
   emit("ssh:native-zmodem-batch", {
-    ref: refA, id: "batch-1", direction: "upload", active: true,
-    files: [{ name: "a.bin", total: 100 }, { name: "b.bin", total: 200 }],
+    ref: refA, id: "transfer-1", direction: "upload", active: true,
+    files: [{ name: "a.bin", total: 100 }],
   });
   emit("ssh:native-zmodem-file", {
-    ref: refA, batchId: "batch-1", kind: "start", index: 0,
+    ref: refA, batchId: "transfer-1", kind: "start", index: 0,
     name: "a.bin", total: 100, processed: 0,
   });
-  emit("ssh:native-zmodem-file", {
-    ref: refA, batchId: "batch-1", kind: "completed", index: 0,
-    processed: 100,
-  });
-  emit("ssh:native-zmodem-file", {
-    ref: refA, batchId: "batch-1", kind: "start", index: 1,
-    name: "b.bin", total: 200,
-  });
-  emit("ssh:native-zmodem-file", {
-    ref: refA, batchId: "batch-1", kind: "progress", index: 1,
-    processed: 100,
+  emit("ssh:native-zmodem-progress", {
+    ref: refA, batchId: "transfer-1", processed: 100, total: 100,
   });
   fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
   expect(screen.getByText("a.bin")).toBeTruthy();
-  expect(screen.getByText("b.bin")).toBeTruthy();
-  expect(screen.getByText("ZMODEM · 2 个文件")).toBeTruthy();
-  expect(screen.getByText("67%")).toBeTruthy();
+  expect(screen.getByText("等待远端确认")).toBeTruthy();
+  expect(screen.queryByText("100%")).toBeNull();
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "transfer-1", direction: "upload", active: false,
+  });
+  expect(screen.getByText("已完成")).toBeTruthy();
 });
 
-test("skip queued rz upload file without cancelling the entire batch", async () => {
+test("native ZMODEM cancellation affects only the active single-file task", async () => {
   render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
   emit("ssh:native-zmodem-batch", {
-    ref: refA, id: "skip-batch", direction: "upload", active: true,
-    files: [{ name: "first.txt", total: 100 }, { name: "second.txt", total: 200 }],
+    ref: refA, id: "transfer-cancel", direction: "upload", active: true,
+    files: [{ name: "single.txt", total: 100 }],
   });
   fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
-  fireEvent.click(screen.getByRole("button", { name: "跳过 second.txt" }));
-  await waitFor(() => expect(api.SkipNativeZmodemPendingFile)
-    .toHaveBeenCalledWith(refA, "skip-batch", 1));
-  emit("ssh:native-zmodem-file", {
-    ref: refA, batchId: "skip-batch", kind: "skip-requested", index: 1,
+  fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
+  await waitFor(() => expect(api.CancelNativeZmodemInteractiveTransfer).toHaveBeenCalledWith(refA));
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "transfer-cancel", direction: "upload", active: false, error: "cancelled",
   });
-  expect(screen.getByText("正在跳过")).toBeTruthy();
-  emit("ssh:native-zmodem-file", {
-    ref: refA, batchId: "skip-batch", kind: "skipped", index: 1, processed: 0,
-  });
-  expect(screen.getByText("已跳过")).toBeTruthy();
+  expect(screen.getByText("已取消")).toBeTruthy();
+  expect(screen.queryByText("100%")).toBeNull();
 });
 
 test("SFTP batch cancellation is scoped and concurrency is saved", async () => {

@@ -34,7 +34,7 @@ interface NativeFile {
   name: string;
   total: number | null;
   bytes: number;
-  status: "queued" | "running" | "skipping" | "skipped" | "completed" | "cancelled" | "failed";
+  status: "queued" | "running" | "completed" | "cancelled" | "failed";
 }
 
 interface NativeBatch {
@@ -46,6 +46,7 @@ interface NativeBatch {
   error?: string;
   bytes: number;
   total: number | null;
+  speed?: string;
 }
 
 interface Props {
@@ -83,6 +84,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     setTerminalJobsState(next);
   };
   const [nativeBatches, setNativeBatches] = useState<Record<string, NativeBatch>>({});
+  const nativeRate = useRef(new Map<string, { bytes: number; time: number; speed?: string }>());
   const [sftpJobs, setSftpJobs] = useState<Record<string, SFTPTask>>({});
   const [sftpConcurrency, setSftpConcurrency] = useState(3);
   const [savingConcurrency, setSavingConcurrency] = useState(false);
@@ -309,8 +311,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       ref: Ref; id: string; direction: Direction; active: boolean;
       files?: { name: string; total?: number }[]; error?: string;
     }) => {
-      if (!event?.ref || !event.id) return;
+      if (!event?.ref || !event.id || (event.active && event.files?.length !== 1)) return;
       const key = refKey(event.ref);
+      if (event.active) nativeRate.current.delete(key);
+      else nativeRate.current.delete(key);
       setNativeBatches(previous => {
         if (event.active) {
           return { ...previous, [key]: {
@@ -327,35 +331,30 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           : "completed";
         return { ...previous, [key]: { ...existing, status, error: event.error,
           files: existing.files.map(file =>
-            file.status === "queued" || file.status === "running" || file.status === "skipping" ||
+            file.status === "queued" || file.status === "running" ||
             (event.error && existing.direction === "download" && file.status === "completed")
               ? { ...file, status: status === "completed" ? "completed" : "failed" } : file),
         }};
       });
     });
     const offNativeFile = listen("ssh:native-zmodem-file", (event: {
-      ref: Ref; batchId: string; kind: "start" | "progress" | "completed" | "skip-requested" | "skipped";
+      ref: Ref; batchId: string; kind: "start" | "progress" | "completed";
       index: number; name?: string; total?: number | null; processed?: number;
     }) => {
-      if (!event?.ref || !Number.isInteger(event.index) || event.index < 0 || event.index >= 100) return;
+      if (!event?.ref || event.index !== 0) return;
       const key = refKey(event.ref);
       setNativeBatches(previous => {
-        const batch = previous[key];
-        if (!batch || batch.id !== event.batchId || batch.status !== "running") return previous;
-        const files = [...batch.files];
-        while (files.length <= event.index) files.push({
-          name: "文件 " + (files.length + 1), total: null, bytes: 0, status: "queued",
-        });
-        const current = files[event.index];
-        files[event.index] = {
-          ...current, name: event.name || current.name,
-          total: event.kind === "start" && typeof event.total === "number" ? event.total : current.total,
-          bytes: typeof event.processed === "number" ? event.processed : current.bytes,
-          status: event.kind === "completed" ? "completed" :
-            event.kind === "skipped" ? "skipped" :
-            event.kind === "skip-requested" ? "skipping" : "running",
-        };
-        return { ...previous, [key]: { ...batch, files } };
+        const task = previous[key];
+        if (!task || task.id !== event.batchId || task.status !== "running") return previous;
+        const file = task.files[0];
+        if (!file) return previous;
+        return { ...previous, [key]: { ...task, files: [{
+          ...file,
+          name: event.name || file.name,
+          total: typeof event.total === "number" ? event.total : file.total,
+          bytes: typeof event.processed === "number" ? event.processed : file.bytes,
+          status: event.kind === "completed" ? "completed" : "running",
+        }] } };
       });
     });
     const offNativeProgress = listen("ssh:native-zmodem-progress", (event: {
@@ -366,7 +365,16 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       setNativeBatches(previous => {
         const batch = previous[key];
         if (!batch || batch.id !== event.batchId || batch.status !== "running") return previous;
-        return { ...previous, [key]: { ...batch, bytes: event.processed, total: event.total } };
+        const now = Date.now();
+        const sample = nativeRate.current.get(key);
+        let speed = sample?.speed;
+        if (!sample || event.processed < sample.bytes) {
+          nativeRate.current.set(key, { bytes: event.processed, time: now });
+        } else if (now - sample.time >= 250) {
+          speed = formatSize(Math.max(0, (event.processed - sample.bytes) * 1000 / (now - sample.time))) + "/s";
+          nativeRate.current.set(key, { bytes: event.processed, time: now, speed });
+        }
+        return { ...previous, [key]: { ...batch, bytes: event.processed, total: event.total, speed } };
       });
     });
     const offSftp = listen("sftp:transfer", (task: SFTPTask) => {
@@ -546,67 +554,43 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
               <p className="transfer-center-empty">{t("sftp:noTransfers")}</p>
             )}
             {native.map(({ key, batch }) => {
-              const activeFiles = batch.files.filter(file => file.status !== "skipped");
-              const sizesKnown = activeFiles.length > 0 && activeFiles.every(file => file.total != null);
-              const total = sizesKnown ? activeFiles.reduce((sum, file) => sum + (file.total ?? 0), 0) : null;
-              const bytes = activeFiles.reduce((sum, file) => sum + file.bytes, 0);
-              const percent = total === null ? null : total === 0
-                ? (batch.status === "completed" ? 100 : 0)
-                : Math.min(100, Math.round(bytes / total * 100));
+              const file = batch.files[0];
+              const total = file?.total ?? batch.total;
+              const bytes = Math.max(batch.bytes, file?.bytes ?? 0);
+              // Wire completion is not remote confirmation. Never report 100%
+              // until the backend has restored the shell and published the file.
+              const percent = batch.status === "completed" ? 100 :
+                total == null ? null : total === 0 ? 0 :
+                  Math.min(99, Math.round(bytes / total * 100));
+              const active = batch.status === "running" || batch.status === "cancelling";
+              const statusLabel = batch.status === "completed" ? t("sftp:completed") :
+                batch.status === "failed" ? t("sftp:failed") :
+                batch.status === "cancelled" ? t("sftp:cancelled") :
+                batch.status === "cancelling" ? t("terminal:zmodemCancelling") :
+                total !== null && bytes >= total ? "等待远端确认" :
+                percent === null ? t("sftp:running") : percent + "%";
               return (
                 <article key={"native-" + key} className="transfer-center-job">
                   <div className="transfer-center-line">
                     {batch.direction === "download" ? <ArrowDownToLine size={15}/> : <ArrowUpFromLine size={15}/>}
-                    <strong>ZMODEM · {batch.files.length} 个文件</strong>
+                    <strong title={file?.name ?? "ZMODEM"}>{file?.name ?? "ZMODEM"}</strong>
                     <span className="transfer-center-session" title={sessionName(batch.ref)}>{sessionName(batch.ref)}</span>
-                    {batch.status === "running" || batch.status === "cancelling" ?
+                    {active ?
                       <button type="button" disabled={batch.status === "cancelling"}
                         title={t("sftp:cancelTransfer")} onClick={() => cancelNative(key, batch)}><X size={14}/></button> :
-                      <Check size={15}/>}
+                      batch.status === "completed" ? <Check size={15}/> : <X size={15}/>}
                   </div>
-                  {batch.files.map((file, index) => {
-                    const filePercent = file.total == null ? null : file.total === 0
-                      ? (file.status === "completed" ? 100 : 0)
-                      : Math.min(100, Math.round(file.bytes / file.total * 100));
-                    return (
-                      <div className="transfer-center-native-file" key={batch.id + ":" + index}>
-                        <div className="transfer-center-line">
-                          <strong title={file.name}>{file.name}</strong>
-                          <span className="transfer-center-session">{file.status === "queued" ? t("sftp:queued") :
-                            file.status === "running" ? t("sftp:running") :
-                            file.status === "skipping" ? t("sftp:zmodemSkipping") :
-                            file.status === "skipped" ? t("sftp:zmodemSkipped") :
-                            file.status === "completed" ? t("sftp:completed") :
-                            file.status === "failed" ? t("sftp:failed") : t("sftp:cancelled")}</span>
-                          {batch.status === "running" && file.status === "queued" && index > 0 &&
-                            <button type="button" aria-label={t("sftp:zmodemSkipFile", { name: file.name })}
-                              title={t("sftp:zmodemSkipFile", { name: file.name })}
-                              onClick={() => void api.SkipNativeZmodemPendingFile(batch.ref, batch.id, index).catch(onNotice)}>
-                              <X size={13}/>
-                            </button>}
-                        </div>
-                        <div className={"transfer-center-bar" + (filePercent == null && file.status === "running" ? " indeterminate" : "")}
-                          role="progressbar" aria-valuemin={0} aria-valuemax={filePercent == null ? undefined : 100}
-                          aria-valuenow={filePercent == null ? undefined : filePercent}>
-                          <div style={filePercent == null ? undefined : { width: String(filePercent) + "%" }}/>
-                        </div>
-                        <div className="transfer-center-metrics">
-                          <span>{formatSize(file.bytes)} / {file.total == null ? t("sftp:transferUnknownProgress") : formatSize(file.total)}</span>
-                          <span>{filePercent == null ? "—" : String(filePercent) + "%"}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div className={"transfer-center-bar" + (percent == null && batch.status === "running" ? " indeterminate" : "")}
-                    role="progressbar" aria-valuemin={0} aria-valuemax={percent == null ? undefined : 100}
-                    aria-valuenow={percent == null ? undefined : percent}>
-                    <div style={percent == null ? undefined : { width: String(percent) + "%" }}/>
+                  <div className={"transfer-center-bar" + (percent === null && active ? " indeterminate" : "")}
+                    role="progressbar" aria-valuemin={0} aria-valuemax={percent === null ? undefined : 100}
+                    aria-valuenow={percent === null ? undefined : percent}>
+                    <div style={percent === null ? undefined : { width: String(percent) + "%" }}/>
                   </div>
                   <div className="transfer-center-metrics">
-                    <span>{formatSize(bytes)} / {total == null ? t("sftp:transferUnknownProgress") : formatSize(total)}</span>
-                    <span title={batch.error}>{batch.status === "failed" ? t("sftp:failed") :
-                      percent == null ? t("sftp:transferUnknownProgress") : String(percent) + "%"}</span>
+                    <span>{formatSize(bytes)} / {total == null ? t("sftp:transferUnknownProgress") : formatSize(total)}
+                      {batch.speed && active ? " · " + batch.speed : ""}</span>
+                    <span title={batch.error}>{statusLabel}</span>
                   </div>
+                  {batch.error && <div className="transfer-center-terminal-error" title={batch.error}>{batch.error}</div>}
                 </article>
               );
             })}
