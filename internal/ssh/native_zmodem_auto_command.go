@@ -90,13 +90,14 @@ func parseNativeAutoCommand(line string) (direction, remotePath string) {
 		// overwrite or conversion behavior and are left to the legacy path.
 		if len(args) > start && args[start] == "-q" { start++ }
 		if len(args) > start && args[start] == "--" { start++ }
-		if len(args)-start < 1 || len(args)-start > 100 { return "", "" }
+		if len(args)-start < 1 { return "", "" }
+		if len(args)-start > 1 { return "reject-multi", "" }
 		for _, file := range args[start:] {
 			if file == "" || strings.HasPrefix(file, "-") || strings.ContainsAny(file, "\r\n\x00") {
 				return "", ""
 			}
 		}
-		return "download", strings.Join(args[start:], "\n")
+		return "download", args[start]
 	}
 	return "", ""
 }
