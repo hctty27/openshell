@@ -46,6 +46,15 @@ func (m *Manager) selectZmodemPaths(c *connection, direction, protocol string, a
     ref := c.ref
     m.mu.Unlock()
 
+    accepted := false
+    // Report whether the filter actually accepted the selected transfer.
+    // The frontend must keep the terminal locked between picker close and
+    // the filter's asynchronous transferStateCallback(true).
+    defer func() {
+        m.emit("ssh:zmodem-pick-ended", map[string]any{
+            "ref": ref, "id": request.id, "accepted": accepted,
+        })
+    }()
     m.emit("ssh:zmodem-pick", map[string]any{
         "ref": ref, "id": request.id, "direction": direction,
         "protocol": protocol, "allowDirectories": allowDirectories,
@@ -66,7 +75,6 @@ func (m *Manager) selectZmodemPaths(c *connection, direction, protocol string, a
     }
     m.mu.Unlock()
 
-    m.emit("ssh:zmodem-pick-ended", map[string]any{"ref": ref, "id": request.id})
     if !live || len(paths) == 0 {
         if live {
             if protocol == "trzsz" {
@@ -100,6 +108,9 @@ func (m *Manager) selectZmodemPaths(c *connection, direction, protocol string, a
         m.mu.Unlock()
         return false
     }
+    // Keep the backend input gate closed before the filter's asynchronous
+    // active callback; typing here would otherwise reach protocol stdin.
+    c.transferring = true
     c.transferID = request.id
     c.transferProtocol = protocol
     c.transferDirection = direction
@@ -119,6 +130,7 @@ func (m *Manager) selectZmodemPaths(c *connection, direction, protocol string, a
         "protocol": protocol,
         "files": files,
     })
+    accepted = true
     return true
 }
 
