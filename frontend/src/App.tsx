@@ -72,6 +72,20 @@ const initial: AppState = {
   fontSize: "14",
   version: APP_VERSION,
 };
+type WorkspacePanelKind = "sftp" | "terminalAI";
+const WORKSPACE_PANEL_MIN = 300;
+const WORKSPACE_PANEL_MAX = 1600;
+const WORKSPACE_PANEL_DEFAULT: Record<WorkspacePanelKind, number> = { sftp: 420, terminalAI: 400 };
+const workspacePanelPreference = (kind: WorkspacePanelKind) =>
+  kind === "sftp" ? "workspaceSFTPWidth" : "workspaceTerminalAIWidth";
+const normalizeWorkspacePanelWidth = (value: number | undefined, kind: WorkspacePanelKind) =>
+  typeof value === "number" && Number.isFinite(value) && value >= WORKSPACE_PANEL_MIN && value <= WORKSPACE_PANEL_MAX
+    ? Math.round(value) : WORKSPACE_PANEL_DEFAULT[kind];
+const workspacePanelLimit = (width: number, overlay: boolean) =>
+  Math.max(WORKSPACE_PANEL_MIN, Math.min(
+    WORKSPACE_PANEL_MAX, Math.floor(width * (overlay ? 0.62 : 0.65)),
+    overlay ? WORKSPACE_PANEL_MAX : Math.floor(width - 400),
+  ));
 const id = () => crypto.randomUUID();
 const connectionActionLabel = (status?: Tab["status"]) => {
   switch (status) {
@@ -230,6 +244,13 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const [fingerprintActionPending, setFingerprintActionPending] = useState(false);
   const [sessionPanels, setSessionPanels] = useState<Record<string, "sftp" | "terminalAI" | null>>({});
   const [terminalAIMounted, setTerminalAIMounted] = useState<Record<string, boolean>>({});
+  const [workspaceSFTPWidth, setWorkspaceSFTPWidth] = useState(
+    normalizeWorkspacePanelWidth(initialState.workspaceSFTPWidth, "sftp"),
+  );
+  const [workspaceTerminalAIWidth, setWorkspaceTerminalAIWidth] = useState(
+    normalizeWorkspacePanelWidth(initialState.workspaceTerminalAIWidth, "terminalAI"),
+  );
+  const workareaRef = useRef<HTMLDivElement>(null);
   const terminalHistoryScopes = useRef<Record<string, string>>({});
   const [aiTerminalControls, setAITerminalControls] = useState<Record<string, {taskId: string; generation: number}>>({});
   const [alternateTerminals, setAlternateTerminals] = useState<Record<string, {generation: number; active: boolean}>>({});
@@ -330,6 +351,70 @@ function Workspace({ initialState }: { initialState: AppState }) {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", end);
     window.addEventListener("pointercancel", end);
+  };
+  const currentPanelWidth = (kind: WorkspacePanelKind) =>
+    kind === "sftp" ? workspaceSFTPWidth : workspaceTerminalAIWidth;
+  const setPanelWidth = (kind: WorkspacePanelKind, width: number) => {
+    if (kind === "sftp") setWorkspaceSFTPWidth(width);
+    else setWorkspaceTerminalAIWidth(width);
+  };
+  const maxPanelWidth = () => {
+    const areaWidth = workareaRef.current?.getBoundingClientRect().width || window.innerWidth;
+    return workspacePanelLimit(areaWidth, window.innerWidth <= 1280);
+  };
+  const savePanelWidth = (kind: WorkspacePanelKind, width: number) => {
+    const next = Math.max(WORKSPACE_PANEL_MIN, Math.min(WORKSPACE_PANEL_MAX, Math.round(width)));
+    if (currentPanelWidth(kind) === next) return;
+    setPanelWidth(kind, next);
+    void api.SavePreference(workspacePanelPreference(kind), String(next)).catch(notify);
+  };
+  const startPanelResize = (kind: WorkspacePanelKind, event: React.PointerEvent) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const pointerID = event.pointerId;
+    const startX = event.clientX;
+    const previous = currentPanelWidth(kind);
+    const startWidth = Math.min(previous, maxPanelWidth());
+    let next = startWidth;
+    try { event.currentTarget.setPointerCapture?.(pointerID); } catch { /* Pointer capture unavailable */ }
+    const previousSelection = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== pointerID) return;
+      next = Math.max(WORKSPACE_PANEL_MIN, Math.min(maxPanelWidth(), Math.round(startWidth + startX - e.clientX)));
+      setPanelWidth(kind, next);
+    };
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== pointerID) return;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      document.body.style.userSelect = previousSelection;
+      document.body.style.cursor = previousCursor;
+      if (e.type === "pointercancel") setPanelWidth(kind, previous);
+      else if (next !== previous)
+        void api.SavePreference(workspacePanelPreference(kind), String(next)).catch(notify);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
+  const resizePanelByKey = (kind: WorkspacePanelKind, event: React.KeyboardEvent) => {
+    const step = event.shiftKey ? 50 : 10;
+    let next: number;
+    switch (event.key) {
+      case "ArrowLeft": next = currentPanelWidth(kind) + step; break;
+      case "ArrowRight": next = currentPanelWidth(kind) - step; break;
+      case "Home": next = WORKSPACE_PANEL_MIN; break;
+      case "End": next = maxPanelWidth(); break;
+      default: return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    savePanelWidth(kind, Math.max(WORKSPACE_PANEL_MIN, Math.min(maxPanelWidth(), next)));
   };
   const sidebarDockRef = useRef<HTMLDivElement>(null);
   const sidebarHovered = useRef(false);
@@ -1297,7 +1382,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                 </button>
               </div>
             </div>
-            <div className={`workspace-workarea ${showWorkspaceSidePanel ? "with-sftp" : ""}`}>
+            <div ref={workareaRef} className={`workspace-workarea ${showWorkspaceSidePanel ? "with-sftp" : ""}`}>
             <div ref={splitContainerRef}
               className={`terminal-container ${splitReady ? `terminal-split terminal-split-${splitDirection}` : ""}`}
               style={{ "--terminal-background": activeTerminalBackground } as CSSProperties}>
@@ -1434,8 +1519,16 @@ function Workspace({ initialState }: { initialState: AppState }) {
               return (
                 <aside key={tab.id} className="workspace-file-panel"
                   aria-label={tr("sftp:fileManager")} aria-hidden={!visible}
-                  style={visible ? undefined : { display: "none" }}>
+                  style={visible ? { "--workspace-panel-width": `${workspaceSFTPWidth}px` } as CSSProperties : { display: "none" }}>
                   {visible && (
+                    <>
+                    <div className="workspace-panel-resize-handle" role="separator" tabIndex={0}
+                      aria-label={tr("sftp:resizePanelWidth")} aria-orientation="vertical"
+                      aria-valuemin={WORKSPACE_PANEL_MIN} aria-valuemax={WORKSPACE_PANEL_MAX}
+                      aria-valuenow={workspaceSFTPWidth} title={tr("sftp:resetPanelWidth")}
+                      onPointerDown={event => startPanelResize("sftp", event)}
+                      onDoubleClick={() => savePanelWidth("sftp", WORKSPACE_PANEL_DEFAULT.sftp)}
+                      onKeyDown={event => resizePanelByKey("sftp", event)} />
                     <SFTPView refID={tab.ref!} onNotice={notify}
                       initialRemoteDirectory={resolveSFTPInitialDirectory(remoteUploadDirs.current[tab.id], tab)}
                       cwdReported={tab.cwdReported === true}
@@ -1443,6 +1536,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                       onRemoteDirectoryChange={directory => {
                         remoteUploadDirs.current[tab.id] = directory;
                       }} hideTaskQueue />
+                    </>
                   )}
 
                 </aside>
@@ -1453,7 +1547,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
               return (
                 <div key={tab.id} className="workspace-file-panel workspace-terminal-ai-panel"
                   aria-hidden={!visible}
-                  style={visible ? undefined : { display: "none" }}>
+                  style={visible ? { "--workspace-panel-width": `${workspaceTerminalAIWidth}px` } as CSSProperties : { display: "none" }}>
+                  {visible && <div className="workspace-panel-resize-handle" role="separator" tabIndex={0}
+                    aria-label={tr("ai:resizeTerminalAiPanel")} aria-orientation="vertical"
+                    aria-valuemin={WORKSPACE_PANEL_MIN} aria-valuemax={WORKSPACE_PANEL_MAX}
+                    aria-valuenow={workspaceTerminalAIWidth} title={tr("ai:resetTerminalAiPanelWidth")}
+                    onPointerDown={event => startPanelResize("terminalAI", event)}
+                    onDoubleClick={() => savePanelWidth("terminalAI", WORKSPACE_PANEL_DEFAULT.terminalAI)}
+                    onKeyDown={event => resizePanelByKey("terminalAI", event)} />}
                   <AISidebar tabs={[tab]} active={tab} pinned isOpen={visible}
                     terminalScopeId={terminalHistoryScopes.current[tab.id]}
                     terminalAlternate={Boolean(tab.ref && alternateTerminals[tab.id]?.generation === tab.ref.generation && alternateTerminals[tab.id]?.active)}

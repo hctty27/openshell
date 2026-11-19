@@ -754,6 +754,51 @@ test("split gutter accepts keyboard, drag, and reset with persistent bounds", as
   expect(api.Connect).toHaveBeenCalledTimes(2);
 });
 
+test("SFTP and terminal AI widths resize independently and persist without remounting terminal", async () => {
+  vi.mocked(api.Connect).mockClear();
+  vi.mocked(api.SavePreference).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [{
+      id: "resize-id", groupId: "", name: "resize", host: "resize.example.com",
+      port: 22, username: "root", authType: "key", privateKeyPath: "", credentialRef: "saved",
+    }],
+    groups: [], fontSize: "14", language: "zh-CN", version: "test",
+    workspaceSFTPWidth: 460, workspaceTerminalAIWidth: 510,
+  });
+  await act(async () => { render(<App />); });
+  fireEvent.click(screen.getByTitle("打开会话列表"));
+  fireEvent.doubleClick(screen.getByRole("button", { name: "选择会话 resize" }));
+  await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(1));
+  const workarea = document.querySelector(".workspace-workarea") as HTMLElement;
+  vi.spyOn(workarea, "getBoundingClientRect").mockReturnValue({
+    left: 0, top: 0, right: 1200, bottom: 600, width: 1200, height: 600,
+    x: 0, y: 0, toJSON: () => ({}),
+  });
+  const terminal = document.querySelector(".terminal-container");
+  fireEvent.click(screen.getByTitle("打开 SFTP 文件管理"));
+  const sftpHandle = screen.getByRole("separator", { name: "调整 SFTP 侧栏宽度" });
+  expect(sftpHandle.getAttribute("aria-valuenow")).toBe("460");
+  fireEvent.pointerDown(sftpHandle, { button: 0, pointerId: 11, clientX: 600 });
+  fireEvent.pointerMove(window, { pointerId: 11, clientX: 520 });
+  fireEvent.pointerUp(window, { pointerId: 11, clientX: 520 });
+  expect(sftpHandle.getAttribute("aria-valuenow")).toBe("540");
+  await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("workspaceSFTPWidth", "540"));
+  fireEvent.doubleClick(sftpHandle);
+  expect(sftpHandle.getAttribute("aria-valuenow")).toBe("420");
+  await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("workspaceSFTPWidth", "420"));
+  fireEvent.click(document.querySelector(".terminal-toolbar .workspace-panel-toggle[title='终端 AI']")!);
+  const aiHandle = screen.getByRole("separator", { name: "调整终端 AI 侧栏宽度" });
+  expect(aiHandle.getAttribute("aria-valuenow")).toBe("510");
+  fireEvent.keyDown(aiHandle, { key: "ArrowLeft" });
+  expect(aiHandle.getAttribute("aria-valuenow")).toBe("520");
+  await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("workspaceTerminalAIWidth", "520"));
+  fireEvent.doubleClick(aiHandle);
+  expect(aiHandle.getAttribute("aria-valuenow")).toBe("400");
+  await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("workspaceTerminalAIWidth", "400"));
+  expect(document.querySelector(".terminal-container")).toBe(terminal);
+  expect(api.Connect).toHaveBeenCalledTimes(1);
+});
+
 test("SFTP opens beside the existing terminal and can close without reconnecting", async () => {
   vi.mocked(api.Connect).mockClear();
   vi.mocked(api.State).mockResolvedValueOnce({

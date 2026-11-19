@@ -95,5 +95,7 @@
   "currentConversation": "Current conversation",
   "contextEstimateShort": "Estimate",
   "compactAction": "Compress context",
-  "contextCompactBusy": "Cannot compress while a task is running"
+  "contextCompactBusy": "Cannot compress while a task is running",
+  "resizeTerminalAiPanel": "Resize terminal AI panel",
+  "resetTerminalAiPanelWidth": "Drag to resize; double-click to reset width"
 }

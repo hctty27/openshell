@@ -69,6 +69,8 @@ type QuickCommand struct {
 type AppState struct {
 	AISidebarMode string `json:"aiSidebarMode"`
 	AISidebarWidth int `json:"aiSidebarWidth"`
+	WorkspaceSFTPWidth int `json:"workspaceSFTPWidth"`
+	WorkspaceTerminalAIWidth int `json:"workspaceTerminalAIWidth"`
 	AIVisible bool `json:"aiVisible"`
 	Language              string              `json:"language"`
 	Sessions              []domain.Session    `json:"sessions"`
@@ -309,6 +311,14 @@ func (a *App) State() (AppState, error) {
 	if e != nil { return AppState{}, e }
 	aiSidebarWidth, e := strconv.Atoi(aiSidebarWidthRaw)
 	if e != nil || aiSidebarWidth < 320 || aiSidebarWidth > 600 { aiSidebarWidth = 400 }
+	workspaceSFTPWidthRaw, e := a.store.GetPreference(a.ctx, "workspaceSFTPWidth")
+	if e != nil { return AppState{}, e }
+	workspaceSFTPWidth, err := strconv.Atoi(workspaceSFTPWidthRaw)
+	if err != nil || workspaceSFTPWidth < 300 || workspaceSFTPWidth > 1600 { workspaceSFTPWidth = 420 }
+	workspaceTerminalAIWidthRaw, e := a.store.GetPreference(a.ctx, "workspaceTerminalAIWidth")
+	if e != nil { return AppState{}, e }
+	workspaceTerminalAIWidth, err := strconv.Atoi(workspaceTerminalAIWidthRaw)
+	if err != nil || workspaceTerminalAIWidth < 300 || workspaceTerminalAIWidth > 1600 { workspaceTerminalAIWidth = 400 }
 	aiVisibleRaw, e := a.store.GetPreference(a.ctx, "aiVisible")
 	if e != nil { return AppState{}, e }
 	detailsExpanded, e := a.store.GetPreference(a.ctx, "sessionDetailsExpanded")
@@ -332,6 +342,7 @@ func (a *App) State() (AppState, error) {
 		SessionSidebarMode: mode, SessionSidebarWidth: width,
 		SessionDetailsExpanded: detailsExpanded == "true",
 		AISidebarMode: aiSidebarMode, AISidebarWidth: aiSidebarWidth, AIVisible: aiVisibleRaw == "true",
+		WorkspaceSFTPWidth: workspaceSFTPWidth, WorkspaceTerminalAIWidth: workspaceTerminalAIWidth,
 		Version:               branding.Version,
 	}, nil
 }
@@ -511,6 +522,9 @@ func (a *App) SavePreference(key, value string) error {
 	case "aiSidebarWidth":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 320 || n > 600 { return apperror.New("unsupportedPreference", nil) }
+	case "workspaceSFTPWidth", "workspaceTerminalAIWidth":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 300 || n > 1600 { return apperror.New("unsupportedPreference", nil) }
 	case "sessionSidebarMode":
 		if value != "pinned" && value != "auto-hide" { return apperror.New("unsupportedPreference", nil) }
 	case "sessionSidebarWidth":
