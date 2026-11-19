@@ -5,10 +5,7 @@ import (
 	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
-	"github.com/trzsz/trzsz-go/trzsz"
 	"io"
-	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -166,97 +163,33 @@ func (w *terminalWriter) Close() {
 	w.flushLocked()
 }
 
-// zmodemDirectionWriter observes ZMODEM handshakes and file metadata.
-// It forwards the byte stream unchanged to the transfer filter.
-type zmodemDirectionWriter struct {
-	mu          sync.Mutex
-	dst         io.Writer
-	tail        []byte
-	onDirection func(string) bool
-	onTrzsz     func(string, bool) bool
-	metadata    *zmodemMetadataParser
-}
-
-var zmodemDirectionPattern = regexp.MustCompile(`\*\*\x18B0([01])[0-9a-f]{12}`)
-var trzszDirectionPattern = regexp.MustCompile(`::TRZSZ:TRANSFER:([SRDF]):[0-9]+\.[0-9]+\.[0-9]+(?::[0-9]+){0,2}`)
-
-func (w *zmodemDirectionWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	oldLen := len(w.tail)
-	data := append(append([]byte(nil), w.tail...), p...)
-	var directions []string
-	var trzszDirections []struct { direction string; directory bool }
-	for _, loc := range trzszDirectionPattern.FindAllSubmatchIndex(data, -1) {
-		if loc[1] <= oldLen { continue }
-		mode := data[loc[2]]
-		direction := "upload"
-		if mode == 'S' { direction = "download" }
-		trzszDirections = append(trzszDirections, struct { direction string; directory bool }{direction, mode == 'D' || mode == 'F'})
-	}
-	for _, loc := range zmodemDirectionPattern.FindAllSubmatchIndex(data, -1) {
-		if loc[1] <= oldLen {
-			continue
-		}
-		if data[loc[2]] == '1' {
-			directions = append(directions, "upload")
-		} else {
-			directions = append(directions, "download")
-		}
-	}
-	if len(data) > 128 {
-		data = data[len(data)-128:]
-	}
-	w.tail = append(w.tail[:0], data...)
-	w.mu.Unlock()
-
-	for _, request := range trzszDirections {
-		if w.onTrzsz != nil && !w.onTrzsz(request.direction, request.directory) {
-			return len(p), nil
-		}
-	}
-	for _, direction := range directions {
-		if w.onDirection != nil {
-			if !w.onDirection(direction) {
-				return len(p), nil
-			}
-		}
-	}
-	if w.metadata != nil {
-		w.metadata.Write(p)
-	}
-	return w.dst.Write(p)
-}
-
-// OpenTerminal connects the existing SSH PTY to an isolated binary-safe transfer
-// filter. Only filtered, printable output reaches history and the renderer.
+// OpenTerminal connects the interactive SSH PTY directly to a native-only
+// output gate. No compatibility transfer filter runs in this session.
 func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
-	if cols < 1 || rows < 1 {
-		return apperror.New("invalidTerminalDimensions", nil)
-	}
+	if cols < 1 || rows < 1 { return apperror.New("invalidTerminalDimensions", nil) }
 	session, err := m.OpenSession(ref)
 	if err != nil { return err }
 	m.mu.Lock()
-	connection := m.connections[ref.TabID]
-	if connection == nil || connection.ref != ref || connection.terminal != nil {
+	conn := m.connections[ref.TabID]
+	if conn == nil || conn.ref != ref || conn.terminal != nil {
 		m.mu.Unlock()
 		_ = session.Close()
 		return apperror.New("terminalMissingOrAlreadyOpen", nil)
 	}
-	connection.terminal = session
+	conn.terminal = session
 	m.mu.Unlock()
-	rollback := func(err error) error {
+	rollback := func(cause error) error {
 		_ = session.Close()
 		m.mu.Lock()
-		if current := m.connections[ref.TabID]; current == connection {
+		if current := m.connections[ref.TabID]; current == conn {
 			current.terminal = nil
 			current.stdin = nil
-			current.filter = nil
 			current.writer = nil
-			current.outputGate = nil
 			current.inputGate = nil
+			current.outputGate = nil
 		}
 		m.mu.Unlock()
-		return err
+		return cause
 	}
 	remoteInput, err := session.StdinPipe()
 	if err != nil { return rollback(err) }
@@ -264,316 +197,52 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 		ssh.TerminalModes{ssh.ECHO: 1, ssh.TTY_OP_ISPEED: 14400, ssh.TTY_OP_OSPEED: 14400}); err != nil {
 		return rollback(err)
 	}
-
-	userInput, filterInput := io.Pipe()
-	inputGate := newTerminalInputGate(filterInput, remoteInput)
-	filterOutput, remoteOutput := io.Pipe()
-	outputDone := make(chan struct{})
-	writer := &terminalWriter{m: m, c: connection}
-	clientOutput := &terminalOutputCloser{writer: writer, done: outputDone}
-	filter := trzsz.NewTrzszFilter(userInput, clientOutput, remoteInput, filterOutput,
-		trzsz.TrzszOptions{TerminalColumns: int32(cols), EnableZmodem: true})
-	filter.SetTransferStateCallback(func(transferring bool) {
-        m.mu.Lock()
-        current := m.connections[ref.TabID]
-        valid := current == connection && current.ref == ref
-        if valid {
-            connection.transferring = transferring
-        }
-        event := map[string]any{"ref": ref, "active": transferring}
-        if valid && connection.transferID != 0 {
-            event["transferId"] = strconv.FormatUint(connection.transferID, 10)
-            if connection.transferProtocol != "" {
-                event["protocol"] = connection.transferProtocol
-            }
-            if connection.transferDirection != "" {
-                event["direction"] = connection.transferDirection
-            }
-            if !transferring {
-                switch {
-                case connection.transferFinished:
-                    event["status"] = connection.transferStatus
-                case connection.transferCancelled:
-                    event["status"] = "cancelled"
-                case connection.transferProtocol == "zmodem":
-                    event["status"] = "failed"
-                    event["error"] = "ZMODEM 传输结束，但未收到本地完成确认"
-                default:
-                    event["status"] = "completed"
-                }
-            }
-        }
-        m.mu.Unlock()
-        if valid && !transferring {
-            _ = filter.SetDefaultDownloadPath("")
-        }
-        if valid {
-            m.emit("ssh:transfer-state", event)
-        }
-    })
-	metadata := newZmodemMetadataParser(
-		func(file zmodemFileMetadata) {
-			m.mu.Lock()
-			valid := m.connections[ref.TabID] == connection && connection.ref == ref &&
-				connection.transferID != 0 && connection.transferProtocol == "zmodem" &&
-				connection.transferDirection == "download"
-			transferID := connection.transferID
-			m.mu.Unlock()
-			if valid {
-				m.emit("ssh:transfer-file", map[string]any{
-					"ref": ref, "transferId": strconv.FormatUint(transferID, 10),
-					"kind": "start", "name": file.Name, "total": file.Total,
-				})
-			}
-		},
-		func(file zmodemFileMetadata, processed uint64) {
-			m.mu.Lock()
-			valid := m.connections[ref.TabID] == connection && connection.ref == ref &&
-				connection.transferID != 0 && connection.transferProtocol == "zmodem" &&
-				connection.transferDirection == "download"
-			transferID := connection.transferID
-			m.mu.Unlock()
-			if valid {
-				m.emit("ssh:transfer-file", map[string]any{
-					"ref": ref, "transferId": strconv.FormatUint(transferID, 10),
-					"kind": "completed", "name": file.Name, "total": file.Total,
-					"processed": processed,
-				})
-			}
-		},
-	)
-	observedOutput := &zmodemDirectionWriter{
-		dst:      remoteOutput,
-		metadata: metadata,
-		onDirection: func(direction string) bool {
-			return m.selectZmodemPaths(connection, direction, "zmodem", false, filter, remoteInput)
-		},
-		onTrzsz: func(direction string, directory bool) bool {
-			return m.selectZmodemPaths(connection, direction, "trzsz", directory, filter, remoteInput)
-		},
-	}
-	gate := newTerminalOutputGate(observedOutput)
-	// The existing trzsz filter remains the sole consumer until an explicit
-	// native lease is acquired; raw protocol bytes never bypass this gate.
+	inputGate := newTerminalInputGate(remoteInput, remoteInput)
+	writer := &terminalWriter{m: m, c: conn}
+	guard := newNativeOnlyOutputGuard(writer, func() {
+		m.mu.Lock()
+		if current := m.connections[ref.TabID]; current == conn && current.ref == ref {
+			current.nativeTerminalPoisoned = true
+		}
+		m.mu.Unlock()
+		m.emit("ssh:native-zmodem-unsupported", map[string]any{
+			"ref": ref, "error": "检测到未经原生接管的 ZMODEM 数据；已阻止协议数据进入终端，请重新连接 SSH 后使用普通 Shell 的 rz / sz 单文件命令",
+		})
+	})
+	gate := newTerminalOutputGate(guard)
 	session.Stdout, session.Stderr = gate, gate
 	if err = session.Shell(); err != nil {
 		gate.close()
 		inputGate.close()
-		filter.Close()
-		_ = filterInput.Close()
-		_ = remoteOutput.Close()
-		_ = filterOutput.Close()
+		writer.Close()
 		return rollback(err)
 	}
 	m.mu.Lock()
-	if current := m.connections[ref.TabID]; current != connection || current.ref != ref {
+	if current := m.connections[ref.TabID]; current != conn || current.ref != ref {
 		m.mu.Unlock()
 		gate.close()
 		inputGate.close()
-		filter.Close()
-		_ = filterInput.Close()
-		_ = remoteOutput.Close()
+		writer.Close()
 		_ = session.Close()
 		return io.ErrClosedPipe
 	}
-	connection.stdin = inputGate
-	connection.inputGate = inputGate
-	connection.filter = filter
-	connection.writer = writer
-	connection.outputGate = gate
+	conn.stdin = inputGate
+	conn.inputGate = inputGate
+	conn.outputGate = gate
+	conn.writer = writer
 	m.mu.Unlock()
 	go func() {
-		err := session.Wait()
-		_ = err
+		_ = session.Wait()
 		m.CancelExperimentalNativeTerminalTransfer(ref)
 		gate.close()
-		filter.Close()
-		_ = filterInput.Close()
 		inputGate.close()
-		_ = remoteOutput.Close()
-		select {
-		case <-outputDone:
-		case <-time.After(2 * time.Second):
-			clientOutput.Close()
-		}
-		m.emit("ssh:transfer-state", map[string]any{"ref": ref, "active": false})
+		writer.Close()
 		m.emit("ssh:terminal-ended", ref)
 		_ = m.Disconnect(ref)
 	}()
 	return nil
 }
 
-// terminalOutputCloser signals when the filtered output has been fully drained.
-type terminalOutputCloser struct {
-    writer *terminalWriter
-    done chan struct{}
-    once sync.Once
-    mu sync.Mutex
-    tail []byte
-    lastProgress time.Time
-}
-var zmodemProgressPattern = regexp.MustCompile(`Transferred ([0-9.]+[[:space:]]*[KMGTPE]?B), Speed ((?:[0-9.]+[[:space:]]*[KMGTPE]?B/s)|N/A)`)
-// Native trzsz emits per-file progress (not an aggregate for multi-file transfers).
-var trzszProgressPattern = regexp.MustCompile(`([0-9]{1,3})% \| ([0-9]+(?:\.[0-9]+)? [KMGT]?B)(?: \| ([0-9]+(?:\.[0-9]+)? [KMGT]?B/s))?`)
-
-// trzsz-go emits these messages immediately after the local rz/sz child exits.
-// Its transfer-state callback can be delayed until further remote SSH output.
-// Accept ANSI SGR variations while keeping the clear-line prefix to avoid
-// treating ordinary shell output such as "Success!!" as a transfer result.
-// trzsz-go writes local ZMODEM results with a clear-line CSI 2K prefix.
-// Keep that origin marker: ordinary remote shell text such as "Success!!"
-// must never complete a transfer. Accept CRLF/LF output translation and SGR
-// or cursor-reset sequences between the marker and the local result.
-var zmodemLocalExitPattern = regexp.MustCompile(`(?:\r|\n)?\x1b\[2K(?:\x1b\[[0-?]*[ -/]*[A-Za-z])*?(?:Success!!|client exit with ([0-9]+))(?:\x1b\[[0-?]*[ -/]*[A-Za-z])*(?:\r\n|\n|\r)`)
-var zmodemLocalStoppedPattern = regexp.MustCompile(`(?:\r|\n)?\x1b\[2K(?:\x1b\[[0-?]*[ -/]*[A-Za-z])*Stopped(?:\x1b\[[0-?]*[ -/]*[A-Za-z])*(?:\r\n|\n|\r)`)
-func (o *terminalOutputCloser) Write(p []byte) (int, error) {
-    o.mu.Lock()
-    oldTailSize := len(o.tail)
-    data := append(append([]byte(nil), o.tail...), p...)
-    matches := zmodemProgressPattern.FindAllSubmatch(data, -1)
-    nativeMatches := trzszProgressPattern.FindAllSubmatch(data, -1)
-    var exitStatus, exitError string
-    locallyExited := false
-    locallyStopped := false
-    for _, loc := range zmodemLocalStoppedPattern.FindAllStringIndex(string(data), -1) {
-        if loc[1] > oldTailSize {
-            locallyStopped = true
-            break
-        }
-    }
-    for _, loc := range zmodemLocalExitPattern.FindAllStringSubmatchIndex(string(data), -1) {
-        if loc[1] <= oldTailSize {
-            continue
-        }
-        locallyExited = true
-        if loc[2] >= 0 {
-            exitStatus = "failed"
-            exitError = "本地 ZMODEM 进程退出，代码 " + string(data[loc[2]:loc[3]])
-        } else {
-            exitStatus = "completed"
-        }
-        break
-    }
-    if len(data) > 256 { data = data[len(data)-256:] }
-    o.tail = append(o.tail[:0], data...)
-    o.writer.m.mu.Lock()
-    transferID := o.writer.c.transferID
-    if locallyStopped && transferID != 0 &&
-        (o.writer.c.transferProtocol == "zmodem" || o.writer.c.transferProtocol == "") &&
-        !o.writer.c.transferFinished {
-        // Ctrl+C in trzsz-go's local ZMODEM filter prints "Stopped" even
-        // when cancellation was not initiated from the transfer-center UI.
-        o.writer.c.transferCancelled = true
-    } else {
-        locallyStopped = false
-    }
-    o.writer.m.mu.Unlock()
-    transferIDText := ""
-    if transferID != 0 {
-        transferIDText = strconv.FormatUint(transferID, 10)
-    }
-    if len(nativeMatches) != 0 && time.Since(o.lastProgress) >= 180*time.Millisecond {
-        last := nativeMatches[len(nativeMatches)-1]
-        percentage := -1
-        if n, err := strconv.Atoi(string(last[1])); err == nil && n <= 100 { percentage = n }
-        if percentage >= 0 {
-            o.lastProgress = time.Now()
-            event := map[string]any{
-                "ref": o.writer.c.ref, "protocol": "trzsz", "percent": percentage,
-                "transferred": string(last[2]), "speed": string(last[3]),
-                "processed": parseZmodemDisplaySize(string(last[2])),
-            }
-            if transferIDText != "" { event["transferId"] = transferIDText }
-            o.writer.m.emit("ssh:transfer-progress", event)
-        }
-    } else if len(matches) != 0 && time.Since(o.lastProgress) >= 180*time.Millisecond {
-        last := matches[len(matches)-1]
-        o.lastProgress = time.Now()
-        event := map[string]any{
-            "ref": o.writer.c.ref,
-            "transferred": string(last[1]),
-            "speed": string(last[2]),
-            "processed": parseZmodemDisplaySize(string(last[1])),
-        }
-        if transferIDText != "" { event["transferId"] = transferIDText }
-        o.writer.m.emit("ssh:transfer-progress", event)
-    }
-    if locallyStopped && !locallyExited {
-        event := map[string]any{
-            "ref": o.writer.c.ref, "active": true,
-            "protocol": "zmodem", "status": "cancelling",
-        }
-        if transferIDText != "" { event["transferId"] = transferIDText }
-        o.writer.m.emit("ssh:transfer-state", event)
-    }
-    if locallyExited {
-        status := exitStatus
-        o.writer.m.mu.Lock()
-        if o.writer.c.transferCancelled {
-            status = "cancelled"
-            exitError = ""
-        }
-        if current := o.writer.m.connections[o.writer.c.ref.TabID]; current == o.writer.c &&
-            o.writer.c.transferID == transferID {
-            o.writer.c.transferFinished = true
-            o.writer.c.transferStatus = status
-        }
-        o.writer.m.mu.Unlock()
-        event := map[string]any{
-            "ref": o.writer.c.ref,
-            "status": status,
-            "error": exitError,
-        }
-        if transferIDText != "" { event["transferId"] = transferIDText }
-        // The trzsz-go ZMODEM filter may delay its state=false callback
-        // until another SSH output chunk arrives after local sz/rz exits.
-        // Publish the locally observed terminal outcome now, without waiting
-        // for a subsequent remote prompt or unrelated command output.
-        state := map[string]any{
-            "ref": o.writer.c.ref, "active": false, "protocol": "zmodem",
-            "status": status, "error": exitError,
-        }
-        if transferIDText != "" { state["transferId"] = transferIDText }
-        o.writer.m.emit("ssh:transfer-finished", event)
-        o.writer.m.emit("ssh:transfer-state", state)
-    }
-    o.mu.Unlock()
-    return o.writer.Write(p)
-}
-func parseZmodemDisplaySize(value string) uint64 {
-	fields := strings.Fields(strings.TrimSpace(value))
-	if len(fields) != 2 {
-		return 0
-	}
-	amount, err := strconv.ParseFloat(fields[0], 64)
-	if err != nil || amount < 0 || amount > 1e15 {
-		return 0
-	}
-	multiplier := float64(1)
-	switch strings.ToUpper(fields[1]) {
-	case "KB":
-		multiplier = 1 << 10
-	case "MB":
-		multiplier = 1 << 20
-	case "GB":
-		multiplier = 1 << 30
-	case "TB":
-		multiplier = 1 << 40
-	case "PB":
-		multiplier = 1 << 50
-	case "EB":
-		multiplier = 1 << 60
-	case "B":
-	default:
-		return 0
-	}
-	return uint64(amount * multiplier)
-}
-
-func (o *terminalOutputCloser) Close() error {
-	o.once.Do(func() { o.writer.Close(); close(o.done) })
-	return nil
-}
 func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	p, e := base64.StdEncoding.DecodeString(data)
 	if e != nil || len(p) > 1024*1024 {
@@ -594,7 +263,7 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 			m.emit("ssh:native-zmodem-auto-intent", autoEvent)
 		}
 		if autoError != "" {
-			m.emit("ssh:zmodem-pick-error", map[string]any{"error": autoError})
+			m.emit("ssh:native-zmodem-command-error", map[string]any{"ref": ref, "error": autoError})
 		}
 	}()
 	m.mu.Lock()
@@ -609,13 +278,6 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned {
 		m.mu.Unlock()
 		return errNativeTerminalInputBusy
-	}
-	// A compatibility rz/sz or trz/tsz transfer owns the same SSH PTY.
-	// This is the user/AI-visible write entrypoint, not the internal
-	// cancellation path: no keys, paste or Ctrl+C may enter the filter.
-	if c.transferring || c.zmodemSelection != nil {
-		m.mu.Unlock()
-		return errTerminalFileTransferBusy
 	}
 	stdin := c.stdin
 	autoSidecar := m.nativeAutoSidecar
@@ -655,47 +317,6 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	}
 	return nil
 }
-// CancelZmodem is the internal cancel-button path. The upstream filter
-// handles trzsz via StopTransferringFiles; for legacy ZMODEM it converts a
-// private Ctrl+C control byte into the protocol CAN cancellation sequence.
-// Regular terminal input is blocked independently in Manager.Write.
-func (m *Manager) CancelZmodem(ref domain.ConnectionRef) error {
-    m.mu.Lock()
-    c := m.connections[ref.TabID]
-    if c == nil || c.ref != ref || c.stdin == nil {
-        m.mu.Unlock()
-        return apperror.New("noActiveFileTransfer", nil)
-    }
-    if c.zmodemSelection != nil {
-        releaseZmodemSelection(c)
-        m.mu.Unlock()
-        return nil
-    }
-    if !c.transferring {
-        m.mu.Unlock()
-        return apperror.New("noActiveFileTransfer", nil)
-    }
-    c.transferCancelled = true
-    transferID := c.transferID
-    filter := c.filter
-    input := c.stdin
-    m.mu.Unlock()
-    if filter != nil && filter.IsTransferringFiles() {
-        filter.StopTransferringFiles(false)
-        return nil
-    }
-    // ZMODEM has no exported Stop method. Send the terminal interrupt and
-    // wait for the pipe write result instead of reporting a false success.
-    _, err := input.Write([]byte{0x03})
-    if err != nil {
-        m.mu.Lock()
-        if current := m.connections[ref.TabID]; current == c && c.ref == ref && c.transferID == transferID {
-            c.transferCancelled = false
-        }
-        m.mu.Unlock()
-    }
-    return err
-}
 func (m *Manager) Resize(ref domain.ConnectionRef, cols, rows int) error {
 	if cols < 1 || cols > 1000 || rows < 1 || rows > 1000 {
 		return apperror.New("invalidTerminalDimensions", nil)
@@ -709,9 +330,6 @@ func (m *Manager) Resize(ref domain.ConnectionRef, cols, rows int) error {
 	s := c.terminal
 	m.mu.Unlock()
 	if err := s.WindowChange(rows, cols); err != nil { return err }
-	m.mu.Lock()
-	if current := m.connections[ref.TabID]; current != nil && current.ref == ref && current.filter != nil { current.filter.SetTerminalColumns(int32(cols)) }
-	m.mu.Unlock()
 	return nil
 }
 func (m *Manager) History(ref domain.ConnectionRef) string {
