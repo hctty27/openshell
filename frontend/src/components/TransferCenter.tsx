@@ -232,11 +232,13 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         });
       } else {
         if (finished.current.has(key)) return;
+        const existing = terminalJobsRef.current[key];
+        const status = event.status ?? (existing?.status === "cancelling" ? "cancelled" : "completed");
         finished.current.add(key);
+        finishResults.current.set(key, { status, error: event.error });
         setTerminalJobs(previous => {
           const job = previous[key];
           if (!job) return previous;
-          const status = event.status ?? (job.status === "cancelling" ? "cancelled" : "completed");
           return {
             ...previous,
             [key]: {
@@ -247,7 +249,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
             },
           };
         });
-        scheduleTerminalCleanup(key, event.status === "failed" ? 12000 : 4000);
+        scheduleTerminalCleanup(key, status === "failed" ? 12000 : 4000);
       }
     });
     const offProgress = listen("ssh:transfer-progress", (event: {
@@ -284,11 +286,13 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     }) => {
       if (!event?.ref) return;
       const key = resolveTerminalTransferKey(terminalJobsRef.current, event.ref, event.transferId);
+      const previousJob = terminalJobsRef.current[key];
+      const status = event.status ?? (previousJob?.status === "cancelling" ? "cancelled" : "completed");
       finished.current.add(key);
+      finishResults.current.set(key, { status, error: event.error });
       setTerminalJobs(previous => {
         const job = previous[key];
         if (!job) return previous;
-        const status = event.status ?? (job.status === "cancelling" ? "cancelled" : "completed");
         return {
           ...previous,
           [key]: {
@@ -300,7 +304,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           },
         };
       });
-      scheduleTerminalCleanup(key, event.status === "failed" ? 12000 : 4000);
+      scheduleTerminalCleanup(key, status === "failed" ? 12000 : 4000);
     });
     const offFile = listen("ssh:transfer-file", (event: {
       ref: Ref; transferId: string; kind: "start" | "completed";
@@ -417,7 +421,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       if (!ref) return;
       const prefix = refKey(ref) + ":";
       for (const key of finished.current) {
-        if (key.startsWith(prefix)) finished.current.delete(key);
+        if (key.startsWith(prefix)) {
+          finished.current.delete(key);
+          finishResults.current.delete(key);
+        }
       }
       for (const key of terminalCleanupTimers.current.keys()) {
         if (key.startsWith(prefix)) clearTerminalCleanup(key);
@@ -480,6 +487,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         for (const [key] of ended) {
           delete next[key];
           finished.current.delete(key);
+          finishResults.current.delete(key);
         }
         return next;
       });
