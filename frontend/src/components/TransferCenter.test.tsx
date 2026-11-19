@@ -369,3 +369,55 @@ test("explicit ZMODEM client exit status clears the active count even without a 
   expect(container.querySelector(".transfer-center-count")).toBeNull();
   expect(screen.getByText("失败")).toBeTruthy();
 });
+
+test("a fast ZMODEM finish arriving before details cannot be reopened by late metadata", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-finished", {
+    ref: refA, transferId: "fast-success", status: "completed",
+  });
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "fast-success", direction: "upload", protocol: "zmodem",
+    files: [{ name: "tiny.txt", total: 70 }],
+  });
+  emit("ssh:transfer-progress", {
+    ref: refA, transferId: "fast-success", transferred: "70 B", speed: "99 B/s",
+  });
+  emit("ssh:transfer-state", {
+    ref: refA, transferId: "fast-success", active: true,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  expect(screen.getByText("已完成")).toBeTruthy();
+  expect(screen.getByText("tiny.txt")).toBeTruthy();
+});
+
+test("a failed exit arriving before ZMODEM details stays failed instead of running", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-state", {
+    ref: refA, transferId: "fast-failure", active: false, status: "failed",
+    error: "本地 ZMODEM 进程退出，代码 1",
+  });
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "fast-failure", direction: "upload", protocol: "zmodem",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  expect(screen.getByText("失败")).toBeTruthy();
+  expect(screen.getByText("本地 ZMODEM 进程退出，代码 1")).toBeTruthy();
+});
+
+test("ZMODEM details cannot reset an already finished identified transfer", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:transfer-progress", {
+    ref: refA, transferId: "out-of-order", transferred: "1.0 MB", speed: "549 KB/s",
+  });
+  emit("ssh:transfer-finished", {
+    ref: refA, transferId: "out-of-order", status: "completed",
+  });
+  emit("ssh:transfer-details", {
+    ref: refA, transferId: "out-of-order", direction: "upload", protocol: "zmodem",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  expect(screen.getByText("已完成")).toBeTruthy();
+});
