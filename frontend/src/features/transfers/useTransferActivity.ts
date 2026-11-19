@@ -9,6 +9,7 @@ const connectionKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generat
 export function useTransferActivity() {
   const sftpJobs = useRef(new Map<string, Set<string>>());
   const zmodemActive = useRef(new Set<string>());
+  const nativeZmodemActive = useRef(new Set<string>());
   const zmodemFinished = useRef(new Map<string, string>());
   const currentTransferIds = useRef(new Map<string, string>());
 
@@ -52,11 +53,22 @@ export function useTransferActivity() {
       zmodemActive.current.delete(key);
       zmodemFinished.current.set(key, transferId);
     });
+    // Native Go/Rust transfers do not emit the legacy ssh:transfer-state event.
+    // Include them in the same close/disconnect confirmation guard.
+    const offNative = listen("ssh:native-zmodem-batch", (payload: {
+      ref: Ref; id: string; active: boolean;
+    }) => {
+      if (!payload?.ref || !payload.id) return;
+      const key = connectionKey(payload.ref);
+      if (payload.active) nativeZmodemActive.current.add(key);
+      else nativeZmodemActive.current.delete(key);
+    });
     const offDisconnected = listen("ssh:disconnected", (ref: Ref) => {
       if (!ref?.tabId) return;
       const key = connectionKey(ref);
       sftpJobs.current.delete(key);
       zmodemActive.current.delete(key);
+      nativeZmodemActive.current.delete(key);
       zmodemFinished.current.delete(key);
       currentTransferIds.current.delete(key);
     });
@@ -65,6 +77,7 @@ export function useTransferActivity() {
       offDetails();
       offState();
       offFinished();
+      offNative();
       offDisconnected();
     };
   }, []);
@@ -72,7 +85,7 @@ export function useTransferActivity() {
   const hasActiveTransfers = (ref: Ref | null | undefined) => {
     if (!ref) return false;
     const key = connectionKey(ref);
-    return Boolean(sftpJobs.current.get(key)?.size || zmodemActive.current.has(key));
+    return Boolean(sftpJobs.current.get(key)?.size || zmodemActive.current.has(key) || nativeZmodemActive.current.has(key));
   };
   return { hasActiveTransfers };
 }
