@@ -17,6 +17,9 @@ func TestNativeZmodemSingleTransferRejectsUnsafePaths(t *testing.T) {
 	if err := app.StartNativeZmodemInteractiveTransfer(ref, "upload", "a\nb", ""); err == nil {
 		t.Fatal("accepted multi-line local path")
 	}
+	if err := app.StartNativeZmodemInteractiveTransfer(ref, "upload-overwrite", "a\nb", ""); err == nil {
+		t.Fatal("accepted unsafe overwrite upload local path")
+	}
 	if err := app.StartNativeZmodemInteractiveTransfer(ref, "upload", "", ""); err == nil {
 		t.Fatal("accepted empty local file path")
 	}
