@@ -116,6 +116,77 @@ const file = (name: string, path: string): SFTPEntry => ({
 const pane = (side: "local" | "remote") =>
   document.querySelector<HTMLElement>(`.sftp-${side}`)!;
 
+const remotePathInput = () =>
+  within(pane("remote")).getByRole("textbox", { name: "目录" }) as HTMLInputElement;
+
+test("SFTP jumps only on click and uses the latest reported terminal directory", async () => {
+  const onRemoteDirectoryChange = vi.fn();
+  const view = (directory: string) => (
+    <DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}
+      cwdReported terminalDirectory={directory}
+      onRemoteDirectoryChange={onRemoteDirectoryChange}/></DialogProvider>
+  );
+  const { rerender } = render(view("/opt/first"));
+  await waitFor(() => expect(api.SFTPList).toHaveBeenCalledWith(ref, "remote", "/root"));
+
+  rerender(view("/opt/latest"));
+  expect(remotePathInput().value).toBe("/root");
+  expect(api.SFTPList).not.toHaveBeenCalledWith(ref, "remote", "/opt/latest");
+
+  fireEvent.click(within(pane("remote")).getByRole("button", { name: "跳转到当前终端目录" }));
+  await waitFor(() => expect(remotePathInput().value).toBe("/opt/latest"));
+  expect(api.SFTPList).toHaveBeenCalledWith(ref, "remote", "/opt/latest");
+  await waitFor(() => expect(onRemoteDirectoryChange).toHaveBeenCalledWith("/opt/latest"));
+});
+
+test("SFTP terminal jump is disabled without a reported valid directory", async () => {
+  const { rerender } = render(
+    <DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}
+      cwdReported={false} terminalDirectory="/opt/project"/></DialogProvider>);
+  const button = within(pane("remote")).getByRole("button", { name: "跳转到当前终端目录" }) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  rerender(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}
+    cwdReported terminalDirectory="relative/path"/></DialogProvider>);
+  expect(button.disabled).toBe(true);
+  await waitFor(() => expect(remotePathInput().value).toBe("/root"));
+});
+
+test("failed SFTP terminal jump retains the prior directory and reports the error", async () => {
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side, directory) => {
+    if (side === "remote" && directory === "/restricted") throw new Error("permission denied");
+    return [];
+  });
+  const onNotice = vi.fn();
+  const onRemoteDirectoryChange = vi.fn();
+  render(<DialogProvider><SFTPView refID={ref} onNotice={onNotice}
+    cwdReported terminalDirectory="/restricted" onRemoteDirectoryChange={onRemoteDirectoryChange}/></DialogProvider>);
+  await waitFor(() => expect(remotePathInput().value).toBe("/root"));
+
+  fireEvent.click(within(pane("remote")).getByRole("button", { name: "跳转到当前终端目录" }));
+  await waitFor(() => expect(onNotice).toHaveBeenCalledWith(expect.any(Error)));
+  expect(remotePathInput().value).toBe("/root");
+  expect(onRemoteDirectoryChange).not.toHaveBeenCalledWith("/restricted");
+});
+
+test("manual SFTP navigation wins over an in-flight terminal directory jump", async () => {
+  let resolveJump: ((entries: SFTPEntry[]) => void) | undefined;
+  const jumpListing = new Promise<SFTPEntry[]>(resolve => { resolveJump = resolve; });
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side, directory) => {
+    if (side === "remote" && directory === "/opt/slow") return jumpListing;
+    return [];
+  });
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}
+    cwdReported terminalDirectory="/opt/slow"/></DialogProvider>);
+  await waitFor(() => expect(remotePathInput().value).toBe("/root"));
+
+  fireEvent.click(within(pane("remote")).getByRole("button", { name: "跳转到当前终端目录" }));
+  fireEvent.change(remotePathInput(), { target: { value: "/manual" } });
+  fireEvent.submit(remotePathInput().closest("form")!);
+  await waitFor(() => expect(remotePathInput().value).toBe("/manual"));
+  await act(async () => { resolveJump?.([]); });
+  expect(remotePathInput().value).toBe("/manual");
+});
+
 test.each([
   ["local", "C:/temp"],
   ["remote", "/root"],
