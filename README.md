@@ -42,7 +42,7 @@ OpenShell is a free, open-source Windows desktop application for developers and 
 
 - **SSH sessions:** tabs, nested folders, duplicate connections, drag-reordering, horizontal and vertical splits, output search, and reconnect behavior.
 - **SFTP:** local and remote browsing, batch upload/download, remote text editing, transfer queue, retry, and one-way directory-sync preview.
-- **Native transfers:** Rust-native Windows ZMODEM for single-file `rz` / `sz` in a verified SSH Shell. The old `trzsz-go` compatibility engine, `trz` / `tsz` and `rz -y` fallback are not supported; use SFTP when the native flow cannot safely take over.
+- **Native transfers:** Rust-native Windows ZMODEM for single-file `rz` / `sz` in a verified SSH Shell. The old `trzsz-go` compatibility engine and `trz` / `tsz` are not supported. Native single-file `rz -y` / `rz --overwrite` supports explicitly confirmed overwrites of remote files; use SFTP when the native flow cannot safely take over.
 - **AI, when you want it:** configure a compatible model API for the global assistant or Terminal AI. SSH and SFTP work without AI configuration.
 - **Xshell migration:** import supported Xshell SSH sessions and folder structures.
 - **Local-first credentials:** session data stays in the local application profile; passwords and private-key passphrases use Windows Credential Manager.
