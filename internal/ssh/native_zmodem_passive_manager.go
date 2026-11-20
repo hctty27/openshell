@@ -1,7 +1,10 @@
 package sshclient
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"os"
 
 	"github.com/hctty27/openshell/internal/domain"
 )
@@ -69,4 +72,67 @@ func (m *Manager) PassiveZmodemSelection(ref domain.ConnectionRef, id uint64) (s
 	if c.nativeZmodemPassiveFrame == 0 { return "download", nil }
 	if c.nativeZmodemPassiveFrame == 1 { return "upload", nil }
 	return "", errors.New("未知的远端 ZMODEM 握手类型")
+}
+
+
+// RunPassiveNativeZmodemTransfer consumes a remote-triggered ZMODEM session.
+// It deliberately cannot restore the terminal until a trusted remote shell
+// exit boundary is implemented. This method is for the opt-in experiment.
+func (m *Manager) RunPassiveNativeZmodemTransfer(
+	parent context.Context, ref domain.ConnectionRef, selectionID uint64,
+	sidecar, direction, localPath string, progress func(uint64, uint64),
+) error {
+	if parent == nil { return errors.New("缺少远端 ZMODEM 自动传输上下文") }
+	if err := parent.Err(); err != nil { return err }
+	if sidecar == "" { return errors.New("未配置原生 ZMODEM sidecar") }
+	if info, err := os.Lstat(sidecar); err != nil || !info.Mode().IsRegular() ||
+		info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("远端 ZMODEM 的本地原生 sidecar 无效")
+	}
+	m.mu.Lock()
+	c := m.connections[ref.TabID]
+	valid := !m.closed && c != nil && c.ref == ref && c.terminal != nil &&
+		c.outputGuard != nil && c.outputGate != nil && c.inputGate != nil &&
+		c.nativeZmodemSelection && c.nativeZmodemSelectionPassive &&
+		c.nativeZmodemSelectionID == selectionID && selectionID != 0 &&
+		c.nativeTerminalTransfer == nil && c.aiController == nil && !c.nativeTerminalPoisoned
+	if valid {
+		valid = (direction == "upload" && c.nativeZmodemPassiveFrame == 1) ||
+			(direction == "download" && c.nativeZmodemPassiveFrame == 0)
+	}
+	if valid {
+		frame, _, pending := c.outputGuard.pendingCapture()
+		valid = pending && frame == c.nativeZmodemPassiveFrame
+	}
+	if !valid {
+		m.mu.Unlock()
+		return errors.New("远端 ZMODEM 自动传输选择已失效或方向不匹配")
+	}
+	ctx, cancel := context.WithCancel(parent)
+	task := &nativeTerminalTransferTask{ref: ref, cancel: cancel}
+	c.nativeTerminalTransfer = task
+	c.nativeZmodemSelection = false
+	c.nativeZmodemSelectionPassive = false
+	// The remote command was *not* wrapped by a nonce-bound exit marker.
+	// Never let a successful local transfer silently resume this PTY.
+	c.nativeTerminalPoisoned = true
+	input, output, guard := c.inputGate, c.outputGate, c.outputGuard
+	m.mu.Unlock()
+	defer cancel()
+	m.emit("ssh:native-zmodem-selection", map[string]any{
+		"ref": ref, "selectionId": selectionID, "active": false,
+	})
+	notifyNativeZmodemAccepted(ctx)
+	coordinator := &nativeTerminalCoordinator{
+		input: input, output: output,
+		runner: nativeTerminalExecutableRunnerWithProgress(sidecar, progress),
+	}
+	err := coordinator.runPassive(ctx, direction, localPath, guard)
+	m.mu.Lock()
+	if c.nativeTerminalTransfer == task { c.nativeTerminalTransfer = nil }
+	m.mu.Unlock()
+	if err != nil {
+		return fmt.Errorf("远端 ZMODEM 自动传输异常（当前终端不可继续输入，需重连）：%w", err)
+	}
+	return nil
 }
