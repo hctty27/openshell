@@ -7,10 +7,15 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 
 	"github.com/hctty27/openshell/internal/domain"
 	sshclient "github.com/hctty27/openshell/internal/ssh"
 )
+
+// Each native transfer receives an increasing generation within the app process.
+// Event listeners can discard late start/end callbacks from older tasks.
+var nativeZmodemTransferSequence atomic.Uint64
 
 func nativeZmodemDesktopSidecarPath() string {
 	if explicit := os.Getenv("OPENSHELL_NATIVE_ZMODEM_SIDECAR"); explicit != "" {
@@ -58,6 +63,7 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	}
 
 	id := domain.NewID()
+	sequence := nativeZmodemTransferSequence.Add(1)
 	name := filepath.Base(localPath)
 	file := map[string]any{"name": name}
 	if isUpload {
@@ -70,12 +76,12 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	}
 
 	a.emit("ssh:native-zmodem-batch", map[string]any{
-		"ref": ref, "id": id, "direction": displayDirection, "active": true,
+		"ref": ref, "id": id, "sequence": sequence, "direction": displayDirection, "active": true,
 		"overwrite": direction == "upload-overwrite",
 		"files": []map[string]any{file},
 	})
 	defer func() {
-		payload := map[string]any{"ref": ref, "id": id, "direction": displayDirection, "active": false}
+		payload := map[string]any{"ref": ref, "id": id, "sequence": sequence, "direction": displayDirection, "active": false}
 		terminalSafe := a.NativeZmodemInteractiveReadiness(ref).Ready
 		payload["terminalSafe"] = terminalSafe
 		if err != nil {
