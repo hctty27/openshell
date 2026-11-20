@@ -170,3 +170,68 @@ func TestNativePassiveSelectionExpiryDoesNotCancelAdmittedTransfer(t *testing.T)
 		t.Fatal("completed picker remained available to a stale UI")
 	}
 }
+
+
+func TestNativePassivePrebufferOverflowRevokesPickerImmediately(t *testing.T) {
+	m, ref, _, intents := nativeAutoTestManager(t, true, true)
+	c := m.connections[ref.TabID]
+	notices := make(chan string, 2)
+	releases := make(chan uint64, 2)
+	originalEmit := m.emit
+	m.emit = func(name string, payload any) {
+		if p, ok := payload.(map[string]any); ok {
+			switch name {
+			case "ssh:native-zmodem-unsupported":
+				notices <- p["error"].(string)
+			case "ssh:native-zmodem-selection":
+				releases <- p["selectionId"].(uint64)
+			}
+		}
+		originalEmit(name, payload)
+	}
+	guard := newNativeOnlyOutputGuardPassive(io.Discard,
+		func() { m.failNativePassiveGuard(ref, c) },
+		c.inputGate.blockPassiveInput,
+		func(frame byte) { go m.handleNativePassiveFrame(ref, c, frame) },
+	)
+	c.outputGuard = guard
+	c.outputGate = newTerminalOutputGate(guard)
+	if _, err := c.outputGate.Write(nativeZmodemHeaderFixture(0)); err != nil {
+		t.Fatal(err)
+	}
+	var intent map[string]any
+	select {
+	case intent = <-intents:
+	case <-time.After(2 * time.Second): t.Fatal("valid remote ZHEX did not open the picker")
+	}
+	id := intent["selectionId"].(uint64)
+	if _, err := c.outputGate.Write(bytes.Repeat([]byte{'x'}, nativePassiveHandshakeBufferLimit)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-notices:
+	default: t.Fatal("overflow did not immediately warn the user")
+	}
+	select {
+	case released := <-releases:
+		if released != id { t.Fatalf("overflow closed wrong picker: %d != %d", released, id) }
+	default:
+		t.Fatal("overflow left picker active until delayed timeout")
+	}
+	m.mu.Lock()
+	poisoned := c.nativeTerminalPoisoned
+	pendingPicker := c.nativeZmodemSelection
+	m.mu.Unlock()
+	if !poisoned || pendingPicker {
+		t.Fatal("overflow incorrectly retained the selection or restored SSH")
+	}
+	if _, _, ok := guard.pendingCapture(); ok {
+		t.Fatal("overflow retained a claimable handshake")
+	}
+	if m.ReleaseNativeZmodemSelection(ref, id) {
+		t.Fatal("stale frontend cancellation succeeded after overflow")
+	}
+	if _, err := c.inputGate.Write([]byte("pwd\r")); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("SSH input escaped after overflow: %v", err)
+	}
+}
