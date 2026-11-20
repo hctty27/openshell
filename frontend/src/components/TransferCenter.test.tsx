@@ -236,3 +236,39 @@ test("native cancel error from a previous task cannot fail the next transfer", a
   expect(screen.getByText("next.bin")).toBeTruthy();
   expect(screen.queryByText(/取消请求未确认/)).toBeNull();
 });
+
+
+test("native progress is monotonic and stops at 99 percent before remote confirmation", () => {
+  render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "progress-task", sequence: 808, direction: "upload",
+    active: true, files: [{ name: "large.bin", total: 100 }],
+  });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "progress-task", kind: "start", index: 0,
+    name: "large.bin", total: 100, processed: 0,
+  });
+  emit("ssh:native-zmodem-progress", {
+    ref: refA, batchId: "progress-task", processed: 80, total: 100,
+  });
+  emit("ssh:native-zmodem-progress", {
+    ref: refA, batchId: "progress-task", processed: 20, total: 100,
+  });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "progress-task", kind: "completed", index: 0,
+    processed: 100,
+  });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "progress-task", kind: "progress", index: 0,
+    processed: 20,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(screen.getByText("100 B / 100 B")).toBeTruthy();
+  expect(screen.getByText("等待远端确认")).toBeTruthy();
+  expect(screen.queryByText("100%")).toBeNull();
+
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "progress-task", sequence: 808, direction: "upload", active: false,
+  });
+  expect(screen.getByText("已完成")).toBeTruthy();
+});
