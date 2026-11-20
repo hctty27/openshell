@@ -150,18 +150,19 @@ func (a *App) StartNativeZmodemPassiveTransfer(
 		}
 	}
 	started := false
+	terminalSafe := false
 	defer func() {
 		if !started { return }
 		payload := map[string]any{
 			"ref": ref, "id": id, "sequence": sequence,
-			"direction": direction, "active": false, "terminalSafe": false,
+			"direction": direction, "active": false, "terminalSafe": terminalSafe,
 		}
 		if err != nil {
 			payload["error"] = err.Error()
 			payload["cancelled"] = errors.Is(err, context.Canceled)
 		}
 		a.emit("ssh:native-zmodem-batch", payload)
-		if err == nil {
+		if err == nil && !terminalSafe {
 			a.emit("ssh:native-zmodem-unsupported", map[string]any{
 				"ref": ref,
 				"error": "远端 ZMODEM 文件传输完成；尚无法证明远端 Shell 已退出，必须重新连接 SSH 后继续输入命令",
@@ -184,7 +185,7 @@ func (a *App) StartNativeZmodemPassiveTransfer(
 			"files": []map[string]any{file},
 		})
 	})
-	return a.ssh.RunPassiveNativeZmodemTransfer(
+	terminalSafe, err = a.ssh.RunPassiveNativeZmodemTransferWithResult(
 		ctx, ref, selectionID, nativeZmodemDesktopSidecarPath(), direction, localPath,
 		func(processed, total uint64) {
 			a.emit("ssh:native-zmodem-progress", map[string]any{
@@ -193,6 +194,7 @@ func (a *App) StartNativeZmodemPassiveTransfer(
 			})
 		},
 	)
+	return err
 }
 
 // CancelNativeZmodemSelection closes only a pending picker reservation.
