@@ -125,7 +125,7 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 		m.mu.Unlock()
 		return errors.New("JumpServer 暂不支持交互式原生 ZMODEM")
 	}
-	if c.aiController != nil || c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned {
+	if c.aiController != nil || c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.nativeZmodemSelectionPassive {
 		m.mu.Unlock()
 		return errors.New("当前终端正被其他任务占用")
 	}
