@@ -492,8 +492,7 @@
 }
 .ai-send-split > button:hover:not(:disabled) { filter: brightness(1.12); }
 .ai-send-split > button:disabled { opacity: .5; }
-.ai-send-split > button:focus-visible {
-  /* A clear local focus marker on the blue split button, without a blue box outside it. */
+.ai-send-submit:focus-visible {
   outline: 2px solid var(--on-accent);
   outline-offset: -2px;
 }
@@ -505,6 +504,55 @@
 }
 .ai-send-split[data-mode="auto"] .ai-send-mode-trigger {
   background: color-mix(in srgb, var(--on-accent) 14%, transparent);
+}
+/* Keep keyboard focus on the small mode arrow without boxing its entire button. */
+.ai-send-split .ai-send-mode-trigger:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--on-accent) 24%, transparent);
+  box-shadow: inset 0 -2px 0 var(--on-accent);
+}
+/* Avoid the native title popup near the app edge. The trigger's aria-label
+   continues to expose the current mode to assistive technology. */
+.ai-send-mode-trigger {
+  position: relative;
+}
+.ai-send-mode-trigger::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 7px);
+  z-index: 50;
+  display: block;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px #00000024;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(3px);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+}
+.ai-send-mode-trigger:is(:hover, :focus-visible):not([aria-expanded="true"]):not(:disabled)::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+@media (forced-colors: active) {
+  .ai-send-split .ai-send-mode-trigger:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+    box-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-send-mode-trigger::after { transition: none; }
 }
 .ai-send-mode-menu {
   display: flex;
