@@ -120,6 +120,16 @@ func (g *nativeOnlyOutputGuard) claimCaptured() ([]byte, error) {
 	return data, nil
 }
 
+// discardCapture releases the bounded handshake buffer when the picker
+// expires, is cancelled, or fails authorization. Quarantine itself remains
+// active: no bytes can reenter xterm without an SSH reconnect.
+func (g *nativeOnlyOutputGuard) discardCapture() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.capture = false
+	g.captured = nil
+}
+
 func (g *nativeOnlyOutputGuard) pendingCapture() (frame byte, bytes int, ok bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
