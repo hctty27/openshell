@@ -307,6 +307,25 @@ func (r *terminalShellReadiness) nativeZmodemInputState() (candidate, ready bool
 	return true, r.prompt && !r.manualInput && !r.assetMenu && !r.jumpServer
 }
 
+// restoreClearedNativeZmodemPrompt reestablishes the already verified
+// ordinary-shell prompt after an intercepted rz/sz line was erased with
+// Ctrl-U and the user dismissed the file picker. No command was executed.
+// Never promote a REPL, JumpServer, alternate buffer or password prompt to
+// an ordinary shell.
+func (r *terminalShellReadiness) restoreClearedNativeZmodemPrompt() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.alternate || r.assetMenu || r.jumpServer || r.psqlPasswordPrompt ||
+		(r.program != "" && r.program != "shell") {
+		return false
+	}
+	r.prompt = true
+	r.manualInput = false
+	r.startedProgram = ""
+	r.launchInput = nil
+	return true
+}
+
 // readyProgram must only be read after checkReady succeeds.
 func (r *terminalShellReadiness) readyProgram() string {
 	r.mu.Lock()
