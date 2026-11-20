@@ -385,7 +385,7 @@ func TestNativeZmodemInteractiveCoordinatorFailedDownloadDoesNotPublish(t *testi
 	done := make(chan error, 1)
 	go func() { done <- coordinator.run(context.Background(), "download", dest, "partial.bin") }()
 	command := string(nativeTerminalNextInput(t, capture))
-	if _, err := output.Write([]byte("**\\x18B000123456789ab")); err != nil { t.Fatal(err) }
+	if _, err := output.Write([]byte("**\x18B000123456789ab")); err != nil { t.Fatal(err) }
 	if _, err := output.Write(append(nativeTerminalCompletionFromCommand(t, command, 2), []byte("shell-ready")...)); err != nil { t.Fatal(err) }
 	select {
 	case err := <-done:
