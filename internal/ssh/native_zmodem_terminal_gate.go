@@ -170,6 +170,24 @@ func (g *terminalOutputGate) quarantineNative(lease uint64) error {
 	return nil
 }
 
+// quarantineWithBoundary detaches a completed Rust sidecar while keeping a
+// pre-established, nonce-bound shell completion detector on the SSH output
+// stream. Only the exact current output lease can make this transition.
+// The detector continues consuming output (including split OSC markers),
+// while the underlying protocol pipe is never written after sidecar exit.
+// This API by itself does not authorize restoring the terminal.
+func (g *terminalOutputGate) quarantineWithBoundary(lease uint64, boundary *nativeRemoteBoundarySink) error {
+	if boundary == nil { return errors.New("缺少已注册的远端命令完成标记") }
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed { return io.ErrClosedPipe }
+	if lease == 0 || g.lease != lease || g.native != boundary {
+		return errTerminalStreamLease
+	}
+	boundary.downstream = io.Discard
+	return nil
+}
+
 // armOnZmodemHeader pre-installs the native destination without switching
 // the live stream yet. The scanner withholds at most 17 possible header bytes.
 // On the first complete frame, any preceding text goes to legacy; the entire
