@@ -1167,3 +1167,22 @@ test("native ZMODEM input lock ignores a completed task's delayed start", async 
   emit({ ref: tab.ref, id: "new", sequence: 405, active: true });
   expect(term.options.disableStdin).toBe(false);
 });
+
+
+test("late old native finish releases its own lock without unlocking a newer task", async () => {
+  renderTerminal();
+  const term = refs.terms[0];
+  const emit = (payload: unknown) =>
+    act(() => events.listeners.get("ssh:native-zmodem-batch")?.(payload));
+  await waitFor(() => expect(events.listeners.has("ssh:native-zmodem-batch")).toBe(true));
+
+  emit({ ref: tab.ref, id: "first", sequence: 601, active: true });
+  // The first remote task actually finished, but its UI event is delayed.
+  emit({ ref: tab.ref, id: "second", sequence: 602, active: true });
+  emit({ ref: tab.ref, id: "first", sequence: 601, active: false, terminalSafe: true });
+  expect(term.options.disableStdin).toBe(true);
+  emit({ ref: tab.ref, id: "second", sequence: 602, active: false, terminalSafe: true });
+  expect(term.options.disableStdin).toBe(false);
+  emit({ ref: tab.ref, id: "first", sequence: 601, active: true });
+  expect(term.options.disableStdin).toBe(false);
+});
