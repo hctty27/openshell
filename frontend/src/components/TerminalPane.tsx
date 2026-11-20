@@ -335,7 +335,11 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       const transferID = event.id ?? "legacy";
       const sequence = typeof event.sequence === "number" && Number.isSafeInteger(event.sequence) && event.sequence > 0
         ? event.sequence : 0;
-      if (sequence < nativeTransferSequence.current) return;
+      // A delayed *end* from an older task must still release that task's
+      // own input lease, even if a newer start event arrived first. Ignore
+      // outdated starts and outcomes for tasks we no longer hold.
+      if (sequence < nativeTransferSequence.current &&
+        (event.active || !nativeTransferIDs.current.has(transferID))) return;
       if (sequence > nativeTransferSequence.current) nativeTransferSequence.current = sequence;
       // The end event can arrive before start through asynchronous listeners.
       // Once ended, this exact task cannot lock the SSH terminal again.
