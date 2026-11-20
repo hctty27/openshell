@@ -7,7 +7,8 @@ import (
 
 // Only a native lease is allowed to consume protocol data. ZHEX start
 // headers contain: frame type (1 B), 4 flag/position bytes, CRC-16 (2 B).
-// Check the CRC before allowing any terminal stream to be quarantined.
+// Check the CRC before routing an authorized transfer to its sidecar.
+// The unclaimed-protocol guard still quarantines suspicious damaged headers.
 var zmodemDirectionPattern = regexp.MustCompile(`\*\*\x18B0([01])[0-9a-fA-F]{12}`)
 
 // nativeZmodemStartScanner recognizes the same ZMODEM header signature as
@@ -65,9 +66,9 @@ func (s *nativeZmodemStartScanner) feed(p []byte) (legacy, native []byte, matche
 	data = append(data, p...)
 	s.tail = nil
 
-	// The terminal can print literal text that happens to resemble an
-	// unverified ZMODEM header. Skip false positives while continuing to
-	// search this same chunk for a later *valid* start frame.
+	// For authorized transfer handoff, skip CRC-invalid candidates while
+	// searching the same chunk for a valid header. For unclaimed remote
+	// output, a syntactically plausible but damaged header is quarantined.
 	for offset := 0; offset < len(data); {
 		candidate := zmodemDirectionPattern.FindIndex(data[offset:])
 		if candidate == nil { break }
