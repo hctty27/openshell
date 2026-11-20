@@ -51,3 +51,39 @@ func TestNativePassiveBashInstallerRegistersTokenBeforeTransfer(t *testing.T) {
 	if _,err:=filter.Write(marker);err!=nil {t.Fatal(err)}
 	if output.Len()!=0 {t.Fatalf("private token leaked into output: %q",output.String())}
 }
+
+
+func TestNativePassiveBashInstallerDeniedInputLeaseDoesNotStrandSetupLock(t *testing.T) {
+	events:=make(chan map[string]any,2)
+	m:=NewManager(keys{},func(name string,payload any){
+		if name=="ssh:native-zmodem-shell-setup" {
+			if v,ok:=payload.(map[string]any);ok {events<-v}
+		}
+	})
+	ref:=domain.ConnectionRef{TabID:"denied-bash",SessionID:"session",Generation:1}
+	var terminal bytes.Buffer
+	input:=newTerminalInputGate(&terminal,&terminal)
+	lease,err:=input.takeover()
+	if err!=nil {t.Fatal(err)}
+	c:=&connection{
+		ref:ref,terminal:&ssh.Session{},inputGate:input,
+		passiveBashHookFilter:newNativePassiveBashHookFilter(&terminal),
+		passiveBashHookInstalling:true,
+	}
+	m.mu.Lock()
+	m.connections[ref.TabID]=c
+	m.mu.Unlock()
+	m.installNativePassiveBashHook(ref,c)
+	m.mu.Lock()
+	installing,poisoned,token:=c.passiveBashHookInstalling,c.nativeTerminalPoisoned,c.passiveBashHookToken
+	m.mu.Unlock()
+	if installing||poisoned||token!="" {
+		t.Fatalf("failed input lease left invalid hook state: installing=%v poisoned=%v token=%q",installing,poisoned,token)
+	}
+	select {
+	case e:=<-events:
+		if e["active"]!=false||e["ready"]!=false {t.Fatalf("wrong setup unlock event: %v",e)}
+	default: t.Fatal("denied hook lease never released frontend setup event")
+	}
+	if err:=input.restore(lease);err!=nil {t.Fatal(err)}
+}
