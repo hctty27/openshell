@@ -23,7 +23,10 @@ func TestNativePassiveVerifiedExitRestoresSamePTYAndAllowsNextTransfer(t *testin
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var visible, remoteInput bytes.Buffer
-			input := newTerminalInputGate(io.Discard, &remoteInput)
+			// Both protocol and ordinary SSH writes reach the same PTY.
+			// A io.Discard legacy stub would hide a successfully restored
+			// manual command from this assertion.
+			input := newTerminalInputGate(&remoteInput, &remoteInput)
 			guard := newNativeOnlyOutputGuardPassive(&visible, func() {
 				t.Error("valid ZHEX was rejected")
 			}, input.blockPassiveInput, func(byte) {})
