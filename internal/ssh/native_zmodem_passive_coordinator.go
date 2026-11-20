@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -110,6 +109,3 @@ func (c *nativeTerminalCoordinator) runPassive(
 	return nil
 }
 
-// Compile-time reference keeps filepath's platform-specific cleaning aligned
-// with the existing executable sidecar runner.
-var _ = filepath.Clean
