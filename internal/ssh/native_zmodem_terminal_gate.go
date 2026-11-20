@@ -282,6 +282,48 @@ func (g *terminalOutputGate) restore(lease uint64) error {
 	return nil
 }
 
+// restoreVerifiedPassive is exclusively for a remote-shell hook that was
+// registered and acknowledged BEFORE the remote program began. The caller
+// must validate the nonce-bound completion, finish Rust, and hold this exact
+// output lease. Only then is the passive guard reset and post-marker Shell
+// output replayed under a single output lock.
+func (g *terminalOutputGate) restoreVerifiedPassive(
+	lease uint64, boundary *nativeRemoteBoundarySink, guard *nativeOnlyOutputGuard,
+) error {
+	if boundary == nil || guard == nil {
+		return errors.New("缺少可信 Shell 退出证明")
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed { return io.ErrClosedPipe }
+	if lease == 0 || lease != g.lease || g.native != boundary || g.legacy != guard ||
+		!boundary.finished {
+		return errTerminalStreamLease
+	}
+	guard.mu.Lock()
+	defer guard.mu.Unlock()
+	if !guard.quarantined || !guard.claimed {
+		return errNativePassiveNoHeader
+	}
+	// Replay any bytes arriving after the validated command-complete
+	// marker before unlocking the old xterm stream. A replay error leaves
+	// both consumers quarantined, never half-restored.
+	if err := writeNativeGateBytes(guard.writer, boundary.replayTrailing()); err != nil {
+		return err
+	}
+	guard.quarantined = false
+	guard.claimed = false
+	guard.capture = false
+	guard.captured = nil
+	guard.scanner = nativeZmodemStartScanner{quarantineMalformed: true}
+	g.native = nil
+	g.quietPrelude = false
+	g.preludeMarker = nil
+	g.preludeTail = nil
+	g.scanner = nativeZmodemStartScanner{}
+	return nil
+}
+
 // restoreWithReplay keeps the gate locked while replaying verified post-
 // protocol shell output. Without the lock, fresh PTY output could overtake
 // bytes withheld after the remote completion marker.
