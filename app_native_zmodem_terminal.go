@@ -75,12 +75,13 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 		file["name"] = name
 	}
 
-	a.emit("ssh:native-zmodem-batch", map[string]any{
-		"ref": ref, "id": id, "sequence": sequence, "direction": displayDirection, "active": true,
-		"overwrite": direction == "upload-overwrite",
-		"files": []map[string]any{file},
-	})
+	started := false
 	defer func() {
+		if !started {
+			// The manager rejected this task before obtaining SSH ownership.
+			// The caller receives the error without any spurious task events.
+			return
+		}
 		payload := map[string]any{"ref": ref, "id": id, "sequence": sequence, "direction": displayDirection, "active": false}
 		terminalSafe := a.NativeZmodemInteractiveReadiness(ref).Ready
 		payload["terminalSafe"] = terminalSafe
@@ -101,6 +102,14 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 			"ref": ref, "batchId": id, "kind": event.Kind,
 			"index": 0, "name": event.Name,
 			"total": event.Total, "processed": event.Processed,
+		})
+	})
+	ctx = sshclient.WithNativeZmodemAcceptedObserver(ctx, func() {
+		started = true
+		a.emit("ssh:native-zmodem-batch", map[string]any{
+			"ref": ref, "id": id, "sequence": sequence, "direction": displayDirection, "active": true,
+			"overwrite": direction == "upload-overwrite",
+			"files": []map[string]any{file},
 		})
 	})
 	return a.ssh.RunExperimentalNativeTerminalTransferWithProgress(
