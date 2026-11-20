@@ -16,11 +16,38 @@ type nativeTerminalTransferTask struct {
 	cancel context.CancelFunc
 }
 
+// The UI's "running" event must be emitted only after the SSH manager
+// admits this task. A rejected concurrent start must not lock the terminal
+// or create an orphaned transfer-center row.
+type nativeZmodemAcceptedObserverKey struct{}
+
+func WithNativeZmodemAcceptedObserver(ctx context.Context, onAccepted func()) context.Context {
+	if onAccepted == nil { return ctx }
+	return context.WithValue(ctx, nativeZmodemAcceptedObserverKey{}, onAccepted)
+}
+
+func notifyNativeZmodemAccepted(ctx context.Context) {
+	if ctx == nil { return }
+	if callback, ok := ctx.Value(nativeZmodemAcceptedObserverKey{}).(func()); ok && callback != nil {
+		callback()
+	}
+}
+
 // All callers must hold Manager.mu. Cancellation is nonblocking and never
 // tries to acquire an input/output gate while the manager lock is held.
 func cancelNativeTerminalTransferLocked(c *connection) {
 	if c != nil && c.nativeTerminalTransfer != nil {
 		c.nativeTerminalTransfer.cancel()
+	}
+}
+
+// ReleaseNativeZmodemSelection clears only a picker reservation belonging
+// to the exact SSH generation. It never cancels a running Rust transfer.
+func (m *Manager) ReleaseNativeZmodemSelection(ref domain.ConnectionRef) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if c := m.connections[ref.TabID]; c != nil && c.ref == ref {
+		c.nativeZmodemSelection = false
 	}
 }
 
@@ -82,10 +109,14 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 	ctx, cancel := context.WithCancel(parent)
 	task := &nativeTerminalTransferTask{ref: ref, cancel: cancel}
 	c.nativeTerminalTransfer = task
+	c.nativeZmodemSelection = false // picker ownership becomes task ownership, atomically
 	input, output := c.inputGate, c.outputGate
 	m.mu.Unlock()
 
 	defer cancel()
+	// The ownership token is installed before the observer can announce
+	// the task to listeners. Rejected starts never emit an active event.
+	notifyNativeZmodemAccepted(ctx)
 
 	coordinator := &nativeTerminalCoordinator{
 		input: input, output: output,

@@ -7,10 +7,15 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 
 	"github.com/hctty27/openshell/internal/domain"
 	sshclient "github.com/hctty27/openshell/internal/ssh"
 )
+
+// Each native transfer receives an increasing generation within the app process.
+// Event listeners can discard late start/end callbacks from older tasks.
+var nativeZmodemTransferSequence atomic.Uint64
 
 func nativeZmodemDesktopSidecarPath() string {
 	if explicit := os.Getenv("OPENSHELL_NATIVE_ZMODEM_SIDECAR"); explicit != "" {
@@ -58,6 +63,7 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	}
 
 	id := domain.NewID()
+	sequence := nativeZmodemTransferSequence.Add(1)
 	name := filepath.Base(localPath)
 	file := map[string]any{"name": name}
 	if isUpload {
@@ -69,13 +75,14 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 		file["name"] = name
 	}
 
-	a.emit("ssh:native-zmodem-batch", map[string]any{
-		"ref": ref, "id": id, "direction": displayDirection, "active": true,
-		"overwrite": direction == "upload-overwrite",
-		"files": []map[string]any{file},
-	})
+	started := false
 	defer func() {
-		payload := map[string]any{"ref": ref, "id": id, "direction": displayDirection, "active": false}
+		if !started {
+			// The manager rejected this task before obtaining SSH ownership.
+			// The caller receives the error without any spurious task events.
+			return
+		}
+		payload := map[string]any{"ref": ref, "id": id, "sequence": sequence, "direction": displayDirection, "active": false}
 		terminalSafe := a.NativeZmodemInteractiveReadiness(ref).Ready
 		payload["terminalSafe"] = terminalSafe
 		if err != nil {
@@ -97,6 +104,14 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 			"total": event.Total, "processed": event.Processed,
 		})
 	})
+	ctx = sshclient.WithNativeZmodemAcceptedObserver(ctx, func() {
+		started = true
+		a.emit("ssh:native-zmodem-batch", map[string]any{
+			"ref": ref, "id": id, "sequence": sequence, "direction": displayDirection, "active": true,
+			"overwrite": direction == "upload-overwrite",
+			"files": []map[string]any{file},
+		})
+	})
 	return a.ssh.RunExperimentalNativeTerminalTransferWithProgress(
 		ctx, ref, nativeZmodemDesktopSidecarPath(), direction, localPath, remotePath,
 		func(processed, total uint64) {
@@ -106,6 +121,13 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 			})
 		},
 	)
+}
+
+// CancelNativeZmodemSelection closes only a pending picker reservation.
+// A task already admitted to the native coordinator is never interrupted.
+func (a *App) CancelNativeZmodemSelection(ref domain.ConnectionRef) error {
+	a.ssh.ReleaseNativeZmodemSelection(ref)
+	return nil
 }
 
 func (a *App) CancelNativeZmodemInteractiveTransfer(ref domain.ConnectionRef) error {
