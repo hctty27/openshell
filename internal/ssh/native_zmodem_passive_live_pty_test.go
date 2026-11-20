@@ -101,8 +101,17 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 			}
 			intents := make(chan map[string]any, 4)
 			unsupported := make(chan string, 4)
+			terminalOutput := make(chan string, 256)
 			manager := NewManager(keys{}, func(name string, payload any) {
 				switch name {
+				case "ssh:output":
+					if p, ok := payload.(map[string]any); ok {
+						if raw, ok := p["data"].(string); ok {
+							if decoded, err := base64.StdEncoding.DecodeString(raw); err == nil {
+								select {case terminalOutput <- string(decoded): default:}
+							}
+						}
+					}
 				case "ssh:native-zmodem-auto-intent":
 					if p, ok := payload.(map[string]any); ok {
 						select { case intents <- p: default: }
@@ -249,10 +258,58 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 			if !alive { t.Fatal("post-protocol SSH stdout unexpectedly terminated the PTY") }
 			if verifiedBash {
 				if unsafe { t.Fatal("verified Bash completion failed to clear SSH poison") }
-				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte("pwd\r"))); err != nil {
+				// A successful Write call alone does not prove Bash actually
+				// executed the next command; test a value not present in the
+				// echoed source text, then do a SECOND ZMODEM transfer on the
+				// exact same SSH PTY without reconnecting.
+				probe := "printf 'RECOVERY_OK_%s\\n' \"$((6*7))\"\r"
+				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte(probe))); err != nil {
 					t.Fatalf("verified same-PTY terminal rejected next command: %v", err)
 				}
-				t.Logf("real remote %s: Bash completion nonce accepted; SHA-256 %x and next command allowed", tc.name, sha256.Sum256(payload))
+				matched := false
+				outputTail := ""
+				deadline := time.After(5*time.Second)
+				for !matched {
+					select {
+					case chunk := <-terminalOutput:
+						outputTail += chunk
+						if strings.Contains(outputTail, "RECOVERY_OK_42") {matched=true}
+						if len(outputTail)>8192 {outputTail=outputTail[len(outputTail)-8192:]}
+					case <-deadline:
+						t.Fatalf("Bash did not execute command after native recovery: %q", outputTail)
+					}
+				}
+				secondLocalPath := localPath
+				if tc.direction == "download" {
+					secondLocalPath = filepath.Join(workspace, "downloaded-again")
+					if err := os.Mkdir(secondLocalPath, 0700); err != nil { t.Fatal(err) }
+				}
+				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte(wire))); err != nil {
+					t.Fatalf("second native transfer could not start on recovered PTY: %v", err)
+				}
+				var secondIntent map[string]any
+				select {
+				case secondIntent = <-intents:
+				case <-time.After(12*time.Second):
+					t.Fatal("second passive ZMODEM handshake was not recognized")
+				}
+				secondID, ok := secondIntent["selectionId"].(uint64)
+				if !ok || secondID <= id || secondIntent["direction"] != tc.direction {
+					t.Fatalf("second transfer ownership was stale: first=%v second=%v", intent, secondIntent)
+				}
+				ctx2, cancel2 := context.WithTimeout(context.Background(), 90*time.Second)
+				secondSafe, secondErr := manager.RunPassiveNativeZmodemTransferWithResult(
+					ctx2, ref, secondID, sidecar, tc.direction, secondLocalPath, nil)
+				cancel2()
+				if secondErr != nil || !secondSafe {
+					t.Fatalf("second transfer did not restore SSH PTY: safe=%v err=%v", secondSafe, secondErr)
+				}
+				if tc.direction == "download" {
+					verifyNativeLiveFile(t,filepath.Join(workspace,fileName),filepath.Join(secondLocalPath,fileName))
+				} else {
+					verifyNativeLiveFile(t,localPath,filepath.Join(remoteHome,fileName))
+				}
+				t.Logf("real remote %s: Manager auto-installed Bash, two consecutive native transfers and intervening Bash command succeeded; SHA-256 %x",tc.name,sha256.Sum256(payload))
 			} else {
 				if !unsafe { t.Fatal("unattested remote exit incorrectly restored PTY") }
 				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte("pwd\r")));
