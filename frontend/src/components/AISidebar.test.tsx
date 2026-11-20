@@ -443,7 +443,8 @@ test("AI composer recalls prior user prompts with arrows and restores unsent dra
   const input = screen.getByPlaceholderText("描述需要 AI 执行的任务...") as HTMLTextAreaElement;
   const markup = input.closest(".ai-compose")?.innerHTML;
   fireEvent.change(input, { target: { value: "未发送的草稿" } });
-  input.setSelectionRange(0, 0);
+  // A single-line draft recalls history even when its caret is at the end.
+  input.setSelectionRange(input.value.length, input.value.length);
   fireEvent.keyDown(input, { key: "ArrowUp" });
   expect(input.value).toBe("检查内存");
   fireEvent.keyDown(input, { key: "ArrowUp" });
