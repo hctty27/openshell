@@ -16,6 +16,7 @@ import { belongsToConversationScope } from "../features/ai/conversationScope";
 import { AI_PROVIDERS_CHANGED } from "../features/ai/providerEvents";
 import { readLastModel, saveLastModel } from "../features/ai/modelSelection";
 import { resolveAIModelSelection } from "../features/ai/modelFallback";
+import { collectPromptHistory, emptyPromptHistoryNavigation, navigatePromptHistory } from "../features/ai/promptHistory";
 import { t } from "../i18n";
 import { decodeAppError } from "../i18n/errors";
 import { useTranslation } from "react-i18next";
@@ -61,6 +62,13 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   const historyTriggerRef = useRef<HTMLButtonElement>(null);
   const targetTriggerRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const promptNavigationRef = useRef(emptyPromptHistoryNavigation());
+  const composingRef = useRef(false);
+  const positionHistoryCaretRef = useRef(false);
+  const resetPromptNavigation = () => {
+    promptNavigationRef.current = emptyPromptHistoryNavigation();
+    positionHistoryCaretRef.current = false;
+  };
   const [running, setRunning] = useState<AIStartResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [stream, setStream] = useState("");
@@ -123,6 +131,10 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     if (!textarea) return;
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(148, Math.max(44, textarea.scrollHeight))}px`;
+    if (positionHistoryCaretRef.current) {
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      positionHistoryCaretRef.current = false;
+    }
   }, [message]);
 
   useEffect(() => {
@@ -345,6 +357,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     }
   };
   const selectConversation = (item: AIConversation) => {
+    resetPromptNavigation();
     followOutputRef.current = true;
     setTargetIDs([]);
     const bindings = item.targetBindings ?? [];
@@ -366,6 +379,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
   };
   const newConversation = () => {
     if (running) return;
+    resetPromptNavigation();
     followOutputRef.current = true;
     setTargetIDs([]);
     setHistorySessionIDs([]);
@@ -397,9 +411,53 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
     try {
       await api.AIDeleteConversation(id);
       setConversations(old => old.filter(c => c.id !== id));
-      if (conversationID === id) setConversationID("");
+      if (conversationID === id) {
+        resetPromptNavigation();
+        setConversationID("");
+      }
     } catch (e) { setError(errorText(e)); }
   };
+  const onComposeKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const composing = composingRef.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229;
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      if (!composing && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+        const textarea = event.currentTarget;
+        const browsing = promptNavigationRef.current.index !== -1;
+        const singleLine = !textarea.value.includes("\n");
+        const atBoundary = singleLine || (event.key === "ArrowUp"
+          ? textarea.selectionStart === 0
+          : textarea.selectionEnd === textarea.value.length);
+        if (textarea.selectionStart === textarea.selectionEnd && (browsing || atBoundary)) {
+          const next = navigatePromptHistory(
+            promptNavigationRef.current,
+            event.key === "ArrowUp" ? "up" : "down",
+            message,
+            () => collectPromptHistory(conversations, conversationID, terminalScopeId),
+          );
+          if (next || browsing) event.preventDefault();
+          if (next) {
+            promptNavigationRef.current = next.navigation;
+            if (next.message === message) {
+              textarea.setSelectionRange(next.message.length, next.message.length);
+            } else {
+              positionHistoryCaretRef.current = true;
+              setMessage(next.message);
+            }
+          }
+          return;
+        }
+      } else {
+        resetPromptNavigation();
+      }
+    } else if (["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"].includes(event.key)) {
+      resetPromptNavigation();
+    }
+    if (event.key === "Enter" && !event.shiftKey && !composing) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const text = message.trim();
@@ -421,6 +479,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
       currentConversationRef.current = started.conversationId;
       if (!finishedTasks.current.has(started.taskId)) setRunning(started);
       setConversationID(started.conversationId);
+      resetPromptNavigation();
       setMessage("");
     } catch (e) { setError(errorText(e)); setStatus(""); }
     finally { setSubmitting(false); }
@@ -517,9 +576,12 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
           </div>
           <form className="ai-compose" onSubmit={submit}>
             <div className="ai-compose-box">
-              <textarea ref={textareaRef} value={message} onChange={e => setMessage(e.target.value)} rows={2}
+              <textarea ref={textareaRef} value={message} onChange={e => { resetPromptNavigation(); setMessage(e.target.value); }} rows={2}
                 placeholder={t("ai:messagePlaceholder")}
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}/>
+                onCompositionStart={() => { composingRef.current = true; }}
+                onCompositionEnd={() => { composingRef.current = false; }}
+                onClick={resetPromptNavigation}
+                onKeyDown={onComposeKeyDown}/>
               <div className="ai-compose-actions">
                 <div className={"ai-compose-config" + (!isTerminal ? " ai-compose-config--with-target" : "")}>
                   <AIModelPicker providers={providers}

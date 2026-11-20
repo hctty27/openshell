@@ -426,3 +426,87 @@ test("global AI session selector stays closed when no SSH session exists", async
   expect(document.querySelector(".ai-target-menu")).toBeNull();
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
 });
+
+
+test("AI composer recalls prior user prompts with arrows and restores unsent draft without UI changes", async () => {
+  vi.mocked(api.AIConversations).mockResolvedValueOnce([
+    { ...oldConversation(), id: "older", scope: "global", messages: [{ role: "user", content: "检查旧日志" }] },
+    { ...oldConversation(), id: "recent", scope: "global", updatedAt: "2026-11-20T00:00:00Z",
+      messages: [
+        { role: "user", content: "检查 CPU" },
+        { role: "assistant", content: "CPU 正常" },
+        { role: "user", content: "检查内存" },
+      ] },
+  ]);
+  await act(async () => render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+    pinned isOpen onTogglePin={vi.fn()} />));
+  const input = screen.getByPlaceholderText("描述需要 AI 执行的任务...") as HTMLTextAreaElement;
+  const markup = input.closest(".ai-compose")?.innerHTML;
+  fireEvent.change(input, { target: { value: "未发送的草稿" } });
+  // A single-line draft recalls history even when its caret is at the end.
+  input.setSelectionRange(input.value.length, input.value.length);
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(input.value).toBe("检查内存");
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(input.value).toBe("检查 CPU");
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(input.value).toBe("检查旧日志");
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(input.value).toBe("检查 CPU");
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(input.value).toBe("检查内存");
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(input.value).toBe("未发送的草稿");
+  expect(input.closest(".ai-compose")?.querySelectorAll("textarea")).toHaveLength(1);
+  expect(input.closest(".ai-compose")?.querySelectorAll("button").length).toBeGreaterThan(0);
+  expect(markup).toContain("ai-compose-actions");
+});
+
+test("prompt history keeps multiline cursor navigation, selections and Chinese IME intact", async () => {
+  vi.mocked(api.AIConversations).mockResolvedValueOnce([{
+    ...oldConversation(), scope: "global", messages: [{ role: "user", content: "历史输入" }],
+  }]);
+  await act(async () => render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+    pinned isOpen onTogglePin={vi.fn()} />));
+  const input = screen.getByPlaceholderText("描述需要 AI 执行的任务...") as HTMLTextAreaElement;
+  fireEvent.change(input, { target: { value: "第一行\n第二行" } });
+  input.setSelectionRange(4, 4);
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(input.value).toBe("第一行\n第二行");
+  input.setSelectionRange(0, 0);
+  fireEvent.compositionStart(input);
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(input.value).toBe("第一行\n第二行");
+  fireEvent.compositionEnd(input);
+  input.setSelectionRange(0, 2);
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(input.value).toBe("第一行\n第二行");
+  input.setSelectionRange(0, 0);
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(input.value).toBe("历史输入");
+  fireEvent.change(input, { target: { value: "编辑历史但不覆盖记录" } });
+  input.setSelectionRange(0, 0);
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(input.value).toBe("历史输入");
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(input.value).toBe("编辑历史但不覆盖记录");
+});
+
+test("terminal AI arrow history only recalls that terminal session", async () => {
+  vi.mocked(api.AIConversations).mockResolvedValueOnce([
+    { ...oldConversation(), scope: "global", messages: [{ role: "user", content: "全局提示" }] },
+    { ...oldConversation(), id: "hk", scope: "terminal", scopeId: "hk-server",
+      messages: [{ role: "user", content: "当前终端提示" }] },
+    { ...oldConversation(), id: "us", scope: "terminal", scopeId: "us-server",
+      messages: [{ role: "user", content: "其他终端提示" }] },
+  ]);
+  await act(async () => render(<AISidebar tabs={[connectedTab]} active={connectedTab}
+    terminalScopeId="hk-server" pinned isOpen onTogglePin={vi.fn()} />));
+  const input = screen.getByPlaceholderText("描述需要 AI 执行的任务...") as HTMLTextAreaElement;
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(input.value).toBe("当前终端提示");
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(input.value).toBe("当前终端提示");
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(input.value).toBe("");
+});
