@@ -235,11 +235,12 @@ func TestNativeAutoCommandPickerBlocksTypingUntilReleased(t *testing.T) {
 	}
 	stale := ref
 	stale.Generation++
-	m.ReleaseNativeZmodemSelection(stale)
+	if m.ReleaseNativeZmodemSelection(stale, 1) { t.Fatal("stale generation released a picker") }
+	if m.ReleaseNativeZmodemSelection(ref, 2) { t.Fatal("stale selection ID released a live picker") }
 	if err := m.Write(ref, key); !errors.Is(err, errNativeTerminalInputBusy) {
 		t.Fatalf("stale picker cancellation released live SSH input: %v", err)
 	}
-	m.ReleaseNativeZmodemSelection(ref)
+	if !m.ReleaseNativeZmodemSelection(ref, 1) { t.Fatal("current picker could not be released") }
 	if err := m.Write(ref, key); err != nil {
 		t.Fatalf("selection cancellation did not restore typing: %v", err)
 	}
