@@ -51,6 +51,9 @@ type connection struct {
 	outputGate *terminalOutputGate
 	inputGate *terminalInputGate
 	nativeTerminalTransfer *nativeTerminalTransferTask
+	// Reserved while the native single-file picker is open; normal shell
+	// input and terminal AI must not bypass the pending ZMODEM handoff.
+	nativeZmodemSelection bool
 	nativeTerminalPoisoned bool
 	nativeAutoInput nativeAutoInputTracker
 	aiController *AITerminalLease

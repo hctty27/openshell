@@ -275,7 +275,7 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		m.mu.Unlock()
 		return errAITerminalBusy
 	}
-	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned {
+	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.nativeZmodemSelection {
 		m.mu.Unlock()
 		return errNativeTerminalInputBusy
 	}
@@ -304,6 +304,8 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 
 	if direction == "reject-multi" {
 		autoError = "ZMODEM 每次只能传输一个文件；批量传输请使用 SFTP"
+	} else if direction == "reject-multiline" {
+		autoError = "已拦截包含 rz/sz 的多行粘贴，防止在原生传输接管前启动远端协议；请单独输入 rz/sz 命令"
 	} else if direction == "reject-unsupported" {
 		autoError = "仅支持原生单文件 rz、rz -y、rz --overwrite、rz -q 及 sz 文件名；其他不支持的参数或复杂 Shell 语法请使用 SFTP"
 	} else if direction == "reject-unavailable" {
@@ -314,7 +316,11 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		}
 	} else if direction != "" {
 		m.mu.Lock()
-		if current := m.connections[ref.TabID]; current == c && c.ref == ref {
+		if current := m.connections[ref.TabID]; current == c && c.ref == ref &&
+			c.nativeTerminalTransfer == nil && !c.nativeTerminalPoisoned {
+			// Reserve the PTY synchronously with this recognized intent.
+			// Picker cancellation or transfer admission releases this reservation.
+			c.nativeZmodemSelection = true
 			autoEvent = map[string]any{"ref": ref, "direction": direction, "remotePath": remotePath, "sessionName": c.session.Name}
 		}
 		m.mu.Unlock()

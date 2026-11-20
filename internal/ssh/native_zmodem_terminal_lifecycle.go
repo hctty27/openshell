@@ -24,6 +24,16 @@ func cancelNativeTerminalTransferLocked(c *connection) {
 	}
 }
 
+// ReleaseNativeZmodemSelection clears only a picker reservation belonging
+// to the exact SSH generation. It never cancels a running Rust transfer.
+func (m *Manager) ReleaseNativeZmodemSelection(ref domain.ConnectionRef) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if c := m.connections[ref.TabID]; c != nil && c.ref == ref {
+		c.nativeZmodemSelection = false
+	}
+}
+
 func (m *Manager) CancelExperimentalNativeTerminalTransfer(ref domain.ConnectionRef) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -82,6 +92,9 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 	ctx, cancel := context.WithCancel(parent)
 	task := &nativeTerminalTransferTask{ref: ref, cancel: cancel}
 	c.nativeTerminalTransfer = task
+	// Convert picker ownership to actual protocol-task ownership atomically
+	// under Manager.mu: there is no gap in which typing can slip through.
+	c.nativeZmodemSelection = false
 	input, output := c.inputGate, c.outputGate
 	m.mu.Unlock()
 
