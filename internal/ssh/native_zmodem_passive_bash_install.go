@@ -23,6 +23,7 @@ func (m *Manager) installNativePassiveBashHook(ref domain.ConnectionRef, expecte
 	// can reach the input gate without acquiring stdinMu.
 	inputLease, leaseErr := expected.inputGate.takeover()
 	if leaseErr != nil { return }
+	sentBootstrap := false
 	leaseRestored := false
 	defer func() {
 		// No bootstrap was ever sent: it is safe to abandon the optional
@@ -32,7 +33,6 @@ func (m *Manager) installNativePassiveBashHook(ref domain.ConnectionRef, expecte
 		}
 	}()
 
-	sentBootstrap := false
 	success := false
 	defer func() {
 		active := false
