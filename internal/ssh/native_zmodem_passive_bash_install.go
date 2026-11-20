@@ -18,23 +18,19 @@ const nativePassiveBashInstallTimeout = 6 * time.Second
 func (m *Manager) installNativePassiveBashHook(ref domain.ConnectionRef, expected *connection) {
 	expected.stdinMu.Lock()
 	defer expected.stdinMu.Unlock()
-	// Capture the PTY input lease before waiting for the first prompt.
-	// This blocks not only Manager.Write but also AI/control writers that
-	// can reach the input gate without acquiring stdinMu.
-	inputLease, leaseErr := expected.inputGate.takeover()
-	if leaseErr != nil { return }
+	// Register cleanup before attempting input takeover: if another task
+	// already owns this PTY, do not strand the frontend setup lock.
 	sentBootstrap := false
 	leaseRestored := false
-	defer func() {
-		// No bootstrap was ever sent: it is safe to abandon the optional
-		// hook and return the original keyboard to its normal owner.
-		if !sentBootstrap && !leaseRestored {
-			_ = expected.inputGate.restore(inputLease)
-		}
-	}()
-
+	leaseAcquired := false
+	var inputLease uint64
 	success := false
 	defer func() {
+		if leaseAcquired && !sentBootstrap && !leaseRestored {
+			// Nothing was sent to the remote Shell. Release installer-only
+			// ownership before publishing the frontend unlocked event.
+			_ = expected.inputGate.restore(inputLease)
+		}
 		active := false
 		m.mu.Lock()
 		if current := m.connections[ref.TabID]; current == expected && current.ref == ref {
@@ -59,6 +55,13 @@ func (m *Manager) installNativePassiveBashHook(ref domain.ConnectionRef, expecte
 			"ref": ref, "active": false, "ready": success,
 		})
 	}()
+
+	// Prevent both ordinary and direct AI writers from injecting bytes into
+	// Bash's hidden nonce prompt, even if they bypass Manager.Write.
+	var leaseErr error
+	inputLease, leaseErr = expected.inputGate.takeover()
+	if leaseErr != nil { return }
+	leaseAcquired = true
 
 	alive := func() bool {
 		m.mu.Lock()
