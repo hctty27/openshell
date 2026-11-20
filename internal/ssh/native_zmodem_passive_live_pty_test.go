@@ -80,6 +80,7 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 		}
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT", "1")
+			if verifiedBash { t.Setenv("OPENSHELL_ZMODEM_PASSIVE_BASH_RECOVERY", "1") }
 			socket, err := net.DialTimeout("tcp", address, 10*time.Second)
 			if err != nil { t.Fatal(err) }
 			var transport net.Conn = socket
@@ -100,17 +101,8 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 			}
 			intents := make(chan map[string]any, 4)
 			unsupported := make(chan string, 4)
-			outputChunks := make(chan string, 256)
 			manager := NewManager(keys{}, func(name string, payload any) {
 				switch name {
-				case "ssh:output":
-					if p, ok := payload.(map[string]any); ok {
-						if raw, ok := p["data"].(string); ok {
-							if decoded, err := base64.StdEncoding.DecodeString(raw); err == nil {
-								select { case outputChunks <- string(decoded): default: }
-							}
-						}
-					}
 				case "ssh:native-zmodem-auto-intent":
 					if p, ok := payload.(map[string]any); ok {
 						select { case intents <- p: default: }
@@ -170,23 +162,21 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 				}
 			}
 			if verifiedBash {
-				// Stage a nonce-scoped prompt hook on this exact interactive
-				// Bash instance BEFORE the remote rz/sz process begins.
-				// The nonce is sent in a second write only after Bash's read -s
-				// challenge, so it does not appear in an echoed shell command.
-				bootstrap := nativePassiveBashHookBootstrap()
-				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte(bootstrap))); err != nil {
-					t.Fatalf("failed to start Bash hook bootstrap: %v", err)
+				// Production Manager must install, challenge and acknowledge the
+				// Bash hook itself; this E2E no longer installs it manually.
+				deadline := time.After(8*time.Second)
+				for {
+					manager.mu.Lock()
+					conn := manager.connections[ref.TabID]
+					installed := conn != nil && conn.passiveBashHookToken != "" &&
+						!conn.passiveBashHookInstalling && !conn.nativeTerminalPoisoned
+					manager.mu.Unlock()
+					if installed { break }
+					select {
+					case <-deadline: t.Fatal("Manager did not automatically install Bash recovery hook")
+					case <-time.After(20*time.Millisecond):
+					}
 				}
-				waitNativePassiveBashOutput(t, outputChunks, nativePassiveBashHookChallenge)
-				manager.mu.Lock()
-				conn := manager.connections[ref.TabID]
-				manager.mu.Unlock()
-				if conn == nil || conn.inputGate == nil { t.Fatal("SSH closed during shell integration bootstrap") }
-				if _, err := conn.inputGate.Write([]byte(testNativePassiveSessionToken + "\r")); err != nil {
-					t.Fatalf("failed to send nonce to Bash read -s: %v", err)
-				}
-				waitNativePassiveBashOutput(t, outputChunks, nativePassiveBashHookReady)
 			}
 			// The input begins with bash, so OpenShell cannot replace it
 			// with its literal-command Ctrl-U / re-exec path.
@@ -232,27 +222,10 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			if verifiedBash {
-				manager.mu.Lock()
-				conn := manager.connections[ref.TabID]
-				if conn == nil { manager.mu.Unlock(); t.Fatal("SSH closed before verified coordinator") }
-				conn.nativeZmodemSelection = false
-				conn.nativeZmodemSelectionPassive = false
-				conn.nativeTerminalPoisoned = true
-				coordinator := &nativeTerminalCoordinator{
-					input: conn.inputGate, output: conn.outputGate,
-					runner: nativeTerminalExecutableRunner(sidecar),
-				}
-				guard := conn.outputGuard
-				manager.mu.Unlock()
-				restored, transferErr := coordinator.runPassiveVerified(
-					ctx, tc.direction, localPath, guard, testNativePassiveSessionToken)
-			err = transferErr
-				if restored {
-					manager.mu.Lock()
-					if manager.connections[ref.TabID] == conn { conn.nativeTerminalPoisoned = false }
-					manager.mu.Unlock()
-				}
-				if !restored { t.Fatalf("registered Bash shell did not recover PTY: %v", err) }
+				var restored bool
+				restored, err = manager.RunPassiveNativeZmodemTransferWithResult(
+					ctx, ref, id, sidecar, tc.direction, localPath, nil)
+				if !restored { t.Fatalf("Manager did not restore original SSH PTY: %v", err) }
 			} else {
 				err = manager.RunPassiveNativeZmodemTransfer(ctx, ref, id, sidecar, tc.direction, localPath, nil)
 			}
@@ -295,21 +268,4 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 
 func nativePassiveShellQuote(raw string) string {
 	return "'" + strings.ReplaceAll(raw, "'", "'\\''") + "'"
-}
-
-func waitNativePassiveBashOutput(t *testing.T, output <-chan string, marker string) {
-	t.Helper()
-	deadline := time.NewTimer(8 * time.Second)
-	defer deadline.Stop()
-	buffer := ""
-	for {
-		select {
-		case chunk := <-output:
-			buffer += chunk
-			if strings.Contains(buffer, marker) { return }
-			if len(buffer) > 4096 { buffer = buffer[len(buffer)-4096:] }
-		case <-deadline.C:
-			t.Fatalf("Bash prompt hook did not emit expected marker %q (tail %q)", marker, buffer)
-		}
-	}
 }
