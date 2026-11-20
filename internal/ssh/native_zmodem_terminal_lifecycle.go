@@ -51,17 +51,26 @@ func (m *Manager) ReleaseNativeZmodemSelection(ref domain.ConnectionRef, selecti
 		m.mu.Unlock()
 		return false
 	}
+	passive := c.nativeZmodemSelectionPassive
 	c.nativeZmodemSelection = false
-	// The intercepted remote line was erased with Ctrl-U; reopening the
-	// already verified shell prompt is necessary for the next rz/sz.
-	// Do not do this for a poisoned terminal or a concurrently owned PTY.
-	if c.nativeTerminalTransfer == nil && !c.nativeTerminalPoisoned {
+	c.nativeZmodemSelectionPassive = false
+	if passive {
+		// The remote program is already executing. Dismissing its picker
+		// is not proof that the remote shell has exited.
+		c.nativeTerminalPoisoned = true
+	} else if c.nativeTerminalTransfer == nil && !c.nativeTerminalPoisoned {
+		// The explicit command was erased with Ctrl-U before executing.
 		c.readiness.restoreClearedNativeZmodemPrompt()
 	}
 	m.mu.Unlock()
 	m.emit("ssh:native-zmodem-selection", map[string]any{
 		"ref": ref, "selectionId": selectionID, "active": false,
 	})
+	if passive {
+		m.emit("ssh:native-zmodem-unsupported", map[string]any{
+			"ref": ref, "error": "已取消远端主动 ZMODEM 选择；无法确认远端程序退出，请重新连接 SSH",
+		})
+	}
 	return true
 }
 
