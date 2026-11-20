@@ -252,6 +252,9 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	}
 	m.mu.Unlock()
 	if bashFilter != nil {
+		m.emit("ssh:native-zmodem-shell-setup", map[string]any{
+			"ref": ref, "active": true,
+		})
 		go m.installNativePassiveBashHook(ref, conn)
 	}
 	go func() {
