@@ -47,6 +47,9 @@ func TestNativePassiveDetectsRemoteFrameAndOpensOnlyMatchingPicker(t *testing.T)
 				t.Fatalf("passive cancellation falsely recovered PTY: %v", err)
 			}
 			if !c.nativeTerminalPoisoned { t.Fatal("unverified remote completion did not poison shell") }
+			if _, _, pending := guard.pendingCapture(); pending {
+				t.Fatal("cancelled passive picker retained protocol bytes in memory")
+			}
 			if visible.Len() != 0 { t.Fatalf("protocol exposed to xterm: %x", visible.Bytes()) }
 		})
 	}
@@ -120,6 +123,9 @@ func TestNativePassiveSelectionExpiryIsFailClosedAndGenerationScoped(t *testing.
 	}
 	if !c.nativeTerminalPoisoned || c.nativeZmodemSelection || c.nativeZmodemSelectionPassive {
 		t.Fatal("expired picker retained ownership or incorrectly restored the terminal")
+	}
+	if _, _, pending := guard.pendingCapture(); pending {
+		t.Fatal("expired picker still buffers remote protocol bytes")
 	}
 	if _, err := c.inputGate.Write([]byte("ls\r")); !errors.Is(err, errNativeTerminalInputBusy) {
 		t.Fatalf("terminal typing was allowed after expiry: %v", err)
