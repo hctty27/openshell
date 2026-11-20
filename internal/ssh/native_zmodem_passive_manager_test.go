@@ -76,3 +76,85 @@ func TestNativePassiveCaptureDeniedWhenSSHContextIsBusy(t *testing.T) {
 }
 
 var _ io.Writer = (*bytes.Buffer)(nil)
+
+
+func TestNativePassiveSelectionExpiryIsFailClosedAndGenerationScoped(t *testing.T) {
+	m, ref, _, intents := nativeAutoTestManager(t, true, true)
+	c := m.connections[ref.TabID]
+	var visible bytes.Buffer
+	var sequence []string
+	originalEmit := m.emit
+	m.emit = func(name string, payload any) {
+		if name == "ssh:native-zmodem-unsupported" || name == "ssh:native-zmodem-selection" {
+			sequence = append(sequence, name)
+		}
+		originalEmit(name, payload)
+	}
+	guard := newNativeOnlyOutputGuardPassive(&visible, func() {},
+		c.inputGate.blockPassiveInput, func(frame byte) { go m.handleNativePassiveFrame(ref, c, frame) })
+	c.outputGuard = guard
+	c.outputGate = newTerminalOutputGate(guard)
+	if _, err := c.outputGate.Write(nativeZmodemHeaderFixture(0)); err != nil { t.Fatal(err) }
+	var intent map[string]any
+	select {
+	case intent = <-intents:
+	case <-time.After(2 * time.Second):
+		t.Fatal("passive handshake not accepted")
+	}
+	id := intent["selectionId"].(uint64)
+	if m.expireNativePassiveSelection(ref, c, id+1) {
+		t.Fatal("expired a different picker generation")
+	}
+	staleRef := ref
+	staleRef.Generation++
+	if m.expireNativePassiveSelection(staleRef, c, id) {
+		t.Fatal("expired a stale SSH connection generation")
+	}
+	if !m.expireNativePassiveSelection(ref, c, id) {
+		t.Fatal("active passive picker was not expired")
+	}
+	if len(sequence) != 2 ||
+		sequence[0] != "ssh:native-zmodem-unsupported" ||
+		sequence[1] != "ssh:native-zmodem-selection" {
+		t.Fatalf("unsafe UI release order: %v", sequence)
+	}
+	if !c.nativeTerminalPoisoned || c.nativeZmodemSelection || c.nativeZmodemSelectionPassive {
+		t.Fatal("expired picker retained ownership or incorrectly restored the terminal")
+	}
+	if _, err := c.inputGate.Write([]byte("ls\r")); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("terminal typing was allowed after expiry: %v", err)
+	}
+	if m.expireNativePassiveSelection(ref, c, id) {
+		t.Fatal("duplicate timeout changed a completed picker")
+	}
+	if !bytes.Equal(visible.Bytes(), nil) {
+		t.Fatal("expired protocol bytes appeared in xterm")
+	}
+}
+
+func TestNativePassiveSelectionExpiryDoesNotCancelAdmittedTransfer(t *testing.T) {
+	m, ref, _, intents := nativeAutoTestManager(t, true, true)
+	c := m.connections[ref.TabID]
+	guard := newNativeOnlyOutputGuardPassive(io.Discard, func() {},
+		c.inputGate.blockPassiveInput, func(frame byte) { go m.handleNativePassiveFrame(ref, c, frame) })
+	c.outputGuard = guard
+	c.outputGate = newTerminalOutputGate(guard)
+	if _, err := c.outputGate.Write(nativeZmodemHeaderFixture(1)); err != nil { t.Fatal(err) }
+	var intent map[string]any
+	select {
+	case intent = <-intents:
+	case <-time.After(2 * time.Second): t.Fatal("passive handshake not accepted")
+	}
+	id := intent["selectionId"].(uint64)
+	m.mu.Lock()
+	c.nativeZmodemSelection = false
+	c.nativeZmodemSelectionPassive = false
+	c.nativeTerminalTransfer = &nativeTerminalTransferTask{ref:ref, cancel:func(){}}
+	m.mu.Unlock()
+	if m.expireNativePassiveSelection(ref, c, id) {
+		t.Fatal("expired an already-running native transfer")
+	}
+	if _, err := m.PassiveZmodemSelection(ref, id); err == nil {
+		t.Fatal("completed picker remained available to a stale UI")
+	}
+}
