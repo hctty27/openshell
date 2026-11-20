@@ -29,7 +29,7 @@ const ref: Ref = { tabId: "tab-1", sessionId: "session-1", generation: 1 };
 const emit = (name: string, payload: unknown) =>
   act(() => { events.callbacks.get(name)?.(payload); });
 const intent = (direction: "upload" | "upload-overwrite" | "download" = "upload", remotePath = "") =>
-  emit("ssh:native-zmodem-auto-intent", { ref, direction, remotePath });
+  emit("ssh:native-zmodem-auto-intent", { ref, direction, remotePath, selectionId: 1 });
 
 beforeEach(async () => {
   events.callbacks.clear();
@@ -69,7 +69,7 @@ test("native picker cancellation never starts a transfer", async () => {
   fireEvent.click(screen.getByRole("button", { name: "取消" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(api.StartNativeZmodemInteractiveTransfer).not.toHaveBeenCalled();
-  await waitFor(() => expect(api.CancelNativeZmodemSelection).toHaveBeenCalledWith(ref));
+  await waitFor(() => expect(api.CancelNativeZmodemSelection).toHaveBeenCalledWith(ref, 1));
 });
 
 test("native single-file picker rejects a multi-line remote path", async () => {
@@ -166,6 +166,6 @@ test("rejected native transfer start releases the picker reservation", async () 
   intent();
   fireEvent.click(await screen.findByText("hello.txt"));
   fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
-  await waitFor(() => expect(api.CancelNativeZmodemSelection).toHaveBeenCalledWith(ref));
+  await waitFor(() => expect(api.CancelNativeZmodemSelection).toHaveBeenCalledWith(ref, 1));
   expect(onNotice).toHaveBeenCalled();
 });
