@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNativePassiveCoordinatorBridgesExistingRemoteProcess(t *testing.T) {
@@ -113,4 +114,56 @@ func TestNativePassiveGenericOSC133633FinishDoesNotRestoreShell(t *testing.T) {
       }
     })
   }
+}
+
+
+func TestNativePassiveCancelAfterHandoffDoesNotPublishOrRestoreShell(t *testing.T) {
+	var visible, remoteInput bytes.Buffer
+	input := newTerminalInputGate(io.Discard, &remoteInput)
+	guard := newNativeOnlyOutputGuardPassive(&visible, func(){},
+		input.blockPassiveInput, func(byte){})
+	output := newTerminalOutputGate(guard)
+	header := nativeZmodemHeaderFixture(0)
+	if _, err := output.Write(header); err != nil { t.Fatal(err) }
+	destination := t.TempDir()
+	started := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	coordinator := &nativeTerminalCoordinator{
+		input: input, output: output,
+		runner: func(ctx context.Context, direction, path string, in io.ReadCloser, out io.Writer) error {
+			if direction != "receive" { return errors.New("expected local ZMODEM receiver") }
+			buf := make([]byte, len(header))
+			if _, err := io.ReadFull(in, buf); err != nil { return err }
+			if !bytes.Equal(buf, header) { return errors.New("initial frame lost") }
+			// A partial download staged on disk must not be published.
+			if err := os.WriteFile(filepath.Join(path, "incomplete.bin"), []byte("partial"), 0600); err != nil {
+				return err
+			}
+			close(started)
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+	result := make(chan error, 1)
+	go func() { result <- coordinator.runPassive(ctx, "download", destination, guard) }()
+	select {
+	case <-started:
+	case <-time.After(3*time.Second): t.Fatal("sidecar never received handshake")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected cancelled passive transfer, got %v", err)
+		}
+	case <-time.After(5*time.Second): t.Fatal("cancelled sidecar hung")
+	}
+	if _, err := os.Stat(filepath.Join(destination, "incomplete.bin")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("partial passive download was published: %v", err)
+	}
+	if _, err := input.Write([]byte("pwd\r")); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("cancelled passive transfer unlocked SSH: %v", err)
+	}
+	if visible.Len() != 0 { t.Fatalf("cancelled protocol exposed binary to terminal: %x", visible.Bytes()) }
 }
