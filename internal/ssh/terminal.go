@@ -275,7 +275,7 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		m.mu.Unlock()
 		return errAITerminalBusy
 	}
-	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned {
+	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.nativeZmodemSelection {
 		m.mu.Unlock()
 		return errNativeTerminalInputBusy
 	}
@@ -316,7 +316,11 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		}
 	} else if direction != "" {
 		m.mu.Lock()
-		if current := m.connections[ref.TabID]; current == c && c.ref == ref {
+		if current := m.connections[ref.TabID]; current == c && c.ref == ref &&
+			c.nativeTerminalTransfer == nil && !c.nativeTerminalPoisoned {
+			// Reserve the PTY synchronously with this recognized intent.
+			// Picker cancellation or transfer admission releases this reservation.
+			c.nativeZmodemSelection = true
 			autoEvent = map[string]any{"ref": ref, "direction": direction, "remotePath": remotePath, "sessionName": c.session.Name}
 		}
 		m.mu.Unlock()
