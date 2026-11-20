@@ -88,7 +88,7 @@ func nativeTransferCommandPrefix(line string) bool {
 		if !strings.HasPrefix(line, name) { continue }
 		if len(line) == len(name) { return true }
 		next := line[len(name)]
-		if next == ' ' || next == '\t' || strings.ContainsRune(";|&<>(){}$\\u0060'\\\"\\\\*?!#~", rune(next)) {
+		if next == ' ' || next == '\t' || next == 96 || next == 39 || next == 34 || next == 92 || strings.ContainsRune(";|&<>(){}$*?!#~", rune(next)) {
 			return true
 		}
 	}
