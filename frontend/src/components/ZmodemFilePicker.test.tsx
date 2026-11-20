@@ -16,6 +16,7 @@ vi.mock("../bridge", () => ({
       { name: "hello.txt", path: "/home/user/hello.txt", isDir: false, isSymlink: false, size: 512, modified: 0, mode: "0644" },
     ]),
     StartNativeZmodemInteractiveTransfer: vi.fn(async () => {}),
+    StartNativeZmodemPassiveTransfer: vi.fn(async () => {}),
     CancelNativeZmodemSelection: vi.fn(async () => {}),
   },
   listen: (name: string, callback: (payload: any) => void) => {
@@ -168,4 +169,52 @@ test("rejected native transfer start releases the picker reservation", async () 
   fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
   await waitFor(() => expect(api.CancelNativeZmodemSelection).toHaveBeenCalledWith(ref, 1));
   expect(onNotice).toHaveBeenCalled();
+});
+
+
+test("passive remote sz sends captured handshake to sidecar without requiring filename", async () => {
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-auto-intent", {
+    ref, direction: "download", remotePath: "", selectionId: 41, passive: true,
+  });
+  expect(await screen.findByText("hello.txt")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "保存到此处" }));
+  await waitFor(() => expect(api.StartNativeZmodemPassiveTransfer)
+    .toHaveBeenCalledWith(ref, 41, "download", "/home/user"));
+  expect(api.StartNativeZmodemInteractiveTransfer).not.toHaveBeenCalled();
+});
+
+test("passive remote rz uploads one selected file without re-running shell rz", async () => {
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-auto-intent", {
+    ref, direction: "upload", remotePath: "", selectionId: 42, passive: true,
+  });
+  fireEvent.click(await screen.findByText("hello.txt"));
+  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
+  await waitFor(() => expect(api.StartNativeZmodemPassiveTransfer)
+    .toHaveBeenCalledWith(ref, 42, "upload", "/home/user/hello.txt"));
+  expect(api.StartNativeZmodemInteractiveTransfer).not.toHaveBeenCalled();
+});
+
+test("cancel passive picker leaves terminal quarantined through backend cancellation", async () => {
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  emit("ssh:native-zmodem-auto-intent", {
+    ref, direction: "upload", selectionId: 43, passive: true,
+  });
+  await screen.findByText("hello.txt");
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  await waitFor(() => expect(api.CancelNativeZmodemSelection).toHaveBeenCalledWith(ref, 43));
+  expect(api.StartNativeZmodemPassiveTransfer).not.toHaveBeenCalled();
+});
+
+test("unsolicited buffer overrun closes its matching passive picker", async () => {
+  const onNotice = vi.fn();
+  render(<ZmodemFilePicker activeRef={ref} onNotice={onNotice} />);
+  emit("ssh:native-zmodem-auto-intent", {
+    ref, direction: "download", selectionId: 44, passive: true,
+  });
+  await screen.findByText("hello.txt");
+  emit("ssh:native-zmodem-unsupported", { ref, error: "ZMODEM prebuffer overflow" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(onNotice).toHaveBeenCalledWith("ZMODEM prebuffer overflow");
 });
