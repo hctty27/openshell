@@ -51,14 +51,27 @@ func (m *Manager) ReleaseNativeZmodemSelection(ref domain.ConnectionRef, selecti
 		m.mu.Unlock()
 		return false
 	}
+	passive := c.nativeZmodemSelectionPassive
+	guard := c.outputGuard
 	c.nativeZmodemSelection = false
-	// The intercepted remote line was erased with Ctrl-U; reopening the
-	// already verified shell prompt is necessary for the next rz/sz.
-	// Do not do this for a poisoned terminal or a concurrently owned PTY.
-	if c.nativeTerminalTransfer == nil && !c.nativeTerminalPoisoned {
+	c.nativeZmodemSelectionPassive = false
+	if passive {
+		// The remote program is already executing. Dismissing its picker
+		// is not proof that the remote shell has exited.
+		c.nativeTerminalPoisoned = true
+	} else if c.nativeTerminalTransfer == nil && !c.nativeTerminalPoisoned {
+		// The explicit command was erased with Ctrl-U before executing.
 		c.readiness.restoreClearedNativeZmodemPrompt()
 	}
 	m.mu.Unlock()
+	if passive && guard != nil { guard.discardCapture() }
+	if passive {
+		// The frontend must learn that the PTY is unsafe before receiving
+		// the selection-release event. Never create a brief typing window.
+		m.emit("ssh:native-zmodem-unsupported", map[string]any{
+			"ref": ref, "error": "已取消远端主动 ZMODEM 选择；无法确认远端程序退出，请重新连接 SSH",
+		})
+	}
 	m.emit("ssh:native-zmodem-selection", map[string]any{
 		"ref": ref, "selectionId": selectionID, "active": false,
 	})
@@ -116,7 +129,7 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 		m.mu.Unlock()
 		return errors.New("JumpServer 暂不支持交互式原生 ZMODEM")
 	}
-	if c.aiController != nil || c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned {
+	if c.aiController != nil || c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.nativeZmodemSelectionPassive {
 		m.mu.Unlock()
 		return errors.New("当前终端正被其他任务占用")
 	}

@@ -6,7 +6,7 @@ import { t } from "../i18n";
 import type { Ref, SFTPEntry } from "../types";
 
 type Direction = "upload" | "upload-overwrite" | "download";
-interface PickerRequest { ref: Ref; id: number; selectionId: number; direction: Direction; remotePath?: string }
+interface PickerRequest { ref: Ref; id: number; selectionId: number; direction: Direction; remotePath?: string; passive?: boolean }
 interface Places { home: string; roots: string[] }
 interface Props {
   activeRef?: Ref;
@@ -54,6 +54,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       direction?: Direction;
       remotePath?: string;
       selectionId?: number;
+      passive?: boolean;
     }) => {
       if (!event?.ref || !Number.isSafeInteger(event.selectionId) || (event.selectionId ?? 0) <= 0 ||
         (event.direction !== "upload" && event.direction !== "upload-overwrite" && event.direction !== "download")) return;
@@ -61,6 +62,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
         ref: event.ref,
         id: -(++nextNativeRequestID.current),
         selectionId: event.selectionId!,
+        passive: event.passive === true,
         direction: event.direction,
         remotePath: event.remotePath ?? "",
       };
@@ -77,7 +79,14 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     const offError = listen("ssh:native-zmodem-command-error", (event: { error?: string }) => {
       if (event?.error) onNotice(event.error);
     });
-    const offUnsupported = listen("ssh:native-zmodem-unsupported", (event: { error?: string }) => {
+    const offUnsupported = listen("ssh:native-zmodem-unsupported", (event: { ref?: Ref; error?: string }) => {
+      if (event?.ref) setRequests(previous => {
+        const key = refKey(event.ref!);
+        if (!previous[key]?.passive) return previous;
+        const next = { ...previous };
+        delete next[key];
+        return next;
+      });
       if (event?.error) onNotice(event.error);
     });
     return () => { offNativeIntent(); offDisconnected(); offError(); offUnsupported(); };
@@ -180,17 +189,23 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       if (paths.length > 0) {
         const download = request.direction === "download";
         if (!download && paths.length !== 1) throw new Error("ZMODEM 每次只能上传一个文件");
-        if (request.direction === "upload-overwrite" && !overwriteConfirmed) {
+        if ((request.direction === "upload-overwrite" || (request.passive && request.direction === "upload")) && !overwriteConfirmed) {
           throw new Error(t("sftp:zmodemOverwriteConfirm"));
         }
         const remotePath = request.remotePath ?? "";
-        if (download && (!remotePath || /[\r\n]/.test(remotePath))) {
+        if (download && (!request.passive && !remotePath || /[\r\n]/.test(remotePath))) {
           throw new Error("ZMODEM 每次只能下载一个远程文件");
         }
-        pending = api.StartNativeZmodemInteractiveTransfer(
-          request.ref, request.direction,
-          download ? directory : paths[0], download ? remotePath : "",
-        );
+        pending = request.passive
+          ? api.StartNativeZmodemPassiveTransfer(
+              request.ref, request.selectionId,
+              request.direction === "download" ? "download" : "upload",
+              download ? directory : paths[0],
+            )
+          : api.StartNativeZmodemInteractiveTransfer(
+              request.ref, request.direction,
+              download ? directory : paths[0], download ? remotePath : "",
+            );
         void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
       } else {
         // Closing the picker does not start a protocol task. Explicitly
@@ -214,7 +229,9 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     }
   };
   const download = request.direction === "download";
-  const overwrite = request.direction === "upload-overwrite";
+  // A remote-origin rz may have been started with -y, which the first
+  // ZRINIT frame cannot reveal. Require explicit overwrite acknowledgement.
+  const overwrite = request.direction === "upload-overwrite" || (request.passive && request.direction === "upload");
   return (
     <dialog ref={dialogRef} className="zmodem-picker-dialog"
       aria-label={t(download ? "sftp:zmodemPickDownload" : "sftp:zmodemPickUpload")}

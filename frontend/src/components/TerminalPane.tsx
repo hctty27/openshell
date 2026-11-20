@@ -334,6 +334,14 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       nativeTransferActive.current = nativeSelectionID.current > 0 || nativeTransferIDs.current.size > 0;
       syncTransferInput();
     };
+    const offBashHookSetup = listen("ssh:native-zmodem-shell-setup", (event: {
+      ref?: Ref; active?: boolean; ready?: boolean;
+    }) => {
+      if (!event?.ref || !matchesConnection(event.ref)) return;
+      if (event.active === true) nativeTransferIDs.current.add("bash-hook-setup");
+      else if (event.active === false) nativeTransferIDs.current.delete("bash-hook-setup");
+      updateNativeInputLock();
+    });
     const offNativeIntent = listen("ssh:native-zmodem-auto-intent", (event: {
       ref?: Ref; selectionId?: number;
     }) => {
@@ -677,6 +685,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       window.removeEventListener("resize", onWindowResize);
       offWindowGeometryEvents.forEach(off => off());
       off();
+      offBashHookSetup();
       offNativeIntent();
       offNativeSelection();
       offNativeBatch();

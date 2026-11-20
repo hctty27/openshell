@@ -170,6 +170,15 @@ jobs:
           export OPENSHELL_ZMODEM_LIVE_SSH_HOSTKEY="$ZMODEM_SSH_TEST_DIR/host.pub"
           export OPENSHELL_ZMODEM_LIVE_SIDECAR="$GITHUB_WORKSPACE/experiments/native-zmodem/target/release/zmodem-sidecar"
           go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInteractivePTY$' -v ./internal/ssh
+          # Execute remote rz/sz via bash -c, then capture the unsolicited
+          # ZHEX frame with OpenShell's passive PTY path and verify SHA-256.
+          OPENSHELL_ZMODEM_PASSIVE_E2E=1 go test -count=1 -timeout=5m -run '^TestNativeZmodemPassiveLiveInteractivePTY$' -v ./internal/ssh
+          # Stage and verify Bash PROMPT_COMMAND on the same SSH PTY, then
+          # finish remote rz/sz through the random shell marker and issue
+          # another ordinary command without reconnecting.
+          OPENSHELL_ZMODEM_PASSIVE_E2E=1 OPENSHELL_ZMODEM_PASSIVE_VERIFIED_E2E=1 go test -count=1 -timeout=5m -run '^TestNativeZmodemPassiveLiveInteractivePTY$' -v ./internal/ssh
+          # Segmented TCP plus 2 ms delay per chunk probes backpressure, not IP loss.
+          OPENSHELL_ZMODEM_PASSIVE_E2E=1 OPENSHELL_ZMODEM_PASSIVE_E2E_DELAY_MS=2 go test -count=1 -timeout=5m -run '^TestNativeZmodemPassiveLiveInteractivePTY$' -v ./internal/ssh
           export OPENSHELL_ZMODEM_CROSS_OS_PTY=1
           export OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS=2
           go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY$' -v ./internal/ssh
@@ -178,6 +187,33 @@ jobs:
           # including cancellation and disconnect fail-closed handling.
           OPENSHELL_ZMODEM_WIRE_BATCH_BYTES=16384 go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY$' -v ./internal/ssh
           OPENSHELL_ZMODEM_WIRE_BATCH_BYTES=16384 go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInterruptedInteractivePTY$' -v ./internal/ssh
+      - name: Verify remote-initiated rz/sz under loopback TCP netem loss
+        working-directory: .
+        shell: bash
+        timeout-minutes: 7
+        run: |
+          set -euo pipefail
+          # This is an ephemeral runner; only the loopback SSH fixture is impaired.
+          if ! command -v tc >/dev/null 2>&1; then
+            sudo apt-get install -y -qq iproute2
+          fi
+          cleanup() { sudo tc qdisc del dev lo root 2>/dev/null || true; }
+          trap cleanup EXIT
+          export OPENSHELL_ZMODEM_LIVE_SSH_ADDR=127.0.0.1:22449
+          export OPENSHELL_ZMODEM_LIVE_SSH_USER="$(id -un)"
+          export OPENSHELL_ZMODEM_LIVE_SSH_KEY="$ZMODEM_SSH_TEST_DIR/client"
+          export OPENSHELL_ZMODEM_LIVE_SSH_HOSTKEY="$ZMODEM_SSH_TEST_DIR/host.pub"
+          export OPENSHELL_ZMODEM_LIVE_SIDECAR="$GITHUB_WORKSPACE/experiments/native-zmodem/target/release/zmodem-sidecar"
+          export OPENSHELL_ZMODEM_PASSIVE_E2E=1
+          export OPENSHELL_ZMODEM_PASSIVE_E2E_LARGE_KIB=8192
+          for loss in '0.1%' '1%'; do
+            echo "::group::Passive remote rz/sz tc netem loss $loss"
+            sudo tc qdisc replace dev lo root netem delay 8ms loss "$loss"
+            sudo tc -s qdisc show dev lo
+            go test -count=1 -timeout=4m -run '^TestNativeZmodemPassiveLiveInteractivePTY$' -v ./internal/ssh
+            sudo tc -s qdisc show dev lo
+            echo "::endgroup::"
+          done
       - name: Print SSH server diagnostics if the interop test failed
         if: failure()
         shell: bash

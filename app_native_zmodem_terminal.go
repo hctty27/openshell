@@ -123,6 +123,80 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	)
 }
 
+// StartNativeZmodemPassiveTransfer consumes a protocol session that was
+// already started by the remote process. It MUST NOT launch a second rz/sz.
+// This experiment is enabled only by OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT=1.
+func (a *App) StartNativeZmodemPassiveTransfer(
+	ref domain.ConnectionRef, selectionID uint64, direction, localPath string,
+) (err error) {
+	if os.Getenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT") != "1" ||
+		!a.nativeZmodemPreferred() {
+		return errors.New("远端主动 ZMODEM 接管实验未启用")
+	}
+	if localPath == "" || strings.ContainsAny(localPath, "\r\n") {
+		return errors.New("请选择本地文件或保存目录")
+	}
+	expected, err := a.ssh.PassiveZmodemSelection(ref, selectionID)
+	if err != nil { return err }
+	if expected != direction { return errors.New("远端 ZMODEM 接管方向与选择不匹配") }
+
+	id := domain.NewID()
+	sequence := nativeZmodemTransferSequence.Add(1)
+	file := map[string]any{"name": "远端文件"}
+	if direction == "upload" {
+		file["name"] = filepath.Base(localPath)
+		if info, statErr := os.Stat(localPath); statErr == nil && info.Mode().IsRegular() {
+			file["total"] = info.Size()
+		}
+	}
+	started := false
+	terminalSafe := false
+	defer func() {
+		if !started { return }
+		payload := map[string]any{
+			"ref": ref, "id": id, "sequence": sequence,
+			"direction": direction, "active": false, "terminalSafe": terminalSafe,
+		}
+		if err != nil {
+			payload["error"] = err.Error()
+			payload["cancelled"] = errors.Is(err, context.Canceled)
+		}
+		a.emit("ssh:native-zmodem-batch", payload)
+		if err == nil && !terminalSafe {
+			a.emit("ssh:native-zmodem-unsupported", map[string]any{
+				"ref": ref,
+				"error": "远端 ZMODEM 文件传输完成；尚无法证明远端 Shell 已退出，必须重新连接 SSH 后继续输入命令",
+			})
+		}
+	}()
+	ctx := sshclient.WithNativeZmodemFileObserver(a.ctx, func(event sshclient.NativeZmodemFileProgress) {
+		if event.Index != 0 { return }
+		a.emit("ssh:native-zmodem-file", map[string]any{
+			"ref": ref, "batchId": id, "kind": event.Kind,
+			"index": 0, "name": event.Name,
+			"total": event.Total, "processed": event.Processed,
+		})
+	})
+	ctx = sshclient.WithNativeZmodemAcceptedObserver(ctx, func() {
+		started = true
+		a.emit("ssh:native-zmodem-batch", map[string]any{
+			"ref": ref, "id": id, "sequence": sequence,
+			"direction": direction, "active": true,
+			"files": []map[string]any{file},
+		})
+	})
+	terminalSafe, err = a.ssh.RunPassiveNativeZmodemTransferWithResult(
+		ctx, ref, selectionID, nativeZmodemDesktopSidecarPath(), direction, localPath,
+		func(processed, total uint64) {
+			a.emit("ssh:native-zmodem-progress", map[string]any{
+				"ref": ref, "batchId": id, "direction": direction,
+				"processed": processed, "total": total,
+			})
+		},
+	)
+	return err
+}
+
 // CancelNativeZmodemSelection closes only a pending picker reservation.
 // A task already admitted to the native coordinator is never interrupted.
 func (a *App) CancelNativeZmodemSelection(ref domain.ConnectionRef, selectionID uint64) error {

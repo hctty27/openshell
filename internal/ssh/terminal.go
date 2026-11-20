@@ -6,6 +6,7 @@ import (
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -177,6 +178,9 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 		return apperror.New("terminalMissingOrAlreadyOpen", nil)
 	}
 	conn.terminal = session
+	passiveEnabled := os.Getenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT") == "1" &&
+		m.nativeAutoSidecar != ""
+	bashRecovery := passiveEnabled && os.Getenv("OPENSHELL_ZMODEM_PASSIVE_BASH_RECOVERY") == "1"
 	m.mu.Unlock()
 	rollback := func(cause error) error {
 		_ = session.Close()
@@ -187,6 +191,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 			current.writer = nil
 			current.inputGate = nil
 			current.outputGate = nil
+			current.outputGuard = nil
 		}
 		m.mu.Unlock()
 		return cause
@@ -199,16 +204,26 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	}
 	inputGate := newTerminalInputGate(remoteInput, remoteInput)
 	writer := &terminalWriter{m: m, c: conn}
-	guard := newNativeOnlyOutputGuard(writer, func() {
-		m.mu.Lock()
-		if current := m.connections[ref.TabID]; current == conn && current.ref == ref {
-			current.nativeTerminalPoisoned = true
-		}
-		m.mu.Unlock()
-		m.emit("ssh:native-zmodem-unsupported", map[string]any{
-			"ref": ref, "error": "检测到未经原生接管的 ZMODEM 数据；已阻止协议数据进入终端，请重新连接 SSH 后使用普通 Shell 的 rz / sz 单文件命令",
-		})
-	})
+	onUnsupported := func() {
+		// Called outside the scanner mutex. Revoke any pending passive
+		// selection immediately on a malformed frame or prebuffer overflow.
+		// The generation check suppresses stale SSH notifications.
+		m.failNativePassiveGuard(ref, conn)
+	}
+	var legacy io.Writer = writer
+	var bashFilter *nativePassiveBashHookFilter
+	if bashRecovery {
+		bashFilter = newNativePassiveBashHookFilter(writer)
+		legacy = bashFilter
+	}
+	guard := newNativeOnlyOutputGuard(legacy, onUnsupported)
+	if passiveEnabled {
+		guard = newNativeOnlyOutputGuardPassive(legacy, onUnsupported,
+			inputGate.blockPassiveInput, func(frame byte) {
+				// Never reenter manager or output-gate locks from their own Write.
+				go m.handleNativePassiveFrame(ref, conn, frame)
+			})
+	}
 	gate := newTerminalOutputGate(guard)
 	session.Stdout, session.Stderr = gate, gate
 	if err = session.Shell(); err != nil {
@@ -229,8 +244,19 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	conn.stdin = inputGate
 	conn.inputGate = inputGate
 	conn.outputGate = gate
+	conn.outputGuard = guard
 	conn.writer = writer
+	if bashFilter != nil {
+		conn.passiveBashHookFilter = bashFilter
+		conn.passiveBashHookInstalling = true
+	}
 	m.mu.Unlock()
+	if bashFilter != nil {
+		m.emit("ssh:native-zmodem-shell-setup", map[string]any{
+			"ref": ref, "active": true,
+		})
+		go m.installNativePassiveBashHook(ref, conn)
+	}
 	go func() {
 		_ = session.Wait()
 		m.CancelExperimentalNativeTerminalTransfer(ref)
@@ -275,7 +301,8 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		m.mu.Unlock()
 		return errAITerminalBusy
 	}
-	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.nativeZmodemSelection {
+	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.nativeZmodemSelection ||
+		c.passiveBashHookInstalling {
 		m.mu.Unlock()
 		return errNativeTerminalInputBusy
 	}

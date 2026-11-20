@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 )
 
 // Native-only ZMODEM cancel sequence (CAN followed by backspaces).
@@ -25,6 +26,9 @@ type terminalInputGate struct {
 	leased bool
 	lease uint64
 	closed bool
+	// Set synchronously when unsolicited remote protocol starts. It is never
+	// cleared without a separately proven remote shell boundary.
+	passiveBlocked atomic.Bool
 }
 
 func newTerminalInputGate(legacy, remote io.Writer) *terminalInputGate {
@@ -38,10 +42,17 @@ func (g *terminalInputGate) Write(p []byte) (int, error) {
 	if g.closed {
 		return 0, io.ErrClosedPipe
 	}
-	if g.leased {
+	if g.leased || g.passiveBlocked.Load() {
 		return 0, errNativeTerminalInputBusy
 	}
 	return g.legacy.Write(p)
+}
+
+// blockPassiveInput is lock-free because the protocol detector runs below
+// the SSH output gate; it must not acquire the remote stdin mutex while an
+// in-flight SSH write may be waiting for stdout.
+func (g *terminalInputGate) blockPassiveInput() {
+	g.passiveBlocked.Store(true)
 }
 
 // takeover waits for the current legacy Write to finish before blocking
@@ -83,6 +94,23 @@ func (g *terminalInputGate) restore(lease uint64) error {
 	if !g.leased || lease == 0 || lease != g.lease {
 		return errNativeTerminalInputLease
 	}
+	g.leased = false
+	return nil
+}
+
+// restoreVerifiedPassive is a strictly stronger form of restore: the
+// caller must already have both a completed Rust protocol AND a validated
+// per-session remote shell completion boundary. Holding the input mutex
+// prevents a manual write between clearing the passive block and dropping
+// the lease. Neither cancellation nor plain ZFIN calls this method.
+func (g *terminalInputGate) restoreVerifiedPassive(lease uint64) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed { return io.ErrClosedPipe }
+	if !g.leased || lease == 0 || lease != g.lease || !g.passiveBlocked.Load() {
+		return errNativeTerminalInputLease
+	}
+	g.passiveBlocked.Store(false)
 	g.leased = false
 	return nil
 }

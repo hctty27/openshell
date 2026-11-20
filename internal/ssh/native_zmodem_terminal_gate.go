@@ -131,6 +131,63 @@ func (g *terminalOutputGate) takeover(native io.Writer) (uint64, error) {
 	return g.lease, nil
 }
 
+// takeoverCaptured atomically switches a quarantined unsolicited handshake
+// to one native consumer and delivers its buffered bytes before admitting
+// any later SSH stdout. No file selection, Manager lock or UI callback may
+// run inside this gate lock.
+func (g *terminalOutputGate) takeoverCaptured(native io.Writer, source *nativeOnlyOutputGuard) (uint64, error) {
+	if native == nil || source == nil { return 0, errNativePassiveNoHeader }
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed { return 0, io.ErrClosedPipe }
+	if g.native != nil || g.armed != nil { return 0, errTerminalStreamOwned }
+	if g.legacy != source { return 0, errNativePassiveNoHeader }
+	pending, err := source.claimCaptured()
+	if err != nil { return 0, err }
+	g.lease++
+	g.native = native
+	// A writer error cannot release this lease: the unconfirmed terminal
+	// remains quarantined and must reconnect.
+	if err := writeNativeGateBytes(g.native, pending); err != nil {
+		return g.lease, err
+	}
+	return g.lease, nil
+}
+
+// quarantineNative keeps the output lease after a passive Rust sidecar stops.
+// The next remote bytes (including an unverified shell prompt) must not reach
+// xterm or a closed Rust stdin pipe. Only an explicit, separately verified
+// remote-shell boundary can make this lease eligible for restoreWithReplay.
+// The output-gate mutex serializes this transition with SSH stdout writes.
+func (g *terminalOutputGate) quarantineNative(lease uint64) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed { return io.ErrClosedPipe }
+	if g.native == nil || lease == 0 || lease != g.lease {
+		return errTerminalStreamLease
+	}
+	g.native = io.Discard
+	return nil
+}
+
+// quarantineWithBoundary detaches a completed Rust sidecar while keeping a
+// pre-established, nonce-bound shell completion detector on the SSH output
+// stream. Only the exact current output lease can make this transition.
+// The detector continues consuming output (including split OSC markers),
+// while the underlying protocol pipe is never written after sidecar exit.
+// This API by itself does not authorize restoring the terminal.
+func (g *terminalOutputGate) quarantineWithBoundary(lease uint64, boundary *nativeRemoteBoundarySink) error {
+	if boundary == nil { return errors.New("缺少已注册的远端命令完成标记") }
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed { return io.ErrClosedPipe }
+	if lease == 0 || g.lease != lease || g.native != boundary {
+		return errTerminalStreamLease
+	}
+	boundary.downstream = io.Discard
+	return nil
+}
+
 // armOnZmodemHeader pre-installs the native destination without switching
 // the live stream yet. The scanner withholds at most 17 possible header bytes.
 // On the first complete frame, any preceding text goes to legacy; the entire
@@ -217,6 +274,48 @@ func (g *terminalOutputGate) restore(lease uint64) error {
 	if g.native == nil || lease == 0 || lease != g.lease {
 		return errTerminalStreamLease
 	}
+	g.native = nil
+	g.quietPrelude = false
+	g.preludeMarker = nil
+	g.preludeTail = nil
+	g.scanner = nativeZmodemStartScanner{}
+	return nil
+}
+
+// restoreVerifiedPassive is exclusively for a remote-shell hook that was
+// registered and acknowledged BEFORE the remote program began. The caller
+// must validate the nonce-bound completion, finish Rust, and hold this exact
+// output lease. Only then is the passive guard reset and post-marker Shell
+// output replayed under a single output lock.
+func (g *terminalOutputGate) restoreVerifiedPassive(
+	lease uint64, boundary *nativeRemoteBoundarySink, guard *nativeOnlyOutputGuard,
+) error {
+	if boundary == nil || guard == nil {
+		return errors.New("缺少可信 Shell 退出证明")
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed { return io.ErrClosedPipe }
+	if lease == 0 || lease != g.lease || g.native != boundary || g.legacy != guard ||
+		!boundary.finished {
+		return errTerminalStreamLease
+	}
+	guard.mu.Lock()
+	defer guard.mu.Unlock()
+	if !guard.quarantined || !guard.claimed {
+		return errNativePassiveNoHeader
+	}
+	// Replay any bytes arriving after the validated command-complete
+	// marker before unlocking the old xterm stream. A replay error leaves
+	// both consumers quarantined, never half-restored.
+	if err := writeNativeGateBytes(guard.writer, boundary.replayTrailing()); err != nil {
+		return err
+	}
+	guard.quarantined = false
+	guard.claimed = false
+	guard.capture = false
+	guard.captured = nil
+	guard.scanner = nativeZmodemStartScanner{quarantineMalformed: true}
 	g.native = nil
 	g.quietPrelude = false
 	g.preludeMarker = nil

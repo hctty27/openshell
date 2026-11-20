@@ -1219,3 +1219,68 @@ test("native picker lease blocks stdin and ignores delayed selection events", as
   emit("ssh:native-zmodem-auto-intent", { ref: { ...tab.ref!, generation: 900 }, selectionId: 99 });
   expect(term.options.disableStdin).toBe(false);
 });
+
+
+test("timed-out remote ZMODEM picker stays locked after its selection release", async () => {
+  renderTerminal();
+  const term = refs.terms[0];
+  const emit = (name: string, payload: unknown) =>
+    act(() => events.listeners.get(name)?.(payload));
+  await waitFor(() => expect(events.listeners.has("ssh:native-zmodem-auto-intent")).toBe(true));
+
+  emit("ssh:native-zmodem-auto-intent", {
+    ref: tab.ref, selectionId: 88, direction: "download", passive: true,
+  });
+  expect(term.options.disableStdin).toBe(true);
+  emit("ssh:native-zmodem-unsupported", {
+    ref: tab.ref, error: "远端 ZMODEM 等待选择文件超时；请重新连接 SSH",
+  });
+  emit("ssh:native-zmodem-selection", { ref: tab.ref, selectionId: 88, active: false });
+  expect(term.options.disableStdin).toBe(true);
+  act(() => term.onDataCallback("pwd\r"));
+  expect(api.WriteTerminal).not.toHaveBeenCalled();
+
+  emit("ssh:native-zmodem-auto-intent", {
+    ref: tab.ref, selectionId: 88, direction: "download", passive: true,
+  });
+  expect(term.options.disableStdin).toBe(true);
+  emit("ssh:disconnected", tab.ref);
+  expect(term.options.disableStdin).toBe(false);
+});
+
+
+test("Bash hook setup locks stdin until current SSH generation completes", async () => {
+  renderTerminal();
+  const term = refs.terms[0];
+  const emit = (payload: unknown) =>
+    act(() => events.listeners.get("ssh:native-zmodem-shell-setup")?.(payload));
+  await waitFor(() => expect(events.listeners.has("ssh:native-zmodem-shell-setup")).toBe(true));
+
+  emit({ ref: tab.ref, active: true });
+  expect(term.options.disableStdin).toBe(true);
+  act(() => term.onDataCallback("password-like-data\r"));
+  expect(api.WriteTerminal).not.toHaveBeenCalled();
+
+  emit({ ref: { ...tab.ref!, generation: tab.ref!.generation + 1 }, active: false });
+  expect(term.options.disableStdin).toBe(true);
+
+  emit({ ref: tab.ref, active: false, ready: true });
+  expect(term.options.disableStdin).toBe(false);
+});
+
+test("failed Bash recovery initialization remains locked after setup ends", async () => {
+  renderTerminal();
+  const term = refs.terms[0];
+  const emit = (name: string, payload: unknown) =>
+    act(() => events.listeners.get(name)?.(payload));
+  await waitFor(() => expect(events.listeners.has("ssh:native-zmodem-shell-setup")).toBe(true));
+
+  emit("ssh:native-zmodem-shell-setup", { ref: tab.ref, active: true });
+  emit("ssh:native-zmodem-unsupported", {
+    ref: tab.ref, error: "Bash hook failed, SSH session requires reconnection",
+  });
+  emit("ssh:native-zmodem-shell-setup", { ref: tab.ref, active: false, ready: false });
+  expect(term.options.disableStdin).toBe(true);
+  act(() => term.onDataCallback("pwd\r"));
+  expect(api.WriteTerminal).not.toHaveBeenCalled();
+});

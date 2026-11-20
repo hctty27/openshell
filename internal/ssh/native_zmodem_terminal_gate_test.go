@@ -223,3 +223,53 @@ func TestNativeZmodemTerminalGateNormalPreludeStillVisible(t *testing.T) {
 	if _, err := gate.Write([]byte("visible shell output")); err != nil { t.Fatal(err) }
 	if got := legacy.String(); got != "visible shell output" { t.Fatalf("default routing changed: %q", got) }
 }
+
+
+func TestNativePassiveOutputQuarantineWaitsForInFlightProtocolWrite(t *testing.T) {
+	var terminal bytes.Buffer
+	sink := &blockingTerminalSink{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	gate := newTerminalOutputGate(&terminal)
+	lease, err := gate.takeover(sink)
+	if err != nil { t.Fatal(err) }
+	writeDone := make(chan error, 1)
+	go func() {
+		_, err := gate.Write([]byte("protocol-payload"))
+		writeDone <- err
+	}()
+	select {
+	case <-sink.started:
+	case <-time.After(2 * time.Second): t.Fatal("protocol writer was not entered")
+	}
+	quarantineDone := make(chan error, 1)
+	go func() { quarantineDone <- gate.quarantineNative(lease) }()
+	select {
+	case err := <-quarantineDone:
+		t.Fatalf("quarantine bypassed in-flight protocol output: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(sink.release)
+	select {
+	case err := <-writeDone:
+		if err != nil { t.Fatal(err) }
+	case <-time.After(2 * time.Second): t.Fatal("protocol writer never completed")
+	}
+	select {
+	case err := <-quarantineDone:
+		if err != nil { t.Fatal(err) }
+	case <-time.After(2 * time.Second): t.Fatal("quarantine transition deadlocked")
+	}
+	// Even a command-completion-looking escape after the Rust process exits
+	// must not resume the old stream without a separately verified boundary.
+	for _, payload := range [][]byte{
+		[]byte("\x1b]633;D;0\x07"),
+		[]byte("\r\nuser@server:~$ "),
+	} {
+		if n, err := gate.Write(payload); err != nil || n != len(payload) {
+			t.Fatalf("post-Rust SSH output failed: %d %v", n, err)
+		}
+	}
+	if terminal.Len() != 0 { t.Fatal("unsafe post-protocol output reached xterm") }
+}
