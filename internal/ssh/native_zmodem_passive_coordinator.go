@@ -70,6 +70,7 @@ func (c *nativeTerminalCoordinator) runPassive(
 		case <-time.After(nativeZmodemShutdownTimeout):
 		}
 	}
+	protocolStarted := time.Now()
 	// The output gate orders all captured bytes before fresh SSH output
 	// while Rust is already reading its dedicated pipe.
 	if _, err = c.output.takeoverCaptured(sink, guard); err != nil {
@@ -88,7 +89,7 @@ func (c *nativeTerminalCoordinator) runPassive(
 		stopSidecar()
 		return fmt.Errorf("远端 ZMODEM 自动传输已中止，终端需重连：%w", nativeZmodemContextError(ctx))
 	}
-	observeNativeZmodemStage(parent, "protocol", time.Now())
+	observeNativeZmodemStage(parent, "protocol", protocolStarted)
 	sink.finish(reader)
 	if processErr != nil {
 		if cause := nativeZmodemContextError(ctx); cause != nil {
