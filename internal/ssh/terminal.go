@@ -6,6 +6,7 @@ import (
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -177,6 +178,8 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 		return apperror.New("terminalMissingOrAlreadyOpen", nil)
 	}
 	conn.terminal = session
+	passiveEnabled := os.Getenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT") == "1" &&
+		m.nativeAutoSidecar != ""
 	m.mu.Unlock()
 	rollback := func(cause error) error {
 		_ = session.Close()
@@ -187,6 +190,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 			current.writer = nil
 			current.inputGate = nil
 			current.outputGate = nil
+			current.outputGuard = nil
 		}
 		m.mu.Unlock()
 		return cause
@@ -199,7 +203,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	}
 	inputGate := newTerminalInputGate(remoteInput, remoteInput)
 	writer := &terminalWriter{m: m, c: conn}
-	guard := newNativeOnlyOutputGuard(writer, func() {
+	onUnsupported := func() {
 		m.mu.Lock()
 		if current := m.connections[ref.TabID]; current == conn && current.ref == ref {
 			current.nativeTerminalPoisoned = true
@@ -208,7 +212,15 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 		m.emit("ssh:native-zmodem-unsupported", map[string]any{
 			"ref": ref, "error": "检测到未经原生接管的 ZMODEM 数据；已阻止协议数据进入终端，请重新连接 SSH 后使用普通 Shell 的 rz / sz 单文件命令",
 		})
-	})
+	}
+	guard := newNativeOnlyOutputGuard(writer, onUnsupported)
+	if passiveEnabled {
+		guard = newNativeOnlyOutputGuardPassive(writer, onUnsupported,
+			inputGate.blockPassiveInput, func(frame byte) {
+				// Never reenter manager or output-gate locks from their own Write.
+				go m.handleNativePassiveFrame(ref, conn, frame)
+			})
+	}
 	gate := newTerminalOutputGate(guard)
 	session.Stdout, session.Stderr = gate, gate
 	if err = session.Shell(); err != nil {
@@ -229,6 +241,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	conn.stdin = inputGate
 	conn.inputGate = inputGate
 	conn.outputGate = gate
+	conn.outputGuard = guard
 	conn.writer = writer
 	m.mu.Unlock()
 	go func() {
