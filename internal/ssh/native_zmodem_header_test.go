@@ -193,3 +193,73 @@ func TestNativeZmodemHeaderProbeHasBoundedBuffer(t *testing.T) {
 		t.Fatal("ordinary payload was not forwarded verbatim")
 	}
 }
+
+
+func TestNativeZmodemCRC16MatchesLRZSZHexHeaders(t *testing.T) {
+	// Independent ZHEX reference vectors from lrzsz zshhdr:
+	// type + four zero flag bytes, CRC-16/XMODEM, high byte first.
+	if !nativeZmodemValidStartHeader([]byte("**\x18B00000000000000")) {
+		t.Fatal("valid ZRQINIT with zero flags was rejected")
+	}
+	if !nativeZmodemValidStartHeader([]byte("**\x18B0100000000aa51")) {
+		t.Fatal("valid ZRINIT with zero flags was rejected")
+	}
+	if !nativeZmodemValidStartHeader([]byte("**\x18B0100000000AA51")) {
+		t.Fatal("uppercase hex header was rejected")
+	}
+	for _, bad := range [][]byte{
+		[]byte("**\x18B0100000000aa50"), // one-bit CRC corruption
+		[]byte("**\x18B0100000000aa5"),  // incomplete header
+		[]byte("**\x18B0200000000bd5b"), // wrong frame type
+		[]byte("**\x18B0100000000xz51"), // non-hexadecimal data
+	} {
+		if nativeZmodemValidStartHeader(bad) {
+			t.Fatalf("invalid ZMODEM header was accepted: %q", bad)
+		}
+	}
+}
+
+func TestNativeZmodemScannerSkipsInvalidCRCBeforeValidFrame(t *testing.T) {
+	prefix := []byte("regular output ")
+	fake := []byte("**\x18B0100000000aa50")
+	valid := nativeZmodemHeaderFixture(0)
+	after := []byte{0x00, 0x13, 0xff}
+	stream := append(append(append([]byte(nil), prefix...), fake...), valid...)
+	stream = append(stream, after...)
+
+	for _, boundary := range []int{0, 1, 5, len(prefix)+7, len(prefix)+len(fake), len(stream)-1, len(stream)} {
+		var plain, protocol bytes.Buffer
+		scanner := nativeZmodemStartScanner{}
+		for _, chunk := range [][]byte{stream[:boundary], stream[boundary:]} {
+			normal, binary, matched := scanner.feed(chunk)
+			plain.Write(normal)
+			protocol.Write(binary)
+			if matched && protocol.Len() < nativeZmodemHeaderSize {
+				t.Fatalf("handoff dropped start header at split %d", boundary)
+			}
+		}
+		if !bytes.Equal(plain.Bytes(), append(append([]byte(nil), prefix...), fake...)) {
+			t.Fatalf("normal terminal bytes changed at boundary %d: %x", boundary, plain.Bytes())
+		}
+		if !bytes.Equal(protocol.Bytes(), append(append([]byte(nil), valid...), after...)) {
+			t.Fatalf("valid handshake lost at boundary %d: %x", boundary, protocol.Bytes())
+		}
+	}
+}
+
+func TestNativeZmodemScannerDoesNotCaptureCRCInvalidFrame(t *testing.T) {
+	plain := []byte("shell printable before **\x18B0100000000aa50 after\n")
+	var scanner nativeZmodemStartScanner
+	var visible bytes.Buffer
+	for _, b := range plain {
+		output, binary, matched := scanner.feed([]byte{b})
+		if matched || len(binary) != 0 {
+			t.Fatal("invalid ZHEX CRC unexpectedly triggered a ZMODEM transfer")
+		}
+		visible.Write(output)
+	}
+	visible.Write(scanner.tail)
+	if !bytes.Equal(visible.Bytes(), plain) {
+		t.Fatalf("false header damaged terminal output: %q", visible.String())
+	}
+}
