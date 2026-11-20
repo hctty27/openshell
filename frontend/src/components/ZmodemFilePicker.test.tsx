@@ -16,6 +16,7 @@ vi.mock("../bridge", () => ({
       { name: "hello.txt", path: "/home/user/hello.txt", isDir: false, isSymlink: false, size: 512, modified: 0, mode: "0644" },
     ]),
     StartNativeZmodemInteractiveTransfer: vi.fn(async () => {}),
+    CancelNativeZmodemSelection: vi.fn(async () => {}),
   },
   listen: (name: string, callback: (payload: any) => void) => {
     events.callbacks.set(name, callback);
@@ -68,6 +69,7 @@ test("native picker cancellation never starts a transfer", async () => {
   fireEvent.click(screen.getByRole("button", { name: "取消" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(api.StartNativeZmodemInteractiveTransfer).not.toHaveBeenCalled();
+  await waitFor(() => expect(api.CancelNativeZmodemSelection).toHaveBeenCalledWith(ref));
 });
 
 test("native single-file picker rejects a multi-line remote path", async () => {
@@ -152,4 +154,18 @@ test("ordinary rz does not require overwrite confirmation", async () => {
   fireEvent.click(send);
   await waitFor(() => expect(api.StartNativeZmodemInteractiveTransfer)
     .toHaveBeenCalledWith(ref, "upload", "/home/user/hello.txt", ""));
+});
+
+
+test("rejected native transfer start releases the picker reservation", async () => {
+  const onNotice = vi.fn();
+  vi.mocked(api.StartNativeZmodemInteractiveTransfer).mockRejectedValueOnce(
+    new Error("SSH terminal busy"),
+  );
+  render(<ZmodemFilePicker activeRef={ref} onNotice={onNotice} />);
+  intent();
+  fireEvent.click(await screen.findByText("hello.txt"));
+  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
+  await waitFor(() => expect(api.CancelNativeZmodemSelection).toHaveBeenCalledWith(ref));
+  expect(onNotice).toHaveBeenCalled();
 });
