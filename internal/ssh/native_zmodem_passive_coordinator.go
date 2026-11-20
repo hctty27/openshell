@@ -59,8 +59,12 @@ func (c *nativeTerminalCoordinator) runPassive(
 	}
 	sidecarDone := make(chan error, 1)
 	go func() {
-		sidecarDone <- c.runner(ctx, action, path,
+		result := c.runner(ctx, action, path,
 			&nativeTerminalInboundReader{reader: reader, sink: sink}, outbound)
+		// Close the dedicated pipe before announcing Rust completion, so
+		// an in-flight SSH output Write cannot deadlock the gate transition.
+		sink.finish(reader)
+		sidecarDone <- result
 	}()
 	stopSidecar := func() {
 		cancel()
