@@ -3,6 +3,7 @@ package sshclient
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -207,6 +208,38 @@ func TestNativeAutoCommandBlocksInProgramAndAfterEditing(t *testing.T) {
 	nativeAutoType(t, m, ref, "z\r")
 	if input.String() != "r\x7fz\r" || len(events) != 0 {
 		t.Fatal("edited command must stay on legacy path")
+	}
+}
+
+func TestNativeAutoCommandPickerBlocksTypingUntilReleased(t *testing.T) {
+	m, ref, input, events := nativeAutoTestManager(t, true, true)
+	nativeAutoType(t, m, ref, "rz\r")
+	select {
+	case intent := <-events:
+		if intent["direction"] != "upload" { t.Fatalf("unexpected intent: %v", intent) }
+	default:
+		t.Fatal("native picker did not open")
+	}
+	if got := input.String(); got != "rz\x15" { t.Fatalf("unexpected initial wire: %q", got) }
+	key := base64.StdEncoding.EncodeToString([]byte("pwd\r"))
+	if err := m.Write(ref, key); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("picker did not reserve user input: %v", err)
+	}
+	if _, err := m.AcquireAITerminal(ref); err == nil {
+		t.Fatal("terminal AI acquired the SSH session during file selection")
+	}
+	stale := ref
+	stale.Generation++
+	m.ReleaseNativeZmodemSelection(stale)
+	if err := m.Write(ref, key); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("stale picker cancellation released live SSH input: %v", err)
+	}
+	m.ReleaseNativeZmodemSelection(ref)
+	if err := m.Write(ref, key); err != nil {
+		t.Fatalf("selection cancellation did not restore typing: %v", err)
+	}
+	if got := input.String(); got != "rz\x15pwd\r" {
+		t.Fatalf("unexpected output after picker cancellation: %q", got)
 	}
 }
 
