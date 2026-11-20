@@ -249,6 +249,43 @@ func TestNativeAutoCommandPickerBlocksTypingUntilReleased(t *testing.T) {
 	}
 }
 
+
+func TestNativeZmodemPickerCancellationAllowsImmediateSecondTransfer(t *testing.T) {
+	for _, command := range []string{"rz", "rz -y", "sz report.bin"} {
+		t.Run(command, func(t *testing.T) {
+			m, ref, input, events := nativeAutoTestManager(t, true, true)
+			nativeAutoType(t, m, ref, command+"\r")
+			first := <-events
+			firstID, ok := first["selectionId"].(uint64)
+			if !ok || firstID == 0 { t.Fatalf("missing first picker generation: %v", first) }
+			if m.ReleaseNativeZmodemSelection(ref, firstID+1) {
+				t.Fatal("stale picker release unexpectedly succeeded")
+			}
+			if !m.ReleaseNativeZmodemSelection(ref, firstID) {
+				t.Fatal("first picker cancellation was rejected")
+			}
+
+			nativeAutoType(t, m, ref, command+"\r")
+			select {
+			case second := <-events:
+				secondID, ok := second["selectionId"].(uint64)
+				if !ok || secondID <= firstID {
+					t.Fatalf("second picker used stale selection generation: first=%v second=%v", first, second)
+				}
+				if second["direction"] != first["direction"] {
+					t.Fatalf("second transfer changed direction: %v -> %v", first, second)
+				}
+			default:
+				t.Fatalf("second %q did not open a picker after cancellation", command)
+			}
+			want := command+"\x15"+command+"\x15"
+			if got := input.String(); got != want {
+				t.Fatalf("second rz/sz was not intercepted: got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestNativeAutoCommandDoesNotInterceptMySQLPrompt(t *testing.T) {
 	m, ref, input, events := nativeAutoTestManager(t, false, true)
 	c := m.connections[ref.TabID]
