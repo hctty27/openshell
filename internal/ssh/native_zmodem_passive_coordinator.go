@@ -73,26 +73,43 @@ func (c *nativeTerminalCoordinator) runPassive(
 	protocolStarted := time.Now()
 	// The output gate orders all captured bytes before fresh SSH output
 	// while Rust is already reading its dedicated pipe.
-	if _, err = c.output.takeoverCaptured(sink, guard); err != nil {
+	outputLease, err := c.output.takeoverCaptured(sink, guard)
+	if err != nil {
+		// The gate may have already switched to the Rust pipe before the
+		// initial buffered Write failed. Keep it quarantined on this path.
+		if outputLease != 0 { _ = c.output.quarantineNative(outputLease) }
 		stopSidecar()
-		_ = c.input.restore(inputLease)
 		return fmt.Errorf("远端 ZMODEM 初始握手交接失败（需重连）：%w", err)
 	}
 	var processErr error
+	abort, cancelled := false, false
 	select {
 	case processErr = <-sidecarDone:
 	case processErr = <-sink.fail:
-		// A broken SSH→Rust pipe is a transfer failure even if the
-		// sidecar later exits successfully after being cancelled.
-		stopSidecar()
+		// A broken SSH-to-Rust pipe is a real failure, regardless of how
+		// the Rust process exits after cancellation.
+		abort = true
 	case <-ctx.Done():
-		// Only protocol CAN is sent; never forward Ctrl+C or user input.
+		// Only ZMODEM CAN may be sent; user Ctrl+C is never forwarded.
 		_, _ = c.input.writeNative(inputLease, zmodemCancelSequence)
+		abort, cancelled = true, true
+	}
+	// Preserve the output lease but detach the Rust pipe before closing it.
+	// Follow-up PTY output must not reach xterm or a closed pipe while the
+	// remote Shell's command-completion boundary remains unverified.
+	quarantineErr := c.output.quarantineNative(outputLease)
+	if abort {
 		stopSidecar()
+	} else {
+		sink.finish(reader)
+	}
+	if cancelled {
 		return fmt.Errorf("远端 ZMODEM 自动传输已中止，终端需重连：%w", nativeZmodemContextError(ctx))
 	}
+	if quarantineErr != nil {
+		return fmt.Errorf("无法安全隔离远端 ZMODEM 结束后的输出（需重连）：%w", quarantineErr)
+	}
 	observeNativeZmodemStage(parent, "protocol", protocolStarted)
-	sink.finish(reader)
 	if processErr != nil {
 		if cause := nativeZmodemContextError(ctx); cause != nil {
 			return fmt.Errorf("远端 ZMODEM 自动传输失败，终端需重连：%w", cause)
