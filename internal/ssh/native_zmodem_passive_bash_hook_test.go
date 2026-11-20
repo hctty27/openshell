@@ -31,7 +31,7 @@ func TestNativePassiveBashPromptHookEmitsSessionBoundExitAndPreservesPromptComma
 		{
 			name: "array",
 			initial: "PROMPT_COMMAND=('printf PROMPT_ARRAY:%s \"$?\"')",
-			runPromptCommand: "eval \"\${PROMPT_COMMAND[0]}\"; eval \"\${PROMPT_COMMAND[1]}\"",
+			runPromptCommand: "eval \"${PROMPT_COMMAND[0]}\"; eval \"${PROMPT_COMMAND[1]}\"",
 			previousMarker: "PROMPT_ARRAY:",
 		},
 	} {
