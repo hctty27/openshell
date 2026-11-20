@@ -82,6 +82,8 @@ func (c *nativeTerminalCoordinator) runPassive(
 	select {
 	case processErr = <-sidecarDone:
 	case processErr = <-sink.fail:
+		// A broken SSH→Rust pipe is a transfer failure even if the
+		// sidecar later exits successfully after being cancelled.
 		stopSidecar()
 	case <-ctx.Done():
 		// Only protocol CAN is sent; never forward Ctrl+C or user input.
