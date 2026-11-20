@@ -203,11 +203,16 @@ func (t *nativeAutoInputTracker) prepare(p []byte, shellReady, shellCandidate bo
 		case 0x15:
 			if t.started && !t.blocked {
 				t.line = t.line[:0]
+			} else if !t.started && !t.blocked && shellCandidate {
+				// Ctrl-U sent at a verified empty Shell prompt means the
+				// following characters are a new, empty command line.
+				t.started = true
+				t.authorized = shellReady
 			}
 		default:
 			if t.blocked { continue }
 			if !t.started {
-				if shellCandidate && (b == 'r' || b == 's' || b == 't') {
+				if shellCandidate && (b == 'r' || b == 's' || b == 't' || b == ' ') {
 					t.started = true
 					t.authorized = shellReady
 					t.line = append(t.line, b)
