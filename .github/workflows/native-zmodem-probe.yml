@@ -169,7 +169,55 @@ jobs:
           export OPENSHELL_ZMODEM_LIVE_SSH_KEY="$ZMODEM_SSH_TEST_DIR/client"
           export OPENSHELL_ZMODEM_LIVE_SSH_HOSTKEY="$ZMODEM_SSH_TEST_DIR/host.pub"
           export OPENSHELL_ZMODEM_LIVE_SIDECAR="$GITHUB_WORKSPACE/experiments/native-zmodem/target/release/zmodem-sidecar"
-          go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInteractivePTY$' -v ./internal/ssh
+          go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInteractivePTY
+          export OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS=2
+          go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY$' -v ./internal/ssh
+          go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInterruptedInteractivePTY$' -v ./internal/ssh
+          # Exercise native-only Rust PTY transport under 16 KiB protocol batches,
+          # including cancellation and disconnect fail-closed handling.
+          OPENSHELL_ZMODEM_WIRE_BATCH_BYTES=16384 go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY$' -v ./internal/ssh
+          OPENSHELL_ZMODEM_WIRE_BATCH_BYTES=16384 go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInterruptedInteractivePTY$' -v ./internal/ssh
+      - name: Print SSH server diagnostics if the interop test failed
+        if: failure()
+        shell: bash
+        run: |
+          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.log" ]; then
+            sudo tail -100 "$ZMODEM_SSH_TEST_DIR/sshd.log"
+          fi
+      - name: Stop loopback SSH test server
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.pid" ]; then
+            sudo kill "$(cat "$ZMODEM_SSH_TEST_DIR/sshd.pid")" || true
+          fi
+ -v ./internal/ssh
+          # Actually launch rz/sz through the existing remote login shell.
+          # The new path must detect the remote ZHEX frame without rewriting
+          # the command, hand it to the Rust sidecar, and verify SHA-256.
+          OPENSHELL_ZMODEM_PASSIVE_E2E=1 go test -count=1 -timeout=5m -run '^TestNativeZmodemPassiveLiveInteractivePTY
+          export OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS=2
+          go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY$' -v ./internal/ssh
+          go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInterruptedInteractivePTY$' -v ./internal/ssh
+          # Exercise native-only Rust PTY transport under 16 KiB protocol batches,
+          # including cancellation and disconnect fail-closed handling.
+          OPENSHELL_ZMODEM_WIRE_BATCH_BYTES=16384 go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY$' -v ./internal/ssh
+          OPENSHELL_ZMODEM_WIRE_BATCH_BYTES=16384 go test -count=1 -timeout=6m -run '^TestNativeZmodemLiveInterruptedInteractivePTY$' -v ./internal/ssh
+      - name: Print SSH server diagnostics if the interop test failed
+        if: failure()
+        shell: bash
+        run: |
+          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.log" ]; then
+            sudo tail -100 "$ZMODEM_SSH_TEST_DIR/sshd.log"
+          fi
+      - name: Stop loopback SSH test server
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "$ZMODEM_SSH_TEST_DIR" ] && [ -f "$ZMODEM_SSH_TEST_DIR/sshd.pid" ]; then
+            sudo kill "$(cat "$ZMODEM_SSH_TEST_DIR/sshd.pid")" || true
+          fi
+ -v ./internal/ssh
           export OPENSHELL_ZMODEM_CROSS_OS_PTY=1
           export OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS=2
           go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY$' -v ./internal/ssh
