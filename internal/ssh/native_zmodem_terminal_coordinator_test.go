@@ -331,7 +331,7 @@ func TestNativeZmodemInteractiveCoordinatorRequiresRemoteDrainProof(t *testing.T
 }
 
 
-func TestNativeZmodemInteractiveCoordinatorRemoteNonzeroExitNeverRestoresTerminal(t *testing.T) {
+func TestNativeZmodemInteractiveCoordinatorRemoteNonzeroExitRestoresVerifiedTerminal(t *testing.T) {
 	var legacy bytes.Buffer
 	capture := &nativeTerminalCapturedInput{ch: make(chan []byte, 4)}
 	input := newTerminalInputGate(io.Discard, capture)
@@ -359,10 +359,49 @@ func TestNativeZmodemInteractiveCoordinatorRemoteNonzeroExitNeverRestoresTermina
 		}
 	case <-time.After(3*time.Second): t.Fatal("remote failure never completed")
 	}
-	if _, err := input.Write([]byte("manual")); !errors.Is(err, errNativeTerminalInputBusy) {
-		t.Fatalf("failed remote transfer restored manual input: %v", err)
+	if _, err := input.Write([]byte("manual")); err != nil {
+		t.Fatalf("verified remote exit did not restore input: %v", err)
 	}
-	if legacy.Len() != 0 {
-		t.Fatalf("failed remote terminal emitted protocol tail: %q", legacy.String())
+	if _, err := output.Write([]byte(" next prompt")); err != nil { t.Fatal(err) }
+	if legacy.String() != "shell prompt next prompt" {
+		t.Fatalf("verified shell output not correctly replayed: %q", legacy.String())
+	}
+}
+
+func TestNativeZmodemInteractiveCoordinatorFailedDownloadDoesNotPublish(t *testing.T) {
+	var legacy bytes.Buffer
+	capture := &nativeTerminalCapturedInput{ch: make(chan []byte, 4)}
+	input := newTerminalInputGate(io.Discard, capture)
+	output := newTerminalOutputGate(&legacy)
+	dest := t.TempDir()
+	coordinator := &nativeTerminalCoordinator{
+		input: input, output: output,
+		runner: func(ctx context.Context, direction, stage string, inbound io.ReadCloser, outbound io.Writer) error {
+			if direction != "receive" { return errors.New("wrong sidecar action") }
+			if _, err := io.ReadFull(inbound, make([]byte, nativeZmodemHeaderSize)); err != nil { return err }
+			return os.WriteFile(filepath.Join(stage, "partial.bin"), []byte("unverified payload"), 0600)
+		},
+	}
+	done := make(chan error, 1)
+	go func() { done <- coordinator.run(context.Background(), "download", dest, "partial.bin") }()
+	command := string(nativeTerminalNextInput(t, capture))
+	if _, err := output.Write([]byte("**\\x18B000123456789ab")); err != nil { t.Fatal(err) }
+	if _, err := output.Write(append(nativeTerminalCompletionFromCommand(t, command, 2), []byte("shell-ready")...)); err != nil { t.Fatal(err) }
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "退出状态为 2") {
+			t.Fatalf("missing remote failure status: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("failed download never completed")
+	}
+	if _, err := os.Stat(filepath.Join(dest, "partial.bin")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed transfer published a partial download: %v", err)
+	}
+	if _, err := input.Write([]byte("normal")); err != nil {
+		t.Fatalf("failed download left terminal leased: %v", err)
+	}
+	if legacy.String() != "shell-ready" {
+		t.Fatalf("failed download did not restore prompt: %q", legacy.String())
 	}
 }
