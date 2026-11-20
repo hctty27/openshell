@@ -211,10 +211,16 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 			} else {
 				verifyNativeLiveFile(t, localPath, filepath.Join(remoteHome, fileName))
 			}
+			// The Bash prompt may arrive after Rust has closed its stdin.
+			// The SSH output gate must keep accepting and quarantining it
+			// rather than failing the SSH channel or restoring raw terminal.
+			time.Sleep(150 * time.Millisecond)
 			manager.mu.Lock()
 			c := manager.connections[ref.TabID]
 			unsafe := c != nil && c.nativeTerminalPoisoned
+			alive := c != nil && c.terminal != nil && c.outputGate != nil
 			manager.mu.Unlock()
+			if !alive { t.Fatal("post-protocol SSH stdout unexpectedly terminated the PTY") }
 			if !unsafe { t.Fatal("unattested remote exit incorrectly restored PTY") }
 			if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte("pwd\r")));
 				!errors.Is(err, errNativeTerminalInputBusy) {
