@@ -19,7 +19,7 @@ func TestNativePassiveHandoffPreservesExactFrameOrderAcrossChunks(t *testing.T) 
 				input.blockPassiveInput, func(kind byte) { detected = append(detected, kind) },
 			)
 			gate := newTerminalOutputGate(guard)
-			before := []byte("shell prompt\\r\\n")
+			before := []byte("shell prompt\r\n")
 			payload := append(append([]byte(nil), header...), []byte("next-frame")...)
 			stream := append(append([]byte(nil), before...), payload...)
 			for _, chunk := range [][]byte{
@@ -63,7 +63,7 @@ func TestNativePassiveUnclaimedCorruptionFailsClosed(t *testing.T) {
 	)
 	gate := newTerminalOutputGate(guard)
 	if _, err := gate.Write([]byte("before")); err != nil { t.Fatal(err) }
-	if _, err := gate.Write([]byte("**\\x18B0100000000aa50")); err != nil { t.Fatal(err) }
+	if _, err := gate.Write([]byte("**\x18B0100000000aa50")); err != nil { t.Fatal(err) }
 	if started != 0 || fallback != 1 {
 		t.Fatalf("invalid CRC started passive transfer: started=%d fallback=%d", started, fallback)
 	}
