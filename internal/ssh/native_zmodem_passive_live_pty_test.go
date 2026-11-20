@@ -55,6 +55,7 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 		}
 	}
 
+	verifiedBash := os.Getenv("OPENSHELL_ZMODEM_PASSIVE_VERIFIED_E2E") == "1"
 	largeKiB := 0
 	if raw := os.Getenv("OPENSHELL_ZMODEM_PASSIVE_E2E_LARGE_KIB"); raw != "" {
 		largeKiB, err = strconv.Atoi(raw)
@@ -74,8 +75,8 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 		{"remote-sz-cancel", "download", true},
 		{"remote-rz-cancel", "upload", true},
 	} {
-		if largeKiB != 0 && (tc.cancelPicker || strings.Contains(tc.name, "empty")) {
-			continue // loss-profile job focuses on full-size transfers only
+		if (largeKiB != 0 || verifiedBash) && (tc.cancelPicker || strings.Contains(tc.name, "empty")) {
+			continue // loss/recovery profiles focus on full-size transfers
 		}
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT", "1")
@@ -99,8 +100,17 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 			}
 			intents := make(chan map[string]any, 4)
 			unsupported := make(chan string, 4)
+			outputChunks := make(chan string, 256)
 			manager := NewManager(keys{}, func(name string, payload any) {
 				switch name {
+				case "ssh:output":
+					if p, ok := payload.(map[string]any); ok {
+						if raw, ok := p["data"].(string); ok {
+							if decoded, err := base64.StdEncoding.DecodeString(raw); err == nil {
+								select { case outputChunks <- string(decoded): default: }
+							}
+						}
+					}
 				case "ssh:native-zmodem-auto-intent":
 					if p, ok := payload.(map[string]any); ok {
 						select { case intents <- p: default: }
@@ -159,6 +169,25 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 				case <-time.After(20*time.Millisecond):
 				}
 			}
+			if verifiedBash {
+				// Stage a nonce-scoped prompt hook on this exact interactive
+				// Bash instance BEFORE the remote rz/sz process begins.
+				// The nonce is sent in a second write only after Bash's read -s
+				// challenge, so it does not appear in an echoed shell command.
+				bootstrap := nativePassiveBashHookBootstrap()
+				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte(bootstrap))); err != nil {
+					t.Fatalf("failed to start Bash hook bootstrap: %v", err)
+				}
+				waitNativePassiveBashOutput(t, outputChunks, nativePassiveBashHookChallenge)
+				manager.mu.Lock()
+				conn := manager.connections[ref.TabID]
+				manager.mu.Unlock()
+				if conn == nil || conn.inputGate == nil { t.Fatal("SSH closed during shell integration bootstrap") }
+				if _, err := conn.inputGate.Write([]byte(testNativePassiveSessionToken + "\r")); err != nil {
+					t.Fatalf("failed to send nonce to Bash read -s: %v", err)
+				}
+				waitNativePassiveBashOutput(t, outputChunks, nativePassiveBashHookReady)
+			}
 			// The input begins with bash, so OpenShell cannot replace it
 			// with its literal-command Ctrl-U / re-exec path.
 			wire := "bash -c " + nativePassiveShellQuote(remoteCommand) + "\r"
@@ -202,7 +231,31 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 				return
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-			err = manager.RunPassiveNativeZmodemTransfer(ctx, ref, id, sidecar, tc.direction, localPath, nil)
+			if verifiedBash {
+				manager.mu.Lock()
+				conn := manager.connections[ref.TabID]
+				if conn == nil { manager.mu.Unlock(); t.Fatal("SSH closed before verified coordinator") }
+				conn.nativeZmodemSelection = false
+				conn.nativeZmodemSelectionPassive = false
+				conn.nativeTerminalPoisoned = true
+				coordinator := &nativeTerminalCoordinator{
+					input: conn.inputGate, output: conn.outputGate,
+					runner: nativeTerminalExecutableRunner(sidecar),
+				}
+				guard := conn.outputGuard
+				manager.mu.Unlock()
+				restored, transferErr := coordinator.runPassiveVerified(
+					ctx, tc.direction, localPath, guard, testNativePassiveSessionToken)
+			err = transferErr
+				if restored {
+					manager.mu.Lock()
+					if manager.connections[ref.TabID] == conn { conn.nativeTerminalPoisoned = false }
+					manager.mu.Unlock()
+				}
+				if !restored { t.Fatalf("registered Bash shell did not recover PTY: %v", err) }
+			} else {
+				err = manager.RunPassiveNativeZmodemTransfer(ctx, ref, id, sidecar, tc.direction, localPath, nil)
+			}
 			cancel()
 			if err != nil { t.Fatalf("real passive %s transfer failed: %v", tc.name, err) }
 			if tc.direction == "download" {
@@ -221,17 +274,42 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 			alive := c != nil && c.terminal != nil && c.outputGate != nil
 			manager.mu.Unlock()
 			if !alive { t.Fatal("post-protocol SSH stdout unexpectedly terminated the PTY") }
-			if !unsafe { t.Fatal("unattested remote exit incorrectly restored PTY") }
-			if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte("pwd\r")));
-				!errors.Is(err, errNativeTerminalInputBusy) {
-				t.Fatalf("remote-initiated transfer unexpectedly restored keyboard: %v", err)
+			if verifiedBash {
+				if unsafe { t.Fatal("verified Bash completion failed to clear SSH poison") }
+				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte("pwd\r"))); err != nil {
+					t.Fatalf("verified same-PTY terminal rejected next command: %v", err)
+				}
+				t.Logf("real remote %s: Bash completion nonce accepted; SHA-256 %x and next command allowed", tc.name, sha256.Sum256(payload))
+			} else {
+				if !unsafe { t.Fatal("unattested remote exit incorrectly restored PTY") }
+				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte("pwd\r")));
+					!errors.Is(err, errNativeTerminalInputBusy) {
+					t.Fatalf("remote-initiated transfer unexpectedly restored keyboard: %v", err)
+				}
+				t.Logf("real remote %s: SHA-256 %x; SSH quarantined (segmented TCP delay=%dms)",
+					tc.name, sha256.Sum256(payload), delayMS)
 			}
-			t.Logf("real remote %s: local and remote SHA-256 %x; SSH remains quarantined (segmented TCP delay=%dms)",
-				tc.name, sha256.Sum256(payload), delayMS)
 		})
 	}
 }
 
 func nativePassiveShellQuote(raw string) string {
 	return "'" + strings.ReplaceAll(raw, "'", "'\\''") + "'"
+}
+
+func waitNativePassiveBashOutput(t *testing.T, output <-chan string, marker string) {
+	t.Helper()
+	deadline := time.NewTimer(8 * time.Second)
+	defer deadline.Stop()
+	buffer := ""
+	for {
+		select {
+		case chunk := <-output:
+			buffer += chunk
+			if strings.Contains(buffer, marker) { return }
+			if len(buffer) > 4096 { buffer = buffer[len(buffer)-4096:] }
+		case <-deadline.C:
+			t.Fatalf("Bash prompt hook did not emit expected marker %q (tail %q)", marker, buffer)
+		}
+	}
 }
