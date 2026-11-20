@@ -16,6 +16,23 @@ type nativeTerminalTransferTask struct {
 	cancel context.CancelFunc
 }
 
+// The UI's "running" event must be emitted only after the SSH manager
+// admits this task. A rejected concurrent start must not lock the terminal
+// or create an orphaned transfer-center row.
+type nativeZmodemAcceptedObserverKey struct{}
+
+func WithNativeZmodemAcceptedObserver(ctx context.Context, onAccepted func()) context.Context {
+	if onAccepted == nil { return ctx }
+	return context.WithValue(ctx, nativeZmodemAcceptedObserverKey{}, onAccepted)
+}
+
+func notifyNativeZmodemAccepted(ctx context.Context) {
+	if ctx == nil { return }
+	if callback, ok := ctx.Value(nativeZmodemAcceptedObserverKey{}).(func()); ok && callback != nil {
+		callback()
+	}
+}
+
 // All callers must hold Manager.mu. Cancellation is nonblocking and never
 // tries to acquire an input/output gate while the manager lock is held.
 func cancelNativeTerminalTransferLocked(c *connection) {
@@ -86,6 +103,9 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 	m.mu.Unlock()
 
 	defer cancel()
+	// The ownership token is installed before the observer can announce
+	// the task to listeners. Rejected starts never emit an active event.
+	notifyNativeZmodemAccepted(ctx)
 
 	coordinator := &nativeTerminalCoordinator{
 		input: input, output: output,
