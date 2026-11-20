@@ -80,9 +80,28 @@ func nativeLiteralShellWords(line string) ([]string, bool) {
 	return words, len(words) > 0
 }
 
+// A recognized rz/sz command containing shell expansions, globs or pipes
+// must be rejected before Enter reaches the remote PTY. Otherwise remote
+// lrzsz may start without a native lease and quarantine the SSH terminal.
+func nativeTransferCommandPrefix(line string) bool {
+	for _, name := range []string{"rz", "sz", "trz", "tsz"} {
+		if !strings.HasPrefix(line, name) { continue }
+		if len(line) == len(name) { return true }
+		next := line[len(name)]
+		if next == ' ' || next == '\t' || strings.ContainsRune(";|&<>(){}$\\u0060'\\\"\\\\*?!#~", rune(next)) {
+			return true
+		}
+	}
+	return false
+}
+
 func parseNativeAutoCommand(line string) (direction, remotePath string) {
 	args, ok := nativeLiteralShellWords(line)
-	if !ok || len(args) == 0 { return "", "" }
+	if !ok {
+		if nativeTransferCommandPrefix(line) { return "reject-unsupported", "" }
+		return "", ""
+	}
+	if len(args) == 0 { return "", "" }
 	switch args[0] {
 	case "rz":
 		// Only options whose meaning is preserved by our own remote command
