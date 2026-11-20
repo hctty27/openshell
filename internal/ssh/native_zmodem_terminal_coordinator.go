@@ -203,7 +203,7 @@ func (c *nativeTerminalCoordinator) run(
 		pipe: writer, ready: make(chan struct{}), fail: make(chan error, 1), expected: expected, meter: meter, activity: activity,
 	}
 	fence := newNativeRemoteBoundarySink(sink, token)
-	outputLease, err := c.output.armOnZmodemHeaderQuiet(fence)
+	outputLease, err := c.output.armOnZmodemHeaderQuietBoundary(fence, fence.prefix)
 	if err != nil {
 		_ = reader.Close()
 		_ = writer.Close()
@@ -282,10 +282,37 @@ func (c *nativeTerminalCoordinator) run(
 
 	observeNativeZmodemStage(parent, "prepare", preparationStarted)
 	protocolStarted := time.Now()
+	var earlyCompletion *nativeRemoteExit
 	select {
 	case err = <-sidecarDone:
-		// Any sidecar error is fail-closed; the remote shell may still be
-		// emitting binary data. No automatic disarm or legacy restoration.
+		// The remote shell may still be emitting binary protocol data.
+		// Do not restore without a verified per-transfer completion marker.
+	case remote := <-fence.completion:
+		if !sink.seenHeader() {
+			// A remote sz for a missing file (or missing lrzsz) terminates
+			// before ZMODEM ever starts. Reap the still-waiting local sidecar,
+			// and restore only because the nonce-scoped shell fence was seen.
+			stopSidecar()
+			if remote.err != nil { return fmt.Errorf("远端 ZMODEM 结束标记异常（需要重连）：%w", remote.err) }
+			if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil { return err }
+			if err := c.input.restore(inputLease); err != nil { return err }
+			return fmt.Errorf("远端 rz/sz 未能启动 ZMODEM 协议（退出状态 %d），终端已安全恢复", remote.code)
+		}
+		// A valid protocol did start, but its remote exit marker arrived
+		// before the local sidecar finished. Bound the drain to avoid an
+		// indefinitely busy shell after the remote command has exited.
+		earlyCompletion = &remote
+		select {
+		case err = <-sidecarDone:
+		case <-time.After(nativeZmodemShutdownTimeout):
+			stopSidecar()
+			if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil { return err }
+			if err := c.input.restore(inputLease); err != nil { return err }
+			return errors.New("远端 rz/sz 已退出，但本地协议处理未结束；终端已安全恢复")
+		case <-ctx.Done():
+			stopSidecar()
+			return recoverInterrupted(nativeZmodemContextError(ctx))
+		}
 	case err = <-sink.fail:
 		stopSidecar()
 		return fmt.Errorf("原生 ZMODEM 启动或转发失败（需要重连终端）：%w", err)
@@ -298,6 +325,13 @@ func (c *nativeTerminalCoordinator) run(
 	if err != nil {
 		if cause := nativeZmodemContextError(ctx); cause != nil {
 			return recoverInterrupted(cause)
+		}
+		// Even if the protocol process failed, a verified remote exit
+		// means no binary data can still arrive at this terminal.
+		if earlyCompletion != nil && earlyCompletion.err == nil {
+			if restoreErr := c.output.restoreWithReplay(outputLease, fence.replayTrailing); restoreErr != nil { return restoreErr }
+			if restoreErr := c.input.restore(inputLease); restoreErr != nil { return restoreErr }
+			return fmt.Errorf("原生 ZMODEM sidecar 执行失败，终端已安全恢复：%w", err)
 		}
 		return fmt.Errorf("原生 ZMODEM sidecar 执行失败（需要重连终端）：%w", err)
 	}
@@ -312,14 +346,19 @@ func (c *nativeTerminalCoordinator) run(
 	// A nonzero exit code is a transfer failure, not evidence of an unsafe PTY:
 	// the fenced marker still proves the remote command has terminated.
 	remoteExitCode := 0
-	select {
-	case remote := <-fence.completion:
-		if remote.err != nil { return fmt.Errorf("远端 ZMODEM 结束标记异常（需要重连）：%w", remote.err) }
-		remoteExitCode = remote.code
-		if ctxErr := nativeZmodemContextError(ctx); ctxErr != nil { return ctxErr }
-	case <-ctx.Done():
-		return recoverInterrupted(nativeZmodemContextError(ctx))
+	if earlyCompletion != nil {
+		if earlyCompletion.err != nil { return fmt.Errorf("远端 ZMODEM 结束标记异常（需要重连）：%w", earlyCompletion.err) }
+		remoteExitCode = earlyCompletion.code
+	} else {
+		select {
+		case remote := <-fence.completion:
+			if remote.err != nil { return fmt.Errorf("远端 ZMODEM 结束标记异常（需要重连）：%w", remote.err) }
+			remoteExitCode = remote.code
+		case <-ctx.Done():
+			return recoverInterrupted(nativeZmodemContextError(ctx))
+		}
 	}
+	if ctxErr := nativeZmodemContextError(ctx); ctxErr != nil { return ctxErr }
 
 	observeNativeZmodemStage(parent, "remoteConfirm", confirmationStarted)
 	restoreStarted := time.Now()
