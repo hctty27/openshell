@@ -52,6 +52,7 @@ func (m *Manager) ReleaseNativeZmodemSelection(ref domain.ConnectionRef, selecti
 		return false
 	}
 	passive := c.nativeZmodemSelectionPassive
+	guard := c.outputGuard
 	c.nativeZmodemSelection = false
 	c.nativeZmodemSelectionPassive = false
 	if passive {
@@ -63,6 +64,7 @@ func (m *Manager) ReleaseNativeZmodemSelection(ref domain.ConnectionRef, selecti
 		c.readiness.restoreClearedNativeZmodemPrompt()
 	}
 	m.mu.Unlock()
+	if passive && guard != nil { guard.discardCapture() }
 	if passive {
 		// The frontend must learn that the PTY is unsafe before receiving
 		// the selection-release event. Never create a brief typing window.
