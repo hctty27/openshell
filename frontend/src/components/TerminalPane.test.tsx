@@ -1142,3 +1142,28 @@ test("unexpected ZMODEM handshake quarantines input until reconnect", async () =
   emit("ssh:disconnected", tab.ref);
   expect(term.options.disableStdin).toBe(false);
 });
+
+
+test("native ZMODEM input lock ignores a completed task's delayed start", async () => {
+  renderTerminal();
+  const term = refs.terms[0];
+  const emit = (payload: unknown) =>
+    act(() => events.listeners.get("ssh:native-zmodem-batch")?.(payload));
+  await waitFor(() => expect(events.listeners.has("ssh:native-zmodem-batch")).toBe(true));
+
+  const previous = { ref: tab.ref, id: "old", sequence: 404 };
+  emit({ ...previous, active: false, terminalSafe: true });
+  emit({ ...previous, active: true });
+  expect(term.options.disableStdin).toBe(false);
+
+  emit({ ref: tab.ref, id: "new", sequence: 405, active: true });
+  expect(term.options.disableStdin).toBe(true);
+  emit({ ...previous, active: true });
+  emit({ ...previous, active: false, terminalSafe: false, error: "stale failure" });
+  expect(term.options.disableStdin).toBe(true);
+  emit({ ref: tab.ref, id: "new", sequence: 405, active: false, terminalSafe: true });
+  expect(term.options.disableStdin).toBe(false);
+
+  emit({ ref: tab.ref, id: "new", sequence: 405, active: true });
+  expect(term.options.disableStdin).toBe(false);
+});

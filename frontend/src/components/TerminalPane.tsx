@@ -78,6 +78,8 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
   const cloneCwdSent = useRef(false);
   const nativeTransferActive = useRef(false);
   const nativeTransferIDs = useRef(new Set<string>());
+  const nativeTransferSequence = useRef(0);
+  const nativeTransferFinished = useRef(new Set<string>());
   const terminalMode = p.tab.status === "connected" && p.tab.ref ? "ssh"
     : p.tab.ref && p.tab.everConnected && ["disconnected", "error"].includes(p.tab.status)
       ? (p.tab.localFallbackPending || p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
@@ -327,15 +329,28 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       candidate.sessionId === ref.sessionId &&
       candidate.generation === ref.generation;
     const offNativeBatch = listen("ssh:native-zmodem-batch", (event: {
-      ref?: Ref; id?: string; active: boolean; terminalSafe?: boolean; error?: string;
+      ref?: Ref; id?: string; sequence?: number; active: boolean; terminalSafe?: boolean; error?: string;
     }) => {
       if (!event?.ref || !matchesConnection(event.ref)) return;
       const transferID = event.id ?? "legacy";
+      const sequence = typeof event.sequence === "number" && Number.isSafeInteger(event.sequence) && event.sequence > 0
+        ? event.sequence : 0;
+      if (sequence < nativeTransferSequence.current) return;
+      if (sequence > nativeTransferSequence.current) nativeTransferSequence.current = sequence;
+      // The end event can arrive before start through asynchronous listeners.
+      // Once ended, this exact task cannot lock the SSH terminal again.
+      if (event.active && nativeTransferFinished.current.has(transferID)) return;
       if (event.active) {
         nativeTransferIDs.current.add(transferID);
         nativeTransferActive.current = true;
         syncTransferInput();
         return;
+      }
+      nativeTransferFinished.current.add(transferID);
+      while (nativeTransferFinished.current.size > 512) {
+        const oldest = nativeTransferFinished.current.values().next().value;
+        if (oldest === undefined) break;
+        nativeTransferFinished.current.delete(oldest);
       }
       const terminalSafe = event.terminalSafe === true ||
         (event.terminalSafe == null && !event.error);
@@ -357,6 +372,8 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       if (!matchesConnection(disconnectedRef)) return;
       nativeTransferActive.current = false;
       nativeTransferIDs.current.clear();
+      nativeTransferSequence.current = 0;
+      nativeTransferFinished.current.clear();
       syncTransferInput();
     });
     let inputFlushing = false;
