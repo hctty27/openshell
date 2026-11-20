@@ -468,18 +468,18 @@ test("prompt history keeps multiline cursor navigation, selections and Chinese I
   await act(async () => render(<AISidebar tabs={[connectedTab]} active={connectedTab}
     pinned isOpen onTogglePin={vi.fn()} />));
   const input = screen.getByPlaceholderText("描述需要 AI 执行的任务...") as HTMLTextAreaElement;
-  fireEvent.change(input, { target: { value: "第一行\\n第二行" } });
+  fireEvent.change(input, { target: { value: "第一行\n第二行" } });
   input.setSelectionRange(4, 4);
   fireEvent.keyDown(input, { key: "ArrowUp" });
-  expect(input.value).toBe("第一行\\n第二行");
+  expect(input.value).toBe("第一行\n第二行");
   input.setSelectionRange(0, 0);
   fireEvent.compositionStart(input);
   fireEvent.keyDown(input, { key: "ArrowUp" });
-  expect(input.value).toBe("第一行\\n第二行");
+  expect(input.value).toBe("第一行\n第二行");
   fireEvent.compositionEnd(input);
   input.setSelectionRange(0, 2);
   fireEvent.keyDown(input, { key: "ArrowUp" });
-  expect(input.value).toBe("第一行\\n第二行");
+  expect(input.value).toBe("第一行\n第二行");
   input.setSelectionRange(0, 0);
   fireEvent.keyDown(input, { key: "ArrowUp" });
   expect(input.value).toBe("历史输入");
