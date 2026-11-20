@@ -15,6 +15,11 @@ var zmodemDirectionPattern = regexp.MustCompile(`\*\*\x18B0([01])[0-9a-fA-F]{12}
 // Both native handoff and the unclaimed-protocol safety guard use it.
 type nativeZmodemStartScanner struct {
 	tail []byte
+	// A passive, unclaimed-protocol guard must quarantine even a corrupted
+	// ZHEX-looking frame. Without a valid PTY lease it is unsafe to let
+	// possible binary data reach xterm. A native transfer handoff requires
+	// CRC validation and leaves this setting disabled.
+	quarantineMalformed bool
 }
 
 const nativeZmodemHeaderSize = 18
@@ -67,7 +72,7 @@ func (s *nativeZmodemStartScanner) feed(p []byte) (legacy, native []byte, matche
 		candidate := zmodemDirectionPattern.FindIndex(data[offset:])
 		if candidate == nil { break }
 		start, end := offset+candidate[0], offset+candidate[1]
-		if nativeZmodemValidStartHeader(data[start:end]) {
+		if s.quarantineMalformed || nativeZmodemValidStartHeader(data[start:end]) {
 			legacy = append([]byte(nil), data[:start]...)
 			native = append([]byte(nil), data[start:]...)
 			return legacy, native, true
