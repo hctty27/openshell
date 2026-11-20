@@ -33,7 +33,9 @@ func (m *Manager) expireNativePassiveSelection(
 	c.nativeZmodemSelection = false
 	c.nativeZmodemSelectionPassive = false
 	c.nativeTerminalPoisoned = true
+	guard := c.outputGuard
 	m.mu.Unlock()
+	if guard != nil { guard.discardCapture() }
 	// Mark the UI unsafe *before* releasing the picker lease: a delayed
 	// frontend event must never briefly reopen terminal stdin.
 	m.emit("ssh:native-zmodem-unsupported", map[string]any{
@@ -80,7 +82,12 @@ func (m *Manager) handleNativePassiveFrame(
 	}
 	var selectionID uint64
 	if valid { selectionID = c.nativeZmodemSelectionID }
+	var rejectedGuard *nativeOnlyOutputGuard
+	if !valid && c != nil && c == expected && c.ref == ref {
+		rejectedGuard = c.outputGuard
+	}
 	m.mu.Unlock()
+	if rejectedGuard != nil { rejectedGuard.discardCapture() }
 
 	if valid {
 		time.AfterFunc(nativePassiveSelectionTimeout, func() {
