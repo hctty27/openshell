@@ -46,31 +46,20 @@ func TestNativeOnlyOutputGuardPreservesOrdinaryTerminalOutput(t *testing.T) {
 }
 
 
-func TestNativeOnlyOutputGuardRequiresValidCRCBeforeQuarantine(t *testing.T) {
+func TestNativeOnlyOutputGuardQuarantinesSuspectedCorruptedHandshake(t *testing.T) {
 	var visible bytes.Buffer
 	notifications := 0
 	guard := newNativeOnlyOutputGuard(&visible, func() { notifications++ })
 	fake := []byte("**\x18B0100000000aa50")
-	if _, err := guard.Write([]byte("prompt:")); err != nil { t.Fatal(err) }
+	if _, err := guard.Write([]byte("shell:")); err != nil { t.Fatal(err) }
 	for _, chunk := range [][]byte{fake[:4], fake[4:9], fake[9:]} {
 		if _, err := guard.Write(chunk); err != nil { t.Fatal(err) }
 	}
-	if _, err := guard.Write([]byte(" normal output\r\n")); err != nil { t.Fatal(err) }
-	if notifications != 0 {
-		t.Fatalf("invalid header unexpectedly quarantined the SSH terminal: %d", notifications)
+	if _, err := guard.Write([]byte("more binary-like output")); err != nil { t.Fatal(err) }
+	if notifications != 1 {
+		t.Fatalf("corrupted unsolicited protocol was allowed to reach xterm: notices=%d", notifications)
 	}
-	want := append([]byte("prompt:"), fake...)
-	want = append(want, []byte(" normal output\r\n")...)
-	if !bytes.Equal(visible.Bytes(), want) {
-		t.Fatalf("invalid header lost terminal output: got %q want %q", visible.Bytes(), want)
-	}
-
-	header := nativeZmodemHeaderFixture(0)
-	for _, chunk := range [][]byte{header[:7], header[7:]} {
-		if _, err := guard.Write(chunk); err != nil { t.Fatal(err) }
-	}
-	if notifications != 1 { t.Fatalf("valid ZRQINIT failed to quarantine: %d", notifications) }
-	if !bytes.Equal(visible.Bytes(), want) {
-		t.Fatalf("real ZMODEM frame reached xterm: %x", visible.Bytes()[len(want):])
+	if visible.String() != "shell:" {
+		t.Fatalf("ZMODEM bytes escaped the fail-closed guard: %q", visible.String())
 	}
 }
