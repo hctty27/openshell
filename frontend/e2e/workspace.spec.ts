@@ -1125,7 +1125,10 @@ test("keyboard focus stays inside AI controls and session tab buttons", async ({
   expect(await compose.evaluate(el => getComputedStyle(el).borderTopColor)).toBe(originalBorder);
 
   await ai.locator("textarea").focus();
-  expect(await compose.evaluate(el => getComputedStyle(el).borderTopColor)).not.toBe(originalBorder);
+  await expect(ai.locator("textarea")).toBeFocused();
+  // The composer border animates over 120ms; wait for the computed color to change.
+  await expect.poll(async () => compose.evaluate(el => getComputedStyle(el).borderTopColor))
+    .not.toBe(originalBorder);
 
   const mode = ai.locator(".ai-send-mode-trigger");
   await mode.focus();
