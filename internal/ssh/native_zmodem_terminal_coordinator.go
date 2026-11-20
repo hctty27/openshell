@@ -309,10 +309,13 @@ func (c *nativeTerminalCoordinator) run(
 	// Local sidecar exit alone never grants permission to resume the terminal.
 	// The remote shell emits a nonce-scoped OSC control marker *after* rz/sz
 	// exits; the marker and following shell output do not reach the sidecar.
+	// A nonzero exit code is a transfer failure, not evidence of an unsafe PTY:
+	// the fenced marker still proves the remote command has terminated.
+	remoteExitCode := 0
 	select {
 	case remote := <-fence.completion:
 		if remote.err != nil { return fmt.Errorf("远端 ZMODEM 结束标记异常（需要重连）：%w", remote.err) }
-		if remote.code != 0 { return fmt.Errorf("远端 rz/sz 退出状态为 %d，终端需要重连", remote.code) }
+		remoteExitCode = remote.code
 		if ctxErr := nativeZmodemContextError(ctx); ctxErr != nil { return ctxErr }
 	case <-ctx.Done():
 		return recoverInterrupted(nativeZmodemContextError(ctx))
@@ -327,6 +330,11 @@ func (c *nativeTerminalCoordinator) run(
 	}
 	if err := c.input.restore(inputLease); err != nil {
 		return err
+	}
+	if remoteExitCode != 0 {
+		// Do not publish partially received downloads; preserve the remote
+		// failure while keeping the verified, restored shell interactive.
+		return fmt.Errorf("远端 rz/sz 退出状态为 %d，终端已安全恢复", remoteExitCode)
 	}
 	if stage != "" {
 		if err := nativeZmodemPublish(stage, publishDestination); err != nil {
