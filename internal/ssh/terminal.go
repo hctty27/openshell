@@ -204,14 +204,10 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	inputGate := newTerminalInputGate(remoteInput, remoteInput)
 	writer := &terminalWriter{m: m, c: conn}
 	onUnsupported := func() {
-		m.mu.Lock()
-		if current := m.connections[ref.TabID]; current == conn && current.ref == ref {
-			current.nativeTerminalPoisoned = true
-		}
-		m.mu.Unlock()
-		m.emit("ssh:native-zmodem-unsupported", map[string]any{
-			"ref": ref, "error": "检测到未经原生接管的 ZMODEM 数据；已阻止协议数据进入终端，请重新连接 SSH 后使用普通 Shell 的 rz / sz 单文件命令",
-		})
+		// Called outside the scanner mutex. Revoke any pending passive
+		// selection immediately on a malformed frame or prebuffer overflow.
+		// The generation check suppresses stale SSH notifications.
+		m.failNativePassiveGuard(ref, conn)
 	}
 	guard := newNativeOnlyOutputGuard(writer, onUnsupported)
 	if passiveEnabled {
