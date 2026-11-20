@@ -62,8 +62,8 @@ func TestNativePassiveCoordinatorBridgesExistingRemoteProcess(t *testing.T) {
 			// protocol ends. It must not write to Rust's closed input pipe,
 			// leak to xterm, or cause SSH stdout to fail.
 			for _, chunk := range [][]byte{
-				[]byte("\\r\\nshell:~$ "),
-				[]byte("\\x1b]133;D;0\\x07"),
+				[]byte("\r\nshell:~$ "),
+				[]byte("\x1b]133;D;0\x07"),
 				bytes.Repeat([]byte{'x'}, 4096),
 			} {
 				if n, err := gate.Write(chunk); err != nil || n != len(chunk) {
