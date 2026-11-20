@@ -73,9 +73,14 @@ func (c *nativeTerminalCoordinator) runPassiveVerified(
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- c.runner(ctx, action, path, &nativeTerminalInboundReader{
+		result := c.runner(ctx, action, path, &nativeTerminalInboundReader{
 			reader: reader, sink: sink,
 		}, outbound)
+		// Unblock an in-flight SSH→Rust Pipe.Write before publishing the
+		// sidecar completion. Without this ordering, the output gate can
+		// wait for a Write whose reader has already exited.
+		sink.finish(reader)
+		done <- result
 	}()
 	stopSidecar := func() {
 		cancel()
