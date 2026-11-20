@@ -110,7 +110,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       });
     });
     const offNativeFile = listen("ssh:native-zmodem-file", (event: {
-      ref: Ref; batchId: string; kind: "start" | "progress" | "completed";
+      ref: Ref; batchId: string; kind: "start" | "progress" | "completed" | "skipped";
       index: number; name?: string; total?: number | null; processed?: number;
     }) => {
       if (!event?.ref || event.index !== 0) return;
@@ -119,24 +119,32 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
         const task = previous[key];
         if (!task || task.id !== event.batchId || task.status !== "running") return previous;
         const file = task.files[0];
-        if (!file) return previous;
+        if (!file || file.status === "completed" || file.status === "cancelled" || file.status === "failed") return previous;
+        const processed = typeof event.processed === "number" && Number.isSafeInteger(event.processed) && event.processed >= 0
+          ? event.processed : file.bytes;
+        const total = typeof event.total === "number" && Number.isSafeInteger(event.total) && event.total >= 0
+          ? event.total : file.total;
         return { ...previous, [key]: { ...task, files: [{
           ...file,
           name: event.name || file.name,
-          total: typeof event.total === "number" ? event.total : file.total,
-          bytes: typeof event.processed === "number" ? event.processed : file.bytes,
-          status: event.kind === "completed" ? "completed" : "running",
+          total,
+          bytes: Math.max(file.bytes, processed),
+          status: event.kind === "completed" ? "completed" :
+            event.kind === "skipped" ? "failed" : "running",
         }] } };
       });
     });
     const offNativeProgress = listen("ssh:native-zmodem-progress", (event: {
       ref: Ref; batchId: string; processed: number; total: number;
     }) => {
-      if (!event?.ref) return;
+      if (!event?.ref || !Number.isSafeInteger(event.processed) || event.processed < 0 ||
+        !Number.isSafeInteger(event.total) || event.total < 0 ||
+        (event.total > 0 && event.processed > event.total)) return;
       const key = refKey(event.ref);
       setNativeBatches(previous => {
         const batch = previous[key];
-        if (!batch || batch.id !== event.batchId || batch.status !== "running") return previous;
+        if (!batch || batch.id !== event.batchId || batch.status !== "running" ||
+          event.processed < batch.bytes) return previous;
         const now = Date.now();
         const sample = nativeRate.current.get(key);
         let speed = sample?.speed;
@@ -146,7 +154,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           speed = formatSize(Math.max(0, (event.processed - sample.bytes) * 1000 / (now - sample.time))) + "/s";
           nativeRate.current.set(key, { bytes: event.processed, time: now, speed });
         }
-        return { ...previous, [key]: { ...batch, bytes: event.processed, total: event.total, speed } };
+        return { ...previous, [key]: {
+          ...batch, bytes: event.processed,
+          total: event.total > 0 ? event.total : batch.total, speed,
+        } };
       });
     });
     const offSftp = listen("sftp:transfer", (task: SFTPTask) => {
