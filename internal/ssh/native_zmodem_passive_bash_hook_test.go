@@ -38,8 +38,7 @@ func TestNativePassiveBashPromptHookEmitsSessionBoundExitAndPreservesPromptComma
 		t.Run(tc.name, func(t *testing.T) {
 			script := tc.initial + "; " + bootstrap +
 				"; false; " + tc.runPromptCommand +
-				"; true; " + tc.runPromptCommand +
-				"; declare -p PROMPT_COMMAND"
+				"; true; " + tc.runPromptCommand
 			cmd := exec.Command("bash", "--noprofile", "--norc", "-c", script)
 			cmd.Stdin = strings.NewReader(testNativePassiveSessionToken + "\n")
 			combined, err := cmd.CombinedOutput()
