@@ -1012,3 +1012,66 @@ test("terminal toolbar has one context-aware disconnect/reconnect control", asyn
   await waitFor(() => expect(api.Connect).toHaveBeenCalledTimes(2));
   expect(screen.getByTitle("断开连接")).toBeTruthy();
 });
+
+
+test("global AI width matches terminal AI range and keeps its width after pointer and keyboard resize", async () => {
+  vi.mocked(api.SavePreference).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [], groups: [], fontSize: "14", language: "zh-CN", version: "test",
+    aiSidebarMode: "pinned", aiSidebarWidth: 720,
+  });
+  await act(async () => { render(<App />); });
+  const root = document.querySelector(".app") as HTMLElement;
+  const body = document.querySelector(".app-body") as HTMLElement;
+  const sessionDock = document.querySelector(".session-sidebar-dock") as HTMLElement;
+  vi.spyOn(body, "getBoundingClientRect").mockReturnValue({
+    left: 0, top: 0, right: 1500, bottom: 600, width: 1500, height: 600,
+    x: 0, y: 0, toJSON: () => ({}),
+  });
+  vi.spyOn(sessionDock, "getBoundingClientRect").mockReturnValue({
+    left: 0, top: 0, right: 235, bottom: 600, width: 235, height: 600,
+    x: 0, y: 0, toJSON: () => ({}),
+  });
+  const terminal = document.querySelector(".terminal-container");
+  const handle = screen.getByRole("separator", { name: "调整 AI 侧栏宽度" });
+  expect(root.style.getPropertyValue("--ai-width")).toBe("720px");
+  expect(handle.getAttribute("aria-valuemin")).toBe("300");
+  expect(handle.getAttribute("aria-valuemax")).toBe("1600");
+  fireEvent.pointerDown(handle, { button: 0, pointerId: 8, clientX: 950 });
+  fireEvent.pointerMove(window, { pointerId: 8, clientX: 700 });
+  // The 65% cap of the 1265px available space is 822px.
+  expect(handle.getAttribute("aria-valuenow")).toBe("822");
+  fireEvent.pointerUp(window, { pointerId: 8, clientX: 700 });
+  await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("aiSidebarWidth", "822"));
+  fireEvent.keyDown(handle, { key: "ArrowRight" });
+  expect(handle.getAttribute("aria-valuenow")).toBe("812");
+  await waitFor(() => expect(api.SavePreference).toHaveBeenCalledWith("aiSidebarWidth", "812"));
+  fireEvent.keyDown(handle, { key: "Home" });
+  expect(handle.getAttribute("aria-valuenow")).toBe("300");
+  fireEvent.keyDown(handle, { key: "End" });
+  expect(handle.getAttribute("aria-valuenow")).toBe("822");
+  fireEvent.doubleClick(handle);
+  expect(handle.getAttribute("aria-valuenow")).toBe("360");
+  expect(document.querySelector(".terminal-container")).toBe(terminal);
+});
+
+test("global AI resize cancel reverts the previous saved width", async () => {
+  vi.mocked(api.SavePreference).mockClear();
+  vi.mocked(api.State).mockResolvedValueOnce({
+    sessions: [], groups: [], fontSize: "14", language: "zh-CN", version: "test",
+    aiSidebarMode: "pinned", aiSidebarWidth: 360,
+  });
+  await act(async () => { render(<App />); });
+  const body = document.querySelector(".app-body") as HTMLElement;
+  vi.spyOn(body, "getBoundingClientRect").mockReturnValue({
+    left: 0, top: 0, right: 1800, bottom: 700, width: 1800, height: 700,
+    x: 0, y: 0, toJSON: () => ({}),
+  });
+  const handle = screen.getByRole("separator", { name: "调整 AI 侧栏宽度" });
+  fireEvent.pointerDown(handle, { button: 0, pointerId: 9, clientX: 800 });
+  fireEvent.pointerMove(window, { pointerId: 9, clientX: 500 });
+  expect(handle.getAttribute("aria-valuenow")).toBe("660");
+  fireEvent.pointerCancel(window, { pointerId: 9, clientX: 500 });
+  expect(handle.getAttribute("aria-valuenow")).toBe("360");
+  expect(api.SavePreference).not.toHaveBeenCalledWith("aiSidebarWidth", "660");
+});
