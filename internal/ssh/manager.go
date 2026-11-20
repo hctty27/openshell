@@ -49,11 +49,16 @@ type connection struct {
 	stdinMu sync.Mutex
 	writer   *terminalWriter
 	outputGate *terminalOutputGate
+	outputGuard *nativeOnlyOutputGuard
 	inputGate *terminalInputGate
 	nativeTerminalTransfer *nativeTerminalTransferTask
 	// Reserved while the native single-file picker is open; normal shell
 	// input and terminal AI must not bypass the pending ZMODEM handoff.
 	nativeZmodemSelection bool
+	// Passive mode is an opt-in remote-handshake experiment; the remote
+	// process has already begun, so cancellation must fail closed.
+	nativeZmodemSelectionPassive bool
+	nativeZmodemPassiveFrame byte
 	nativeZmodemSelectionID uint64 // per-connection picker generation; never reused while this SSH session lives
 	nativeTerminalPoisoned bool
 	nativeAutoInput nativeAutoInputTracker
