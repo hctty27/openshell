@@ -63,14 +63,16 @@ func (m *Manager) ReleaseNativeZmodemSelection(ref domain.ConnectionRef, selecti
 		c.readiness.restoreClearedNativeZmodemPrompt()
 	}
 	m.mu.Unlock()
-	m.emit("ssh:native-zmodem-selection", map[string]any{
-		"ref": ref, "selectionId": selectionID, "active": false,
-	})
 	if passive {
+		// The frontend must learn that the PTY is unsafe before receiving
+		// the selection-release event. Never create a brief typing window.
 		m.emit("ssh:native-zmodem-unsupported", map[string]any{
 			"ref": ref, "error": "已取消远端主动 ZMODEM 选择；无法确认远端程序退出，请重新连接 SSH",
 		})
 	}
+	m.emit("ssh:native-zmodem-selection", map[string]any{
+		"ref": ref, "selectionId": selectionID, "active": false,
+	})
 	return true
 }
 
