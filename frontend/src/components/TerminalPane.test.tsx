@@ -1186,3 +1186,36 @@ test("late old native finish releases its own lock without unlocking a newer tas
   emit({ ref: tab.ref, id: "first", sequence: 601, active: true });
   expect(term.options.disableStdin).toBe(false);
 });
+
+
+test("native picker lease blocks stdin and ignores delayed selection events", async () => {
+  renderTerminal();
+  const term = refs.terms[0];
+  const emit = (name: string, payload: unknown) =>
+    act(() => events.listeners.get(name)?.(payload));
+  await waitFor(() => expect(events.listeners.has("ssh:native-zmodem-auto-intent")).toBe(true));
+
+  emit("ssh:native-zmodem-auto-intent", { ref: tab.ref, selectionId: 5, direction: "upload" });
+  expect(term.options.disableStdin).toBe(true);
+  act(() => term.onDataCallback("pwd\r"));
+  expect(api.WriteTerminal).not.toHaveBeenCalled();
+
+  emit("ssh:native-zmodem-selection", { ref: tab.ref, selectionId: 4, active: false });
+  expect(term.options.disableStdin).toBe(true);
+  emit("ssh:native-zmodem-batch", { ref: tab.ref, id: "task-1", sequence: 7, active: true });
+  emit("ssh:native-zmodem-selection", { ref: tab.ref, selectionId: 5, active: false });
+  expect(term.options.disableStdin).toBe(true);
+
+  emit("ssh:native-zmodem-batch", { ref: tab.ref, id: "task-1", sequence: 7, active: false, terminalSafe: true });
+  expect(term.options.disableStdin).toBe(false);
+  // Events are delivered asynchronously; ended selections must stay ended.
+  emit("ssh:native-zmodem-auto-intent", { ref: tab.ref, selectionId: 5, direction: "upload" });
+  expect(term.options.disableStdin).toBe(false);
+
+  emit("ssh:native-zmodem-auto-intent", { ref: tab.ref, selectionId: 6, direction: "download" });
+  expect(term.options.disableStdin).toBe(true);
+  emit("ssh:native-zmodem-selection", { ref: tab.ref, selectionId: 6, active: false });
+  expect(term.options.disableStdin).toBe(false);
+  emit("ssh:native-zmodem-auto-intent", { ref: { ...tab.ref!, generation: 900 }, selectionId: 99 });
+  expect(term.options.disableStdin).toBe(false);
+});
