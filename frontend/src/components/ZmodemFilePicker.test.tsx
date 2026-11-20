@@ -190,7 +190,10 @@ test("passive remote rz uploads one selected file without re-running shell rz", 
     ref, direction: "upload", remotePath: "", selectionId: 42, passive: true,
   });
   fireEvent.click(await screen.findByText("hello.txt"));
-  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
+  const send = screen.getByRole("button", { name: "确认覆盖上传" });
+  expect((send as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("checkbox", { name: "我确认允许覆盖服务器上的同名文件" }));
+  fireEvent.click(send);
   await waitFor(() => expect(api.StartNativeZmodemPassiveTransfer)
     .toHaveBeenCalledWith(ref, 42, "upload", "/home/user/hello.txt"));
   expect(api.StartNativeZmodemInteractiveTransfer).not.toHaveBeenCalled();
