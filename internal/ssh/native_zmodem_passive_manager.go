@@ -10,6 +10,43 @@ import (
 	"github.com/hctty27/openshell/internal/domain"
 )
 
+// failNativePassiveGuard is invoked when the stdout scanner detects an
+// unclaimable or overflowed ZMODEM stream. It invalidates a pending picker
+// immediately, instead of leaving its lease alive until the 2-minute timer.
+// The current SSH generation remains quarantined in every failure case.
+func (m *Manager) failNativePassiveGuard(ref domain.ConnectionRef, expected *connection) {
+	m.mu.Lock()
+	c := m.connections[ref.TabID]
+	if c == nil || c != expected || c.ref != ref {
+		m.mu.Unlock()
+		return
+	}
+	c.nativeTerminalPoisoned = true
+	selectionID := uint64(0)
+	var guard *nativeOnlyOutputGuard
+	if c.nativeZmodemSelection && c.nativeZmodemSelectionPassive {
+		selectionID = c.nativeZmodemSelectionID
+		c.nativeZmodemSelection = false
+		c.nativeZmodemSelectionPassive = false
+		guard = c.outputGuard
+	}
+	m.mu.Unlock()
+	if guard != nil { guard.discardCapture() }
+	message := "检测到未经原生接管的 ZMODEM 数据；已阻止协议数据进入终端，请重新连接 SSH"
+	if selectionID != 0 {
+		message = "远端 ZMODEM 握手缓冲已溢出或无法继续接管；已取消本次文件选择，必须重新连接 SSH"
+	}
+	m.emit("ssh:native-zmodem-unsupported", map[string]any{
+		"ref": ref, "error": message,
+	})
+	if selectionID != 0 {
+		// The frontend must mark stdin unsafe before the picker disappears.
+		m.emit("ssh:native-zmodem-selection", map[string]any{
+			"ref": ref, "selectionId": selectionID, "active": false,
+		})
+	}
+}
+
 // A remote rz/sz process may time out while the user leaves the file
 // selection dialog open. Do not buffer indefinitely, and never interpret
 // timeout as proof that the remote shell has returned.
