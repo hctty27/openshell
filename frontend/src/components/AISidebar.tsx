@@ -423,9 +423,10 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
       if (!composing && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
         const textarea = event.currentTarget;
         const browsing = promptNavigationRef.current.index !== -1;
-        const atBoundary = event.key === "ArrowUp"
+        const singleLine = !textarea.value.includes("\n");
+        const atBoundary = singleLine || (event.key === "ArrowUp"
           ? textarea.selectionStart === 0
-          : textarea.selectionEnd === textarea.value.length;
+          : textarea.selectionEnd === textarea.value.length);
         if (textarea.selectionStart === textarea.selectionEnd && (browsing || atBoundary)) {
           const next = navigatePromptHistory(
             promptNavigationRef.current,
