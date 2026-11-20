@@ -65,7 +65,7 @@ func (m *Manager) AcquireAITerminal(ref domain.ConnectionRef) (*AITerminalLease,
     defer m.mu.Unlock()
     if m.connections[ref.TabID] != conn || conn.ref != ref ||
         conn.terminal == nil || conn.stdin == nil || conn.inputGate == nil ||
-        conn.nativeTerminalTransfer != nil || conn.nativeTerminalPoisoned {
+        conn.nativeTerminalTransfer != nil || conn.nativeTerminalPoisoned || conn.nativeZmodemSelection {
         return nil, errAITerminalUnavailable
     }
     if conn.aiController != nil { return nil, errAITerminalBusy }
@@ -108,7 +108,7 @@ func (lease *AITerminalLease) validInput() (interface{ Write([]byte)(int,error) 
     defer lease.manager.mu.Unlock()
     c := lease.manager.connections[lease.ref.TabID]
     if c == nil || c != lease.connection || c.ref != lease.ref ||
-        c.aiController != lease || c.stdin == nil || c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned {
+        c.aiController != lease || c.stdin == nil || c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.nativeZmodemSelection {
         return nil,errAITerminalUnavailable
     }
     return c.stdin,nil

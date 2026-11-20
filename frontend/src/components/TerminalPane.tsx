@@ -78,6 +78,10 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
   const cloneCwdSent = useRef(false);
   const nativeTransferActive = useRef(false);
   const nativeTransferIDs = useRef(new Set<string>());
+  const nativeTransferSequence = useRef(0);
+  const nativeTransferFinished = useRef(new Set<string>());
+  const nativeSelectionID = useRef(0);
+  const nativeSelectionLastSeen = useRef(0);
   const terminalMode = p.tab.status === "connected" && p.tab.ref ? "ssh"
     : p.tab.ref && p.tab.everConnected && ["disconnected", "error"].includes(p.tab.status)
       ? (p.tab.localFallbackPending || p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
@@ -326,37 +330,80 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       !!ref && candidate.tabId === ref.tabId &&
       candidate.sessionId === ref.sessionId &&
       candidate.generation === ref.generation;
+    const updateNativeInputLock = () => {
+      nativeTransferActive.current = nativeSelectionID.current > 0 || nativeTransferIDs.current.size > 0;
+      syncTransferInput();
+    };
+    const offNativeIntent = listen("ssh:native-zmodem-auto-intent", (event: {
+      ref?: Ref; selectionId?: number;
+    }) => {
+      if (!event?.ref || !matchesConnection(event.ref)) return;
+      const id = event.selectionId;
+      if (!Number.isSafeInteger(id) || !id || id <= nativeSelectionLastSeen.current) return;
+      nativeSelectionLastSeen.current = id;
+      nativeSelectionID.current = id;
+      updateNativeInputLock();
+    });
+    const offNativeSelection = listen("ssh:native-zmodem-selection", (event: {
+      ref?: Ref; selectionId?: number; active?: boolean;
+    }) => {
+      if (!event?.ref || !matchesConnection(event.ref) || event.active !== false) return;
+      const id = event.selectionId;
+      if (!Number.isSafeInteger(id) || !id) return;
+      nativeSelectionLastSeen.current = Math.max(nativeSelectionLastSeen.current, id);
+      if (nativeSelectionID.current !== id) return;
+      nativeSelectionID.current = 0;
+      updateNativeInputLock();
+    });
     const offNativeBatch = listen("ssh:native-zmodem-batch", (event: {
-      ref?: Ref; id?: string; active: boolean; terminalSafe?: boolean; error?: string;
+      ref?: Ref; id?: string; sequence?: number; active: boolean; terminalSafe?: boolean; error?: string;
     }) => {
       if (!event?.ref || !matchesConnection(event.ref)) return;
       const transferID = event.id ?? "legacy";
+      const sequence = typeof event.sequence === "number" && Number.isSafeInteger(event.sequence) && event.sequence > 0
+        ? event.sequence : 0;
+      // A delayed *end* from an older task must still release that task's
+      // own input lease, even if a newer start event arrived first. Ignore
+      // outdated starts and outcomes for tasks we no longer hold.
+      if (sequence < nativeTransferSequence.current &&
+        (event.active || !nativeTransferIDs.current.has(transferID))) return;
+      if (sequence > nativeTransferSequence.current) nativeTransferSequence.current = sequence;
+      // The end event can arrive before start through asynchronous listeners.
+      // Once ended, this exact task cannot lock the SSH terminal again.
+      if (event.active && nativeTransferFinished.current.has(transferID)) return;
       if (event.active) {
         nativeTransferIDs.current.add(transferID);
-        nativeTransferActive.current = true;
-        syncTransferInput();
+        updateNativeInputLock();
         return;
+      }
+      nativeTransferFinished.current.add(transferID);
+      while (nativeTransferFinished.current.size > 512) {
+        const oldest = nativeTransferFinished.current.values().next().value;
+        if (oldest === undefined) break;
+        nativeTransferFinished.current.delete(oldest);
       }
       const terminalSafe = event.terminalSafe === true ||
         (event.terminalSafe == null && !event.error);
       if (terminalSafe) nativeTransferIDs.current.delete(transferID);
       else nativeTransferIDs.current.add(transferID);
-      nativeTransferActive.current = nativeTransferIDs.current.size > 0;
-      syncTransferInput();
+      updateNativeInputLock();
     });
     const offUnsupported = listen("ssh:native-zmodem-unsupported", (event: {
       ref?: Ref; error?: string;
     }) => {
       if (!event?.ref || !matchesConnection(event.ref)) return;
       nativeTransferIDs.current.add("unsafe-protocol");
-      nativeTransferActive.current = true;
-      syncTransferInput();
+      updateNativeInputLock();
       callbacks.current.onError(new Error(event.error ?? "Unclaimed ZMODEM protocol; reconnect SSH"));
     });
     const offDisconnected = listen("ssh:disconnected", (disconnectedRef: Ref) => {
       if (!matchesConnection(disconnectedRef)) return;
       nativeTransferActive.current = false;
       nativeTransferIDs.current.clear();
+      nativeSelectionID.current = 0;
+      nativeSelectionLastSeen.current = 0;
+      nativeTransferSequence.current = 0;
+      nativeTransferFinished.current.clear();
       syncTransferInput();
     });
     let inputFlushing = false;
@@ -630,6 +677,8 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       window.removeEventListener("resize", onWindowResize);
       offWindowGeometryEvents.forEach(off => off());
       off();
+      offNativeIntent();
+      offNativeSelection();
       offNativeBatch();
       offUnsupported();
       offDisconnected();

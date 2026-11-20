@@ -3,6 +3,7 @@ package sshclient
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,9 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		remote string
 	}{
 		{"upload", []string{"r", "z", "\r"}, true, "rz\x15", "upload", ""},
+		{"leading space upload", []string{" rz\r"}, true, " rz\x15", "upload", ""},
+		{"leading space download", []string{"  sz log.bin\r"}, true, "  sz log.bin\x15", "download", "log.bin"},
+		{"empty-line Ctrl-U then upload", []string{"\x15", "rz\r"}, true, "\x15rz\x15", "upload", ""},
 		{"download", []string{"sz /tmp/report.bin\r"}, true, "sz /tmp/report.bin\x15", "download", "/tmp/report.bin"},
 		{"missing prompt fails closed", []string{"rz\r"}, false, "rz\x15", "reject-unavailable", ""},
 		{"unknown prompt ordinary command unchanged", []string{"redis-cli\r"}, false, "redis-cli\r", "", ""},
@@ -35,7 +39,7 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		{"unsupported upload option", []string{"rz -a\r"}, true, "rz -a\x15", "reject-unsupported", ""},
 		{"overwrite after option terminator rejected", []string{"rz -- -y\r"}, true, "rz -- -y\x15", "reject-unsupported", ""},
 		{"relative path", []string{"sz report.bin\r"}, true, "sz report.bin\x15", "download", "report.bin"},
-		{"unsafe command", []string{"sz /tmp/a;rm -rf /\r"}, true, "sz /tmp/a;rm -rf /\r", "", ""},
+		{"unsupported shell chain blocked", []string{"sz /tmp/a;rm -rf /\r"}, true, "sz /tmp/a;rm -rf /\x15", "reject-unsupported", ""},
 		{"quoted spaces", []string{"sz '/tmp/a b'\r"}, true, "sz '/tmp/a b'\x15", "download", "/tmp/a b"},
 		{"empty line", []string{"\r"}, true, "\r", "", ""},
 		{"multi download rejected before remote command", []string{"sz -q -- one.bin 'two files.bin'\r"}, true, "sz -q -- one.bin 'two files.bin'\x15", "reject-multi", ""},
@@ -43,13 +47,21 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		{"escaped space", []string{"sz name\\ with\\ spaces.bin\r"}, true, "sz name\\ with\\ spaces.bin\x15", "download", "name with spaces.bin"},
 		{"upload quiet", []string{"rz -q\r"}, true, "rz -q\x15", "upload", ""},
 		{"overwrite split input", []string{"r", "z", " ", "-", "y", "\r"}, true, "rz -y\x15", "upload-overwrite", ""},
-		{"shell expansion remains legacy", []string{"sz \"$HOME/a.bin\"\r"}, true, "sz \"$HOME/a.bin\"\r", "", ""},
-		{"glob remains legacy", []string{"sz *.bin\r"}, true, "sz *.bin\r", "", ""},
-		{"home expansion remains legacy", []string{"sz ~/file.bin\r"}, true, "sz ~/file.bin\r", "", ""},
+		{"shell expansion blocked", []string{"sz \"$HOME/a.bin\"\r"}, true, "sz \"$HOME/a.bin\"\x15", "reject-unsupported", ""},
+		{"glob blocked", []string{"sz *.bin\r"}, true, "sz *.bin\x15", "reject-unsupported", ""},
+		{"home expansion blocked", []string{"sz ~/file.bin\r"}, true, "sz ~/file.bin\x15", "reject-unsupported", ""},
 		{"history editing", []string{"r", "\x1b[A", "z\r"}, true, "r\x1b[Az\r", "", ""},
-		{"backspace editing", []string{"r", "\x7f", "z\r"}, true, "r\x7fz\r", "", ""},
-		{"multiline paste", []string{"rz\rwhoami\r"}, true, "rz\rwhoami\r", "", ""},
-		{"newline", []string{"rz\n"}, true, "rz\n", "", ""},
+		{"backspace editing not a transfer", []string{"r", "\x7f", "z\r"}, true, "r\x7fz\r", "", ""},
+		{"fix typo with delete", []string{"rzz", "\x7f", "\r"}, true, "rzz\x7f\x15", "upload", ""},
+		{"fix typo with backspace", []string{"rzz", "\b", "\r"}, true, "rzz\b\x15", "upload", ""},
+		{"edit overwrite flag", []string{"rz -yx", "\x7f", "\r"}, true, "rz -yx\x7f\x15", "upload-overwrite", ""},
+		{"edit UTF-8 path", []string{"sz '中文错", "\x7f", "文.bin'\r"}, true, "sz '中文错\x7f文.bin'\x15", "download", "中文文.bin"},
+		{"Ctrl-U clears the typed line", []string{"rz -y", "\x15", "sz one.bin\r"}, true, "rz -y\x15sz one.bin\x15", "download", "one.bin"},
+		{"CRLF is one entered command", []string{"rz\r\n"}, true, "rz\x15", "upload", ""},
+		{"multiline with later ZMODEM", []string{"echo hello\rsz a.bin\r"}, true, "\x15", "reject-multiline", ""},
+		{"multiline with prior partial ZMODEM", []string{"rz", "\rwhoami\r"}, true, "rz\x15", "reject-multiline", ""},
+		{"multiline paste rejected", []string{"rz\rwhoami\r"}, true, "\x15", "reject-multiline", ""},
+		{"newline", []string{"rz\n"}, true, "rz\x15", "upload", ""},
 		{"long input", []string{strings.Repeat("r", nativeAutoCommandMaxLength+10)+"\r"}, true, strings.Repeat("r", nativeAutoCommandMaxLength+10)+"\r", "", ""},
 	}
 	for _, tc := range cases {
@@ -156,6 +168,44 @@ func TestNativeAutoCommandRejectsStaleGeneration(t *testing.T) {
 	if input.Len() != 0 || len(events) != 0 { t.Fatal("stale intent reached an active terminal") }
 }
 
+func TestNativeAutoCommandBackspaceAndPasteSafetyAtManagerWrite(t *testing.T) {
+	cases := []struct { name string; parts []string; wire string; expectedIntent string; expectedError bool }{
+		{"backspace to rz", []string{"rzz", "\x7f", "\r"}, "rzz\x7f\x15", "upload", false},
+		{"backspace to rz -y", []string{"rz -yx", "\x7f", "\r"}, "rz -yx\x7f\x15", "upload-overwrite", false},
+		{"multiline paste", []string{"rz\rwhoami\r"}, "\x15", "", true},
+		{"paste after partial command", []string{"rz", "\rwhoami\r"}, "rz\x15", "", true},
+		{"LF newline", []string{"rz\n"}, "rz\x15", "upload", false},
+		{"leading spaces", []string{"  rz\r"}, "  rz\x15", "upload", false},
+		{"empty line kill", []string{"\x15", "rz\r"}, "\x15rz\x15", "upload", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m, ref, wire, events := nativeAutoTestManager(t, true, true)
+			var rejected []string
+			oldEmit := m.emit
+			m.emit = func(name string, payload any) {
+				oldEmit(name, payload)
+				if name == "ssh:native-zmodem-command-error" {
+					rejected = append(rejected, payload.(map[string]any)["error"].(string))
+				}
+			}
+			for _, part := range tc.parts { nativeAutoType(t, m, ref, part) }
+			if got := wire.String(); got != tc.wire { t.Fatalf("got wire %q, want %q", got, tc.wire) }
+			if tc.expectedError && len(rejected) != 1 { t.Fatalf("expected rejection, got %v", rejected) }
+			if !tc.expectedError && len(rejected) != 0 { t.Fatalf("unexpected rejection: %v", rejected) }
+			if tc.expectedIntent == "" {
+				if len(events) != 0 { t.Fatal("unsafe paste started a file picker") }
+			} else {
+				select {
+				case event := <-events:
+					if event["direction"] != tc.expectedIntent { t.Fatalf("intent mismatch: %v", event) }
+				default: t.Fatal("native picker missing")
+				}
+			}
+		})
+	}
+}
+
 func TestNativeAutoCommandBlocksInProgramAndAfterEditing(t *testing.T) {
 	m, ref, input, events := nativeAutoTestManager(t, true, true)
 	nativeAutoType(t, m, ref, "r")
@@ -163,6 +213,76 @@ func TestNativeAutoCommandBlocksInProgramAndAfterEditing(t *testing.T) {
 	nativeAutoType(t, m, ref, "z\r")
 	if input.String() != "r\x7fz\r" || len(events) != 0 {
 		t.Fatal("edited command must stay on legacy path")
+	}
+}
+
+func TestNativeAutoCommandPickerBlocksTypingUntilReleased(t *testing.T) {
+	m, ref, input, events := nativeAutoTestManager(t, true, true)
+	nativeAutoType(t, m, ref, "rz\r")
+	select {
+	case intent := <-events:
+		if intent["direction"] != "upload" { t.Fatalf("unexpected intent: %v", intent) }
+	default:
+		t.Fatal("native picker did not open")
+	}
+	if got := input.String(); got != "rz\x15" { t.Fatalf("unexpected initial wire: %q", got) }
+	key := base64.StdEncoding.EncodeToString([]byte("pwd\r"))
+	if err := m.Write(ref, key); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("picker did not reserve user input: %v", err)
+	}
+	if _, err := m.AcquireAITerminal(ref); err == nil {
+		t.Fatal("terminal AI acquired the SSH session during file selection")
+	}
+	stale := ref
+	stale.Generation++
+	if m.ReleaseNativeZmodemSelection(stale, 1) { t.Fatal("stale generation released a picker") }
+	if m.ReleaseNativeZmodemSelection(ref, 2) { t.Fatal("stale selection ID released a live picker") }
+	if err := m.Write(ref, key); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("stale picker cancellation released live SSH input: %v", err)
+	}
+	if !m.ReleaseNativeZmodemSelection(ref, 1) { t.Fatal("current picker could not be released") }
+	if err := m.Write(ref, key); err != nil {
+		t.Fatalf("selection cancellation did not restore typing: %v", err)
+	}
+	if got := input.String(); got != "rz\x15pwd\r" {
+		t.Fatalf("unexpected output after picker cancellation: %q", got)
+	}
+}
+
+
+func TestNativeZmodemPickerCancellationAllowsImmediateSecondTransfer(t *testing.T) {
+	for _, command := range []string{"rz", "rz -y", "sz report.bin"} {
+		t.Run(command, func(t *testing.T) {
+			m, ref, input, events := nativeAutoTestManager(t, true, true)
+			nativeAutoType(t, m, ref, command+"\r")
+			first := <-events
+			firstID, ok := first["selectionId"].(uint64)
+			if !ok || firstID == 0 { t.Fatalf("missing first picker generation: %v", first) }
+			if m.ReleaseNativeZmodemSelection(ref, firstID+1) {
+				t.Fatal("stale picker release unexpectedly succeeded")
+			}
+			if !m.ReleaseNativeZmodemSelection(ref, firstID) {
+				t.Fatal("first picker cancellation was rejected")
+			}
+
+			nativeAutoType(t, m, ref, command+"\r")
+			select {
+			case second := <-events:
+				secondID, ok := second["selectionId"].(uint64)
+				if !ok || secondID <= firstID {
+					t.Fatalf("second picker used stale selection generation: first=%v second=%v", first, second)
+				}
+				if second["direction"] != first["direction"] {
+					t.Fatalf("second transfer changed direction: %v -> %v", first, second)
+				}
+			default:
+				t.Fatalf("second %q did not open a picker after cancellation", command)
+			}
+			want := command+"\x15"+command+"\x15"
+			if got := input.String(); got != want {
+				t.Fatalf("second rz/sz was not intercepted: got %q, want %q", got, want)
+			}
+		})
 	}
 }
 

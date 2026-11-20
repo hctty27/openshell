@@ -16,12 +16,53 @@ type nativeTerminalTransferTask struct {
 	cancel context.CancelFunc
 }
 
+// The UI's "running" event must be emitted only after the SSH manager
+// admits this task. A rejected concurrent start must not lock the terminal
+// or create an orphaned transfer-center row.
+type nativeZmodemAcceptedObserverKey struct{}
+
+func WithNativeZmodemAcceptedObserver(ctx context.Context, onAccepted func()) context.Context {
+	if onAccepted == nil { return ctx }
+	return context.WithValue(ctx, nativeZmodemAcceptedObserverKey{}, onAccepted)
+}
+
+func notifyNativeZmodemAccepted(ctx context.Context) {
+	if ctx == nil { return }
+	if callback, ok := ctx.Value(nativeZmodemAcceptedObserverKey{}).(func()); ok && callback != nil {
+		callback()
+	}
+}
+
 // All callers must hold Manager.mu. Cancellation is nonblocking and never
 // tries to acquire an input/output gate while the manager lock is held.
 func cancelNativeTerminalTransferLocked(c *connection) {
 	if c != nil && c.nativeTerminalTransfer != nil {
 		c.nativeTerminalTransfer.cancel()
 	}
+}
+
+// ReleaseNativeZmodemSelection clears only a picker reservation belonging
+// to the exact SSH generation. It never cancels a running Rust transfer.
+func (m *Manager) ReleaseNativeZmodemSelection(ref domain.ConnectionRef, selectionID uint64) bool {
+	m.mu.Lock()
+	c := m.connections[ref.TabID]
+	if c == nil || c.ref != ref || !c.nativeZmodemSelection ||
+		selectionID == 0 || selectionID != c.nativeZmodemSelectionID {
+		m.mu.Unlock()
+		return false
+	}
+	c.nativeZmodemSelection = false
+	// The intercepted remote line was erased with Ctrl-U; reopening the
+	// already verified shell prompt is necessary for the next rz/sz.
+	// Do not do this for a poisoned terminal or a concurrently owned PTY.
+	if c.nativeTerminalTransfer == nil && !c.nativeTerminalPoisoned {
+		c.readiness.restoreClearedNativeZmodemPrompt()
+	}
+	m.mu.Unlock()
+	m.emit("ssh:native-zmodem-selection", map[string]any{
+		"ref": ref, "selectionId": selectionID, "active": false,
+	})
+	return true
 }
 
 func (m *Manager) CancelExperimentalNativeTerminalTransfer(ref domain.ConnectionRef) bool {
@@ -82,10 +123,22 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 	ctx, cancel := context.WithCancel(parent)
 	task := &nativeTerminalTransferTask{ref: ref, cancel: cancel}
 	c.nativeTerminalTransfer = task
+	// Picker ownership becomes task ownership atomically.
+	selectionID := uint64(0)
+	if c.nativeZmodemSelection { selectionID = c.nativeZmodemSelectionID }
+	c.nativeZmodemSelection = false
 	input, output := c.inputGate, c.outputGate
 	m.mu.Unlock()
 
+	if selectionID != 0 {
+		m.emit("ssh:native-zmodem-selection", map[string]any{
+			"ref": ref, "selectionId": selectionID, "active": false,
+		})
+	}
 	defer cancel()
+	// The ownership token is installed before the observer can announce
+	// the task to listeners. Rejected starts never emit an active event.
+	notifyNativeZmodemAccepted(ctx)
 
 	coordinator := &nativeTerminalCoordinator{
 		input: input, output: output,

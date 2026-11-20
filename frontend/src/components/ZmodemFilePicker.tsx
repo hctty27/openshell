@@ -6,7 +6,7 @@ import { t } from "../i18n";
 import type { Ref, SFTPEntry } from "../types";
 
 type Direction = "upload" | "upload-overwrite" | "download";
-interface PickerRequest { ref: Ref; id: number; direction: Direction; remotePath?: string }
+interface PickerRequest { ref: Ref; id: number; selectionId: number; direction: Direction; remotePath?: string }
 interface Places { home: string; roots: string[] }
 interface Props {
   activeRef?: Ref;
@@ -53,11 +53,14 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       ref?: Ref;
       direction?: Direction;
       remotePath?: string;
+      selectionId?: number;
     }) => {
-      if (!event?.ref || (event.direction !== "upload" && event.direction !== "upload-overwrite" && event.direction !== "download")) return;
+      if (!event?.ref || !Number.isSafeInteger(event.selectionId) || (event.selectionId ?? 0) <= 0 ||
+        (event.direction !== "upload" && event.direction !== "upload-overwrite" && event.direction !== "download")) return;
       const request: PickerRequest = {
         ref: event.ref,
         id: -(++nextNativeRequestID.current),
+        selectionId: event.selectionId!,
         direction: event.direction,
         remotePath: event.remotePath ?? "",
       };
@@ -189,9 +192,18 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
           download ? directory : paths[0], download ? remotePath : "",
         );
         void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
+      } else {
+        // Closing the picker does not start a protocol task. Explicitly
+        // release its backend terminal reservation before accepting typing.
+        pending = api.CancelNativeZmodemSelection(request.ref, request.selectionId);
       }
       closeRequest();
       if (pending) void pending.catch(err => {
+        // If admission failed before the native task took ownership, the
+        // file picker no longer exists to release its selection lease.
+        // The transfer may already have taken ownership, making release
+        // correctly return "not active". Preserve the original error only.
+        void api.CancelNativeZmodemSelection(request.ref, request.selectionId).catch(() => {});
         const message = errorText(err);
         if (message.includes("终端已安全恢复") && message.includes("context canceled")) return;
         onNotice(err);

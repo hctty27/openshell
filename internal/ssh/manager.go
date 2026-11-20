@@ -51,6 +51,10 @@ type connection struct {
 	outputGate *terminalOutputGate
 	inputGate *terminalInputGate
 	nativeTerminalTransfer *nativeTerminalTransferTask
+	// Reserved while the native single-file picker is open; normal shell
+	// input and terminal AI must not bypass the pending ZMODEM handoff.
+	nativeZmodemSelection bool
+	nativeZmodemSelectionID uint64 // per-connection picker generation; never reused while this SSH session lives
 	nativeTerminalPoisoned bool
 	nativeAutoInput nativeAutoInputTracker
 	aiController *AITerminalLease

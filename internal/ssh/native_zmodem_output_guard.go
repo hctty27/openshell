@@ -19,7 +19,10 @@ type nativeOnlyOutputGuard struct {
 }
 
 func newNativeOnlyOutputGuard(writer io.Writer, notify func()) *nativeOnlyOutputGuard {
-	return &nativeOnlyOutputGuard{writer:writer, notify:notify}
+	return &nativeOnlyOutputGuard{
+		writer: writer, notify: notify,
+		scanner: nativeZmodemStartScanner{quarantineMalformed: true},
+	}
 }
 
 func (g *nativeOnlyOutputGuard) Write(p []byte) (int,error) {

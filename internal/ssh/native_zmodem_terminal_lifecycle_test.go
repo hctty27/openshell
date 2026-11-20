@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"sync/atomic"
 	"time"
 
 	"github.com/hctty27/openshell/internal/domain"
@@ -133,4 +134,102 @@ func TestNativeZmodemTerminalLifecycleBlocksAIAndParallelTransfers(t *testing.T)
 	if err := m.runNativeTerminalExperiment(context.Background(), ref, os.Args[0], "upload", source, ""); err == nil {
 		t.Fatal("second transfer reused an unsafe terminal without reconnect")
 	}
+}
+
+
+func TestNativeZmodemAcceptedObserverFiresOnlyAfterAdmission(t *testing.T) {
+  m, ref := connected(t)
+  sidecar, err := filepath.Abs(os.Args[0])
+  if err != nil { t.Fatal(err) }
+  source := filepath.Join(t.TempDir(), "input.bin")
+  if err := os.WriteFile(source, []byte("sample"), 0600); err != nil { t.Fatal(err) }
+  var accepted atomic.Int32
+  parent := WithNativeZmodemAcceptedObserver(context.Background(), func() {
+    accepted.Add(1)
+  })
+
+  // Without an interactive terminal the manager must not emit "active".
+  if err := m.runNativeTerminalExperimentWithProgress(
+    parent, ref, sidecar, "upload", source, "", nil,
+  ); err == nil {
+    t.Fatal("transfer without terminal was admitted")
+  }
+  if accepted.Load() != 0 {
+    t.Fatalf("observer ran for missing SSH terminal: %d", accepted.Load())
+  }
+
+  if err := m.OpenTerminal(ref, 80, 24); err != nil { t.Fatal(err) }
+  nativeTerminalSidecarTestEnv(t, "sleep")
+  done := make(chan error, 1)
+  go func() {
+    done <- m.runNativeTerminalExperimentWithProgress(
+      parent, ref, sidecar, "upload", source, "", nil,
+    )
+  }()
+  _ = awaitNativeTerminalLease(t, m, ref)
+  if got := accepted.Load(); got != 1 {
+    t.Fatalf("expected exactly one admitted task, got %d", got)
+  }
+  // An overlapping task must be rejected without a second UI start.
+  if err := m.runNativeTerminalExperimentWithProgress(
+    parent, ref, sidecar, "upload", source, "", nil,
+  ); err == nil {
+    t.Fatal("overlapping task was admitted")
+  }
+  if got := accepted.Load(); got != 1 {
+    t.Fatalf("rejected concurrent start emitted a phantom task: %d", got)
+  }
+
+  if !m.CancelExperimentalNativeTerminalTransfer(ref) {
+    t.Fatal("active task could not be cancelled")
+  }
+  select {
+  case err := <-done:
+    if !errors.Is(err, context.Canceled) {
+      t.Fatalf("unexpected transfer cancellation: %v", err)
+    }
+  case <-time.After(5 * time.Second):
+    t.Fatal("transfer did not return after cancellation")
+  }
+}
+
+
+func TestNativeZmodemPickerSelectionBecomesExclusiveTaskOwnership(t *testing.T) {
+  m, ref := connected(t)
+  if err := m.OpenTerminal(ref, 80, 24); err != nil { t.Fatal(err) }
+  nativeTerminalSidecarTestEnv(t, "sleep")
+  source := filepath.Join(t.TempDir(), "handoff.bin")
+  if err := os.WriteFile(source, []byte("payload"), 0600); err != nil { t.Fatal(err) }
+
+  m.mu.Lock()
+  conn := m.connections[ref.TabID]
+  conn.nativeZmodemSelection = true
+  conn.nativeZmodemSelectionID = 11
+  m.mu.Unlock()
+
+  var accepted atomic.Int32
+  parent := WithNativeZmodemAcceptedObserver(context.Background(), func() {
+    m.mu.Lock()
+    c := m.connections[ref.TabID]
+    correct := c == conn && c.nativeTerminalTransfer != nil && !c.nativeZmodemSelection
+    m.mu.Unlock()
+    if correct { accepted.Add(1) }
+  })
+  done := make(chan error, 1)
+  go func() {
+    done <- m.runNativeTerminalExperimentWithProgress(parent, ref, os.Args[0], "upload", source, "", nil)
+  }()
+  _ = awaitNativeTerminalLease(t, m, ref)
+  if accepted.Load() != 1 { t.Fatal("native transfer was not given exclusive ownership of picker lease") }
+  if m.ReleaseNativeZmodemSelection(ref, 11) {
+    t.Fatal("stale picker cancellation released an active ZMODEM task")
+  }
+  if !m.CancelExperimentalNativeTerminalTransfer(ref) { t.Fatal("transfer cancellation was rejected") }
+  select {
+  case err := <-done:
+    if !errors.Is(err, context.Canceled) {
+      t.Fatalf("unexpected native transfer outcome: %v", err)
+    }
+  case <-time.After(5 * time.Second): t.Fatal("native transfer never stopped")
+  }
 }
