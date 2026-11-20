@@ -161,3 +161,78 @@ test("SFTP batch cancellation is scoped and concurrency is saved", async () => {
 });
 
 
+
+
+test("late native start cannot revive a task after its terminal outcome", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  const begin = {
+    ref: refA, id: "finished-first", sequence: 101, direction: "upload",
+    active: true, files: [{ name: "done.bin", total: 100 }],
+  };
+  // Async UI callbacks are not guaranteed to arrive in backend emit order.
+  emit("ssh:native-zmodem-batch", { ...begin, active: false });
+  emit("ssh:native-zmodem-batch", begin);
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(screen.queryByText("done.bin")).toBeNull();
+});
+
+test("older native event cannot replace a newer SSH transfer", () => {
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+  const oldTask = {
+    ref: refA, id: "old-task", sequence: 201, direction: "upload",
+    active: true, files: [{ name: "old.bin", total: 100 }],
+  };
+  const newTask = {
+    ref: refA, id: "new-task", sequence: 202, direction: "download",
+    active: true, files: [{ name: "new.bin", total: 100 }],
+  };
+  emit("ssh:native-zmodem-batch", oldTask);
+  emit("ssh:native-zmodem-batch", { ...oldTask, active: false });
+  emit("ssh:native-zmodem-batch", newTask);
+  emit("ssh:native-zmodem-batch", oldTask);
+  emit("ssh:native-zmodem-batch", { ...oldTask, active: false });
+  emit("ssh:native-zmodem-file", {
+    ref: refA, batchId: "old-task", kind: "completed", index: 0, processed: 100,
+  });
+  emit("ssh:native-zmodem-progress", {
+    ref: refA, batchId: "old-task", processed: 100, total: 100,
+  });
+  expect(container.querySelector(".transfer-center-count")?.textContent).toBe("1");
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  expect(screen.getByText("new.bin")).toBeTruthy();
+  expect(screen.queryByText("old.bin")).toBeNull();
+  emit("ssh:native-zmodem-batch", { ...newTask, active: false });
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  emit("ssh:native-zmodem-batch", newTask);
+  expect(container.querySelector(".transfer-center-count")).toBeNull();
+  expect(screen.getByText("已完成")).toBeTruthy();
+});
+
+test("native cancel error from a previous task cannot fail the next transfer", async () => {
+  let failCancel!: (err: Error) => void;
+  vi.mocked(api.CancelNativeZmodemInteractiveTransfer).mockImplementationOnce(
+    () => new Promise<void>((_resolve, reject) => { failCancel = reject; }),
+  );
+  const onNotice = vi.fn();
+  const { container } = render(<TransferCenter tabs={tabs} onNotice={onNotice} />);
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "cancel-old", sequence: 300, direction: "upload", active: true,
+    files: [{ name: "cancel-old.bin", total: 10 }],
+  });
+  fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+  fireEvent.click(screen.getByRole("button", { name: "取消传输" }));
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "cancel-old", sequence: 300, direction: "upload", active: false,
+    cancelled: true, terminalSafe: true,
+  });
+  emit("ssh:native-zmodem-batch", {
+    ref: refA, id: "next-task", sequence: 301, direction: "download", active: true,
+    files: [{ name: "next.bin", total: 10 }],
+  });
+  await act(async () => { failCancel(new Error("previous cancellation rejected")); });
+  expect(onNotice).toHaveBeenCalled();
+  expect(container.querySelector(".transfer-center-count")?.textContent).toBe("1");
+  expect(screen.getByText("next.bin")).toBeTruthy();
+  expect(screen.queryByText(/取消请求未确认/)).toBeNull();
+});
