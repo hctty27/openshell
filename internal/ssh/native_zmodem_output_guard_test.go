@@ -9,7 +9,7 @@ func TestNativeOnlyOutputGuardBlocksUnclaimedZmodemAcrossChunks(t *testing.T) {
 	var visible bytes.Buffer
 	notifications := 0
 	guard := newNativeOnlyOutputGuard(&visible, func() { notifications++ })
-	header := append([]byte("**\x18B01"), []byte("0123456789ab")...)
+	header := nativeZmodemHeaderFixture(1)
 	if len(header) != nativeZmodemHeaderSize {
 		t.Fatalf("invalid test header length: %d", len(header))
 	}
