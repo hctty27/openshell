@@ -43,6 +43,18 @@ OpenShell 仍然优先截获直接键入的 `rz` / `sz file` 字面量命令。�
 
 下一步要做的不是使用固定延迟或裸 OSC 自动调用 `restore()`，而是先在 **远端命令启动之前** 建立可信的 Shell 集成，并将独立的会话/命令随机标识绑定到其完成消息。当前仍未实现该预先绑定机制，因此默认关闭自动恢复。
 
+## 受控 Bash Shell 结束证明（分阶段实验）
+
+新增 `native_zmodem_passive_bash_hook.go`、`runPassiveVerified` 与独立测试，**目前尚未在 GUI/Manager 正式执行自动安装**：
+
+1. 仅适用于事先确认的交互式 Bash；远端命令开始前，客户端必须取得当前 SSH PTY 的控制权并执行钩子引导。
+2. 引导命令不直接包含 nonce。Bash 输出挑战 OSC 后使用 `read -r -s` 无回显读取客户端后续单独发送的 128-bit 随机令牌，然后确认钩子准备就绪；保留已有标量/数组 `PROMPT_COMMAND` 行为。
+3. Bash 在下次主提示符前输出带会话令牌与退出码的自定义 OSC。独立验证器要求已注册的令牌匹配当前会话；即使 Rust sidecar 先结束，仍然保留标记解析器并停止向 Rust 管道写入。
+4. 接收到匹配令牌并确认 Rust 协议成功后，`terminalOutputGate` 在同一互斥锁中重新激活普通终端输出并回放尾部字节，然后 `terminalInputGate` 清除被动输入锁。错误令牌、缺少标记、超时和文件接收不完整时保持隔离。
+5. 新增测试覆盖：有效令牌后允许下一次传输、跨会话错误令牌不恢复、`PROMPT_COMMAND` 保留、Bash 钩子无回显读取与旧协议数据管道的并发关闭。真实 Linux OpenSSH 的受控 Bash 钩子端到端测试已加入 CI，**结果应以该工作流实际执行为准**。
+
+**限制：** 该随机令牌用于识别预先安装的 Shell 钩子，不是对恶意远端服务器或同一账号恶意进程的身份认证。裸 OSC 133/633、Shell 提示符和单独 ZFIN 仍不允许解锁。Bash 钩子自动安装、Wails 前端状态移交、Zsh/Fish 兼容与 Windows GUI 实机验收均未完成；未注册会话继续采用重连策略。
+
 ## 关键限制：远端 Shell 退出尚不可验证
 
 **远端主动启动的命令没有 OpenShell 预先植入的 nonce-scoped shell 退出标记。**
