@@ -3,12 +3,19 @@ package sshclient
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 )
 
+func nativeZmodemHeaderFixture(frame byte) []byte {
+	flags := [5]byte{frame, 1, 2, 3, 4}
+	crc := nativeZmodemCRC16(flags[:])
+	return []byte(fmt.Sprintf("**\x18B%02x01020304%04x", frame, crc))
+}
+
 func nativeZmodemHeaderTestStream() []byte {
-	return []byte("**\x18B010123456789ab")
+	return nativeZmodemHeaderFixture(1)
 }
 
 func TestNativeZmodemHeaderScannerEverySplitBoundary(t *testing.T) {
