@@ -154,6 +154,22 @@ func (g *terminalOutputGate) takeoverCaptured(native io.Writer, source *nativeOn
 	return g.lease, nil
 }
 
+// quarantineNative keeps the output lease after a passive Rust sidecar stops.
+// The next remote bytes (including an unverified shell prompt) must not reach
+// xterm or a closed Rust stdin pipe. Only an explicit, separately verified
+// remote-shell boundary can make this lease eligible for restoreWithReplay.
+// The output-gate mutex serializes this transition with SSH stdout writes.
+func (g *terminalOutputGate) quarantineNative(lease uint64) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed { return io.ErrClosedPipe }
+	if g.native == nil || lease == 0 || lease != g.lease {
+		return errTerminalStreamLease
+	}
+	g.native = io.Discard
+	return nil
+}
+
 // armOnZmodemHeader pre-installs the native destination without switching
 // the live stream yet. The scanner withholds at most 17 possible header bytes.
 // On the first complete frame, any preceding text goes to legacy; the entire
