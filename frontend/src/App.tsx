@@ -285,7 +285,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
     initialState.aiSidebarMode === "pinned" ? "pinned" : "auto-hide",
   );
   const [aiSidebarWidth, setAISidebarWidth] = useState(
-    Math.max(320, Math.min(480, initialState.aiSidebarWidth ?? 360)),
+    Math.max(WORKSPACE_PANEL_MIN, Math.min(WORKSPACE_PANEL_MAX, initialState.aiSidebarWidth ?? 360)),
   );
   const [aiAutoOpen, setAIAutoOpen] = useState(false);
   const aiDockRef = useRef<HTMLDivElement>(null);
@@ -333,24 +333,67 @@ function Workspace({ initialState }: { initialState: AppState }) {
     if (aiHoverTimer.current !== null) window.clearTimeout(aiHoverTimer.current);
     if (aiCloseTimer.current !== null) window.clearTimeout(aiCloseTimer.current);
   }, []);
+  const maxAISidebarWidth = () => {
+    const bodyWidth = aiDockRef.current?.parentElement?.getBoundingClientRect().width || window.innerWidth;
+    const sessionDockWidth = sidebarDockRef.current?.getBoundingClientRect().width ||
+      (sidebarMode === "pinned" ? sessionWidth : 12);
+    // The same cap as terminal AI, measured across the space left after the session dock.
+    return workspacePanelLimit(bodyWidth - sessionDockWidth, false);
+  };
+  const saveAISidebarWidth = (width: number) => {
+    const next = Math.max(WORKSPACE_PANEL_MIN, Math.min(maxAISidebarWidth(), Math.round(width)));
+    if (next === aiSidebarWidth) return;
+    setAISidebarWidth(next);
+    void api.SavePreference("aiSidebarWidth", String(next)).catch(notify);
+  };
   const startAIResize = (event: React.PointerEvent) => {
-    if (aiSidebarMode !== "pinned") return;
-    const start = event.clientX;
-    const initial = aiSidebarWidth;
-    let changed = initial;
+    if (aiSidebarMode !== "pinned" || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const pointerID = event.pointerId;
+    const startX = event.clientX;
+    const previous = aiSidebarWidth;
+    const startWidth = Math.min(previous, maxAISidebarWidth());
+    let next = startWidth;
+    try { event.currentTarget.setPointerCapture?.(pointerID); } catch { /* Pointer capture unavailable */ }
+    const previousSelection = document.body.style.userSelect;
+    const previousCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
     const move = (e: PointerEvent) => {
-      changed = Math.max(320, Math.min(480, initial + start - e.clientX));
-      setAISidebarWidth(changed);
+      if (e.pointerId !== pointerID) return;
+      next = Math.max(WORKSPACE_PANEL_MIN,
+        Math.min(maxAISidebarWidth(), Math.round(startWidth + startX - e.clientX)));
+      setAISidebarWidth(next);
     };
-    const end = () => {
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== pointerID) return;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
-      if (changed !== initial) void api.SavePreference("aiSidebarWidth", String(changed)).catch(notify);
+      document.body.style.userSelect = previousSelection;
+      document.body.style.cursor = previousCursor;
+      if (e.type === "pointercancel") setAISidebarWidth(previous);
+      else if (next !== previous)
+        void api.SavePreference("aiSidebarWidth", String(next)).catch(notify);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", end);
     window.addEventListener("pointercancel", end);
+  };
+  const resizeAISidebarByKey = (event: React.KeyboardEvent) => {
+    const step = event.shiftKey ? 50 : 10;
+    let next: number;
+    switch (event.key) {
+      case "ArrowLeft": next = aiSidebarWidth + step; break;
+      case "ArrowRight": next = aiSidebarWidth - step; break;
+      case "Home": next = WORKSPACE_PANEL_MIN; break;
+      case "End": next = maxAISidebarWidth(); break;
+      default: return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    saveAISidebarWidth(next);
   };
   const currentPanelWidth = (kind: WorkspacePanelKind) =>
     kind === "sftp" ? workspaceSFTPWidth : workspaceTerminalAIWidth;
@@ -1114,6 +1157,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
       style={
         {
           "--session-width": `${sessionWidth}px`,
+          "--session-dock-width": `${sidebarMode === "pinned" ? sessionWidth : 12}px`,
           "--ai-width": `${aiSidebarWidth}px`,
         } as React.CSSProperties
       }
@@ -1645,7 +1689,11 @@ function Workspace({ initialState }: { initialState: AppState }) {
         )}
         {aiPinned && (
           <div className="ai-dock-splitter" onPointerDown={startAIResize}
-            role="separator" aria-label={tr("ai:resizeAiSidebar")} />
+            onDoubleClick={() => saveAISidebarWidth(360)}
+            onKeyDown={resizeAISidebarByKey}
+            role="separator" tabIndex={0} aria-orientation="vertical"
+            aria-valuemin={WORKSPACE_PANEL_MIN} aria-valuemax={WORKSPACE_PANEL_MAX}
+            aria-valuenow={aiSidebarWidth} aria-label={tr("ai:resizeAiSidebar")} />
         )}
         <AISidebar tabs={tabs} active={active} pinned={aiPinned} isOpen={aiOpen}
           onTogglePin={toggleAIPin}

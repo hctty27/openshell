@@ -310,7 +310,7 @@ func (a *App) State() (AppState, error) {
 	aiSidebarWidthRaw, e := a.store.GetPreference(a.ctx, "aiSidebarWidth")
 	if e != nil { return AppState{}, e }
 	aiSidebarWidth, e := strconv.Atoi(aiSidebarWidthRaw)
-	if e != nil || aiSidebarWidth < 320 || aiSidebarWidth > 600 { aiSidebarWidth = 400 }
+	if e != nil || aiSidebarWidth < 300 || aiSidebarWidth > 1600 { aiSidebarWidth = 400 }
 	workspaceSFTPWidthRaw, e := a.store.GetPreference(a.ctx, "workspaceSFTPWidth")
 	if e != nil { return AppState{}, e }
 	workspaceSFTPWidth, err := strconv.Atoi(workspaceSFTPWidthRaw)
@@ -521,7 +521,7 @@ func (a *App) SavePreference(key, value string) error {
 		if value != "pinned" && value != "auto-hide" { return apperror.New("unsupportedPreference", nil) }
 	case "aiSidebarWidth":
 		n, err := strconv.Atoi(value)
-		if err != nil || n < 320 || n > 600 { return apperror.New("unsupportedPreference", nil) }
+		if err != nil || n < 300 || n > 1600 { return apperror.New("unsupportedPreference", nil) }
 	case "workspaceSFTPWidth", "workspaceTerminalAIWidth":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 300 || n > 1600 { return apperror.New("unsupportedPreference", nil) }

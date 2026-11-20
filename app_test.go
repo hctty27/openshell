@@ -474,3 +474,29 @@ func TestUpdateHostFingerprintRejectsStaleChallenge(t *testing.T) {
 		t.Fatalf("stale challenge overwrote trusted key: key=%q err=%v", key, err)
 	}
 }
+
+
+func TestAISidebarWidthMatchesTerminalAIAndPersists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	a, err := newApp(path, &vault{m: map[string]string{}}, nil)
+	if err != nil { t.Fatal(err) }
+	for _, width := range []string{"300", "1600", "1280"} {
+		if err := a.SavePreference("aiSidebarWidth", width); err != nil {
+			t.Fatalf("AI sidebar width %s rejected: %v", width, err)
+		}
+	}
+	for _, width := range []string{"299", "1601", "-1", "not-a-width"} {
+		if err := a.SavePreference("aiSidebarWidth", width); err == nil {
+			t.Fatalf("invalid AI sidebar width %s accepted", width)
+		}
+	}
+	a.shutdown(context.Background())
+	b, err := newApp(path, &vault{m: map[string]string{}}, nil)
+	if err != nil { t.Fatal(err) }
+	defer b.shutdown(context.Background())
+	state, err := b.State()
+	if err != nil { t.Fatal(err) }
+	if state.AISidebarWidth != 1280 {
+		t.Fatalf("expanded AI sidebar width not restored: %d", state.AISidebarWidth)
+	}
+}
