@@ -73,8 +73,14 @@ func TestNativePassiveCaptureDeniedWhenSSHContextIsBusy(t *testing.T) {
 	if _, err := c.inputGate.Write([]byte("bad")); !errors.Is(err, errNativeTerminalInputBusy) {
 		t.Fatalf("terminal did not remain isolated: %v", err)
 	}
-	if _, _, ok := guard.pendingCapture(); !ok {
-		t.Fatal("protocol is not quarantined pending safe decision")
+	if _, _, ok := guard.pendingCapture(); ok {
+		t.Fatal("rejected remote handshake still retained its protocol buffer")
+	}
+	guard.mu.Lock()
+	quarantined := guard.quarantined
+	guard.mu.Unlock()
+	if !quarantined {
+		t.Fatal("rejected remote ZMODEM protocol was incorrectly returned to xterm")
 	}
 }
 
