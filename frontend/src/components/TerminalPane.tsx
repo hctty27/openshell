@@ -80,6 +80,8 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
   const nativeTransferIDs = useRef(new Set<string>());
   const nativeTransferSequence = useRef(0);
   const nativeTransferFinished = useRef(new Set<string>());
+  const nativeSelectionID = useRef(0);
+  const nativeSelectionLastSeen = useRef(0);
   const terminalMode = p.tab.status === "connected" && p.tab.ref ? "ssh"
     : p.tab.ref && p.tab.everConnected && ["disconnected", "error"].includes(p.tab.status)
       ? (p.tab.localFallbackPending || p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
@@ -328,6 +330,31 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       !!ref && candidate.tabId === ref.tabId &&
       candidate.sessionId === ref.sessionId &&
       candidate.generation === ref.generation;
+    const updateNativeInputLock = () => {
+      nativeTransferActive.current = nativeSelectionID.current > 0 || nativeTransferIDs.current.size > 0;
+      syncTransferInput();
+    };
+    const offNativeIntent = listen("ssh:native-zmodem-auto-intent", (event: {
+      ref?: Ref; selectionId?: number;
+    }) => {
+      if (!event?.ref || !matchesConnection(event.ref)) return;
+      const id = event.selectionId;
+      if (!Number.isSafeInteger(id) || !id || id <= nativeSelectionLastSeen.current) return;
+      nativeSelectionLastSeen.current = id;
+      nativeSelectionID.current = id;
+      updateNativeInputLock();
+    });
+    const offNativeSelection = listen("ssh:native-zmodem-selection", (event: {
+      ref?: Ref; selectionId?: number; active?: boolean;
+    }) => {
+      if (!event?.ref || !matchesConnection(event.ref) || event.active !== false) return;
+      const id = event.selectionId;
+      if (!Number.isSafeInteger(id) || !id) return;
+      nativeSelectionLastSeen.current = Math.max(nativeSelectionLastSeen.current, id);
+      if (nativeSelectionID.current !== id) return;
+      nativeSelectionID.current = 0;
+      updateNativeInputLock();
+    });
     const offNativeBatch = listen("ssh:native-zmodem-batch", (event: {
       ref?: Ref; id?: string; sequence?: number; active: boolean; terminalSafe?: boolean; error?: string;
     }) => {
@@ -346,8 +373,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       if (event.active && nativeTransferFinished.current.has(transferID)) return;
       if (event.active) {
         nativeTransferIDs.current.add(transferID);
-        nativeTransferActive.current = true;
-        syncTransferInput();
+        updateNativeInputLock();
         return;
       }
       nativeTransferFinished.current.add(transferID);
@@ -360,22 +386,22 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
         (event.terminalSafe == null && !event.error);
       if (terminalSafe) nativeTransferIDs.current.delete(transferID);
       else nativeTransferIDs.current.add(transferID);
-      nativeTransferActive.current = nativeTransferIDs.current.size > 0;
-      syncTransferInput();
+      updateNativeInputLock();
     });
     const offUnsupported = listen("ssh:native-zmodem-unsupported", (event: {
       ref?: Ref; error?: string;
     }) => {
       if (!event?.ref || !matchesConnection(event.ref)) return;
       nativeTransferIDs.current.add("unsafe-protocol");
-      nativeTransferActive.current = true;
-      syncTransferInput();
+      updateNativeInputLock();
       callbacks.current.onError(new Error(event.error ?? "Unclaimed ZMODEM protocol; reconnect SSH"));
     });
     const offDisconnected = listen("ssh:disconnected", (disconnectedRef: Ref) => {
       if (!matchesConnection(disconnectedRef)) return;
       nativeTransferActive.current = false;
       nativeTransferIDs.current.clear();
+      nativeSelectionID.current = 0;
+      nativeSelectionLastSeen.current = 0;
       nativeTransferSequence.current = 0;
       nativeTransferFinished.current.clear();
       syncTransferInput();
@@ -651,6 +677,8 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       window.removeEventListener("resize", onWindowResize);
       offWindowGeometryEvents.forEach(off => off());
       off();
+      offNativeIntent();
+      offNativeSelection();
       offNativeBatch();
       offUnsupported();
       offDisconnected();
