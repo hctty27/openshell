@@ -22,8 +22,10 @@ func (m *Manager) installNativePassiveBashHook(ref domain.ConnectionRef, expecte
 	sentBootstrap := false
 	success := false
 	defer func() {
+		active := false
 		m.mu.Lock()
 		if current := m.connections[ref.TabID]; current == expected && current.ref == ref {
+			active = true
 			expected.passiveBashHookInstalling = false
 			if !success && sentBootstrap {
 				// If read -s was entered but never acknowledged, neither
@@ -33,12 +35,16 @@ func (m *Manager) installNativePassiveBashHook(ref domain.ConnectionRef, expecte
 			}
 		}
 		m.mu.Unlock()
+		if !active { return }
 		if !success && sentBootstrap {
 			m.emit("ssh:native-zmodem-unsupported", map[string]any{
 				"ref":ref,
 				"error":"Bash Shell 集成未完成验证，当前终端状态不确定；请重新连接 SSH",
 			})
 		}
+		m.emit("ssh:native-zmodem-shell-setup", map[string]any{
+			"ref": ref, "active": false, "ready": success,
+		})
 	}()
 
 	alive := func() bool {
