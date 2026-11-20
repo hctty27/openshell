@@ -321,7 +321,9 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 			// Reserve the PTY synchronously with this recognized intent.
 			// Picker cancellation or transfer admission releases this reservation.
 			c.nativeZmodemSelection = true
-			autoEvent = map[string]any{"ref": ref, "direction": direction, "remotePath": remotePath, "sessionName": c.session.Name}
+			c.nativeZmodemSelectionID++
+			autoEvent = map[string]any{"ref": ref, "direction": direction, "remotePath": remotePath,
+				"sessionName": c.session.Name, "selectionId": c.nativeZmodemSelectionID}
 		}
 		m.mu.Unlock()
 	}
