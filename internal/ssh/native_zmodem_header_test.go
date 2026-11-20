@@ -230,13 +230,19 @@ func TestNativeZmodemScannerSkipsInvalidCRCBeforeValidFrame(t *testing.T) {
 	for _, boundary := range []int{0, 1, 5, len(prefix)+7, len(prefix)+len(fake), len(stream)-1, len(stream)} {
 		var plain, protocol bytes.Buffer
 		scanner := nativeZmodemStartScanner{}
+		captured := false
 		for _, chunk := range [][]byte{stream[:boundary], stream[boundary:]} {
+			if captured {
+				protocol.Write(chunk)
+				continue
+			}
 			normal, binary, matched := scanner.feed(chunk)
 			plain.Write(normal)
 			protocol.Write(binary)
 			if matched && protocol.Len() < nativeZmodemHeaderSize {
 				t.Fatalf("handoff dropped start header at split %d", boundary)
 			}
+			captured = matched
 		}
 		if !bytes.Equal(plain.Bytes(), append(append([]byte(nil), prefix...), fake...)) {
 			t.Fatalf("normal terminal bytes changed at boundary %d: %x", boundary, plain.Bytes())
