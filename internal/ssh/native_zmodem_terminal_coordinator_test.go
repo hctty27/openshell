@@ -148,7 +148,7 @@ func TestNativeZmodemInteractiveCoordinatorDownloadPublishesAfterRemoteProof(t *
 		t.Fatalf("unsafe or wrong remote shell command %q", remoteCommand)
 	}
 	// Remote ZRQINIT denotes a download, not ZRINIT.
-	header := []byte("**\x18B000123456789ab")
+	header := nativeZmodemHeaderFixture(0)
 	if len(header) != nativeZmodemHeaderSize { t.Fatal("invalid ZRQINIT fixture") }
 	if _, err := output.Write(header[:3]); err != nil { t.Fatal(err) }
 	if _, err := output.Write(header[3:]); err != nil { t.Fatal(err) }
@@ -187,7 +187,7 @@ func TestNativeZmodemInteractiveCoordinatorWrongDirectionFailsClosed(t *testing.
 	go func() { done <- coordinator.run(ctx, "upload", file, "") }()
 	_ = nativeTerminalNextInput(t, capture)
 	// ZRQINIT (download) must not be mistaken for upload's ZRINIT.
-	_, _ = output.Write([]byte("**\x18B000123456789ab"))
+	_, _ = output.Write(nativeZmodemHeaderFixture(0))
 	select {
 	case err := <-done:
 		if err == nil { t.Fatal("wrong-direction header accepted") }
@@ -385,7 +385,7 @@ func TestNativeZmodemInteractiveCoordinatorFailedDownloadDoesNotPublish(t *testi
 	done := make(chan error, 1)
 	go func() { done <- coordinator.run(context.Background(), "download", dest, "partial.bin") }()
 	command := string(nativeTerminalNextInput(t, capture))
-	if _, err := output.Write([]byte("**\x18B000123456789ab")); err != nil { t.Fatal(err) }
+	if _, err := output.Write(nativeZmodemHeaderFixture(0)); err != nil { t.Fatal(err) }
 	if _, err := output.Write(append(nativeTerminalCompletionFromCommand(t, command, 2), []byte("shell-ready")...)); err != nil { t.Fatal(err) }
 	select {
 	case err := <-done:
