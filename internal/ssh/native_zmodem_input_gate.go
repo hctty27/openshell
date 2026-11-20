@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 )
 
 // Native-only ZMODEM cancel sequence (CAN followed by backspaces).
@@ -25,6 +26,9 @@ type terminalInputGate struct {
 	leased bool
 	lease uint64
 	closed bool
+	// Set synchronously when unsolicited remote protocol starts. It is never
+	// cleared without a separately proven remote shell boundary.
+	passiveBlocked atomic.Bool
 }
 
 func newTerminalInputGate(legacy, remote io.Writer) *terminalInputGate {
@@ -38,10 +42,17 @@ func (g *terminalInputGate) Write(p []byte) (int, error) {
 	if g.closed {
 		return 0, io.ErrClosedPipe
 	}
-	if g.leased {
+	if g.leased || g.passiveBlocked.Load() {
 		return 0, errNativeTerminalInputBusy
 	}
 	return g.legacy.Write(p)
+}
+
+// blockPassiveInput is lock-free because the protocol detector runs below
+// the SSH output gate; it must not acquire the remote stdin mutex while an
+// in-flight SSH write may be waiting for stdout.
+func (g *terminalInputGate) blockPassiveInput() {
+	g.passiveBlocked.Store(true)
 }
 
 // takeover waits for the current legacy Write to finish before blocking
