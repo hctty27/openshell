@@ -173,6 +173,8 @@ jobs:
           # Execute remote rz/sz via bash -c, then capture the unsolicited
           # ZHEX frame with OpenShell's passive PTY path and verify SHA-256.
           OPENSHELL_ZMODEM_PASSIVE_E2E=1 go test -count=1 -timeout=5m -run '^TestNativeZmodemPassiveLiveInteractivePTY$' -v ./internal/ssh
+          # Segmented TCP plus 2 ms delay per chunk probes backpressure, not IP loss.
+          OPENSHELL_ZMODEM_PASSIVE_E2E=1 OPENSHELL_ZMODEM_PASSIVE_E2E_DELAY_MS=2 go test -count=1 -timeout=5m -run '^TestNativeZmodemPassiveLiveInteractivePTY$' -v ./internal/ssh
           export OPENSHELL_ZMODEM_CROSS_OS_PTY=1
           export OPENSHELL_ZMODEM_CROSS_OS_LATENCY_MS=2
           go test -count=1 -timeout=6m -run '^TestNativeZmodemCrossOSInteractivePTY$' -v ./internal/ssh
