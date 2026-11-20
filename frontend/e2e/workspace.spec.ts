@@ -1135,5 +1135,18 @@ test("keyboard focus stays inside AI controls and session tab buttons", async ({
   await page.keyboard.press("Tab");
   await page.keyboard.press("Shift+Tab");
   await expect(mode).toBeFocused();
-  expect(await mode.evaluate(el => getComputedStyle(el).outlineOffset)).toBe("-2px");
+  const modeFocus = await mode.evaluate(el => ({
+    outline: getComputedStyle(el).outlineStyle,
+    shadow: getComputedStyle(el).boxShadow,
+    width: el.getBoundingClientRect().width,
+    background: getComputedStyle(el).backgroundColor,
+    title: el.getAttribute("title"),
+  }));
+  expect(modeFocus.outline).toBe("none");
+  expect(modeFocus.shadow).not.toBe("none");
+  expect(modeFocus.width).toBeGreaterThanOrEqual(24);
+  expect(modeFocus.title).toBeNull();
+  const sendBackground = await ai.locator(".ai-send-submit")
+    .evaluate(el => getComputedStyle(el).backgroundColor);
+  expect(modeFocus.background).not.toBe(sendBackground);
 });

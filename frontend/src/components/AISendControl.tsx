@@ -62,7 +62,6 @@ export default function AISendControl({ mode, disabled, modeDisabled = false, on
         <Send size={15} aria-hidden="true" />
       </button>
       <button className="ai-send-mode-trigger" ref={triggerRef} type="button"
-        title={`${t("ai:executionMode")}：${modeLabel}`}
         aria-label={`${t("ai:executionMode")}：${modeLabel}`}
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuID : undefined}
         disabled={modeDisabled}

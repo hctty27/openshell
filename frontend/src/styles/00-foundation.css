@@ -15,6 +15,7 @@
   --accent-border: #5D9CEC88;
   --focus-border: #91B7D9;
   --focus-ring: #AACFF8;
+  --focus-on-accent: #132D49;
   --info: #8DBAF3;
   --info-soft: #5D9CEC1A;
   --info-border: #5D9CEC66;
@@ -54,6 +55,7 @@
   --accent-border: #2563EB63;
   --focus-border: #5B7DA3;
   --focus-ring: #3D70AD;
+  --focus-on-accent: #FFFFFF;
   --info: #2563EB;
   --info-soft: #2563EB14;
   --info-border: #2563EB4F;

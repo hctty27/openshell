@@ -471,40 +471,67 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* Two distinct actions: prominent send, quiet mode picker. Avoid nested blue
+   outlines inside the narrow chevron button. */
 .ai-send-split {
   position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: stretch;
+  gap: 3px;
   height: 30px;
-  border-radius: 8px;
-  background: var(--accent-fill);
-  color: var(--on-accent);
 }
 .ai-send-split > button {
   display: grid;
   place-items: center;
+  position: relative;
   height: 30px;
   padding: 0;
-  color: inherit;
-  border: 0;
-  background: transparent;
+  border-radius: 8px;
+  transition: background-color 120ms ease, color 120ms ease;
 }
-.ai-send-split > button:hover:not(:disabled) { filter: brightness(1.12); }
 .ai-send-split > button:disabled { opacity: .5; }
 .ai-send-split > button:focus-visible {
-  /* A clear local focus marker on the blue split button, without a blue box outside it. */
-  outline: 2px solid var(--on-accent);
-  outline-offset: -2px;
+  /* A visible 2px bottom indicator, without boxing in the whole control. */
+  outline: none;
+  box-shadow: inset 0 -2px 0 var(--focus-ring);
 }
-.ai-send-submit { width: 30px; border-radius: 8px 0 0 8px; }
-.ai-send-mode-trigger {
-  width: 21px;
-  border-left: 1px solid color-mix(in srgb, var(--on-accent) 30%, transparent) !important;
-  border-radius: 0 8px 8px 0;
+.ai-send-split > .ai-send-submit {
+  width: 32px;
+  color: var(--on-accent);
+  background: var(--accent-fill);
 }
-.ai-send-split[data-mode="auto"] .ai-send-mode-trigger {
-  background: color-mix(in srgb, var(--on-accent) 14%, transparent);
+.ai-send-split > .ai-send-submit:hover:not(:disabled) {
+  color: var(--on-accent);
+  background: var(--accent-fill);
+  filter: brightness(1.08);
+}
+.ai-send-split > .ai-send-submit:focus-visible {
+  box-shadow: inset 0 -2px 0 var(--focus-on-accent);
+}
+.ai-send-split > .ai-send-mode-trigger {
+  width: 26px;
+  min-width: 26px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--field-bg);
+}
+.ai-send-split > .ai-send-mode-trigger:hover:not(:disabled),
+.ai-send-split > .ai-send-mode-trigger:focus-visible {
+  color: var(--text-primary);
+  background: var(--raised);
+}
+.ai-send-split[data-mode="auto"] > .ai-send-mode-trigger {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+@media (forced-colors: active) {
+  .ai-send-split > button:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+    box-shadow: none;
+  }
 }
 .ai-send-mode-menu {
   display: flex;
