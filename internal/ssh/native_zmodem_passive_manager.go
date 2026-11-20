@@ -5,9 +5,46 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/hctty27/openshell/internal/domain"
 )
+
+// A remote rz/sz process may time out while the user leaves the file
+// selection dialog open. Do not buffer indefinitely, and never interpret
+// timeout as proof that the remote shell has returned.
+const nativePassiveSelectionTimeout = 2 * time.Minute
+
+// expireNativePassiveSelection is scoped to the exact SSH connection and
+// monotonically increasing selection ID. A stale timer must never cancel a
+// newer selection or an already-admitted Rust transfer.
+func (m *Manager) expireNativePassiveSelection(
+	ref domain.ConnectionRef, expected *connection, selectionID uint64,
+) bool {
+	m.mu.Lock()
+	c := m.connections[ref.TabID]
+	if c == nil || c != expected || c.ref != ref ||
+		!c.nativeZmodemSelection || !c.nativeZmodemSelectionPassive ||
+		selectionID == 0 || c.nativeZmodemSelectionID != selectionID ||
+		c.nativeTerminalTransfer != nil {
+		m.mu.Unlock()
+		return false
+	}
+	c.nativeZmodemSelection = false
+	c.nativeZmodemSelectionPassive = false
+	c.nativeTerminalPoisoned = true
+	m.mu.Unlock()
+	// Mark the UI unsafe *before* releasing the picker lease: a delayed
+	// frontend event must never briefly reopen terminal stdin.
+	m.emit("ssh:native-zmodem-unsupported", map[string]any{
+		"ref": ref,
+		"error": "远端 ZMODEM 等待选择文件超时；远端 Shell 状态未确认，请重新连接 SSH",
+	})
+	m.emit("ssh:native-zmodem-selection", map[string]any{
+		"ref": ref, "selectionId": selectionID, "active": false,
+	})
+	return true
+}
 
 // handleNativePassiveFrame runs outside the SSH output Write callback. The
 // passive guard already quarantined the terminal and synchronously blocked
@@ -45,6 +82,11 @@ func (m *Manager) handleNativePassiveFrame(
 	if valid { selectionID = c.nativeZmodemSelectionID }
 	m.mu.Unlock()
 
+	if valid {
+		time.AfterFunc(nativePassiveSelectionTimeout, func() {
+			m.expireNativePassiveSelection(ref, expected, selectionID)
+		})
+	}
 	if !valid {
 		m.emit("ssh:native-zmodem-unsupported", map[string]any{
 			"ref": ref, "error": "检测到远端主动 ZMODEM 握手，但当前终端无法安全接管；协议数据已隔离，请重新连接 SSH",
