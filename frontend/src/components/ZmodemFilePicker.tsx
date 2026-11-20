@@ -189,9 +189,16 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
           download ? directory : paths[0], download ? remotePath : "",
         );
         void api.SaveTransferLocalDir(request.ref.sessionId, directory).catch(onNotice);
+      } else {
+        // Closing the picker does not start a protocol task. Explicitly
+        // release its backend terminal reservation before accepting typing.
+        pending = api.CancelNativeZmodemSelection(request.ref);
       }
       closeRequest();
       if (pending) void pending.catch(err => {
+        // If admission failed before the native task took ownership, the
+        // file picker no longer exists to release its selection lease.
+        void api.CancelNativeZmodemSelection(request.ref).catch(onNotice);
         const message = errorText(err);
         if (message.includes("终端已安全恢复") && message.includes("context canceled")) return;
         onNotice(err);
