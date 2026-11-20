@@ -79,11 +79,12 @@ func (g *nativeOnlyOutputGuard) Write(p []byte) (int, error) {
 	passive := false
 	if matched {
 		g.quarantined = true
+		// A malformed ZHEX-looking frame may still be damaged protocol data;
+		// immediately block user input in either case before any callback.
+		if g.blockInput != nil { g.blockInput() }
 		if g.onPassive != nil && len(protocol) >= nativeZmodemHeaderSize &&
 			nativeZmodemValidStartHeader(protocol[:nativeZmodemHeaderSize]) &&
 			len(protocol) <= nativePassiveHandshakeBufferLimit {
-			// Immediately prevent keyboard/AI writes before asynchronous UI work.
-			if g.blockInput != nil { g.blockInput() }
 			g.capture = true
 			g.captured = append(g.captured, protocol...)
 			passiveFrame = protocol[5] - '0'
