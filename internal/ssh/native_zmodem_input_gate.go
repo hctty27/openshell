@@ -98,6 +98,23 @@ func (g *terminalInputGate) restore(lease uint64) error {
 	return nil
 }
 
+// restoreVerifiedPassive is a strictly stronger form of restore: the
+// caller must already have both a completed Rust protocol AND a validated
+// per-session remote shell completion boundary. Holding the input mutex
+// prevents a manual write between clearing the passive block and dropping
+// the lease. Neither cancellation nor plain ZFIN calls this method.
+func (g *terminalInputGate) restoreVerifiedPassive(lease uint64) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed { return io.ErrClosedPipe }
+	if !g.leased || lease == 0 || lease != g.lease || !g.passiveBlocked.Load() {
+		return errNativeTerminalInputLease
+	}
+	g.passiveBlocked.Store(false)
+	g.leased = false
+	return nil
+}
+
 func (g *terminalInputGate) close() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
