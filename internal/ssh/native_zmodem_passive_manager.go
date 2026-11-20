@@ -101,7 +101,8 @@ func (m *Manager) handleNativePassiveFrame(
 	valid := !m.closed && c != nil && c == expected && c.ref == ref &&
 		c.outputGuard != nil && c.outputGate != nil && c.inputGate != nil &&
 		c.nativeTerminalTransfer == nil && !c.nativeZmodemSelection &&
-		!c.nativeTerminalPoisoned && !isJumpServerVersion(c.serverVersion) &&
+		!c.passiveBashHookInstalling && !c.nativeTerminalPoisoned &&
+		!isJumpServerVersion(c.serverVersion) &&
 		!c.readiness.isJumpServer() && status.Ready
 	if valid {
 		candidate, _ := c.readiness.nativeZmodemInputState()
