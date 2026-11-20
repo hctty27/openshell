@@ -155,6 +155,21 @@
   background: var(--hover);
   color: var(--text-primary);
 }
+.ai-selector-button:focus-visible,
+.ai-model-picker__trigger:focus-visible {
+  /* Use the existing border as the focus indicator, not a second outer frame. */
+  border-color: var(--focus-ring);
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--focus-ring);
+}
+@media (forced-colors: active) {
+  .ai-selector-button:focus-visible,
+  .ai-model-picker__trigger:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+    box-shadow: none;
+  }
+}
 .ai-selector-button > svg { flex: 0 0 auto; }
 .ai-selector-label {
   flex: 1;
@@ -338,7 +353,9 @@
   border-radius: 11px;
   transition: border-color 120ms ease;
 }
-.ai-compose-box:focus-within {
+/* Only highlight the composer border when editing text, not while tabbing
+   through its model, target and send controls. */
+.ai-compose-box:has(> textarea:focus) {
   border-color: var(--focus-border);
 }
 .ai-compose textarea {
@@ -469,6 +486,11 @@
 }
 .ai-send-split > button:hover:not(:disabled) { filter: brightness(1.12); }
 .ai-send-split > button:disabled { opacity: .5; }
+.ai-send-split > button:focus-visible {
+  /* A clear local focus marker on the blue split button, without a blue box outside it. */
+  outline: 2px solid var(--on-accent);
+  outline-offset: -2px;
+}
 .ai-send-submit { width: 30px; border-radius: 8px 0 0 8px; }
 .ai-send-mode-trigger {
   width: 21px;

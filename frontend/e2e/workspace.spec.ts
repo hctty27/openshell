@@ -1084,3 +1084,56 @@ test("floating global AI overlays without moving or hiding terminal AI and SFTP"
   await expect(terminalAI).toBeHidden();
   await verifyFloatingBehavior(".workspace-file-panel:not(.workspace-terminal-ai-panel)");
 });
+
+test("keyboard focus stays inside AI controls and session tab buttons", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTitle("新建会话", { exact: true }).first().click();
+  await page.getByLabel("会话名称", { exact: true }).fill("焦点检查");
+  await page.getByLabel("主机地址").fill("127.0.0.1");
+  await page.getByLabel("登录密码").fill("fixture-password");
+  await page.getByText("保存到 Windows 凭据管理器").click();
+  await page.getByRole("button", { name: "保存会话", exact: true }).click();
+  await page.getByRole("button", { name: "选中会话 焦点检查" }).dblclick();
+  await page.getByRole("button", { name: "信任并连接" }).click();
+
+  const close = page.locator(".terminal-tab.active .terminal-tab-close");
+  await close.focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(close).toBeFocused();
+  expect(await close.evaluate(el => el.matches(":focus-visible"))).toBe(true);
+  expect(await close.evaluate(el => getComputedStyle(el).outlineOffset)).toBe("-2px");
+
+  await page.locator(".ai-rail").click();
+  const ai = page.locator("#global-ai-panel");
+  await expect(ai).toBeVisible();
+  const compose = ai.locator(".ai-compose-box");
+  const originalBorder = await compose.evaluate(el => getComputedStyle(el).borderTopColor);
+  const model = ai.locator(".ai-model-picker__trigger");
+  await model.focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(model).toBeFocused();
+  const modelFocus = await model.evaluate(el => ({
+    keyboard: el.matches(":focus-visible"),
+    outline: getComputedStyle(el).outlineStyle,
+    shadow: getComputedStyle(el).boxShadow,
+  }));
+  expect(modelFocus.keyboard).toBe(true);
+  expect(modelFocus.outline).toBe("none");
+  expect(modelFocus.shadow).not.toBe("none");
+  expect(await compose.evaluate(el => getComputedStyle(el).borderTopColor)).toBe(originalBorder);
+
+  await ai.locator("textarea").focus();
+  await expect(ai.locator("textarea")).toBeFocused();
+  // The composer border animates over 120ms; wait for the computed color to change.
+  await expect.poll(async () => compose.evaluate(el => getComputedStyle(el).borderTopColor))
+    .not.toBe(originalBorder);
+
+  const mode = ai.locator(".ai-send-mode-trigger");
+  await mode.focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(mode).toBeFocused();
+  expect(await mode.evaluate(el => getComputedStyle(el).outlineOffset)).toBe("-2px");
+});
