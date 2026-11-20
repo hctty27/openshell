@@ -168,12 +168,26 @@ func (m *Manager) RunPassiveNativeZmodemTransfer(
 	parent context.Context, ref domain.ConnectionRef, selectionID uint64,
 	sidecar, direction, localPath string, progress func(uint64, uint64),
 ) error {
-	if parent == nil { return errors.New("缺少远端 ZMODEM 自动传输上下文") }
-	if err := parent.Err(); err != nil { return err }
-	if sidecar == "" { return errors.New("未配置原生 ZMODEM sidecar") }
+	_, err := m.RunPassiveNativeZmodemTransferWithResult(parent, ref, selectionID,
+		sidecar, direction, localPath, progress)
+	return err
+}
+
+// RunPassiveNativeZmodemTransferWithResult distinguishes a successful
+// ZMODEM protocol from a verified return to the original SSH Shell. The
+// latter is exposed to the UI ONLY after Bash hook installation was
+// acknowledged before the remote command began, and the exact generation
+// still owns the terminal transfer.
+func (m *Manager) RunPassiveNativeZmodemTransferWithResult(
+	parent context.Context, ref domain.ConnectionRef, selectionID uint64,
+	sidecar, direction, localPath string, progress func(uint64, uint64),
+) (terminalSafe bool, resultErr error) {
+	if parent == nil { return false, errors.New("缺少远端 ZMODEM 自动传输上下文") }
+	if err := parent.Err(); err != nil { return false, err }
+	if sidecar == "" { return false, errors.New("未配置原生 ZMODEM sidecar") }
 	if info, err := os.Lstat(sidecar); err != nil || !info.Mode().IsRegular() ||
 		info.Mode()&os.ModeSymlink != 0 {
-		return errors.New("远端 ZMODEM 的本地原生 sidecar 无效")
+		return false, errors.New("远端 ZMODEM 的本地原生 sidecar 无效")
 	}
 	m.mu.Lock()
 	c := m.connections[ref.TabID]
@@ -192,15 +206,18 @@ func (m *Manager) RunPassiveNativeZmodemTransfer(
 	}
 	if !valid {
 		m.mu.Unlock()
-		return errors.New("远端 ZMODEM 自动传输选择已失效或方向不匹配")
+		return false, errors.New("远端 ZMODEM 自动传输选择已失效或方向不匹配")
 	}
 	ctx, cancel := context.WithCancel(parent)
 	task := &nativeTerminalTransferTask{ref: ref, cancel: cancel}
 	c.nativeTerminalTransfer = task
 	c.nativeZmodemSelection = false
 	c.nativeZmodemSelectionPassive = false
-	// The remote command was *not* wrapped by a nonce-bound exit marker.
-	// Never let a successful local transfer silently resume this PTY.
+	// Record an installer-verified token for this exact SSH generation
+	// before relinquishing the manager mutex. A session that never
+	// acknowledged the two-stage Bash challenge remains fail-closed.
+	token := c.passiveBashHookToken
+	if c.passiveBashHookInstalling { token = "" }
 	c.nativeTerminalPoisoned = true
 	input, output, guard := c.inputGate, c.outputGate, c.outputGuard
 	m.mu.Unlock()
@@ -213,12 +230,27 @@ func (m *Manager) RunPassiveNativeZmodemTransfer(
 		input: input, output: output,
 		runner: nativeTerminalExecutableRunnerWithProgress(sidecar, progress),
 	}
-	err := coordinator.runPassive(ctx, direction, localPath, guard)
+	var err error
+	if token != "" {
+		terminalSafe, err = coordinator.runPassiveVerified(ctx, direction, localPath, guard, token)
+	} else {
+		err = coordinator.runPassive(ctx, direction, localPath, guard)
+	}
 	m.mu.Lock()
-	if c.nativeTerminalTransfer == task { c.nativeTerminalTransfer = nil }
+	if current := m.connections[ref.TabID]; current == c && c.ref == ref &&
+		c.nativeTerminalTransfer == task {
+		c.nativeTerminalTransfer = nil
+		if terminalSafe { c.nativeTerminalPoisoned = false }
+	} else {
+		// SSH reconnect/disconnect invalidates any old generation result.
+		terminalSafe = false
+	}
 	m.mu.Unlock()
 	if err != nil {
-		return fmt.Errorf("远端 ZMODEM 自动传输异常（当前终端不可继续输入，需重连）：%w", err)
+		if terminalSafe {
+			return true, fmt.Errorf("远端 ZMODEM 传输异常，但原 SSH 终端已验证恢复：%w", err)
+		}
+		return false, fmt.Errorf("远端 ZMODEM 自动传输异常（当前终端不可继续输入，需重连）：%w", err)
 	}
-	return nil
+	return terminalSafe, nil
 }
