@@ -8,6 +8,12 @@
   background: var(--panel);
   border-left: 1px solid var(--border);
 }
+/* Pinned assistant uses the same adaptive width budget as the workspace AI panel.
+   Leave at least 400px for the workspace, even after window resizing. */
+.ai-dock:not(.ai-dock--auto) {
+  flex-basis: min(var(--ai-width), 65%,
+    max(300px, calc(100% - var(--session-dock-width) - 400px)));
+}
 .ai-dock--auto {
   flex: 0 0 12px;
   width: 12px;
