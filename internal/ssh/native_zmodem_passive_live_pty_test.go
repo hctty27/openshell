@@ -58,11 +58,14 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 	for _, tc := range []struct{
 		name string
 		direction string
+		cancelPicker bool
 	}{
-		{"remote-sz", "download"},
-		{"remote-rz", "upload"},
-		{"remote-sz-empty", "download"},
-		{"remote-rz-empty", "upload"},
+		{"remote-sz", "download", false},
+		{"remote-rz", "upload", false},
+		{"remote-sz-empty", "download", false},
+		{"remote-rz-empty", "upload", false},
+		{"remote-sz-cancel", "download", true},
+		{"remote-rz-cancel", "upload", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT", "1")
@@ -163,6 +166,29 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 			if !ok || id == 0 || intent["passive"] != true ||
 				intent["direction"] != tc.direction {
 				t.Fatalf("invalid passive handshake intent: %v", intent)
+			}
+			if tc.cancelPicker {
+				if !manager.ReleaseNativeZmodemSelection(ref, id) {
+					t.Fatal("real passive file picker cancellation rejected")
+				}
+				manager.mu.Lock()
+				c := manager.connections[ref.TabID]
+				poisoned := c != nil && c.nativeTerminalPoisoned
+				var buffered bool
+				if c != nil && c.outputGuard != nil {
+					_, _, buffered = c.outputGuard.pendingCapture()
+				}
+				manager.mu.Unlock()
+				if !poisoned || buffered { t.Fatal("cancelled passive picker reenabled SSH or retained handshake buffer") }
+				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte("pwd\r")));
+					!errors.Is(err, errNativeTerminalInputBusy) {
+					t.Fatalf("cancelled remote session allowed user input: %v", err)
+				}
+				if _, err := manager.PassiveZmodemSelection(ref, id); err == nil {
+					t.Fatal("cancelled picker still authorized a transfer")
+				}
+				t.Logf("real remote %s: cancellation quarantined PTY and freed prebuffer (delay=%dms)", tc.name, delayMS)
+				return
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			err = manager.RunPassiveNativeZmodemTransfer(ctx, ref, id, sidecar, tc.direction, localPath, nil)
