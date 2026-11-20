@@ -70,3 +70,47 @@ func TestNativePassiveCoordinatorBridgesExistingRemoteProcess(t *testing.T) {
 		})
 	}
 }
+
+
+func TestNativePassiveGenericOSC133633FinishDoesNotRestoreShell(t *testing.T) {
+  for _, marker := range []string{
+    "\x1b]133;D;0\x07",
+    "\x1b]633;D;0\x1b\\",
+  } {
+    t.Run(marker, func(t *testing.T) {
+      var visible, remoteInput bytes.Buffer
+      input := newTerminalInputGate(io.Discard, &remoteInput)
+      guard := newNativeOnlyOutputGuardPassive(&visible, func(){},
+        input.blockPassiveInput, func(byte){})
+      output := newTerminalOutputGate(guard)
+      header := nativeZmodemHeaderFixture(1)
+      if _, err := output.Write(header); err != nil { t.Fatal(err) }
+      localPath := filepath.Join(t.TempDir(), "upload.txt")
+      if err := os.WriteFile(localPath, []byte("ok"), 0600); err != nil { t.Fatal(err) }
+      coordinator := &nativeTerminalCoordinator{
+        input: input, output: output,
+        runner: func(_ context.Context, direction, path string, in io.ReadCloser, out io.Writer) error {
+          if direction != "send" || path != localPath { return errors.New("invalid native action") }
+          buf := make([]byte, len(header))
+          if _, err := io.ReadFull(in, buf); err != nil { return err }
+          if !bytes.Equal(header, buf) { return errors.New("wrong handshake bytes") }
+          return nil
+        },
+      }
+      if err := coordinator.runPassive(context.Background(), "upload", localPath, guard); err != nil {
+        t.Fatal(err)
+      }
+      // Unauthenticated integration text may be emitted by applications or
+      // a child process and must never be interpreted as PTY completion.
+      if _, err := output.Write(append([]byte(marker), []byte("shell> ")...)); err != nil {
+        t.Fatal(err)
+      }
+      if visible.Len() != 0 {
+        t.Fatalf("unsolicited completion text leaked into xterm: %x", visible.Bytes())
+      }
+      if _, err := input.Write([]byte("pwd\r")); !errors.Is(err, errNativeTerminalInputBusy) {
+        t.Fatalf("plain OSC sequence released terminal ownership: %v", err)
+      }
+    })
+  }
+}
