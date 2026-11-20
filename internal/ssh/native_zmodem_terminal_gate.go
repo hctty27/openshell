@@ -131,6 +131,29 @@ func (g *terminalOutputGate) takeover(native io.Writer) (uint64, error) {
 	return g.lease, nil
 }
 
+// takeoverCaptured atomically switches a quarantined unsolicited handshake
+// to one native consumer and delivers its buffered bytes before admitting
+// any later SSH stdout. No file selection, Manager lock or UI callback may
+// run inside this gate lock.
+func (g *terminalOutputGate) takeoverCaptured(native io.Writer, source *nativeOnlyOutputGuard) (uint64, error) {
+	if native == nil || source == nil { return 0, errNativePassiveNoHeader }
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closed { return 0, io.ErrClosedPipe }
+	if g.native != nil || g.armed != nil { return 0, errTerminalStreamOwned }
+	if g.legacy != source { return 0, errNativePassiveNoHeader }
+	pending, err := source.claimCaptured()
+	if err != nil { return 0, err }
+	g.lease++
+	g.native = native
+	// A writer error cannot release this lease: the unconfirmed terminal
+	// remains quarantined and must reconnect.
+	if err := writeNativeGateBytes(g.native, pending); err != nil {
+		return g.lease, err
+	}
+	return g.lease, nil
+}
+
 // armOnZmodemHeader pre-installs the native destination without switching
 // the live stream yet. The scanner withholds at most 17 possible header bytes.
 // On the first complete frame, any preceding text goes to legacy; the entire
