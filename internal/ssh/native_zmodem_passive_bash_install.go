@@ -18,6 +18,19 @@ const nativePassiveBashInstallTimeout = 6 * time.Second
 func (m *Manager) installNativePassiveBashHook(ref domain.ConnectionRef, expected *connection) {
 	expected.stdinMu.Lock()
 	defer expected.stdinMu.Unlock()
+	// Capture the PTY input lease before waiting for the first prompt.
+	// This blocks not only Manager.Write but also AI/control writers that
+	// can reach the input gate without acquiring stdinMu.
+	inputLease, leaseErr := expected.inputGate.takeover()
+	if leaseErr != nil { return }
+	leaseRestored := false
+	defer func() {
+		// No bootstrap was ever sent: it is safe to abandon the optional
+		// hook and return the original keyboard to its normal owner.
+		if !sentBootstrap && !leaseRestored {
+			_ = expected.inputGate.restore(inputLease)
+		}
+	}()
 
 	sentBootstrap := false
 	success := false
@@ -82,7 +95,7 @@ drained:
 	bootstrap := []byte(nativePassiveBashHookBootstrap())
 	// Treat even a partial bootstrap Write as unsafe to retry or type over.
 	sentBootstrap = true
-	if n, err := expected.inputGate.Write(bootstrap); err != nil || n != len(bootstrap) { return }
+	if n, err := expected.inputGate.writeNative(inputLease, bootstrap); err != nil || n != len(bootstrap) { return }
 
 	wait := func(want byte) error {
 		for {
@@ -101,8 +114,13 @@ drained:
 	// The challenge was seen BEFORE the nonce is sent. The nonce does not
 	// occur anywhere in the echoed bootstrap line.
 	secret := []byte(token+"\r")
-	if n, err := expected.inputGate.Write(secret); err != nil || n!=len(secret) { return }
+	if n, err := expected.inputGate.writeNative(inputLease, secret); err != nil || n!=len(secret) { return }
 	if err = wait(nativeHookEventReady); err != nil { return }
+	// Restore only the installer lease. A concurrent passive ZHEX frame
+	// would keep passiveBlocked set, and the Manager's poisoned check below
+	// prevents this registration from authorizing a verified transfer.
+	if err = expected.inputGate.restore(inputLease); err != nil { return }
+	leaseRestored = true
 	m.mu.Lock()
 	if !m.closed && m.connections[ref.TabID] == expected && expected.ref == ref &&
 		!expected.nativeTerminalPoisoned && expected.passiveBashHookInstalling {
