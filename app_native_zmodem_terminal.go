@@ -108,6 +108,13 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	)
 }
 
+// CancelNativeZmodemSelection closes only a pending picker reservation.
+// A task already admitted to the native coordinator is never interrupted.
+func (a *App) CancelNativeZmodemSelection(ref domain.ConnectionRef) error {
+	a.ssh.ReleaseNativeZmodemSelection(ref)
+	return nil
+}
+
 func (a *App) CancelNativeZmodemInteractiveTransfer(ref domain.ConnectionRef) error {
 	if !a.ssh.CancelExperimentalNativeTerminalTransfer(ref) {
 		return errors.New("没有可取消的原生 ZMODEM 传输")
