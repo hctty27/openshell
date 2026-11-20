@@ -35,7 +35,7 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		{"unsupported upload option", []string{"rz -a\r"}, true, "rz -a\x15", "reject-unsupported", ""},
 		{"overwrite after option terminator rejected", []string{"rz -- -y\r"}, true, "rz -- -y\x15", "reject-unsupported", ""},
 		{"relative path", []string{"sz report.bin\r"}, true, "sz report.bin\x15", "download", "report.bin"},
-		{"unsafe command", []string{"sz /tmp/a;rm -rf /\r"}, true, "sz /tmp/a;rm -rf /\r", "", ""},
+		{"unsafe command rejected", []string{"sz /tmp/a;rm -rf /\r"}, true, "sz /tmp/a;rm -rf /\x15", "reject-unsupported", ""},
 		{"quoted spaces", []string{"sz '/tmp/a b'\r"}, true, "sz '/tmp/a b'\x15", "download", "/tmp/a b"},
 		{"empty line", []string{"\r"}, true, "\r", "", ""},
 		{"multi download rejected before remote command", []string{"sz -q -- one.bin 'two files.bin'\r"}, true, "sz -q -- one.bin 'two files.bin'\x15", "reject-multi", ""},
@@ -43,9 +43,9 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		{"escaped space", []string{"sz name\\ with\\ spaces.bin\r"}, true, "sz name\\ with\\ spaces.bin\x15", "download", "name with spaces.bin"},
 		{"upload quiet", []string{"rz -q\r"}, true, "rz -q\x15", "upload", ""},
 		{"overwrite split input", []string{"r", "z", " ", "-", "y", "\r"}, true, "rz -y\x15", "upload-overwrite", ""},
-		{"shell expansion remains legacy", []string{"sz \"$HOME/a.bin\"\r"}, true, "sz \"$HOME/a.bin\"\r", "", ""},
-		{"glob remains legacy", []string{"sz *.bin\r"}, true, "sz *.bin\r", "", ""},
-		{"home expansion remains legacy", []string{"sz ~/file.bin\r"}, true, "sz ~/file.bin\r", "", ""},
+		{"shell expansion rejected", []string{"sz \"$HOME/a.bin\"\r"}, true, "sz \"$HOME/a.bin\"\x15", "reject-unsupported", ""},
+		{"glob rejected", []string{"sz *.bin\r"}, true, "sz *.bin\x15", "reject-unsupported", ""},
+		{"home expansion rejected", []string{"sz ~/file.bin\r"}, true, "sz ~/file.bin\x15", "reject-unsupported", ""},
 		{"history editing", []string{"r", "\x1b[A", "z\r"}, true, "r\x1b[Az\r", "", ""},
 		{"backspace editing", []string{"r", "\x7f", "z\r"}, true, "r\x7fz\r", "", ""},
 		{"multiline paste", []string{"rz\rwhoami\r"}, true, "rz\rwhoami\r", "", ""},
@@ -274,5 +274,26 @@ func TestNativeAutoCommandKnownREPLAndAlternateScreenBypass(t *testing.T) {
 				t.Fatalf("modified a non-Shell input: %q", input.String())
 			}
 		})
+	}
+}
+
+
+func TestNativeAutoCommandComplexShellSyntaxCannotStartUnclaimedZmodem(t *testing.T) {
+	m, ref, input, events := nativeAutoTestManager(t, true, true)
+	var rejected []string
+	m.emit = func(name string, payload any) {
+		if name == "ssh:native-zmodem-command-error" {
+			rejected = append(rejected, payload.(map[string]any)["error"].(string))
+		}
+	}
+	for _, command := range []string{"sz *.bin", "sz ~/file.bin", "sz \"$HOME/file.bin\"", "sz /tmp/a;echo b"} {
+		input.Reset()
+		nativeAutoType(t, m, ref, command+"\r")
+		if got := input.String(); got != command+"\x15" {
+			t.Fatalf("unsupported command reached remote shell: %q", got)
+		}
+	}
+	if len(events) != 0 || len(rejected) != 4 {
+		t.Fatalf("complex rz/sz spawned unclaimed transfer: events=%d errors=%v", len(events), rejected)
 	}
 }
