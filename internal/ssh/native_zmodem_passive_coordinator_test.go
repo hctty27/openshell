@@ -58,7 +58,23 @@ func TestNativePassiveCoordinatorBridgesExistingRemoteProcess(t *testing.T) {
 			if outbound.String() != "local-handshake" {
 				t.Fatalf("native control not delivered to same remote PTY: %q", outbound.String())
 			}
-			if visible.Len() != 0 { t.Fatalf("protocol leaked to terminal: %x", visible.Bytes()) }
+			// The remote Shell may print a prompt immediately after the
+			// protocol ends. It must not write to Rust's closed input pipe,
+			// leak to xterm, or cause SSH stdout to fail.
+			for _, chunk := range [][]byte{
+				[]byte("\\r\\nshell:~$ "),
+				[]byte("\\x1b]133;D;0\\x07"),
+				bytes.Repeat([]byte{'x'}, 4096),
+			} {
+				if n, err := gate.Write(chunk); err != nil || n != len(chunk) {
+					t.Fatalf("post-ZMODEM PTY stdout failed: %d %v", n, err)
+				}
+			}
+			gate.mu.Lock()
+			quarantined := gate.native == io.Discard
+			gate.mu.Unlock()
+			if !quarantined { t.Fatal("ended Rust sink still owns SSH output after passive transfer") }
+			if visible.Len() != 0 { t.Fatalf("protocol or shell prompt leaked to terminal: %x", visible.Bytes()) }
 			if _, err := input.Write([]byte("pwd")); !errors.Is(err, errNativeTerminalInputBusy) {
 				t.Fatalf("unverified shell was falsely restored: %v", err)
 			}
@@ -73,6 +89,64 @@ func TestNativePassiveCoordinatorBridgesExistingRemoteProcess(t *testing.T) {
 }
 
 
+func TestNativePassiveSidecarErrorQuarantinesRemoteShellOutput(t *testing.T) {
+	var visible, outgoing bytes.Buffer
+	input := newTerminalInputGate(io.Discard, &outgoing)
+	guard := newNativeOnlyOutputGuardPassive(&visible, func() {},
+		input.blockPassiveInput, func(byte) {})
+	output := newTerminalOutputGate(guard)
+	header := nativeZmodemHeaderFixture(1)
+	if _, err := output.Write(header); err != nil { t.Fatal(err) }
+	local := filepath.Join(t.TempDir(), "source.bin")
+	if err := os.WriteFile(local, []byte("file"), 0600); err != nil { t.Fatal(err) }
+	wantErr := errors.New("sidecar failed")
+	coordinator := &nativeTerminalCoordinator{
+		input: input, output: output,
+		runner: func(_ context.Context, direction, path string, in io.ReadCloser, out io.Writer) error {
+			data := make([]byte, len(header))
+			if _, err := io.ReadFull(in, data); err != nil { return err }
+			return wantErr
+		},
+	}
+	if err := coordinator.runPassive(context.Background(), "upload", local, guard); !errors.Is(err, wantErr) {
+		t.Fatalf("expected sidecar error, got %v", err)
+	}
+	if _, err := output.Write([]byte("\r\nremote-shell$ ")); err != nil {
+		t.Fatalf("remote output after Rust error broke SSH gate: %v", err)
+	}
+	output.mu.Lock()
+	safe := output.native == io.Discard
+	output.mu.Unlock()
+	if !safe || visible.Len() != 0 {
+		t.Fatalf("failed sidecar leaked remote shell or retained stale pipe: safe=%v visible=%q",
+			safe, visible.String())
+	}
+	if _, err := input.Write([]byte("whoami\r")); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("failed passive transfer unblocked SSH: %v", err)
+	}
+}
+
+func TestNativePassiveQuarantineRejectsStaleOutputLease(t *testing.T) {
+	var visible bytes.Buffer
+	guard := newNativeOnlyOutputGuardPassive(&visible, func() {}, func() {}, func(byte) {})
+	gate := newTerminalOutputGate(guard)
+	if _, err := gate.Write(nativeZmodemHeaderFixture(1)); err != nil { t.Fatal(err) }
+	var native bytes.Buffer
+	lease, err := gate.takeoverCaptured(&native, guard)
+	if err != nil { t.Fatal(err) }
+	if err := gate.quarantineNative(lease + 1); !errors.Is(err, errTerminalStreamLease) {
+		t.Fatalf("stale lease replaced native sink: %v", err)
+	}
+	if _, err := gate.Write([]byte("real protocol")); err != nil { t.Fatal(err) }
+	if native.String() == "" || !bytes.Contains(native.Bytes(), []byte("real protocol")) {
+		t.Fatal("stale output lease interrupted active native transfer")
+	}
+	if err := gate.quarantineNative(lease); err != nil { t.Fatal(err) }
+	if _, err := gate.Write([]byte("post protocol")); err != nil { t.Fatal(err) }
+	if bytes.Contains(native.Bytes(), []byte("post protocol")) || visible.Len() != 0 {
+		t.Fatal("post-protocol data reached native or legacy sink")
+	}
+}
 func TestNativePassiveGenericOSC133633FinishDoesNotRestoreShell(t *testing.T) {
   for _, marker := range []string{
     "\x1b]133;D;0\x07",
