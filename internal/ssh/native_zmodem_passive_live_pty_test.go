@@ -6,9 +6,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -43,6 +45,15 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	remoteHome, err := os.UserHomeDir()
 	if err != nil { t.Fatal(err) }
+	// Delayed segmented TCP is a reproducible slow-link proxy. It does not
+	// emulate dropped packets or the kernel's retransmission behavior.
+	delayMS := 0
+	if raw := os.Getenv("OPENSHELL_ZMODEM_PASSIVE_E2E_DELAY_MS"); raw != "" {
+		delayMS, err = strconv.Atoi(raw)
+		if err != nil || delayMS < 0 || delayMS > 10 {
+			t.Fatalf("invalid passive SSH test latency %q", raw)
+		}
+	}
 
 	for _, tc := range []struct{
 		name string
@@ -50,14 +61,25 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 	}{
 		{"remote-sz", "download"},
 		{"remote-rz", "upload"},
+		{"remote-sz-empty", "download"},
+		{"remote-rz-empty", "upload"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT", "1")
-			client, err := ssh.Dial("tcp", address, &ssh.ClientConfig{
+			socket, err := net.DialTimeout("tcp", address, 10*time.Second)
+			if err != nil { t.Fatal(err) }
+			var transport net.Conn = socket
+			if delayMS > 0 {
+				transport = &nativeCrossOSDelayedConn{
+					Conn: socket, delay: time.Duration(delayMS)*time.Millisecond,
+				}
+			}
+			sshConn, channels, requests, err := ssh.NewClientConn(transport, address, &ssh.ClientConfig{
 				User: user, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
 				HostKeyCallback: ssh.FixedHostKey(hostKey), Timeout: 10*time.Second,
 			})
-			if err != nil { t.Fatal(err) }
+			if err != nil { _ = socket.Close(); t.Fatal(err) }
+			client := ssh.NewClient(sshConn, channels, requests)
 			ref := domain.ConnectionRef{
 				TabID: "passive-e2e-" + tc.name, SessionID: "passive-e2e",
 				Generation: 1,
@@ -90,6 +112,7 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 
 			workspace := t.TempDir()
 			payload := nativeLivePayload(64*1024+43)
+			if strings.Contains(tc.name, "empty") { payload = nil }
 			fileName := fmt.Sprintf("openshell-passive-%s-%d.bin", tc.name, time.Now().UnixNano())
 			localPath := ""
 			var remoteCommand string
@@ -160,8 +183,8 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 				!errors.Is(err, errNativeTerminalInputBusy) {
 				t.Fatalf("remote-initiated transfer unexpectedly restored keyboard: %v", err)
 			}
-			t.Logf("real remote %s: local and remote SHA-256 %x; SSH remains quarantined",
-				tc.name, sha256.Sum256(payload))
+			t.Logf("real remote %s: local and remote SHA-256 %x; SSH remains quarantined (segmented TCP delay=%dms)",
+				tc.name, sha256.Sum256(payload), delayMS)
 		})
 	}
 }
