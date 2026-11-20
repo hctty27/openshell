@@ -304,6 +304,8 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 
 	if direction == "reject-multi" {
 		autoError = "ZMODEM 每次只能传输一个文件；批量传输请使用 SFTP"
+	} else if direction == "reject-multiline" {
+		autoError = "已拦截包含 rz/sz 的多行粘贴，防止在原生传输接管前启动远端协议；请单独输入 rz/sz 命令"
 	} else if direction == "reject-unsupported" {
 		autoError = "仅支持原生单文件 rz、rz -y、rz --overwrite、rz -q 及 sz 文件名；其他不支持的参数或复杂 Shell 语法请使用 SFTP"
 	} else if direction == "reject-unavailable" {
