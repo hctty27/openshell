@@ -189,7 +189,7 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       if (paths.length > 0) {
         const download = request.direction === "download";
         if (!download && paths.length !== 1) throw new Error("ZMODEM 每次只能上传一个文件");
-        if (request.direction === "upload-overwrite" && !overwriteConfirmed) {
+        if ((request.direction === "upload-overwrite" || (request.passive && request.direction === "upload")) && !overwriteConfirmed) {
           throw new Error(t("sftp:zmodemOverwriteConfirm"));
         }
         const remotePath = request.remotePath ?? "";
@@ -229,7 +229,9 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
     }
   };
   const download = request.direction === "download";
-  const overwrite = request.direction === "upload-overwrite";
+  // A remote-origin rz may have been started with -y, which the first
+  // ZRINIT frame cannot reveal. Require explicit overwrite acknowledgement.
+  const overwrite = request.direction === "upload-overwrite" || (request.passive && request.direction === "upload");
   return (
     <dialog ref={dialogRef} className="zmodem-picker-dialog"
       aria-label={t(download ? "sftp:zmodemPickDownload" : "sftp:zmodemPickUpload")}
