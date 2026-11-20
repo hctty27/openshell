@@ -24,6 +24,9 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		remote string
 	}{
 		{"upload", []string{"r", "z", "\r"}, true, "rz\x15", "upload", ""},
+		{"leading space upload", []string{" rz\r"}, true, " rz\x15", "upload", ""},
+		{"leading space download", []string{"  sz log.bin\r"}, true, "  sz log.bin\x15", "download", "log.bin"},
+		{"empty-line Ctrl-U then upload", []string{"\x15", "rz\r"}, true, "\x15rz\x15", "upload", ""},
 		{"download", []string{"sz /tmp/report.bin\r"}, true, "sz /tmp/report.bin\x15", "download", "/tmp/report.bin"},
 		{"missing prompt fails closed", []string{"rz\r"}, false, "rz\x15", "reject-unavailable", ""},
 		{"unknown prompt ordinary command unchanged", []string{"redis-cli\r"}, false, "redis-cli\r", "", ""},
@@ -172,6 +175,8 @@ func TestNativeAutoCommandBackspaceAndPasteSafetyAtManagerWrite(t *testing.T) {
 		{"multiline paste", []string{"rz\rwhoami\r"}, "\x15", "", true},
 		{"paste after partial command", []string{"rz", "\rwhoami\r"}, "rz\x15", "", true},
 		{"LF newline", []string{"rz\n"}, "rz\x15", "upload", false},
+		{"leading spaces", []string{"  rz\r"}, "  rz\x15", "upload", false},
+		{"empty line kill", []string{"\x15", "rz\r"}, "\x15rz\x15", "upload", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
