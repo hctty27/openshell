@@ -180,6 +180,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	conn.terminal = session
 	passiveEnabled := os.Getenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT") == "1" &&
 		m.nativeAutoSidecar != ""
+	bashRecovery := passiveEnabled && os.Getenv("OPENSHELL_ZMODEM_PASSIVE_BASH_RECOVERY") == "1"
 	m.mu.Unlock()
 	rollback := func(cause error) error {
 		_ = session.Close()
@@ -209,9 +210,15 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 		// The generation check suppresses stale SSH notifications.
 		m.failNativePassiveGuard(ref, conn)
 	}
-	guard := newNativeOnlyOutputGuard(writer, onUnsupported)
+	var legacy io.Writer = writer
+	var bashFilter *nativePassiveBashHookFilter
+	if bashRecovery {
+		bashFilter = newNativePassiveBashHookFilter(writer)
+		legacy = bashFilter
+	}
+	guard := newNativeOnlyOutputGuard(legacy, onUnsupported)
 	if passiveEnabled {
-		guard = newNativeOnlyOutputGuardPassive(writer, onUnsupported,
+		guard = newNativeOnlyOutputGuardPassive(legacy, onUnsupported,
 			inputGate.blockPassiveInput, func(frame byte) {
 				// Never reenter manager or output-gate locks from their own Write.
 				go m.handleNativePassiveFrame(ref, conn, frame)
@@ -239,7 +246,14 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	conn.outputGate = gate
 	conn.outputGuard = guard
 	conn.writer = writer
+	if bashFilter != nil {
+		conn.passiveBashHookFilter = bashFilter
+		conn.passiveBashHookInstalling = true
+	}
 	m.mu.Unlock()
+	if bashFilter != nil {
+		go m.installNativePassiveBashHook(ref, conn)
+	}
 	go func() {
 		_ = session.Wait()
 		m.CancelExperimentalNativeTerminalTransfer(ref)
@@ -284,7 +298,8 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		m.mu.Unlock()
 		return errAITerminalBusy
 	}
-	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.nativeZmodemSelection {
+	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.nativeZmodemSelection ||
+		c.passiveBashHookInstalling {
 		m.mu.Unlock()
 		return errNativeTerminalInputBusy
 	}
