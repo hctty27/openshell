@@ -65,7 +65,7 @@ func (m *Manager) NativeZmodemExperimentalReadiness(
 	if isJumpServerVersion(c.serverVersion) || c.readiness.isJumpServer() {
 		return nativeZmodemReadiness("jumpserver_unsupported", "JumpServer 暂不支持原生 ZMODEM 接管")
 	}
-	if c.aiController != nil || c.nativeTerminalTransfer != nil {
+	if c.aiController != nil || c.nativeTerminalTransfer != nil || c.nativeZmodemSelectionPassive {
 		return nativeZmodemReadiness("busy", "当前终端存在文件传输或 AI 独占任务")
 	}
 	return nativeZmodemReadiness("ready", "原生 ZMODEM 已就绪，仍需选择文件和方向")
