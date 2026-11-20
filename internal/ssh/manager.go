@@ -59,6 +59,11 @@ type connection struct {
 	// process has already begun, so cancellation must fail closed.
 	nativeZmodemSelectionPassive bool
 	nativeZmodemPassiveFrame byte
+	// Bash completion is trusted only after the connection-scoped challenge
+	// and READY acknowledgment have completed before remote rz/sz starts.
+	passiveBashHookInstalling bool
+	passiveBashHookToken string
+	passiveBashHookFilter *nativePassiveBashHookFilter
 	nativeZmodemSelectionID uint64 // per-connection picker generation; never reused while this SSH session lives
 	nativeTerminalPoisoned bool
 	nativeAutoInput nativeAutoInputTracker
