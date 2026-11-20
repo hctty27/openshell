@@ -52,6 +52,12 @@ func (m *Manager) ReleaseNativeZmodemSelection(ref domain.ConnectionRef, selecti
 		return false
 	}
 	c.nativeZmodemSelection = false
+	// The intercepted remote line was erased with Ctrl-U; reopening the
+	// already verified shell prompt is necessary for the next rz/sz.
+	// Do not do this for a poisoned terminal or a concurrently owned PTY.
+	if c.nativeTerminalTransfer == nil && !c.nativeTerminalPoisoned {
+		c.readiness.restoreClearedNativeZmodemPrompt()
+	}
 	m.mu.Unlock()
 	m.emit("ssh:native-zmodem-selection", map[string]any{
 		"ref": ref, "selectionId": selectionID, "active": false,
