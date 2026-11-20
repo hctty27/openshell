@@ -43,6 +43,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
   const [open, setOpen] = useState(false);
   const [nativeBatches, setNativeBatches] = useState<Record<string, NativeBatch>>({});
   const nativeRate = useRef(new Map<string, { bytes: number; time: number; speed?: string }>());
+  // Keep terminal outcomes after their rows disappear: a late "start" must
+  // not resurrect an already-finished native ZMODEM task.
+  const nativeLastSequence = useRef(new Map<string, number>());
+  const nativeFinished = useRef(new Set<string>());
   const [sftpJobs, setSftpJobs] = useState<Record<string, SFTPTask>>({});
   const [sftpConcurrency, setSftpConcurrency] = useState(3);
   const [savingConcurrency, setSavingConcurrency] = useState(false);
@@ -61,15 +65,31 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
 
   useEffect(() => {
     const offNativeBatch = listen("ssh:native-zmodem-batch", (event: {
-      ref: Ref; id: string; direction: Direction; active: boolean;
+      ref: Ref; id: string; sequence?: number; direction: Direction; active: boolean;
       files?: { name: string; total?: number }[]; error?: string; cancelled?: boolean; terminalSafe?: boolean; overwrite?: boolean;
     }) => {
       if (!event?.ref || !event.id || (event.active && event.files?.length !== 1)) return;
       const key = refKey(event.ref);
-      if (event.active) nativeRate.current.delete(key);
-      else nativeRate.current.delete(key);
+      const sequence = typeof event.sequence === "number" && Number.isSafeInteger(event.sequence) && event.sequence > 0
+        ? event.sequence : 0;
+      const latest = nativeLastSequence.current.get(key) ?? 0;
+      if (sequence < latest) return;
+      if (sequence > latest) nativeLastSequence.current.set(key, sequence);
+      const identity = key + ":" + event.id;
+      if (event.active && nativeFinished.current.has(identity)) return;
+      if (!event.active) {
+        nativeFinished.current.add(identity);
+        // Bounded tombstones survive the transfer row's timed removal.
+        while (nativeFinished.current.size > 512) {
+          const oldest = nativeFinished.current.values().next().value;
+          if (oldest === undefined) break;
+          nativeFinished.current.delete(oldest);
+        }
+      }
+      nativeRate.current.delete(key);
       setNativeBatches(previous => {
         if (event.active) {
+          if (previous[key]?.id === event.id) return previous;
           return { ...previous, [key]: {
             id: event.id, ref: event.ref, direction: event.direction, overwrite: event.overwrite === true, status: "running",
             files: (event.files ?? []).map(file => ({
@@ -79,7 +99,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           }};
         }
         const existing = previous[key];
-        if (!existing || existing.id !== event.id) return previous;
+        if (!existing || existing.id !== event.id || (existing.status !== "running" && existing.status !== "cancelling")) return previous;
         const status = event.cancelled ? "cancelled" : event.error ? "failed" : "completed";
         return { ...previous, [key]: { ...existing, status, error: event.error,
           files: existing.files.map(file =>
@@ -231,11 +251,11 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     tabs.find(tab => tab.ref && refKey(tab.ref) === refKey(ref))?.session.name ?? ref.sessionId;
 
   const cancelNative = (key: string, batch: NativeBatch) => {
-    setNativeBatches(previous => previous[key] ? ({
+    setNativeBatches(previous => previous[key]?.id === batch.id ? ({
       ...previous, [key]: { ...previous[key], status: "cancelling" },
     }) : previous);
     void api.CancelNativeZmodemInteractiveTransfer(batch.ref).catch(error => {
-      setNativeBatches(previous => previous[key]?.status === "cancelling" ? ({
+      setNativeBatches(previous => previous[key]?.id === batch.id && previous[key]?.status === "cancelling" ? ({
         ...previous, [key]: { ...previous[key], status: "failed", error: "取消请求未确认：" + errorText(error) },
       }) : previous);
       onNotice(error);
