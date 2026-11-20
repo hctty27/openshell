@@ -86,7 +86,7 @@ type Backend = {
   AcknowledgeTerminalOutput(ref: Ref, sequence: number): Promise<void>;
   NativeZmodemInteractiveReadiness(ref: Ref): Promise<import("./types").NativeZmodemReadiness>;
   StartNativeZmodemInteractiveTransfer(ref: Ref, direction: "upload" | "upload-overwrite" | "download", localPath: string, remotePath: string): Promise<void>;
-  CancelNativeZmodemSelection(ref: Ref): Promise<void>;
+  CancelNativeZmodemSelection(ref: Ref, selectionId: number): Promise<void>;
   CancelNativeZmodemInteractiveTransfer(ref: Ref): Promise<void>;
   NativeZmodemChooseUploadFile(): Promise<string>;
 
