@@ -55,6 +55,13 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 		}
 	}
 
+	largeKiB := 0
+	if raw := os.Getenv("OPENSHELL_ZMODEM_PASSIVE_E2E_LARGE_KIB"); raw != "" {
+		largeKiB, err = strconv.Atoi(raw)
+		if err != nil || largeKiB < 256 || largeKiB > 16384 {
+			t.Fatalf("invalid passive E2E large-file size %q (256..16384 KiB)", raw)
+		}
+	}
 	for _, tc := range []struct{
 		name string
 		direction string
@@ -67,6 +74,9 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 		{"remote-sz-cancel", "download", true},
 		{"remote-rz-cancel", "upload", true},
 	} {
+		if largeKiB != 0 && (tc.cancelPicker || strings.Contains(tc.name, "empty")) {
+			continue // loss-profile job focuses on full-size transfers only
+		}
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT", "1")
 			socket, err := net.DialTimeout("tcp", address, 10*time.Second)
@@ -115,6 +125,7 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 
 			workspace := t.TempDir()
 			payload := nativeLivePayload(64*1024+43)
+			if largeKiB != 0 { payload = nativeLivePayload(largeKiB*1024+43) }
 			if strings.Contains(tc.name, "empty") { payload = nil }
 			fileName := fmt.Sprintf("openshell-passive-%s-%d.bin", tc.name, time.Now().UnixNano())
 			localPath := ""
@@ -190,7 +201,7 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 				t.Logf("real remote %s: cancellation quarantined PTY and freed prebuffer (delay=%dms)", tc.name, delayMS)
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			err = manager.RunPassiveNativeZmodemTransfer(ctx, ref, id, sidecar, tc.direction, localPath, nil)
 			cancel()
 			if err != nil { t.Fatalf("real passive %s transfer failed: %v", tc.name, err) }
