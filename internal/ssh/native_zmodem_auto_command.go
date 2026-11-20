@@ -5,8 +5,9 @@ import (
 	"unicode/utf8"
 )
 
-// Only unedited commands at verified POSIX shell prompts can be intercepted.
-// Unsupported syntax is explicitly rejected rather than using a legacy engine.
+// A bounded shadow of straightforward shell-line editing is used only at a
+// verified POSIX prompt. Unsupported edits are not reinterpreted or executed
+// through a fallback transfer engine.
 const nativeAutoCommandMaxLength = 4096
 
 type nativeAutoInputTracker struct {
@@ -80,9 +81,27 @@ func nativeLiteralShellWords(line string) ([]string, bool) {
 	return words, len(words) > 0
 }
 
+// Reject recognized transfer commands with shell syntax the native wrapper
+// cannot preserve. Never let such a command start an unclaimed ZMODEM stream.
+func nativeTransferCommandPrefix(line string) bool {
+	line = strings.TrimLeft(line, " \t")
+	for _, name := range []string{"rz", "sz", "trz", "tsz"} {
+		if !strings.HasPrefix(line, name) { continue }
+		if len(line) == len(name) { return true }
+		next := line[len(name)]
+		if next == ' ' || next == '\t' || next == 96 || next == 39 || next == 34 || next == 92 ||
+			strings.ContainsRune(";|&<>(){}$*?!#~", rune(next)) { return true }
+	}
+	return false
+}
+
 func parseNativeAutoCommand(line string) (direction, remotePath string) {
 	args, ok := nativeLiteralShellWords(line)
-	if !ok || len(args) == 0 { return "", "" }
+	if !ok {
+		if nativeTransferCommandPrefix(line) { return "reject-unsupported", "" }
+		return "", ""
+	}
+	if len(args) == 0 { return "", "" }
 	switch args[0] {
 	case "rz":
 		// Only options whose meaning is preserved by our own remote command
@@ -128,26 +147,63 @@ func parseNativeAutoCommand(line string) (direction, remotePath string) {
 	return "", ""
 }
 
-// Previous keystrokes have already reached the remote line editor. A
-// recognized Enter becomes Ctrl-U, followed by a separate GUI authorization.
+// A clipboard can submit multiple commands in one terminal Write. If any
+// line is rz/sz, forwarding the paste would launch a remote protocol before
+// the local sidecar has taken ownership. Discard the complete paste instead.
+func nativeTransferMultilinePaste(line []byte, p []byte) bool {
+	full := string(line) + string(p)
+	parts := strings.FieldsFunc(full, func(r rune) bool { return r == '\r' || r == '\n' })
+	if len(parts) < 2 { return false }
+	for _, part := range parts {
+		if nativeTransferCommandPrefix(part) { return true }
+	}
+	return false
+}
+
+// Previous keystrokes have already reached the remote line editor. Only an
+// isolated Enter for a recognized literal command may become Ctrl-U and open
+// the native single-file picker. Backspace and line-kill are mirrored in a
+// bounded shadow buffer; the remote shell still owns the actual line editor.
 func (t *nativeAutoInputTracker) prepare(p []byte, shellReady, shellCandidate bool) (wire []byte, direction, remotePath string) {
 	wire = append([]byte(nil), p...)
+	if nativeTransferMultilinePaste(t.line, p) {
+		t.reset()
+		return []byte{0x15}, "reject-multiline", ""
+	}
 	for index, b := range p {
 		switch b {
 		case '\r', '\n':
-			if b == '\r' && index == len(p)-1 && t.started && !t.blocked {
+			if t.started && !t.blocked {
 				direction, remotePath = parseNativeAutoCommand(string(t.line))
 				if direction != "" {
-					// The command was typed into the remote line editor. Never
-					// send Enter unless a verified Shell prompt authorized it.
-					wire[index] = 0x15
-					if !t.authorized {
-						direction, remotePath = "reject-unavailable", ""
+					// Do not allow the rest of this payload to type while
+					// the file picker opens. A final CRLF is one newline.
+					trailingLF := b == '\r' && index == len(p)-2 && p[index+1] == '\n'
+					if index != len(p)-1 && !trailingLF {
+						t.reset()
+						return append(wire[:index:index], 0x15), "reject-multiline", ""
 					}
+					authorized := t.authorized
+					t.reset()
+					wire = append(wire[:index:index], 0x15)
+					if !authorized {
+						return wire, "reject-unavailable", ""
+					}
+					return wire, direction, remotePath
 				}
 			}
 			t.reset()
 			shellReady = false
+		case '\b', 0x7f:
+			if t.blocked || !t.started { continue }
+			if len(t.line) == 0 { continue }
+			_, size := utf8.DecodeLastRune(t.line)
+			if size <= 0 { size = 1 }
+			t.line = t.line[:len(t.line)-size]
+		case 0x15:
+			if t.started && !t.blocked {
+				t.line = t.line[:0]
+			}
 		default:
 			if t.blocked { continue }
 			if !t.started {
