@@ -405,3 +405,47 @@ func TestNativeZmodemInteractiveCoordinatorFailedDownloadDoesNotPublish(t *testi
 		t.Fatalf("failed download did not restore prompt: %q", legacy.String())
 	}
 }
+
+
+func TestNativeZmodemRemoteExitBeforeHeaderRestoresTerminal(t *testing.T) {
+	var legacy bytes.Buffer
+	capture := &nativeTerminalCapturedInput{ch: make(chan []byte, 4)}
+	input := newTerminalInputGate(io.Discard, capture)
+	output := newTerminalOutputGate(&legacy)
+	dest := t.TempDir()
+	coordinator := &nativeTerminalCoordinator{
+		input: input, output: output,
+		runner: func(ctx context.Context, direction, path string, inbound io.ReadCloser, outbound io.Writer) error {
+			if direction != "receive" { return errors.New("wrong sidecar action") }
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+	done := make(chan error, 1)
+	go func() { done <- coordinator.run(context.Background(), "download", dest, "missing-file.bin") }()
+	command := string(nativeTerminalNextInput(t, capture))
+	marker := nativeTerminalCompletionFromCommand(t, command, 127)
+	// The remote command fails without a ZMODEM start frame. The OSC
+	// marker is split across arbitrary SSH stdout chunks, then followed
+	// by ordinary shell text. No protocol or command echo may leak.
+	if _, err := output.Write([]byte("sz: no such file\r\n")); err != nil { t.Fatal(err) }
+	for _, part := range [][]byte{marker[:8], marker[8:23], marker[23:]} {
+		if _, err := output.Write(part); err != nil { t.Fatal(err) }
+	}
+	if _, err := output.Write([]byte("shell-ready")); err != nil { t.Fatal(err) }
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "退出状态 127") || !strings.Contains(err.Error(), "安全恢复") {
+			t.Fatalf("missing safe early-exit error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("remote early failure left ZMODEM waiting")
+	}
+	if _, err := input.Write([]byte("pwd")); err != nil {
+		t.Fatalf("early remote exit did not restore shell input: %v", err)
+	}
+	if _, err := output.Write([]byte(" prompt")); err != nil { t.Fatal(err) }
+	if got := legacy.String(); got != "shell-ready prompt" {
+		t.Fatalf("incorrect replay after early remote exit: %q", got)
+	}
+}
