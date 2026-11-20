@@ -1,21 +1,34 @@
 package sshclient
 
 import (
+	"errors"
 	"io"
 	"sync"
 )
 
-// nativeOnlyOutputGuard keeps unclaimed binary ZMODEM frames away from xterm.
-// It is bypassed while a verified native PTY lease is active. Once an
-// unsolicited handshake is detected, it quarantines subsequent output and
-// leaves the terminal marked unsafe until reconnect instead of guessing at
-// protocol boundaries or passing binary data to the user's Shell.
+// The unclaimed ZMODEM path never writes protocol bytes to xterm. The passive
+// experiment retains a bounded prefix until the native sidecar owns the PTY.
+const nativePassiveHandshakeBufferLimit = 1 << 20
+
+var (
+	errNativePassiveNoHeader = errors.New("未检测到可交接的远端 ZMODEM 握手")
+	errNativePassiveOverflow = errors.New("远端 ZMODEM 预缓冲已溢出，必须重新连接")
+)
+
+// nativeOnlyOutputGuard sits behind terminalOutputGate. Normal sessions
+// quarantine unsupported ZMODEM; the gated passive experiment additionally
+// keeps a bounded copy for one subsequent, atomic Rust-sidecar handoff.
 type nativeOnlyOutputGuard struct {
 	mu sync.Mutex
 	writer io.Writer
 	scanner nativeZmodemStartScanner
 	quarantined bool
 	notify func()
+	blockInput func()
+	onPassive func(frame byte)
+	capture bool
+	captured []byte
+	claimed bool
 }
 
 func newNativeOnlyOutputGuard(writer io.Writer, notify func()) *nativeOnlyOutputGuard {
@@ -25,25 +38,92 @@ func newNativeOnlyOutputGuard(writer io.Writer, notify func()) *nativeOnlyOutput
 	}
 }
 
-func (g *nativeOnlyOutputGuard) Write(p []byte) (int,error) {
+// onPassive must schedule any manager/UI work asynchronously. It cannot
+// synchronously reenter terminalOutputGate.Write or take the manager lock.
+func newNativeOnlyOutputGuardPassive(
+	writer io.Writer, notify func(), blockInput func(), onPassive func(byte),
+) *nativeOnlyOutputGuard {
+	g := newNativeOnlyOutputGuard(writer, notify)
+	g.blockInput = blockInput
+	g.onPassive = onPassive
+	return g
+}
+
+func (g *nativeOnlyOutputGuard) Write(p []byte) (int, error) {
 	g.mu.Lock()
 	if g.quarantined {
+		overflow := false
+		if g.capture {
+			if len(g.captured)+len(p) > nativePassiveHandshakeBufferLimit {
+				g.capture = false
+				g.captured = nil
+				overflow = true
+			} else {
+				g.captured = append(g.captured, p...)
+			}
+		}
 		g.mu.Unlock()
-		return len(p),nil
+		if overflow && g.notify != nil { g.notify() }
+		return len(p), nil
 	}
-	plain, _, matched := g.scanner.feed(p)
-	if len(plain)>0 {
-		n,err:=g.writer.Write(plain)
-		if err!=nil || n!=len(plain) {
+	plain, protocol, matched := g.scanner.feed(p)
+	if len(plain) > 0 {
+		n, err := g.writer.Write(plain)
+		if err != nil || n != len(plain) {
 			g.mu.Unlock()
-			if err!=nil{return 0,err}
-			return 0,io.ErrShortWrite
+			if err != nil { return 0, err }
+			return 0, io.ErrShortWrite
 		}
 	}
+	var passiveFrame byte
+	passive := false
 	if matched {
-		g.quarantined=true
+		g.quarantined = true
+		if g.onPassive != nil && len(protocol) >= nativeZmodemHeaderSize &&
+			nativeZmodemValidStartHeader(protocol[:nativeZmodemHeaderSize]) &&
+			len(protocol) <= nativePassiveHandshakeBufferLimit {
+			// Immediately prevent keyboard/AI writes before asynchronous UI work.
+			if g.blockInput != nil { g.blockInput() }
+			g.capture = true
+			g.captured = append(g.captured, protocol...)
+			passiveFrame = protocol[5] - '0'
+			passive = true
+		}
 	}
 	g.mu.Unlock()
-	if matched && g.notify!=nil { g.notify() }
-	return len(p),nil
+	if passive {
+		g.onPassive(passiveFrame)
+	} else if matched && g.notify != nil {
+		g.notify()
+	}
+	return len(p), nil
+}
+
+// claimCaptured is called *only while the surrounding output gate is
+// locked*. It establishes a single consumer for the exact captured bytes;
+// future SSH writes then flow to that consumer, preserving wire order.
+func (g *nativeOnlyOutputGuard) claimCaptured() ([]byte, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.quarantined || !g.capture || g.claimed ||
+		len(g.captured) < nativeZmodemHeaderSize {
+		return nil, errNativePassiveNoHeader
+	}
+	if !nativeZmodemValidStartHeader(g.captured[:nativeZmodemHeaderSize]) {
+		return nil, errNativePassiveNoHeader
+	}
+	data := g.captured
+	g.captured = nil
+	g.capture = false
+	g.claimed = true
+	return data, nil
+}
+
+func (g *nativeOnlyOutputGuard) pendingCapture() (frame byte, bytes int, ok bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.capture || g.claimed || len(g.captured) < nativeZmodemHeaderSize {
+		return 0, 0, false
+	}
+	return g.captured[5] - '0', len(g.captured), true
 }
