@@ -2,6 +2,10 @@
 
 ## 未发布
 
+- AI 完全自动模式改为白名单：只有能确认只读的简单命令（`ls`、`cat`、`grep`、`ps`、`df`、`git status/log/diff` 等）直接执行，其余写入、组合命令、变量/命令替换、解释器和 `sudo -u`/`xargs`/`timeout` 等包装一律需确认；引号或转义拆开的敏感路径（`/etc/sha""dow`）、WireGuard、kubeconfig、rclone、tfstate、云元数据地址、递归搜索 `/root` 等也需确认；完全自动模式下 SFTP 写系统文件或 Shell 启动文件同样需确认；补上 `git diff --ext-diff`、`sort --compress-program`、`dmesg -n`、`ss -K`、`getent shadow`、`ps e` 等审查模式漏洞。
+- 被动 rz/sz（实验开关）：zsh、dash、fish 等非 Bash Shell 不再被注入 Bash 引导导致锁死；引导不再回显、不再写入 history；嵌套 Shell 里完成的下载不再被丢弃；需要重连时在终端页内显示原因和「重新连接」按钮，不再自动断开。
+- 被动 rz/sz：复合命令和无法确认的提示符交给被动接管；远端文件不可读或对端已退出时 15 秒内结束；本地目录不可写时在选择器内提示；远端 rz 拒收时弹出通知并保留失败记录；高延迟链路上传提速（流式窗口 256 KiB）；下载占位名走多语言。
+- 修复被拒绝的 `rz` 行之后再输入 `rz/sz` 被误拒的问题；`sz -y x` 提示不支持该参数，而不是“一次只能一个文件”。
 - AI：未命名对话按界面语言显示「新对话 / New conversation」；数据库交互工具的结果改为与其他工具一致的 `exit status: N`；终端结束标记无效时只显示本地化错误（不再夹带中文原文）。
 - 测试：修复 vitest 偶发因 `@wailsio/runtime` drag.js 定时器在环境拆除后报错而整体失败的问题。
 

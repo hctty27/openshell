@@ -13,8 +13,22 @@ package sshclient
 const (
 	nativePassiveBashHookChallenge = "\x1b]777;OpenShellPassiveHookChallenge\x07"
 	nativePassiveBashHookReady     = "\x1b]777;OpenShellPassiveHookReady\x07"
+	// nativePassiveBashHookProbePrefix starts the reply to the shell probe.
+	// It is followed by $BASH_VERSION (empty outside Bash) and BEL.
+	nativePassiveBashHookProbePrefix = "\x1b]777;OpenShellPassiveHookProbe;"
 )
 
+// nativePassiveShellProbe asks the shell, before anything Bash-specific is
+// typed, whether it is Bash. It is valid in POSIX sh, dash, ash, ksh, zsh,
+// Bash and fish and does nothing else. The leading space keeps it out of
+// the history where HISTCONTROL/HIST_IGNORE_SPACE or fish honour that.
+func nativePassiveShellProbe() string {
+	return " printf '\\033]777;OpenShellPassiveHookProbe;%s\\007' \"$BASH_VERSION\"\r"
+}
+
 func nativePassiveBashHookBootstrap() string {
-	return "if [ -n \"${BASH_VERSION-}\" ]; then builtin printf '\\033]777;OpenShellPassiveHookChallenge\\007'; IFS= read -r -s __openshell_native_nonce; if [[ \"$__openshell_native_nonce\" =~ ^[0-9a-f]{32}$ ]]; then __openshell_native_passive_prompt() { local __os_pc_code=$?; builtin printf '\\033]777;OpenShellNativeZmodem;%s;%d\\007' \"$__openshell_native_nonce\" \"$__os_pc_code\"; return \"$__os_pc_code\"; }; case \"$(declare -p PROMPT_COMMAND 2>/dev/null)\" in \"declare -a\"* ) PROMPT_COMMAND=(__openshell_native_passive_prompt \"${PROMPT_COMMAND[@]}\");; * ) PROMPT_COMMAND=\"__openshell_native_passive_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}\";; esac; builtin printf '\\033]777;OpenShellPassiveHookReady\\007'; fi; fi\r"
+	// The bootstrap ends by removing itself and the probe from the Bash
+	// history: only entries that contain the OpenShellPassiveHook marker
+	// are deleted, so nothing of the user's history can be lost.
+	return " if [ -n \"${BASH_VERSION-}\" ]; then builtin printf '\\033]777;OpenShellPassiveHookChallenge\\007'; IFS= read -r -s __openshell_native_nonce; if [[ \"$__openshell_native_nonce\" =~ ^[0-9a-f]{32}$ ]]; then __openshell_native_passive_prompt() { local __os_pc_code=$?; builtin printf '\\033]777;OpenShellNativeZmodem;%s;%d\\007' \"$__openshell_native_nonce\" \"$__os_pc_code\"; return \"$__os_pc_code\"; }; case \"$(declare -p PROMPT_COMMAND 2>/dev/null)\" in \"declare -a\"* ) PROMPT_COMMAND=(__openshell_native_passive_prompt \"${PROMPT_COMMAND[@]}\");; * ) PROMPT_COMMAND=\"__openshell_native_passive_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}\";; esac; for __os_i in 1 2; do __os_h=$(builtin history 1); case \"$__os_h\" in *OpenShellPassiveHook*) __os_h=${__os_h#\"${__os_h%%[0-9]*}\"}; builtin history -d \"${__os_h%%[!0-9]*}\" 2>/dev/null;; esac; done; unset __os_i __os_h; builtin printf '\\033]777;OpenShellPassiveHookReady\\007'; fi; fi\r"
 }

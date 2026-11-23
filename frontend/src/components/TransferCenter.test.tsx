@@ -294,3 +294,32 @@ test("closing from the icon or Escape hands focus back to the terminal", () => {
     window.removeEventListener("openshell:focus-terminal", focus);
   }
 });
+
+test("a declined native upload stays listed after finished rows are swept", () => {
+  vi.useFakeTimers();
+  try {
+    render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+    emit("ssh:native-zmodem-batch", {
+      ref: refA, id: "declined", direction: "upload", active: true,
+      files: [{ name: "np.bin", total: 12 }],
+    });
+    emit("ssh:native-zmodem-file", {
+      ref: refA, batchId: "declined", kind: "declined", index: 0, name: "np.bin",
+    });
+    emit("ssh:native-zmodem-batch", {
+      ref: refA, id: "declined", direction: "upload", active: false,
+      terminalSafe: true, error: "远端 rz 拒收了文件",
+    });
+    emit("ssh:native-zmodem-batch", {
+      ref: refB, id: "done", direction: "download", active: true,
+      files: [{ name: "ok.bin", total: 1 }],
+    });
+    emit("ssh:native-zmodem-batch", { ref: refB, id: "done", direction: "download", active: false });
+    act(() => { vi.advanceTimersByTime(21000); });
+    fireEvent.click(screen.getByRole("button", { name: "传输任务" }));
+    expect(screen.getByText("np.bin")).toBeTruthy();
+    expect(screen.queryByText("ok.bin")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});

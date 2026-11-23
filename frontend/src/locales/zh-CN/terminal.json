@@ -103,5 +103,8 @@
   "nativeZmodemBatchLimit": "每次请选择 1–100 个文件或远程路径。",
   "nativeZmodemBatchCompleted": "本次已完成 {{count}} 个文件",
   "connectionFailedTitle": "无法连接到 {{name}}",
-  "connectionLostTitle": "与 {{name}} 的连接已断开"
+  "connectionLostTitle": "与 {{name}} 的连接已断开",
+  "nativeZmodemReconnectTitle": "终端需要重新连接",
+  "nativeZmodemReconnectHint": "SSH 连接仍然保持，已完成的文件已保存。为避免残留的 ZMODEM 数据进入 Shell，终端输入已锁定；重新连接后即可继续输入。",
+  "nativeZmodemReconnect": "重新连接"
 }

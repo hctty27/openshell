@@ -200,11 +200,26 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       return next;
     });
   };
-  const submit = (paths: string[]) => {
+  const submit = async (paths: string[]) => {
     if (busy || submittingKey.current === requestKey ||
       currentRequestKey.current !== requestKey) return;
     submittingKey.current = requestKey;
     setError("");
+    if (paths.length > 0 && request.direction === "download") {
+      // An unwritable folder is reported here, while the user can still
+      // pick another one, instead of failing after the SSH takeover.
+      try {
+        await api.CheckNativeZmodemLocalDirectory(directory);
+      } catch (err) {
+        if (currentRequestKey.current === requestKey) setError(errorText(err));
+        submittingKey.current = "";
+        return;
+      }
+      if (currentRequestKey.current !== requestKey) {
+        submittingKey.current = "";
+        return;
+      }
+    }
     try {
       let pending: Promise<void> | undefined;
       if (paths.length > 0) {

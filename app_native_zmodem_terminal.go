@@ -62,6 +62,9 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	if status := a.NativeZmodemInteractiveReadiness(ref); !status.Ready {
 		return errors.New(status.Message)
 	}
+	if direction == "download" {
+		if err := nativeZmodemCheckLocalDirectory(localPath); err != nil { return err }
+	}
 
 	id := domain.NewID()
 	sequence := nativeZmodemTransferSequence.Add(1)
@@ -149,10 +152,15 @@ func (a *App) StartNativeZmodemPassiveTransfer(
 	expected, err := a.ssh.PassiveZmodemSelection(ref, selectionID)
 	if err != nil { return err }
 	if expected != direction { return apperror.New("zmodemDirectionMismatch", nil) }
+	if direction == "download" {
+		if err := nativeZmodemCheckLocalDirectory(localPath); err != nil { return err }
+	}
 
 	id := domain.NewID()
 	sequence := nativeZmodemTransferSequence.Add(1)
-	file := map[string]any{"name": "远端文件"}
+	// The remote file name is only known after ZFILE; the transfer center
+	// shows a translated placeholder for an empty name until then.
+	file := map[string]any{"name": ""}
 	if direction == "upload" {
 		file["name"] = filepath.Base(localPath)
 		if info, statErr := os.Stat(localPath); statErr == nil && info.Mode().IsRegular() {
@@ -168,15 +176,19 @@ func (a *App) StartNativeZmodemPassiveTransfer(
 			"ref": ref, "id": id, "sequence": sequence,
 			"direction": direction, "active": false, "terminalSafe": terminalSafe,
 		}
+		transferred := err == nil
 		if err == nil && declined.Load() > 0 {
-			payload["error"] = apperror.New("zmodemRemoteDeclined", nil).Error()
+			// Also return it, so the picker's caller shows a notification:
+			// a remote rz that cannot write (existing file without -y, or an
+			// unwritable directory) answers ZSKIP and exits successfully.
+			err = apperror.New("zmodemRemoteDeclined", nil)
 		}
 		if err != nil {
 			payload["error"] = err.Error()
 			payload["cancelled"] = errors.Is(err, context.Canceled)
 		}
 		a.emit("ssh:native-zmodem-batch", payload)
-		if err == nil && !terminalSafe {
+		if transferred && !terminalSafe {
 			a.emit("ssh:native-zmodem-unsupported", map[string]any{
 				"ref": ref,
 				"error": apperror.New("zmodemCompletedShellUnverified", nil).Error(),
@@ -218,6 +230,31 @@ func (a *App) CancelNativeZmodemSelection(ref domain.ConnectionRef, selectionID 
 	if !a.ssh.ReleaseNativeZmodemSelection(ref, selectionID) {
 		return apperror.New("zmodemSelectionExpired", nil)
 	}
+	return nil
+}
+
+// CheckNativeZmodemLocalDirectory runs when the user confirms a download
+// folder in the picker, before any SSH ownership is taken: an unwritable
+// folder is reported in the picker instead of failing after takeover.
+func (a *App) CheckNativeZmodemLocalDirectory(path string) error {
+	return nativeZmodemCheckLocalDirectory(path)
+}
+
+func nativeZmodemCheckLocalDirectory(path string) error {
+	if path == "" || strings.ContainsAny(path, "\r\n") {
+		return apperror.New("zmodemChooseLocalTarget", nil)
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.IsDir() {
+		return apperror.Wrap("zmodemLocalDirectoryNotWritable", err, map[string]any{"path": path})
+	}
+	probe, err := os.CreateTemp(path, ".openshell-zmodem-check-*")
+	if err != nil {
+		return apperror.Wrap("zmodemLocalDirectoryNotWritable", err, map[string]any{"path": path})
+	}
+	name := probe.Name()
+	_ = probe.Close()
+	_ = os.Remove(name)
 	return nil
 }
 
