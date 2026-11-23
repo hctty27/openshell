@@ -95,13 +95,64 @@ func nativeTransferCommandPrefix(line string) bool {
 	return false
 }
 
+// nativeTransferWrappers run the following words as a command.
+var nativeTransferWrappers = map[string]bool{
+	"sudo": true, "doas": true, "exec": true, "nohup": true, "time": true, "command": true,
+	"builtin": true, "env": true, "nice": true, "stdbuf": true, "timeout": true,
+}
+
+func nativeIsTransferProgram(word string) bool {
+	switch strings.Trim(word, "'\"\\") {
+	case "rz", "sz", "trz", "tsz", "lrz", "lsz", "/usr/bin/rz", "/usr/bin/sz", "/bin/rz", "/bin/sz", "/usr/local/bin/rz", "/usr/local/bin/sz":
+		return true
+	}
+	return false
+}
+
+// nativeEmbeddedTransferCommand reports rz/sz that would run as part of a
+// larger command line: after &&, ||, ;, |, inside ( ) or { }, or behind a
+// wrapper such as sudo. OpenShell cannot claim such a ZMODEM session, and an
+// unclaimed session would take over the SSH terminal, so the line is
+// rejected before it reaches the remote shell.
+func nativeEmbeddedTransferCommand(line string) bool {
+	segments := strings.FieldsFunc(line, func(r rune) bool { return strings.ContainsRune(";&|(){}\n`", r) })
+	for _, segment := range segments {
+		words := strings.Fields(segment)
+		for len(words) > 0 {
+			word := strings.Trim(words[0], "'\"\\")
+			if word == "!" || word == "then" || word == "do" || word == "else" || word == "elif" ||
+				(strings.Contains(word, "=") && !strings.HasPrefix(word, "=")) {
+				words = words[1:]
+				continue
+			}
+			if nativeTransferWrappers[word] {
+				words = words[1:]
+				for len(words) > 0 && (strings.HasPrefix(words[0], "-") || strings.Contains(words[0], "=") ||
+					(word == "timeout" && len(words[0]) > 0 && words[0][0] >= '0' && words[0][0] <= '9')) {
+					words = words[1:]
+				}
+				continue
+			}
+			break
+		}
+		if len(words) > 0 && nativeIsTransferProgram(words[0]) {
+			return true
+		}
+	}
+	return false
+}
+
 func parseNativeAutoCommand(line string) (direction, remotePath string) {
 	args, ok := nativeLiteralShellWords(line)
 	if !ok {
 		if nativeTransferCommandPrefix(line) { return "reject-unsupported", "" }
+		if nativeEmbeddedTransferCommand(line) { return "reject-compound", "" }
 		return "", ""
 	}
 	if len(args) == 0 { return "", "" }
+	if args[0] != "rz" && args[0] != "sz" && args[0] != "trz" && args[0] != "tsz" && nativeEmbeddedTransferCommand(line) {
+		return "reject-compound", ""
+	}
 	switch args[0] {
 	case "rz":
 		// Only options whose meaning is preserved by our own remote command
@@ -212,7 +263,10 @@ func (t *nativeAutoInputTracker) prepare(p []byte, shellReady, shellCandidate bo
 		default:
 			if t.blocked { continue }
 			if !t.started {
-				if shellCandidate && (b == 'r' || b == 's' || b == 't' || b == ' ') {
+				// Track every printable command line at a possible shell
+				// prompt, so rz/sz embedded in a compound command
+				// ("cd /tmp && rz") is recognized too.
+				if shellCandidate && b >= 32 && b != 127 {
 					t.started = true
 					t.authorized = shellReady
 					t.line = append(t.line, b)

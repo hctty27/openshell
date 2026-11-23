@@ -61,7 +61,7 @@ func TestNativeZmodemCancelledTransferRestoresAfterRemoteProof(t *testing.T) {
 		t.Fatalf("terminal input was not safely restored: %v", err)
 	}
 	if _, err := output.Write([]byte(" prompt")); err != nil { t.Fatal(err) }
-	if legacy.String() != "shell-ready prompt" {
+	if legacy.String() != "\r\x1b[Kshell-ready prompt" {
 		t.Fatalf("unexpected protocol data leaked into the terminal: %q", legacy.String())
 	}
 }

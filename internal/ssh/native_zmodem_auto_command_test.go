@@ -62,6 +62,18 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		{"multiline with prior partial ZMODEM", []string{"rz", "\rwhoami\r"}, true, "rz\x15", "reject-multiline", ""},
 		{"multiline paste rejected", []string{"rz\rwhoami\r"}, true, "\x15", "reject-multiline", ""},
 		{"newline", []string{"rz\n"}, true, "rz\x15", "upload", ""},
+		{"compound and-list", []string{"true && rz\r"}, true, "true && rz\x15", "reject-compound", ""},
+		{"compound cd then upload", []string{"cd /tmp && rz -y\r"}, true, "cd /tmp && rz -y\x15", "reject-compound", ""},
+		{"compound sequence", []string{"ls; sz a.bin\r"}, true, "ls; sz a.bin\x15", "reject-compound", ""},
+		{"compound or-list", []string{"false || sz a\r"}, true, "false || sz a\x15", "reject-compound", ""},
+		{"subshell", []string{"(cd /tmp; rz)\r"}, true, "(cd /tmp; rz)\x15", "reject-compound", ""},
+		{"pipeline", []string{"cat x | sz -\r"}, true, "cat x | sz -\x15", "reject-compound", ""},
+		{"sudo wrapper", []string{"sudo rz\r"}, true, "sudo rz\x15", "reject-compound", ""},
+		{"env assignment and wrapper", []string{"LANG=C exec sz f\r"}, true, "LANG=C exec sz f\x15", "reject-compound", ""},
+		{"full path", []string{"/usr/bin/rz\r"}, true, "/usr/bin/rz\x15", "reject-compound", ""},
+		{"compound without transfer unchanged", []string{"cd /tmp && ls\r"}, true, "cd /tmp && ls\r", "", ""},
+		{"rz as an argument unchanged", []string{"grep rz notes.txt\r"}, true, "grep rz notes.txt\r", "", ""},
+		{"ordinary command unchanged", []string{"echo hello\r"}, true, "echo hello\r", "", ""},
 		{"long input", []string{strings.Repeat("r", nativeAutoCommandMaxLength+10)+"\r"}, true, strings.Repeat("r", nativeAutoCommandMaxLength+10)+"\r", "", ""},
 	}
 	for _, tc := range cases {
