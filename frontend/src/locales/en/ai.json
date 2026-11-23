@@ -97,5 +97,12 @@
   "compactAction": "Compress context",
   "contextCompactBusy": "Cannot compress while a task is running",
   "resizeTerminalAiPanel": "Resize terminal AI panel",
-  "resetTerminalAiPanelWidth": "Drag to resize; double-click to reset width"
+  "resetTerminalAiPanelWidth": "Drag to resize; double-click to reset width",
+  "toolRejected": "Rejected",
+  "failedWithExitCode": "Failed (exit {{code}})",
+  "approvalPolicy_write": "Review mode: writing a remote file always needs your approval.",
+  "approvalPolicy_python": "Review mode: Python code always needs your approval.",
+  "approvalPolicy_unverified": "Review mode: OpenShell could not verify that this command is read-only.",
+  "approvalPolicy_dangerous": "This command can delete data, stop services or run downloaded code, so it always needs your approval.",
+  "approvalPolicy_sensitive": "This touches credentials or secrets (for example SSH keys, /etc/shadow or .env). The content would be sent to the AI provider."
 }

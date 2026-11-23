@@ -17,6 +17,8 @@ type mysqlAIState struct {
 	seenResult bool
 }
 
+var mysqlReadCommands = map[string]bool{"SHOW": true, "DESCRIBE": true, "DESC": true, "SELECT": true, "EXPLAIN": true}
+
 func mysqlReadOnlyQuery(command string) (string, error) {
 	query := strings.TrimSpace(command)
 	if query == "" || len(query) > 8192 || strings.ContainsAny(query, "\r\x00") {
@@ -38,26 +40,11 @@ func mysqlReadOnlyQuery(command string) (string, error) {
 	case strings.HasSuffix(query, ";"):
 		query = strings.TrimSpace(query[:len(query)-1])
 	}
-	if query == "" || strings.ContainsAny(query, ";\\") ||
-		strings.Contains(query, "--") || strings.Contains(query, "/*") ||
-		strings.Contains(query, "*/") || strings.Contains(query, "#") {
-		return "", errors.New("MySQL 终端 AI 当前只支持不含注释或多语句的单条查询")
+	if query == "" {
+		return "", errors.New("SQL 为空")
 	}
-	parts := strings.Fields(query)
-	if len(parts) == 0 { return "", errors.New("SQL 为空") }
-	switch strings.ToUpper(parts[0]) {
-	case "SHOW", "DESCRIBE", "DESC", "SELECT", "EXPLAIN":
-	default:
-		return "", errors.New("MySQL 终端 AI 当前仅支持 SHOW、DESCRIBE、DESC、SELECT 和 EXPLAIN 查询")
-	}
-	upper := " " + strings.ToUpper(strings.Join(parts, " ")) + " "
-	for _, forbidden := range []string{
-		" INTO ", " FOR UPDATE ", " LOCK IN SHARE MODE ",
-		" SLEEP(", " BENCHMARK(", " LOAD_FILE(", " EXPLAIN ANALYZE ",
-	} {
-		if strings.Contains(upper, forbidden) {
-			return "", errors.New("当前 SQL 包含暂不支持的操作")
-		}
+	if err := validateReadOnlySQL(query, "mysql", mysqlReadCommands); err != nil {
+		return "", fmt.Errorf("MySQL 终端 AI 只允许单条只读查询（SHOW、DESCRIBE、DESC、SELECT、EXPLAIN）: %w", err)
 	}
 	return query + terminator, nil
 }
@@ -142,7 +129,7 @@ func (lease *AITerminalLease) runMySQL(ctx context.Context, command string) (str
 	}
 	select {
 	case result := <-running.done:
-		return fmt.Sprintf("%s\n退出状态: %d", result.output, result.code), nil
+		return fmt.Sprintf("%s\nexit status: %d", result.output, result.code), nil
 	case <-ctx.Done():
 		lease.markFailed()
 		lease.interrupt()

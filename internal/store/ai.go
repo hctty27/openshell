@@ -42,6 +42,10 @@ type AIMessage struct {
 	Content string `json:"content"`
 	ToolCalls []AIToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string `json:"tool_call_id,omitempty"`
+	// Status and ExitCode describe a tool result for the UI. They are not
+	// sent to the AI provider.
+	Status string `json:"status,omitempty"`
+	ExitCode *int `json:"exit_code,omitempty"`
 }
 
 type AITargetBinding struct {

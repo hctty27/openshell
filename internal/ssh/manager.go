@@ -158,7 +158,14 @@ func (m *Manager) Connect(ctx context.Context, tab string, s domain.Session, aut
 			hops[i].address = Address(host, port)
 		}
 	}
-	client, jumpClients, err := m.dialRoute(ctx, address, s.Username, methods, hops)
+	var hopMethods []ssh.AuthMethod
+	if len(hops) > 0 {
+		var closeHopAuth func()
+		hopMethods, closeHopAuth, err = jumpHopAuthMethods(ctx, s.AuthType, methods, s.JumpReusePassword)
+		if err != nil { return ref, domain.Error("authentication", err.Error()) }
+		defer closeHopAuth()
+	}
+	client, jumpClients, err := m.dialRoute(ctx, address, s.Username, methods, hops, hopMethods)
 	if err != nil {
 		var hostErr *HostKeyError
 		if errors.As(err, &hostErr) { return ref, hostErr }

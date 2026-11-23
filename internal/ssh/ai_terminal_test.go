@@ -93,7 +93,7 @@ func TestAITerminalRunUsesExistingPTYAndPreservesShellSyntax(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output, "退出状态: 0") ||
+	if !strings.Contains(output, "exit status: 0") ||
 		!strings.Contains(input.String(), "cd /tmp && pwd") {
 		t.Fatalf("unexpected output=%s, input=%q", output, input.String())
 	}
@@ -171,7 +171,7 @@ func TestAITerminalSupportsTenSequentialShellCommands(t *testing.T) {
 		if err != nil {
 			t.Fatalf("round %d failed: %v", i+1, err)
 		}
-		if !strings.Contains(output, "退出状态: 0") {
+		if !strings.Contains(output, "exit status: 0") {
 			t.Fatalf("round %d returned unexpected output: %q", i+1, output)
 		}
 	}

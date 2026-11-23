@@ -1,6 +1,7 @@
 package sshclient
 
 import (
+ "strings"
  "context"
  "errors"
  "fmt"
@@ -75,7 +76,7 @@ func TestProxyJumpRequiresTrustAtEveryHop(t *testing.T) {
  target:=testssh.Start(t)
  m:=NewManager(keys{},nil)
  defer m.Close()
- session:=domain.Session{ID:"proxy",Host:target.Host,Port:target.Port,Username:"root",AuthType:"password",ProxyJump:fmt.Sprintf("root@%s:%d",bastion.Host,bastion.Port)}
+ session:=domain.Session{ID:"proxy",Host:target.Host,Port:target.Port,Username:"root",AuthType:"password",ProxyJump:fmt.Sprintf("root@%s:%d",bastion.Host,bastion.Port),JumpReusePassword:true}
  for _, expected := range []string{Address(bastion.Host,bastion.Port),Address(target.Host,target.Port)} {
   _,err:=m.Connect(context.Background(),"jump-tab",session,AuthInput{Password:"test-password"})
   var challenge *HostKeyError
@@ -127,6 +128,7 @@ func TestTwoHopProxyJumpAuthenticatesEachTransport(t *testing.T) {
   ID: "two-hop", Host: target.Host, Port: target.Port,
   Username: "root", AuthType: "password",
   ProxyJump: fmt.Sprintf("root@%s:%d,root@%s:%d",first.Host,first.Port,second.Host,second.Port),
+  JumpReusePassword: true,
  }
  addresses := []string{
   Address(first.Host, first.Port),
@@ -165,4 +167,17 @@ func TestLocalForwardReconnectRebindsSamePort(t *testing.T) {
  if err != nil { t.Fatalf("stale disconnect removed new forward: %v",err) }
  _ = conn.Close()
  if err := m.Disconnect(b);err!=nil { t.Fatal(err) }
+}
+
+func TestProxyJumpDoesNotForwardPasswordWithoutOptIn(t *testing.T) {
+ t.Setenv("SSH_AUTH_SOCK", "")
+ bastion:=testssh.Start(t)
+ target:=testssh.Start(t)
+ m:=NewManager(keys{},nil)
+ defer m.Close()
+ session:=domain.Session{ID:"proxy",Host:target.Host,Port:target.Port,Username:"root",AuthType:"password",ProxyJump:fmt.Sprintf("root@%s:%d",bastion.Host,bastion.Port)}
+ _,err:=m.Connect(context.Background(),"jump-tab",session,AuthInput{Password:"test-password"})
+ if err==nil || !strings.Contains(err.Error(),"proxyJumpPasswordNotForwarded") {
+  t.Fatalf("password jump without opt-in must not reuse the target password, got %v",err)
+ }
 }

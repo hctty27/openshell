@@ -138,7 +138,7 @@
   "useOpenSSHConfig": "使用 ~/.ssh/config（Host 别名）",
   "useOpenSSHConfigDescription": "连接时从 OpenSSH 配置解析 HostName、User、Port、IdentityFile 和 ProxyJump，不修改已保存的会话信息。",
   "proxyJump": "跳板机（ProxyJump）",
-  "proxyJumpDescription": "可选，格式为 user@host:port；多个跳板用逗号分隔（最多 3 跳）。每跳均验证主机指纹，使用选定的认证方式。",
+  "proxyJumpDescription": "可选。格式为 user@host:port，多个跳板用逗号分隔（最多 3 个）。每一跳都需要信任主机指纹。私钥和 SSH Agent 认证会用于每一跳；密码只有在下方明确允许后才会发送给跳板机。",
   "sshAgent": "SSH Agent",
   "sshAgentDescription": "使用 SSH Agent 中已加载的密钥，OpenShell 不保存或读取私钥内容。",
   "localForwards": "本地端口转发",
@@ -207,5 +207,8 @@
   "defaultTransferDirectory": "默认本地目录",
   "defaultTransferDirectoryDescription": "新会话默认使用此目录；SFTP 和 rz/sz/trz/tsz 会按 SSH 会话记住最后访问的目录。",
   "chooseTransferDirectory": "选择默认本地目录",
-  "resetTransferDirectory": "重置"
+  "resetTransferDirectory": "重置",
+  "jumpReusePassword": "同时把这个密码发送给跳板机",
+  "jumpReusePasswordDescription": "只有在所有跳板机密码相同并且你信任它们时才开启。否则跳板机使用 SSH Agent 认证，目标机的密码不会发送给跳板机。",
+  "aiInsecureBaseUrl": "这个地址使用未加密的 HTTP。API Key、提问内容以及发给 AI 的终端输出都可能在网络上被看到。除非服务运行在本机，否则请使用 https://。"
 }

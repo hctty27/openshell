@@ -227,5 +227,6 @@
   "fingerprintUpdateNotAllowed": "当前指纹确认不能用于替换已有信任密钥。",
   "fingerprintUpdateConflict": "等待确认期间，已保存的服务器指纹发生变化。请重新连接并核验。",
   "fingerprintUpdateFailed": "无法更新已信任的服务器指纹。",
-  "fingerprintTrustFailed": "无法保存服务器指纹。"
+  "fingerprintTrustFailed": "无法保存服务器指纹。",
+  "proxyJumpPasswordNotForwarded": "跳板机需要单独认证。请把密钥加载到 SSH Agent、改用私钥认证，或在会话设置中允许把密码发送给跳板机"
 }

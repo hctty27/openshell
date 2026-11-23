@@ -152,3 +152,20 @@ test("English tool cards preserve the original command result", async () => {
   fireEvent.click(screen.getByRole("button", { name: /Terminal command/ }));
   expect(screen.getByText((_, element) => element?.tagName === "PRE" && element.textContent === result)).toBeTruthy();
 });
+
+test("uses the structured backend status instead of parsing localized output", async () => {
+  await initializeI18n("en");
+  const messages: AIMessage[] = [
+    { role: "user", content: "check" },
+    { role: "assistant", content: "", tool_calls: tool("s1", "ssh_exec", { target: "t1", command: "false" }) },
+    { role: "tool", tool_call_id: "s1", content: "exit status: 1", status: "failed", exit_code: 1 },
+    { role: "assistant", content: "", tool_calls: tool("s2", "ssh_exec", { target: "t1", command: "rm -rf /x" }) },
+    { role: "tool", tool_call_id: "s2", content: "The user rejected this action.", status: "rejected" },
+    { role: "assistant", content: "", tool_calls: tool("s3", "sftp_write", { target: "t1", path: "/tmp/a" }) },
+    { role: "tool", tool_call_id: "s3", content: "saved, revision=abc", status: "success" },
+  ];
+  render(<AITranscript messages={messages} />);
+  expect(screen.getByText("Failed (exit 1)")).toBeTruthy();
+  expect(screen.getByText("Rejected")).toBeTruthy();
+  expect(screen.getByText("Success")).toBeTruthy();
+});

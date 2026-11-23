@@ -20,6 +20,9 @@ type Session struct {
 	PrivateKeyPath string `json:"privateKeyPath"`
 	UseSSHConfig   bool   `json:"useSSHConfig,omitempty"`
 	ProxyJump      string `json:"proxyJump,omitempty"`
+	// JumpReusePassword sends the target password to every ProxyJump hop.
+	// Off by default so a jump host never learns the target's password.
+	JumpReusePassword bool `json:"jumpReusePassword,omitempty"`
 	LocalForwards []LocalForward `json:"localForwards,omitempty"`
 	CredentialRef  string `json:"credentialRef"`
 	TerminalTheme  string `json:"terminalTheme,omitempty"`
