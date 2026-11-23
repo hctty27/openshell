@@ -516,7 +516,7 @@ func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToo
 		a.aiApprovals[approvalID] = ch
 		a.aiMu.Unlock()
 		defer func() { a.aiMu.Lock();delete(a.aiApprovals,approvalID);a.aiMu.Unlock() }()
-		a.emit("ai:approval",map[string]any{"taskId":taskID,"approvalId":approvalID,"command":summary,"reason":args.Reason,"tabId":ref.TabID,"policy":policy.Policy,"tool":call.Function.Name})
+		a.emit("ai:approval",map[string]any{"taskId":taskID,"approvalId":approvalID,"command":summary,"reason":args.Reason,"tabId":ref.TabID,"policy":policy.Policy,"tool":call.Function.Name,"callId":call.ID})
 		select {
 		case approved:=<-ch:
 			if !approved { return aiToolResult{Output:"The user rejected this action. Do not retry it without asking the user.", Status:"rejected"} }

@@ -124,10 +124,11 @@ function toolTitle(call: AIToolCall): { label: string; detail: string } {
   }
 }
 
-function AIToolCard({ step, execution, note }: {
+function AIToolCard({ step, execution, note, awaitingApproval }: {
   step: ToolStep;
   execution: "independent" | "terminal";
   note?: string;
+  awaitingApproval?: boolean;
 }) {
   useTranslation("ai");
   const { call, result } = step;
@@ -140,7 +141,7 @@ function AIToolCard({ step, execution, note }: {
   const statusLabel = result?.status === "rejected" ? t("ai:toolRejected") :
     result?.status === "cancelled" ? t("ai:taskCancelled") :
     state === "success" ? t("ai:success") :
-    state === "failed" ? (result?.exit_code !== undefined ? t("ai:failedWithExitCode", { code: result.exit_code }) : t("ai:failed")) : state === "running" ? t("ai:inProgress") : t("ai:needsReview");
+    state === "failed" ? (result?.exit_code !== undefined ? t("ai:failedWithExitCode", { code: result.exit_code }) : t("ai:failed")) : state === "running" ? t(awaitingApproval ? "ai:awaitingApproval" : "ai:inProgress") : t("ai:needsReview");
   const Icon = call.function.name === "ssh_exec" ? Terminal :
     call.function.name === "sftp_list" ? FolderOpen :
       call.function.name === "sftp_write" ? FilePenLine : FileText;
@@ -177,9 +178,11 @@ function AIToolCard({ step, execution, note }: {
   );
 }
 
-export default function AITranscript({ messages, execution = "independent" }: {
+export default function AITranscript({ messages, execution = "independent", awaitingCallId }: {
   messages: AIMessage[];
   execution?: "independent" | "terminal";
+  /** Tool call that is paused until the user approves or rejects it. */
+  awaitingCallId?: string;
 }) {
   useTranslation("ai");
   const entries = buildTranscript(messages);
@@ -193,6 +196,7 @@ export default function AITranscript({ messages, execution = "independent" }: {
               {importantNote && <p className="ai-step-warning">{entry.note}</p>}
               {entry.steps.map((step, index) => (
                 <AIToolCard key={step.call.id || index} step={step} execution={execution}
+                  awaitingApproval={!!awaitingCallId && step.call.id === awaitingCallId}
                   note={index === 0 && !importantNote ? entry.note : undefined} />
               ))}
             </div>

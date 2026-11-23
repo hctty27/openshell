@@ -169,3 +169,13 @@ test("uses the structured backend status instead of parsing localized output", a
   expect(screen.getByText("Rejected")).toBeTruthy();
   expect(screen.getByText("Success")).toBeTruthy();
 });
+
+test("a tool call paused for approval says so instead of running", () => {
+  render(<AITranscript awaitingCallId="pending" messages={[
+    { role: "assistant", content: "", tool_calls: tool("pending", "ssh_exec", {
+      target: "t1", command: "rm -rf /tmp/x",
+    }) },
+  ]} />);
+  expect(screen.getByText("等待你确认")).toBeTruthy();
+  expect(screen.queryByText("执行中")).toBeNull();
+});
