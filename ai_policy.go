@@ -12,7 +12,7 @@ import (
 type aiApprovalPolicy struct {
 	Required bool
 	// Policy explains why approval is needed: model, write, python,
-	// unverified, dangerous or sensitive. It is shown to the user.
+	// unverified, dangerous, sensitive or opaque. It is shown to the user.
 	Policy string
 }
 
@@ -20,7 +20,8 @@ type aiApprovalPolicy struct {
 // AI provider without explicit user consent.
 var aiSensitivePath = regexp.MustCompile(`(?i)(^|[\s/'"=:~])(` +
 	`\.ssh(/|$|\s)|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?\b|authorized_keys\b|known_hosts\b|` +
-	`etc/(shadow|gshadow|sudoers)\b|etc/sudoers\.d\b|` +
+	`etc/(shadow|gshadow|sudoers)\b|etc/sudoers\.d\b|etc/ssh/ssh_host_[\w-]+_key(\s|$|['"])|` +
+	`\.npmrc\b|\.pypirc\b|\.config/gh/hosts\.ya?ml\b|\.cargo/credentials(\.toml)?\b|\.terraform\.d/credentials|` +
 	`\.aws/|\.azure/|\.config/gcloud\b|\.kube/config\b|\.docker/config\.json\b|` +
 	`\.netrc\b|\.pgpass\b|\.my\.cnf\b|\.git-credentials\b|\.gnupg\b|\.password-store\b|\.vault-token\b|` +
 	`\.(bash|zsh|mysql|psql|python|node_repl)_history\b|\.env(\.[\w-]+)?(\s|$|['"])|` +
@@ -39,35 +40,45 @@ func aiPathIsSensitive(p string) bool {
 
 // aiShellDangerous returns true for commands that can destroy data, stop
 // services or execute downloaded code. They always need approval, even in
-// automatic mode.
+// automatic mode. It looks inside wrappers such as bash -c, sh -c, su -c,
+// ssh host CMD and find -exec, and treats find -delete, sed -i, package
+// removal and writes into system directories as destructive.
 func aiShellDangerous(command string) bool {
+	return aiShellDangerousDepth(command, 0)
+}
+
+func aiShellDangerousDepth(command string, depth int) bool {
 	lower := strings.ToLower(command)
 	for _, pattern := range aiDangerousPatterns {
 		if pattern.MatchString(lower) {
 			return true
 		}
 	}
-	for _, segment := range aiShellSegments(lower) {
-		words := aiStripCommandPrefixes(strings.Fields(segment))
+	// The naive split also looks at text inside quotes (over-matching only
+	// adds a prompt); the quote-aware split keeps script arguments whole.
+	segments := append(aiShellSegments(command), aiShellSegmentsQuoted(command)...)
+	for _, segment := range segments {
+		// aiShellFields removes quotes and backslashes, so \rm, r"m" and
+		// 'rm' are all seen as rm.
+		words := aiStripCommandPrefixes(aiShellFields(segment))
 		if len(words) == 0 {
 			continue
 		}
-		name := path.Base(words[0])
-		args := strings.Join(words[1:], " ")
+		name := strings.ToLower(path.Base(words[0]))
+		args := strings.ToLower(strings.Join(words[1:], " "))
 		switch name {
 		case "rm", "rmdir", "shred", "wipefs", "fdisk", "sfdisk", "parted", "sgdisk", "dd",
 			"shutdown", "reboot", "halt", "poweroff", "init", "telinit",
 			"kill", "killall", "pkill", "userdel", "usermod", "groupdel", "passwd", "chpasswd",
 			"iptables", "ip6tables", "nft", "ufw", "firewall-cmd", "truncate", "mkswap", "swapoff",
-			"umount", "crontab", "visudo", "chattr":
+			"umount", "crontab", "visudo", "chattr", "unlink", "srm", "blkdiscard", "losetup", "lvremove", "vgremove", "pvremove", "zpool", "zfs":
 			if name == "crontab" && !strings.Contains(" "+args+" ", " -r") && !strings.Contains(" "+args+" ", " -e") {
 				continue
 			}
-			return true
-		case "chmod", "chown", "chgrp":
-			if strings.Contains(" "+args, " -r") || strings.Contains(args, "--recursive") || strings.Contains(" "+args+" ", " / ") {
-				return true
+			if (name == "zfs" || name == "zpool") && !regexp.MustCompile(`\b(destroy|rollback|export|offline|detach|remove|labelclear)\b`).MatchString(args) {
+				continue
 			}
+			return true
 		case "systemctl", "service":
 			if regexp.MustCompile(`\b(start|stop|restart|reload|try-restart|reload-or-restart|disable|enable|mask|kill|isolate|poweroff|reboot|halt|daemon-reload|set-default)\b`).MatchString(args) {
 				return true
@@ -81,11 +92,14 @@ func aiShellDangerous(command string) bool {
 				return true
 			}
 		case "git":
-			if regexp.MustCompile(`(reset\s+--hard|clean\s+-[a-z]*f|push\s+.*(--force|-f\b)|branch\s+-d)`).MatchString(args) {
+			if regexp.MustCompile(`(reset\s+--hard|clean\s+-[a-z]*f|push\s+.*(--force|-f\b)|branch\s+-d|checkout\s+(--\s|\.)|restore\b|stash\s+(drop|clear))`).MatchString(args) {
 				return true
 			}
 		}
 		if strings.HasPrefix(name, "mkfs") {
+			return true
+		}
+		if aiShellArgDangerous(name, words[1:]) || aiShellNestedDangerous(name, words[1:], depth) {
 			return true
 		}
 	}
@@ -196,7 +210,14 @@ func aiShellReadOnly(command string) bool {
 			if strings.Contains(args, " -c") || strings.Contains(args, " -C") || strings.Contains(args, "--clear") {
 				return false
 			}
-		case "date", "hostname", "timedatectl", "hostnamectl":
+		case "date":
+			if strings.Contains(args, " -s") || strings.Contains(args, "--set") {
+				return false
+			}
+			if strings.TrimSpace(args) != "" && !strings.HasPrefix(strings.TrimSpace(args), "+") && !strings.HasPrefix(strings.TrimSpace(args), "-") {
+				return false
+			}
+		case "hostname", "timedatectl", "hostnamectl":
 			if strings.TrimSpace(args) != "" && !strings.HasPrefix(strings.TrimSpace(args), "+") && sub != "status" && sub != "-I" && sub != "-f" && sub != "-i" && sub != "-s" {
 				return false
 			}
@@ -218,7 +239,15 @@ func aiShellReadOnly(command string) bool {
 			if sub == "get" && regexp.MustCompile(`\bsecrets?\b`).MatchString(args) {
 				return false
 			}
+		case "tree":
+			if strings.Contains(args, " -o") || strings.Contains(args, "--output") {
+				return false
+			}
 		case "git":
+			// --output=FILE (diff, log, show) writes the result to a file.
+			if strings.Contains(args, "--output") || regexp.MustCompile(`\s-o\S*\s`).MatchString(args) {
+				return false
+			}
 			if !map[string]bool{"status": true, "log": true, "diff": true, "show": true, "rev-parse": true, "remote": true, "branch": true, "describe": true}[sub] ||
 				(sub == "branch" && len(words) > 2 && words[2] != "-a" && words[2] != "-r" && words[2] != "--list" && words[2] != "-v" && words[2] != "-vv") ||
 				(sub == "remote" && len(words) > 2 && words[2] != "-v") {
@@ -274,8 +303,13 @@ func aiToolApproval(mode, tool, program, command, filePath string, modelAsked bo
 		if aiShellDangerous(command) {
 			return aiApprovalPolicy{true, "dangerous"}
 		}
-		if aiPathIsSensitive(command) {
+		if aiPathIsSensitive(command) || aiShellGlobSensitive(command) || aiShellExposesSecrets(command) {
 			return aiApprovalPolicy{true, "sensitive"}
+		}
+		if aiShellOpaque(command) {
+			// The program is computed at run time ($(...), $VAR, eval), so
+			// none of the checks above can be trusted.
+			return aiApprovalPolicy{true, "opaque"}
 		}
 		if review && modelAsked {
 			return aiApprovalPolicy{true, "model"}
