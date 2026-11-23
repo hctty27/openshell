@@ -505,9 +505,23 @@ func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToo
 	if summary == "" { summary = call.Function.Name + ": " + args.Path }
 	program := ""
 	if terminalLease != nil { program = terminalLease.Program() }
+	// Resolve SFTP aliases before deciding what data the model may access.
+	// A request for /tmp/link must also be checked against its real target.
+	canonicalPath := args.Path
+	sftpLinked := false
+	sftpTool := call.Function.Name == "sftp_list" || call.Function.Name == "sftp_read" || call.Function.Name == "sftp_write"
+	if sftpTool {
+		var err error
+		canonicalPath, sftpLinked, err = a.sftp.AIResolveRemotePath(ref, args.Path)
+		if err != nil { return aiToolFailed("Cannot verify AI SFTP path: " + err.Error()) }
+		if canonicalPath != args.Path { summary += " (resolved: " + canonicalPath + ")" }
+	}
 	// Approval is decided by OpenShell. The model's needs_confirmation flag can
 	// only add a confirmation step, never remove one required by policy.
 	policy := aiToolApproval(mode, call.Function.Name, program, args.Command, args.Path, args.NeedsConfirmation)
+	if sftpTool {
+		policy = aiSFTPApprovalPolicy(mode, call.Function.Name, args.Path, canonicalPath, sftpLinked, args.NeedsConfirmation)
+	}
 	if policy.Required {
 		approvalID := domain.NewID()
 		ch := make(chan bool, 1)
@@ -541,13 +555,13 @@ func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToo
 		}
 		return a.executeAICommand(execCtx,ref,args.Command)
 	case "sftp_list":
-		entries,err:=a.SFTPList(ref,"remote",args.Path)
+		entries,err:=a.SFTPList(ref,"remote",canonicalPath)
 		if err!=nil{return aiToolFailed(err.Error())}
 		if len(entries)>120 {entries=entries[:120]}
 		b,_:=json.Marshal(entries)
 		return aiToolResult{Output:truncateAIOutput(string(b),65536), Status:"success"}
 	case "sftp_read":
-		doc,err:=a.SFTPReadRemoteText(ref,args.Path)
+		doc,err:=a.SFTPReadRemoteText(ref,canonicalPath)
 		if err!=nil{return aiToolFailed(err.Error())}
 		if len(doc.Content)>65536 {return aiToolFailed("The file exceeds the AI read limit (64 KiB); narrow the range, for example with head or grep.")}
 		b,_:=json.Marshal(doc)
@@ -556,7 +570,7 @@ func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToo
 		if len(args.Content)>65536 {return aiToolFailed("AI write content exceeds 64 KiB")}
 		// The revision must come from sftp_read so stale content never overwrites the server file.
 		if args.Revision=="" {return aiToolFailed("missing file revision; call sftp_read first")}
-		doc,err:=a.SFTPSaveRemoteText(ref,args.Path,args.Revision,args.Content)
+		doc,err:=a.SFTPSaveRemoteText(ref,canonicalPath,args.Revision,args.Content)
 		if err!=nil{return aiToolFailed(err.Error())}
 		return aiToolResult{Output:fmt.Sprintf("saved, revision=%s",doc.Revision), Status:"success"}
 	default:
