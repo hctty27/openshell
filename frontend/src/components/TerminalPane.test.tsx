@@ -1284,3 +1284,25 @@ test("failed Bash recovery initialization remains locked after setup ends", asyn
   act(() => term.onDataCallback("pwd\r"));
   expect(api.WriteTerminal).not.toHaveBeenCalled();
 });
+
+test("connection failures show an in-tab panel with retry and edit actions", async () => {
+  const onRetry = vi.fn();
+  const onEditSession = vi.fn();
+  const failed = { ...tab, status: "error" as const, error: "dial tcp: connection refused" };
+  const view = renderTerminal({ tab: failed, onRetry, onEditSession });
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("无法连接到");
+  expect(alert.textContent).toContain("connection refused");
+  fireEvent.click(screen.getByRole("button", { name: /重试连接/ }));
+  fireEvent.click(screen.getByRole("button", { name: /编辑会话/ }));
+  expect(onRetry).toHaveBeenCalledTimes(1);
+  expect(onEditSession).toHaveBeenCalledTimes(1);
+  view.rerender(
+    <DialogProvider>
+      <TestTerminalPane tab={{ ...failed, status: "connected", error: "" }} active fontSize={14} theme="dark"
+        autoCopySelection rightClickPaste confirmMultilinePaste onNotice={vi.fn()} onError={vi.fn()}
+        onSelection={vi.fn()} onRetry={onRetry} onEditSession={onEditSession} />
+    </DialogProvider>,
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
+});

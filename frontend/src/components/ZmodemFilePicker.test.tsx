@@ -47,7 +47,7 @@ test("native rz uploads exactly one selected file and closes before transfer res
   render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
   intent();
   fireEvent.click(await screen.findByText("hello.txt"));
-  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
+  fireEvent.click(screen.getByRole("button", { name: "上传选中的文件" }));
   await waitFor(() => expect(api.StartNativeZmodemInteractiveTransfer)
     .toHaveBeenCalledWith(ref, "upload", "/home/user/hello.txt", ""));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -150,7 +150,7 @@ test("ordinary rz does not require overwrite confirmation", async () => {
   expect(screen.queryByRole("checkbox", {
     name: "我确认允许覆盖服务器上的同名文件",
   })).toBeNull();
-  const send = screen.getByRole("button", { name: "上传选中文件" });
+  const send = screen.getByRole("button", { name: "上传选中的文件" });
   expect((send as HTMLButtonElement).disabled).toBe(false);
   fireEvent.click(send);
   await waitFor(() => expect(api.StartNativeZmodemInteractiveTransfer)
@@ -166,7 +166,7 @@ test("rejected native transfer start releases the picker reservation", async () 
   render(<ZmodemFilePicker activeRef={ref} onNotice={onNotice} />);
   intent();
   fireEvent.click(await screen.findByText("hello.txt"));
-  fireEvent.click(screen.getByRole("button", { name: "上传选中文件" }));
+  fireEvent.click(screen.getByRole("button", { name: "上传选中的文件" }));
   await waitFor(() => expect(api.CancelNativeZmodemSelection).toHaveBeenCalledWith(ref, 1));
   expect(onNotice).toHaveBeenCalled();
 });

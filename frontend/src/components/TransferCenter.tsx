@@ -2,6 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpDown, ArrowUpFromLine, Check, RotateCcw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, desktop, errorText, listen } from "../bridge";
+import { decodeAppError } from "../i18n/errors";
+import { requestTerminalFocus } from "../features/terminalFocus";
+
+/** Localizes coded backend errors and keeps plain messages unchanged. */
+export function transferErrorText(error?: string): string {
+  if (!error) return "";
+  return decodeAppError(error) ? errorText(error) : error;
+}
 import { t } from "../i18n";
 import type { Ref, SFTPTask, Tab } from "../types";
 import { mergeTransferHistory } from "../features/transfers/transferHistory";
@@ -110,7 +118,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       });
     });
     const offNativeFile = listen("ssh:native-zmodem-file", (event: {
-      ref: Ref; batchId: string; kind: "start" | "progress" | "completed" | "skipped";
+      ref: Ref; batchId: string; kind: "start" | "progress" | "completed" | "skipped" | "declined";
       index: number; name?: string; total?: number | null; processed?: number;
     }) => {
       if (!event?.ref || event.index !== 0) return;
@@ -130,7 +138,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
           total,
           bytes: Math.max(file.bytes, processed),
           status: event.kind === "completed" ? "completed" :
-            event.kind === "skipped" ? "failed" : "running",
+            event.kind === "skipped" || event.kind === "declined" ? "failed" : "running",
         }] } };
       });
     });
@@ -265,9 +273,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     setNativeBatches(previous => previous[key]?.id === batch.id ? ({
       ...previous, [key]: { ...previous[key], status: "cancelling" },
     }) : previous);
+    requestTerminalFocus();
     void api.CancelNativeZmodemInteractiveTransfer(batch.ref).catch(error => {
       setNativeBatches(previous => previous[key]?.id === batch.id && previous[key]?.status === "cancelling" ? ({
-        ...previous, [key]: { ...previous[key], status: "failed", error: "取消请求未确认：" + errorText(error) },
+        ...previous, [key]: { ...previous[key], status: "failed", error: t("sftp:zmodemCancelUnconfirmed", { error: errorText(error) }) },
       }) : previous);
       onNotice(error);
     });
@@ -287,7 +296,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
             <strong>{t("sftp:transferQueue")}</strong>
             <span>{t("sftp:transferActive", { count: running })}</span>
             <button type="button" aria-label={t("sftp:zmodemDialogClose")}
-              onClick={() => setOpen(false)}><X size={15} /></button>
+              onClick={() => { setOpen(false); requestTerminalFocus(); }}><X size={15} /></button>
           </header>
           <div className="transfer-center-list">
             {native.length === 0 && visibleSftp.length === 0 && (
@@ -303,11 +312,13 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                 total == null ? null : total === 0 ? 0 :
                   Math.min(99, Math.round(bytes / total * 100));
               const active = batch.status === "running" || batch.status === "cancelling";
+              // A user cancellation is not an error; only show real failures.
+              const batchError = batch.status === "cancelled" ? "" : transferErrorText(batch.error);
               const statusLabel = batch.status === "completed" ? t("sftp:completed") :
                 batch.status === "failed" ? t("sftp:failed") :
                 batch.status === "cancelled" ? t("sftp:cancelled") :
                 batch.status === "cancelling" ? t("terminal:zmodemCancelling") :
-                total !== null && bytes >= total ? "等待远端确认" :
+                total !== null && bytes >= total ? t("sftp:zmodemWaitingForRemote") :
                 percent === null ? t("sftp:running") : percent + "%";
               return (
                 <article key={"native-" + key} className="transfer-center-job">
@@ -328,9 +339,9 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                   <div className="transfer-center-metrics">
                     <span>{formatSize(bytes)} / {total == null ? t("sftp:transferUnknownProgress") : formatSize(total)}
                       {batch.speed && active ? " · " + batch.speed : ""}</span>
-                    <span title={batch.error}>{statusLabel}</span>
+                    <span title={batchError}>{statusLabel}</span>
                   </div>
-                  {batch.error && <div className="transfer-center-terminal-error" title={batch.error}>{batch.error}</div>}
+                  {batchError && <div className="transfer-center-terminal-error" title={batchError}>{batchError}</div>}
                 </article>
               );
             })}

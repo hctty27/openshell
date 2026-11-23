@@ -58,3 +58,26 @@ func TestConflictPolicy(t *testing.T) {
     present,err=checkTarget(os.Lstat,filepath.Join(root,"missing.txt"),false)
     if err!=nil || present {t.Fatalf("expected free target: %v",err)}
 }
+
+func TestLocalListResolvesSymlinkedDirectories(t *testing.T) {
+    root := t.TempDir()
+    target := filepath.Join(root, "zz-target")
+    if err := os.Mkdir(target, 0o755); err != nil { t.Fatal(err) }
+    if err := os.WriteFile(filepath.Join(root, "a-file.txt"), []byte("x"), 0o644); err != nil { t.Fatal(err) }
+    if err := os.Symlink(target, filepath.Join(root, "b-link")); err != nil { t.Skipf("symlinks unavailable: %v", err) }
+    if err := os.Symlink(filepath.Join(root, "a-file.txt"), filepath.Join(root, "c-file-link")); err != nil { t.Fatal(err) }
+    items, err := testManager().List(domain.ConnectionRef{}, "local", root)
+    if err != nil { t.Fatal(err) }
+    names := make([]string, 0, len(items))
+    byName := map[string]Entry{}
+    for _, item := range items { names = append(names, item.Name); byName[item.Name] = item }
+    if got := strings.Join(names, ","); got != "b-link,zz-target,a-file.txt,c-file-link" {
+        t.Fatalf("directory-like entries should sort first: %s", got)
+    }
+    if link := byName["b-link"]; !link.IsSymlink || !link.TargetIsDir || link.IsDir {
+        t.Fatalf("symlinked directory not resolved: %+v", link)
+    }
+    if link := byName["c-file-link"]; !link.IsSymlink || link.TargetIsDir {
+        t.Fatalf("file symlink marked as directory: %+v", link)
+    }
+}

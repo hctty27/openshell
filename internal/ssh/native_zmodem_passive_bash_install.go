@@ -1,6 +1,7 @@
 package sshclient
 
 import (
+	"github.com/hctty27/openshell/internal/apperror"
 	"errors"
 	"time"
 
@@ -48,7 +49,7 @@ func (m *Manager) installNativePassiveBashHook(ref domain.ConnectionRef, expecte
 		if !success && sentBootstrap {
 			m.emit("ssh:native-zmodem-unsupported", map[string]any{
 				"ref":ref,
-				"error":"Bash Shell 集成未完成验证，当前终端状态不确定；请重新连接 SSH",
+				"error":apperror.New("zmodemShellSetupUnverified", nil).Error(),
 			})
 		}
 		m.emit("ssh:native-zmodem-shell-setup", map[string]any{

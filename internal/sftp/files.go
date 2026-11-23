@@ -22,6 +22,9 @@ type Entry struct {
     Path string `json:"path"`
     IsDir bool `json:"isDir"`
     IsSymlink bool `json:"isSymlink"`
+    // TargetIsDir is set for symbolic links that resolve to a directory so
+    // the browser can open them like folders.
+    TargetIsDir bool `json:"targetIsDir,omitempty"`
     Size int64 `json:"size"`
     Modified int64 `json:"modified"`
     Mode string `json:"mode"`
@@ -139,14 +142,42 @@ func (m *Manager) List(ref domain.ConnectionRef, side, directory string) ([]Entr
         defer release()
         infos, err = c.ReadDir(directory)
         if err != nil { return nil, err }
+        out := make([]Entry, 0, len(infos))
+        resolved := 0
+        for _, info := range infos {
+            entry := makeEntry(directory, info, true)
+            if entry.IsSymlink && resolved < maxResolvedSymlinks {
+                resolved++
+                if target, statErr := c.Stat(entry.Path); statErr == nil { entry.TargetIsDir = target.IsDir() }
+            }
+            out = append(out, entry)
+        }
+        sortEntries(out)
+        return out, nil
     }
     out := make([]Entry, 0, len(infos))
-    for _, info := range infos { out = append(out, makeEntry(directory, info, side == "remote")) }
+    resolved := 0
+    for _, info := range infos {
+        entry := makeEntry(directory, info, false)
+        if entry.IsSymlink && resolved < maxResolvedSymlinks {
+            resolved++
+            if target, statErr := os.Stat(entry.Path); statErr == nil { entry.TargetIsDir = target.IsDir() }
+        }
+        out = append(out, entry)
+    }
+    sortEntries(out)
+    return out, nil
+}
+
+// maxResolvedSymlinks bounds extra stat round trips in huge directories.
+const maxResolvedSymlinks = 256
+
+func sortEntries(out []Entry) {
+    isDir := func(e Entry) bool { return e.IsDir || e.TargetIsDir }
     sort.Slice(out, func(i,j int) bool {
-        if out[i].IsDir != out[j].IsDir { return out[i].IsDir }
+        if isDir(out[i]) != isDir(out[j]) { return isDir(out[i]) }
         return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
     })
-    return out, nil
 }
 
 func checkNotExists(check func(string) (os.FileInfo, error), target string) error {

@@ -101,5 +101,7 @@
   "nativeZmodemBatchUploadHint": "可选择多个文件；每行填写一个完整本地路径，最多 100 个。",
   "nativeZmodemBatchRemoteHint": "每行填写一个远端文件路径；支持空格和中文，最多 100 个。",
   "nativeZmodemBatchLimit": "每次请选择 1–100 个文件或远程路径。",
-  "nativeZmodemBatchCompleted": "本次已完成 {{count}} 个文件"
+  "nativeZmodemBatchCompleted": "本次已完成 {{count}} 个文件",
+  "connectionFailedTitle": "无法连接到 {{name}}",
+  "connectionLostTitle": "与 {{name}} 的连接已断开"
 }

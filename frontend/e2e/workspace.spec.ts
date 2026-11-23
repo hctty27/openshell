@@ -188,6 +188,56 @@ test.beforeEach(async ({ page }) => {
               },
             });
           },
+          AIProviders: async () => structuredClone(state.aiProviders ?? []),
+          AISaveProvider: async (req: any) => {
+            const provider = { ...req.provider, id: req.provider.id || "provider-1", hasKey: true };
+            state.aiProviders = [provider];
+            return provider;
+          },
+          AIConversations: async () => structuredClone(state.aiConversations ?? []),
+          AIStart: async (req: any) => {
+            const now = new Date().toISOString();
+            const conversation: any = {
+              id: req.conversationId || "conversation-1",
+              title: req.text, providerId: req.providerId, modelId: req.modelId,
+              mode: req.mode, execution: req.execution, scopeId: req.scopeId,
+              scope: req.scopeId ? "terminal" : "global",
+              targetNames: ["测试服务器"],
+              targetSessionIds: req.targets.map((ref: any) => ref.sessionId),
+              createdAt: now, updatedAt: now,
+              messages: [
+                { role: "user", content: req.text },
+                { role: "assistant", content: "先查看当前目录。", tool_calls: [{
+                  id: "call-1", type: "function",
+                  function: { name: "ssh_exec", arguments: JSON.stringify({ target: "t1", command: "pwd", needs_confirmation: false }) },
+                }] },
+              ],
+            };
+            (window as any).__aiStart = req;
+            (window as any).__aiConversation = conversation;
+            setTimeout(() => {
+              emit("ai:state", { taskId: "task-1", status: "running", detail: "" });
+              emit("ai:conversation", structuredClone(conversation));
+              // OpenShell, not the model, decided that pwd in a pipe-free
+              // command still needs approval in review mode here.
+              emit("ai:approval", { taskId: "task-1", approvalId: "approval-1", command: "pwd", reason: "", policy: "unverified", tool: "ssh_exec" });
+            }, 30);
+            return { taskId: "task-1", conversationId: conversation.id };
+          },
+          AIApprove: async (approvalId: string, approved: boolean) => {
+            (window as any).__executions.push(approvalId + ":" + approved);
+            const conversation = (window as any).__aiConversation;
+            conversation.messages.push(
+              { role: "tool", tool_call_id: "call-1", content: "/home/test\nexit status: 0", status: "success", exit_code: 0 },
+              { role: "assistant", content: "当前目录是 /home/test。" },
+            );
+            conversation.updatedAt = new Date().toISOString();
+            setTimeout(() => {
+              emit("ai:conversation", structuredClone(conversation));
+              emit("ai:state", { taskId: "task-1", status: "completed", detail: "" });
+            }, 30);
+          },
+          AIStop: async () => {},
           Continue: async () => ({ text: "当前目录是 /home/test。" }),
           PreviewContext: async () => ({
             text: "root@test:~$ pwd",
@@ -231,89 +281,35 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   await page.getByRole("button", { name: "信任并连接" }).click();
   await expect(page.locator(".terminal-tab.active .connection-state-connected")).toHaveAttribute("aria-label", "SSH 已连接");
   await page.getByTitle("设置", { exact: true }).click();
-  await page.getByRole("button", { name: "AI 配置", exact: true }).click();
+  await page.getByRole("button", { name: "AI 设置", exact: true }).click();
   await page.getByLabel("配置名称", { exact: true }).fill("测试 API");
-  await page
-    .getByLabel("Base URL", { exact: true })
-    .fill("https://api.example.com/v1");
+  await page.getByLabel("Base URL", { exact: true }).fill("http://api.example.com/v1");
+  // Plain HTTP to a remote host is allowed but clearly flagged.
+  await expect(page.getByText(/未加密的 HTTP/)).toBeVisible();
+  await page.getByLabel("Base URL", { exact: true }).fill("https://api.example.com/v1");
+  await expect(page.getByText(/未加密的 HTTP/)).toHaveCount(0);
   await page.getByLabel("API Key", { exact: true }).fill("fixture-key");
-  await page.getByLabel("模型名称", { exact: true }).fill("test-model");
+  await page.getByRole("button", { name: "添加模型" }).click();
+  await page.getByLabel("模型 ID", { exact: true }).fill("test-model");
   await page.getByRole("button", { name: "保存配置", exact: true }).click();
-  await expect(page.getByText("配置已保存",{exact:true})).toBeVisible();
+  await expect(page.getByText("API 配置已保存", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).last().click();
-  await page.getByLabel("发送给 AI").fill("检查服务器目录");
-  await page.getByTitle("发送消息").click();
-  await expect(page.getByText("待确认的命令")).toBeVisible();
-  for (const theme of ["light", "dark"]) {
-    await page.getByTitle("设置", { exact: true }).click();
-    await page
-      .getByRole("button", { name: theme === "light" ? "浅色" : "深色", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "关闭", exact: true })
-      .last()
-      .click();
-    const editor = page.getByRole("textbox", { name: "待执行命令" });
-    for (const action of ["idle", "hover", "focus"]) {
-      if (action === "hover") await editor.hover();
-      if (action === "focus") await editor.focus();
-      const contrast = await editor.evaluate((element) => {
-        const style = getComputedStyle(element);
-        const luminance = (color: string) => {
-          const channels = color
-            .match(/[\d.]+/g)!
-            .slice(0, 3)
-            .map(Number)
-            .map((value) => {
-              const v = value / 255;
-              return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-            });
-          return (
-            channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
-          );
-        };
-        const foreground = luminance(style.color),
-          background = luminance(style.backgroundColor);
-        return (
-          (Math.max(foreground, background) + 0.05) /
-          (Math.min(foreground, background) + 0.05)
-        );
-      });
-      expect(
-        contrast,
-        `${theme} command editor ${action}`,
-      ).toBeGreaterThanOrEqual(4.5);
-    }
-    await page.screenshot({ path: `../tmp/command-${theme}.png` });
-  }
-  expect(await page.evaluate(() => (window as any).__executions.length)).toBe(
-    0,
-  );
-  await page.getByRole("button", { name: "确认执行", exact: true }).click();
-  await expect(page.getByText("执行完成", { exact: true })).toBeVisible();
-  expect(await page.evaluate(() => (window as any).__executions)).toEqual([
-    "proposal-1",
-  ]);
-  await expect(
-    page.getByText("当前目录是 /home/test。", { exact: true }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "展开 AI 助手" }).click();
+  const prompt = page.locator('textarea[placeholder="描述需要 AI 执行的任务..."]:visible').first();
+  await prompt.fill("检查服务器目录");
+  await prompt.press("Enter");
+  const approval = page.locator(".ai-approval");
+  await expect(approval).toBeVisible();
+  await expect(approval).toContainText("审查模式：OpenShell 无法确认这条命令是只读的。");
+  await expect(approval.locator("pre")).toHaveText("pwd");
+  expect(await page.evaluate(() => (window as any).__aiStart.mode)).toBe("review");
+  expect(await page.evaluate(() => (window as any).__executions.length)).toBe(0);
+  await page.screenshot({ path: "../tmp/ui-ai-approval.png" });
+  await approval.getByRole("button", { name: "允许执行", exact: true }).click();
+  expect(await page.evaluate(() => (window as any).__executions)).toEqual(["approval-1:true"]);
+  await expect(page.getByText("当前目录是 /home/test。", { exact: true })).toBeVisible();
+  await expect(page.locator(".ai-step-card--success")).toHaveCount(1);
   await page.screenshot({ path: "../tmp/ui-connected.png" });
-  await page.getByLabel("AI 模式").selectOption("auto");
-  await page.getByLabel("发送给 AI").fill("继续检查磁盘");
-  await page.getByTitle("发送消息").click();
-  await expect(page.getByRole("button", { name: "继续下一轮" })).toBeVisible();
-  await expect(page.getByLabel("AI 模式")).toBeDisabled();
-  await page.getByRole("button", { name: "继续下一轮" }).click();
-  await expect(page.getByText("任务已完成", { exact: true })).toBeVisible();
-  expect(await page.evaluate(() => (window as any).__resumed.extend)).toBe(
-    true,
-  );
-  await page.getByLabel("发送给 AI").fill("再次检查");
-  await page.getByTitle("发送消息").click();
-  await page.getByTitle("停止任务").click();
-  await expect(
-    page.getByText("已停止，不再执行后续命令", { exact: true }),
-  ).toBeVisible();
 
   expect(
     await page.evaluate(
@@ -325,7 +321,7 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
     () => (window as any).__resizes.length,
   );
   await page.getByTitle("设置", { exact: true }).click();
-  await page.getByRole("button", { name: "终端", exact: true }).click();
+  await page.getByRole("button", { name: "外观", exact: true }).click();
   await page.getByRole("slider").focus();
   await page.getByRole("slider").press("ArrowRight");
   await expect
@@ -335,12 +331,14 @@ test("session, custom API, terminal and explicitly confirmed AI command", async 
   await page.evaluate(() => {
     (window as any).__rejectPTY = true;
   });
-  await page.getByTitle("重新连接", { exact: true }).click();
-  await expect(
-    page.getByRole("main").getByText("操作失败: PTY 拒绝", { exact: true }),
-  ).toBeVisible();
-  await page.getByTitle("收起 AI").click();
-  await expect(page.getByText("AI 助手", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "断开连接", exact: true }).click();
+  await page.getByRole("button", { name: /^(重新连接|连接)$/ }).first().click();
+  // The failure reason stays in the tab with recovery actions.
+  const failure = page.locator(".terminal-pane.active .terminal-connection-error");
+  await expect(failure).toContainText("PTY 拒绝");
+  await expect(failure.getByRole("button", { name: "重试连接" })).toBeVisible();
+  await expect(failure.getByRole("button", { name: "编辑会话" })).toBeVisible();
+  await page.screenshot({ path: "../tmp/ui-connection-error.png" });
 });
 
 test("auto-hide sidebars ignore pointer entry while mouse buttons are held", async ({ page }) => {
@@ -518,7 +516,7 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
       const screen = pane
         .querySelector(".xterm-screen")!
         .getBoundingClientRect();
-      const bar = pane.querySelector(".scrollbar.vertical")!;
+      const bar = pane.querySelector(".xterm-scrollbar.xterm-vertical")!;
       return {
         bottom: screen.bottom,
         right: screen.right,
@@ -539,15 +537,16 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
     (window as any).__terminalOutput("row\r\n".repeat(200) + "last-line> "),
   );
   await expect.poll(async () => (await geometry()).width).toBe(before.width);
-  expect((await geometry()).scrollbarWidth).toBe(6);
+  expect((await geometry()).scrollbarWidth).toBe(8);
   expect((await geometry()).opacity).toBe("1");
   await page.getByTitle("设置", { exact: true }).click();
+  await page.getByRole("button", { name: "外观", exact: true }).click();
   await page
     .getByRole("button", { name: "浅色", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(page.locator(".terminal-pane.active .xterm-viewport")).toHaveCSS(
     "background-color",
-    "rgb(255, 255, 255)",
+    "rgb(248, 250, 252)",
   );
   await expect(page.locator(".settings-dialog--settings > footer")).toHaveCount(0);
   await page.locator(".settings-dialog--settings > header button").click();
@@ -564,7 +563,15 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
       })
       .toBe(true);
   }
-  await page.getByTitle("收起 AI").click();
+  await page.getByTitle("展开 AI 助手").click();
+  await page.getByTitle("固定 AI 栏").click();
+  await expect
+    .poll(async () => {
+      const g = await geometry();
+      return g.bottom <= g.hostBottom && g.right <= g.hostRight;
+    })
+    .toBe(true);
+  await page.getByTitle("自动隐藏 AI 栏").click();
   await expect
     .poll(async () => {
       const g = await geometry();
@@ -574,6 +581,7 @@ test("terminal stays within its viewport with stable scrollbar and both themes",
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.getByTitle("设置", { exact: true }).click();
+  await page.getByRole("button", { name: "外观", exact: true }).click();
   await page
     .getByRole("button", { name: "深色", exact: true }).click();
   await page.screenshot({ path: "../tmp/theme-dark.png" });
@@ -784,6 +792,11 @@ test("compact workspace removes redundant chrome while keeping quick commands", 
   await expect(settingsButton).toBeVisible();
   await expect(settingsButton.locator("xpath=../..")).toHaveClass(/window-titlebar/);
 
+  const detailsToggle = page.locator(".details-toggle");
+  if (await detailsToggle.getAttribute("aria-expanded") !== "true") {
+    await detailsToggle.click();
+  }
+  await expect(page.locator(".details-properties > div").first()).toBeVisible();
   const geometry = await page.evaluate(() => {
     const height = (selector: string) =>
       document.querySelector(selector)!.getBoundingClientRect().height;

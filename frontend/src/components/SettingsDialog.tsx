@@ -89,6 +89,15 @@ const emptySession: Session = {
   privateKeyPath: "",
   credentialRef: "",
 };
+/** Splits "host:port" typed into the host field; IPv6 needs brackets. */
+export function splitHostPort(value: string): { host: string; port: number } | null {
+  const match = value.trim().match(/^(\[[0-9a-fA-F:.]+\]|[^:\s\[\]]+):(\d{1,5})$/);
+  if (!match) return null;
+  const port = Number(match[2]);
+  if (port < 1 || port > 65535) return null;
+  return { host: match[1].replace(/^\[|\]$/g, ""), port };
+}
+
 export default function SettingsDialog(p: Props) {
   useTranslation();
   const dialogs = useDialogs();
@@ -299,6 +308,7 @@ export default function SettingsDialog(p: Props) {
                 {t("settings:sessionName")}
                 <input
                   value={session.name}
+                  maxLength={100}
                   onChange={(e) => field("name", e.target.value)}
                   placeholder={t("settings:eGHongKongServer")}
                 />
@@ -310,6 +320,10 @@ export default function SettingsDialog(p: Props) {
                     autoFocus
                     value={session.host}
                     onChange={(e) => field("host", e.target.value)}
+                    onBlur={() => {
+                      const split = splitHostPort(session.host);
+                      if (split) setSession((current) => ({ ...current, host: split.host, port: split.port }));
+                    }}
                     placeholder={t("settings:ipAddressOrHostname")}
                   />
                 </label>

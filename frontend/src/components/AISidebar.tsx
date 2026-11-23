@@ -573,7 +573,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                     sensitive: "ai:approvalPolicy_sensitive",
                   } as const)[approval.policy])}</p>
                 )}
-                <p>{approval.reason || t("ai:approvalReason")}</p>
+                {(approval.reason || !approval.policy || approval.policy === "model") &&
+                  <p>{approval.reason || t("ai:approvalReason")}</p>}
                 <pre>{approval.command}</pre>
                 <div><button onClick={() => { void api.AIApprove(approval.approvalId, false); setApproval(null); }}>{t("ai:reject")}</button>
                   <button className="ai-primary" onClick={() => { void api.AIApprove(approval.approvalId, true); setApproval(null); }}>{t("ai:allowExecution")}</button></div>
