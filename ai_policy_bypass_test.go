@@ -92,12 +92,10 @@ func TestAIToolApprovalClosesShellBypasses(t *testing.T) {
 func TestAIToolApprovalKeepsCommonCommandsQuiet(t *testing.T) {
 	quiet := map[string][]string{
 		"auto": {
-			"ls -la", "ls *.log", "cat *.txt", "grep -r foo *", "ls ~", "ls ~/*", "echo $PATH", "echo \"$(date)\"",
-			"awk '{print $1 }' /var/log/syslog", "cat /etc/passwd", "cat /etc/hosts", "systemctl status nginx",
-			"cp a.txt b.txt", "mv /tmp/a /tmp/b", "sed -n 1,5p /etc/hosts", "sed 's/a/b/' x", "find /var/log -name '*.gz'",
-			"bash -c 'ls -la'", "ssh other uptime", "chmod 644 ./app.conf", "apt list --installed", "pip install requests",
-			"tar czf /tmp/x.tgz /srv/app", "docker ps", "kubectl get pods", "env FOO=1 make test", "x=$(date); echo $x",
-			"git diff HEAD~1", "find . -name '*.go' -exec grep -l foo {} +",
+			"ls -la", "ls *.log", "cat *.txt", "grep -r foo *", "ls ~", "ls ~/*", "cat /etc/passwd", "cat /etc/hosts",
+			"systemctl status nginx", "find /var/log -name '*.gz'", "docker ps", "kubectl get pods", "git diff HEAD~1",
+			"git status", "git log -n 5 --oneline", "df -h", "ps aux | grep nginx | head -20", "grep -rn TODO .",
+			"journalctl -u nginx -n 50 --no-pager 2>/dev/null", "du -sh /var/log", "free -m", "uname -a",
 		},
 		"review": {
 			"ls -la", "ls *.log", "cat /etc/hosts", "git diff HEAD", "git log -n 5 --oneline", "tree -L 2 /srv",
@@ -109,6 +107,22 @@ func TestAIToolApprovalKeepsCommonCommandsQuiet(t *testing.T) {
 			if got := aiToolApproval(mode, "ssh_exec", "", command, "", false); got.Required {
 				t.Errorf("%s %q unexpectedly needs approval: %+v", mode, command, got)
 			}
+		}
+	}
+}
+
+// TestAIToolApprovalAutoModeIsAllowlist: automatic mode no longer runs
+// everything that is not known to be dangerous; anything that is not
+// provably read-only asks first.
+func TestAIToolApprovalAutoModeIsAllowlist(t *testing.T) {
+	for _, command := range []string{
+		"echo $PATH", "echo \"$(date)\"", "awk '{print $1 }' /var/log/syslog", "cp a.txt b.txt", "mv /tmp/a /tmp/b",
+		"sed -n 1,5p /etc/hosts", "bash -c 'ls -la'", "ssh other uptime", "chmod 644 ./app.conf", "apt list --installed",
+		"pip install requests", "tar czf /tmp/x.tgz /srv/app", "env FOO=1 make test", "x=$(date); echo $x",
+		"find . -name '*.go' -exec grep -l foo {} +", "ls && whoami", "ls; whoami", "ls > /tmp/x", "./run.sh",
+	} {
+		if got := aiToolApproval("auto", "ssh_exec", "", command, "", false); !got.Required {
+			t.Errorf("auto %q runs without approval", command)
 		}
 	}
 }

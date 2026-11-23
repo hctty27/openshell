@@ -324,6 +324,8 @@ var aiSensitiveGlobSamples = []string{
 	"/etc/ssl/private/server.key", "/etc/letsencrypt/live/example.com/privkey.pem",
 	"/proc/self/environ", "/proc/1/environ",
 	"/srv/app/.env", "/srv/app/.env.production", "/srv/app/server.pem", "/srv/app/server.key",
+	"/etc/wireguard/wg0.conf", "/etc/kubernetes/admin.conf", "/etc/rancher/k3s/k3s.yaml", "/etc/mysql/debian.cnf",
+	"/srv/app/terraform.tfstate",
 }
 
 var aiSensitiveHomeSamples = []string{
@@ -332,6 +334,7 @@ var aiSensitiveHomeSamples = []string{
 	".docker/config.json", ".netrc", ".pgpass", ".my.cnf", ".git-credentials", ".gnupg/private-keys-v1.d/x.key",
 	".password-store/x.gpg", ".vault-token", ".npmrc", ".pypirc", ".config/gh/hosts.yml", ".cargo/credentials.toml",
 	".bash_history", ".zsh_history", ".mysql_history", ".psql_history", ".python_history", ".env",
+	".config/rclone/rclone.conf", ".s3cfg", ".htpasswd",
 }
 
 var aiGlobSamples = func() []string {

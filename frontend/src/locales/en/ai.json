@@ -100,11 +100,11 @@
   "resetTerminalAiPanelWidth": "Drag to resize; double-click to reset width",
   "toolRejected": "Rejected",
   "failedWithExitCode": "Failed (exit {{code}})",
-  "approvalPolicy_write": "Review mode: writing a remote file always needs your approval.",
-  "approvalPolicy_python": "Review mode: Python code always needs your approval.",
-  "approvalPolicy_unverified": "Review mode: OpenShell could not verify that this command is read-only.",
+  "approvalPolicy_write": "Writing this remote file needs your approval (always in review mode; in automatic mode for system and shell startup files).",
+  "approvalPolicy_python": "This Python code needs your approval (always in review mode; in automatic mode when it uses files, processes, the network or modules OpenShell does not know).",
+  "approvalPolicy_unverified": "OpenShell could not verify that this command is read-only. Only simple read-only commands run without approval, in both modes.",
   "approvalPolicy_dangerous": "This command can delete data, stop services or run downloaded code, so it always needs your approval.",
   "approvalPolicy_sensitive": "This touches credentials or secrets (for example SSH keys, /etc/shadow or .env). The content would be sent to the AI provider.",
-  "approvalPolicy_opaque": "OpenShell cannot tell which program this command runs (it is built from $(...), a variable or eval), so it always needs your approval.",
+  "approvalPolicy_opaque": "OpenShell cannot tell what this command runs or opens (it uses $(...), a variable or eval), so it always needs your approval.",
   "awaitingApproval": "Waiting for your approval"
 }

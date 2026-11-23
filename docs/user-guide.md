@@ -30,7 +30,7 @@ Configure one or more model profiles in **Settings → AI**. Each profile uses a
 
 - **Global AI assistant:** select one or more connected SSH sessions and ask the assistant to inspect, diagnose, or perform remote tasks through its independent SSH execution path where supported.
 - **Terminal AI:** work with the active SSH terminal. Supported interactive workflows include MySQL/MariaDB, Redis, PostgreSQL (`psql`), and Python. Current-terminal execution is limited to the active session.
-- **Execution control:** choose review-before-execution or fully automatic mode. Terminal readiness is checked before commands are sent; when a safe shell state cannot be verified, execution is refused. Terminal AI also provides a take-control action to stop AI operation and return control to the user.
+- **Execution control:** choose review-before-execution or fully automatic mode. Fully automatic mode only runs commands OpenShell can verify as read-only (an allowlist such as `ls`, `cat`, `grep`, `ps`, `df`, `git status/log/diff`); anything else (writes, chained commands, `$(...)`, variables, interpreters, wrappers such as `sudo -u` or `xargs`) and anything touching credentials asks first. SFTP writes to system or shell startup files also ask. Terminal readiness is checked before commands are sent; when a safe shell state cannot be verified, execution is refused. Terminal AI also provides a take-control action to stop AI operation and return control to the user.
 
 AI prompts and the context needed for a request are sent to the model provider you configured when you use AI. Review the [privacy policy](../PRIVACY.md) and your provider's data-handling terms before sending sensitive information.
 

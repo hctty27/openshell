@@ -42,15 +42,20 @@ func TestAIToolApprovalIgnoresModelOptOut(t *testing.T) {
 		{"review", "ssh_exec", "", "ls *.log", "", false, false, ""},
 		// The model can always add a prompt.
 		{"review", "ssh_exec", "", "df -h", "", true, true, "model"},
-		// Automatic mode still stops for destructive commands and secrets.
+		// Automatic mode stops for destructive commands, secrets and anything
+		// it cannot prove read-only.
 		{"auto", "ssh_exec", "", "rm -rf /", "", false, true, "dangerous"},
 		{"auto", "ssh_exec", "", "sudo -n reboot", "", false, true, "dangerous"},
 		{"auto", "ssh_exec", "", "cat /root/.aws/credentials", "", false, true, "sensitive"},
-		{"auto", "ssh_exec", "", "echo hi > /tmp/x", "", false, false, ""},
+		{"auto", "ssh_exec", "", "echo hi > /tmp/x", "", false, true, "unverified"},
+		{"auto", "ssh_exec", "", "mkdir -p /tmp/x", "", false, true, "unverified"},
+		{"auto", "ssh_exec", "", "ls -la /var/log", "", false, false, ""},
 		{"auto", "ssh_exec", "", "df -h", "", true, false, ""},
 		// File tools.
 		{"review", "sftp_write", "", "", "/etc/nginx/nginx.conf", false, true, "write"},
 		{"auto", "sftp_write", "", "", "/tmp/notes.txt", false, false, ""},
+		{"auto", "sftp_write", "", "", "/srv/app/config.yml", false, false, ""},
+		{"auto", "sftp_write", "", "", "/etc/passwd", false, true, "write"},
 		{"auto", "sftp_write", "", "", "/home/u/.ssh/authorized_keys", false, true, "sensitive"},
 		{"review", "sftp_read", "", "", "/etc/nginx/nginx.conf", false, false, ""},
 		{"review", "sftp_read", "", "", "/home/u/.ssh/id_ed25519", false, true, "sensitive"},
@@ -62,6 +67,8 @@ func TestAIToolApprovalIgnoresModelOptOut(t *testing.T) {
 		{"auto", "sftp_read", "", "", "/proc/1/environ", false, true, "sensitive"},
 		// Interactive clients.
 		{"review", "ssh_exec", "python", "1+1", "", false, true, "python"},
+		{"auto", "ssh_exec", "python", "1+1", "", false, false, ""},
+		{"auto", "ssh_exec", "python", "import os; os.remove('x')", "", false, true, "python"},
 		{"review", "ssh_exec", "mysql", "SELECT 1", "", false, false, ""},
 		{"review", "ssh_exec", "psql", "SELECT 1", "", true, true, "model"},
 		{"auto", "ssh_exec", "redis", "FLUSHALL", "", false, true, "dangerous"},
