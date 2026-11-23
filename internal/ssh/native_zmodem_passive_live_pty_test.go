@@ -55,7 +55,11 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 		}
 	}
 
-	verifiedBash := os.Getenv("OPENSHELL_ZMODEM_PASSIVE_VERIFIED_E2E") == "1"
+	// Hook installation is now the default whenever the sidecar is configured.
+	// The VERIFIED_E2E env only selects the shorter "recovery-focused" case
+	// list used by CI; it no longer enables the hook itself.
+	verifiedBash := true
+	focusRecovery := os.Getenv("OPENSHELL_ZMODEM_PASSIVE_VERIFIED_E2E") == "1"
 	largeKiB := 0
 	if raw := os.Getenv("OPENSHELL_ZMODEM_PASSIVE_E2E_LARGE_KIB"); raw != "" {
 		largeKiB, err = strconv.Atoi(raw)
@@ -75,12 +79,10 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 		{"remote-sz-cancel", "download", true},
 		{"remote-rz-cancel", "upload", true},
 	} {
-		if (largeKiB != 0 || verifiedBash) && (tc.cancelPicker || strings.Contains(tc.name, "empty")) {
+		if (largeKiB != 0 || focusRecovery) && (tc.cancelPicker || strings.Contains(tc.name, "empty")) {
 			continue // loss/recovery profiles focus on full-size transfers
 		}
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT", "1")
-			if verifiedBash { t.Setenv("OPENSHELL_ZMODEM_PASSIVE_BASH_RECOVERY", "1") }
 			socket, err := net.DialTimeout("tcp", address, 10*time.Second)
 			if err != nil { t.Fatal(err) }
 			var transport net.Conn = socket

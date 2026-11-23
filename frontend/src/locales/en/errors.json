@@ -241,7 +241,6 @@
   "zmodemLocalDirectoryNotWritable": "The local folder {{path}} cannot be written. Choose another folder",
   "zmodemChooseLocalTarget": "Choose a local file or a destination folder",
   "zmodemSingleRemoteFile": "ZMODEM can download only one remote file at a time",
-  "zmodemPassiveDisabled": "Remote-initiated ZMODEM transfers are not enabled",
   "zmodemDirectionMismatch": "The remote ZMODEM direction does not match your selection",
   "zmodemCompletedShellUnverified": "The ZMODEM transfer finished, but the remote shell could not be confirmed as ready. Reconnect SSH before typing more commands",
   "zmodemSelectionExpired": "This ZMODEM file selection has ended or belongs to another session",

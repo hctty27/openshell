@@ -138,13 +138,11 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 
 // StartNativeZmodemPassiveTransfer consumes a protocol session that was
 // already started by the remote process. It MUST NOT launch a second rz/sz.
-// This experiment is enabled only by OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT=1.
 func (a *App) StartNativeZmodemPassiveTransfer(
 	ref domain.ConnectionRef, selectionID uint64, direction, localPath string,
 ) (err error) {
-	if os.Getenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT") != "1" ||
-		!a.nativeZmodemPreferred() {
-		return apperror.New("zmodemPassiveDisabled", nil)
+	if !a.nativeZmodemPreferred() {
+		return apperror.New("zmodemDisabledOnPlatform", nil)
 	}
 	if localPath == "" || strings.ContainsAny(localPath, "\r\n") {
 		return apperror.New("zmodemChooseLocalTarget", nil)

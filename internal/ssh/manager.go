@@ -64,9 +64,9 @@ type connection struct {
 	passiveBashHookInstalling bool
 	passiveBashHookToken string
 	passiveBashHookFilter *nativePassiveBashHookFilter
-	// passiveZmodem is set when the passive ZMODEM experiment guards this
-	// PTY, so a remote rz/sz that OpenShell cannot pre-check is still
-	// taken over safely when it starts.
+	// passiveZmodem is set when this PTY is guarded for remote-initiated
+	// rz/sz, so a command that OpenShell cannot pre-check is still taken
+	// over safely when the handshake starts.
 	passiveZmodem bool
 	nativeZmodemSelectionID uint64 // per-connection picker generation; never reused while this SSH session lives
 	nativeTerminalPoisoned bool

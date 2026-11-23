@@ -6,7 +6,6 @@ import (
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -178,9 +177,10 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 		return apperror.New("terminalMissingOrAlreadyOpen", nil)
 	}
 	conn.terminal = session
-	passiveEnabled := os.Getenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT") == "1" &&
-		m.nativeAutoSidecar != ""
-	bashRecovery := passiveEnabled && os.Getenv("OPENSHELL_ZMODEM_PASSIVE_BASH_RECOVERY") == "1"
+	// Passive takeover and Bash recovery are on whenever the native sidecar
+	// is configured. Non-Bash shells are still probed and skipped (no hook).
+	passiveEnabled := m.nativeAutoSidecar != ""
+	bashRecovery := passiveEnabled
 	m.mu.Unlock()
 	rollback := func(cause error) error {
 		_ = session.Close()
