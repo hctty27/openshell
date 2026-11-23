@@ -246,6 +246,7 @@ func (m *Manager) OpenTerminal(ref domain.ConnectionRef, cols, rows int) error {
 	conn.outputGate = gate
 	conn.outputGuard = guard
 	conn.writer = writer
+	conn.passiveZmodem = passiveEnabled
 	if bashFilter != nil {
 		conn.passiveBashHookFilter = bashFilter
 		conn.passiveBashHookInstalling = true
@@ -320,6 +321,16 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 			direction = "reject-unavailable"
 		}
 	}
+	// With passive ZMODEM, a compound command (cd d && rz, sudo sz f, a
+	// function) or an rz/sz typed at a prompt OpenShell does not recognize
+	// (zsh "host% ", fish, a custom PS1) is sent unchanged: the passive guard
+	// takes the remote protocol over when it starts, so there is no reason to
+	// erase the line.
+	if c.passiveZmodem && (direction == "reject-compound" ||
+		direction == "reject-unavailable" && autoError == "") {
+		wire = append([]byte(nil), p...)
+		direction = ""
+	}
 	// Mark the terminal busy before writing. The remote process can return a
 	// prompt before stdin.Write completes; recording input afterward can
 	// overwrite that prompt and leave the REPL permanently marked busy.
@@ -328,6 +339,12 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 	n, err := stdin.Write(wire)
 	if err != nil { return err }
 	if n != len(wire) { return io.ErrShortWrite }
+	// A refused rz/sz line was erased with Ctrl-U at a verified prompt and
+	// never ran: keep the prompt verified, so the next rz is not refused
+	// with zmodemPromptUnverified until some other command is entered.
+	if strings.HasPrefix(direction, "reject-") && c.nativeAutoInput.erasedAtPrompt {
+		c.readiness.restoreClearedNativeZmodemPrompt()
+	}
 
 	if direction == "reject-multi" {
 		autoError = apperror.New("zmodemSingleFileOnly", nil).Error()

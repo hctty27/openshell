@@ -869,6 +869,27 @@ function Workspace({ initialState }: { initialState: AppState }) {
       setDisconnectingTabs([...disconnectInFlight.current]);
     }
   };
+  // Reconnects a live SSH tab on request (for example after a ZMODEM
+  // transfer left its terminal unverified). The old connection is closed as
+  // a deliberate disconnect, so no auto-retry or local fallback starts in
+  // between, and a new one is opened at once.
+  const reconnectTab = async (tab: Tab) => {
+    if (disconnectInFlight.current.has(tab.id) || !tab.ref) return;
+    const ref = tab.ref;
+    stopRetryTimer(tab.id);
+    update(tab.id, t => t.ref?.generation === ref.generation
+      ? { ...t, status: "disconnected", manualDisconnected: true, localFallbackPending: true, retryCount: 0, error: "" }
+      : t);
+    try {
+      await api.Disconnect(ref);
+    } catch {
+      // The old connection may already be gone; connect anyway.
+    }
+    const latest = tabsRef.current.find(t => t.id === tab.id);
+    if (!latest) return;
+    update(tab.id, t => ({ ...t, localFallbackPending: false }));
+    manualConnect(latest);
+  };
   const closingTabs = useRef(new Set<string>());
   const activeAIFor = (tab: Tab) => Boolean(tab.ref &&
     aiTerminalControlsRef.current[tab.id]?.generation === tab.ref.generation);
@@ -1519,6 +1540,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
                   onEditSession={() => {
                     const session = state.sessions.find(item => item.id === tab.session.id) ?? tab.session;
                     setDialog({ kind: "session", session });
+                  }}
+                  onReconnect={() => {
+                    const current = tabsRef.current.find(item => item.id === tab.id);
+                    if (current) void reconnectTab(current);
                   }}
                   onError={(text) => {
                     update(tab.id, (t) => ({

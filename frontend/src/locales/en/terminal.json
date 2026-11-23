@@ -103,5 +103,8 @@
   "nativeZmodemBatchLimit": "Select 1–100 file paths per transfer.",
   "nativeZmodemBatchCompleted": "{{count}} files completed",
   "connectionFailedTitle": "Could not connect to {{name}}",
-  "connectionLostTitle": "Connection to {{name}} ended"
+  "connectionLostTitle": "Connection to {{name}} ended",
+  "nativeZmodemReconnectTitle": "The terminal needs to reconnect",
+  "nativeZmodemReconnectHint": "The SSH connection is still open and finished files are saved. Terminal input stays locked so leftover ZMODEM data cannot reach the shell; reconnect to continue typing.",
+  "nativeZmodemReconnect": "Reconnect"
 }

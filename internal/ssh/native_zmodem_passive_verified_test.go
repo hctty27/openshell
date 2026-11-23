@@ -134,7 +134,9 @@ func TestNativePassiveVerifiedExitRejectsOtherTokenAndKeepsPTYLocked(t *testing.
 	}()
 	restored, err := coordinator.runPassiveVerified(
 		ctx, "upload", local, guard, testNativePassiveSessionToken)
-	if restored || err == nil {
+	// The upload itself finished, so there is no error; but the terminal
+	// must stay locked because the remote shell was never confirmed.
+	if restored {
 		t.Fatalf("wrong session token restored terminal: restored=%v err=%v", restored, err)
 	}
 	if err := <-fakeDone; err != nil { t.Fatal(err) }
@@ -152,5 +154,37 @@ func TestNativePassiveVerifiedExitRejectsUnregisteredToken(t *testing.T) {
 	restored, err := coordinator.runPassiveVerified(context.Background(), "upload", "/tmp", nil, "")
 	if restored || err == nil {
 		t.Fatalf("missing pre-registered token accepted: %v %v", restored, err)
+	}
+}
+
+// B2: in a nested shell (bash -l, sudo -i, su -) the remote never prints the
+// registered marker. A file Rust received completely must still be saved;
+// only the terminal stays locked until a reconnect.
+func TestNativePassiveVerifiedKeepsCompletedDownloadWithoutMarker(t *testing.T) {
+	var visible bytes.Buffer
+	input := newTerminalInputGate(io.Discard, io.Discard)
+	guard := newNativeOnlyOutputGuardPassive(&visible, func(){}, input.blockPassiveInput, func(byte){})
+	output := newTerminalOutputGate(guard)
+	header := nativeZmodemHeaderFixture(0)
+	if _, err := output.Write(header); err != nil { t.Fatal(err) }
+	target := t.TempDir()
+	coordinator := &nativeTerminalCoordinator{
+		input: input, output: output,
+		runner: func(_ context.Context, _ string, dir string, in io.ReadCloser, _ io.Writer) error {
+			buf := make([]byte, len(header))
+			if _, err := io.ReadFull(in, buf); err != nil { return err }
+			return os.WriteFile(filepath.Join(dir, "report.bin"), []byte("complete"), 0600)
+		},
+	}
+	restored, err := coordinator.runPassiveVerified(
+		context.Background(), "download", target, guard, testNativePassiveSessionToken)
+	if restored || err != nil {
+		t.Fatalf("completed download without marker: restored=%v err=%v", restored, err)
+	}
+	if got, err := os.ReadFile(filepath.Join(target, "report.bin")); err != nil || string(got) != "complete" {
+		t.Fatalf("completed download was discarded: %q %v", got, err)
+	}
+	if _, err := input.Write([]byte("pwd\r")); !errors.Is(err, errNativeTerminalInputBusy) {
+		t.Fatalf("unverified shell unlocked terminal: %v", err)
 	}
 }

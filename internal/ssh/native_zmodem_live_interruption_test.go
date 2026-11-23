@@ -163,7 +163,11 @@ func TestNativeZmodemLiveInterruptedInteractivePTY(t *testing.T) {
 			select {
 			case err := <-done:
 				if err == nil { t.Fatal("interrupted native transfer reported success") }
-				safelyRecovered = kind == "cancel" && strings.Contains(err.Error(), "zmodemAbortedRecovered")
+				// Cancel and deadline both run the verified abort path; on a
+				// fast host the remote shell marker can arrive before the
+				// deadline handling finishes, so either outcome is valid as
+				// long as the cleanup matches the reported one.
+				safelyRecovered = kind != "disconnect" && strings.Contains(err.Error(), "zmodemAbortedRecovered")
 				if kind == "cancel" && !errors.Is(err, context.Canceled) {
 					t.Fatalf("cancel did not propagate: %v", err)
 				}
