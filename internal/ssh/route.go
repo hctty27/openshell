@@ -1,6 +1,7 @@
 package sshclient
 
 import (
+ "github.com/hctty27/openshell/internal/apperror"
  "context"
  "errors"
  "fmt"
@@ -218,7 +219,22 @@ func closeSSHConnection(c *connection) {
  closeHopClients(c.hops)
 }
 
-func (m *Manager) dialRoute(ctx context.Context, address, user string, methods []ssh.AuthMethod, hops []jumpHost) (*ssh.Client, []*ssh.Client, error) {
+// jumpHopAuthMethods never forwards a saved password to a jump host unless the
+// user explicitly opted in: a malicious or compromised jump host would
+// otherwise learn the target's password. Public-key and agent methods only
+// produce session-bound signatures and are safe to reuse for every hop.
+func jumpHopAuthMethods(ctx context.Context, authType string, targetMethods []ssh.AuthMethod, reusePassword bool) ([]ssh.AuthMethod, func(), error) {
+ if authType == "key" || authType == "agent" || reusePassword {
+  return targetMethods, func(){}, nil
+ }
+ methods, closeAuth, err := authenticationMethods(ctx, "agent", "", AuthInput{})
+ if err != nil {
+  return nil, nil, apperror.Wrap("proxyJumpPasswordNotForwarded", err, nil)
+ }
+ return methods, closeAuth, nil
+}
+
+func (m *Manager) dialRoute(ctx context.Context, address, user string, methods []ssh.AuthMethod, hops []jumpHost, hopMethods ...[]ssh.AuthMethod) (*ssh.Client, []*ssh.Client, error) {
  clients := make([]*ssh.Client, 0, len(hops))
  var mu sync.Mutex
  release := func() {
@@ -249,7 +265,9 @@ func (m *Manager) dialRoute(ctx context.Context, address, user string, methods [
    raw, err = clients[i-1].Dial("tcp", target)
   }
   if err != nil { release(); return nil, nil, fmt.Errorf("SSH connection to %s: %w", target, err) }
-  client, err := m.handshake(ctx, raw, target, login, methods)
+  auth := methods
+  if i < len(hops) && len(hopMethods) > 0 && hopMethods[0] != nil { auth = hopMethods[0] }
+  client, err := m.handshake(ctx, raw, target, login, auth)
   if err != nil { release(); return nil, nil, err }
   if ctx.Err() != nil {
    _ = client.Close()

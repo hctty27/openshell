@@ -35,6 +35,7 @@ interface Props {
 interface Approval {
   taskId: string;
   approvalId: string;
+  policy?: "model" | "write" | "python" | "unverified" | "dangerous" | "sensitive";
   command: string;
   reason: string;
   tabId: string;
@@ -563,6 +564,15 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
             {approval && (
               <div className="ai-approval">
                 <strong>{t("ai:approvalTitle")}</strong>
+                {approval.policy && approval.policy !== "model" && (
+                  <p className="ai-approval-policy">{t(({
+                    write: "ai:approvalPolicy_write",
+                    python: "ai:approvalPolicy_python",
+                    unverified: "ai:approvalPolicy_unverified",
+                    dangerous: "ai:approvalPolicy_dangerous",
+                    sensitive: "ai:approvalPolicy_sensitive",
+                  } as const)[approval.policy])}</p>
+                )}
                 <p>{approval.reason || t("ai:approvalReason")}</p>
                 <pre>{approval.command}</pre>
                 <div><button onClick={() => { void api.AIApprove(approval.approvalId, false); setApproval(null); }}>{t("ai:reject")}</button>

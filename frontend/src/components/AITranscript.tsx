@@ -75,11 +75,18 @@ type ToolState = "running" | "success" | "failed" | "unknown";
 
 function toolState(call: AIToolCall, result?: AIMessage): ToolState {
   if (!result) return "running";
+  // Newer results carry a structured status from the backend; text matching
+  // below is only kept for conversations saved by older versions.
+  switch (result.status) {
+    case "success": return "success";
+    case "failed": case "rejected": case "cancelled": return "failed";
+    case "unknown": return "unknown";
+  }
   const output = result.content.trim();
   if (call.function.name === "ssh_exec") {
     // Use only the final exit-status line appended by the executor, not
     // a similarly worded string printed by the command itself.
-    const status = output.match(/(?:^|\n)退出状态:\s*(?:exit status\s*)?(-?\d+)\s*$/i);
+    const status = output.match(/(?:^|\n)(?:退出状态|exit status):\s*(?:(?:Process exited with status|exit status)\s*)?(-?\d+)\s*$/i);
     if (status) return Number(status[1]) === 0 ? "success" : "failed";
   }
 
@@ -130,8 +137,10 @@ function AIToolCard({ step, execution, note }: {
     if (state === "failed" || state === "unknown") setExpanded(true);
   }, [state]);
   const title = toolTitle(call);
-  const statusLabel = state === "success" ? t("ai:success") :
-    state === "failed" ? t("ai:failed") : state === "running" ? t("ai:inProgress") : t("ai:needsReview");
+  const statusLabel = result?.status === "rejected" ? t("ai:toolRejected") :
+    result?.status === "cancelled" ? t("ai:taskCancelled") :
+    state === "success" ? t("ai:success") :
+    state === "failed" ? (result?.exit_code !== undefined ? t("ai:failedWithExitCode", { code: result.exit_code }) : t("ai:failed")) : state === "running" ? t("ai:inProgress") : t("ai:needsReview");
   const Icon = call.function.name === "ssh_exec" ? Terminal :
     call.function.name === "sftp_list" ? FolderOpen :
       call.function.name === "sftp_write" ? FilePenLine : FileText;

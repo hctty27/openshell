@@ -227,5 +227,6 @@
   "fingerprintUpdateNotAllowed": "This fingerprint challenge cannot replace an existing trusted key.",
   "fingerprintUpdateConflict": "The saved server fingerprint changed while confirmation was pending. Reconnect and verify it again.",
   "fingerprintUpdateFailed": "Could not update the trusted server fingerprint.",
-  "fingerprintTrustFailed": "Could not save the server fingerprint."
+  "fingerprintTrustFailed": "Could not save the server fingerprint.",
+  "proxyJumpPasswordNotForwarded": "The jump host needs its own credentials. Load a key into your SSH agent, switch to key authentication, or allow sending this password to the jump hosts in the session settings"
 }

@@ -138,7 +138,7 @@
   "useOpenSSHConfig": "Use ~/.ssh/config (Host alias)",
   "useOpenSSHConfigDescription": "Resolve HostName, User, Port, IdentityFile and ProxyJump from OpenSSH config at connection time. Saved values are preserved.",
   "proxyJump": "Jump host (ProxyJump)",
-  "proxyJumpDescription": "Optional. Use user@host:port or multiple comma-separated hops (maximum 3). Every hop requires host key trust and uses the selected authentication method.",
+  "proxyJumpDescription": "Optional. Use user@host:port or multiple comma-separated hops (maximum 3). Every hop requires host key trust. Private key and SSH agent authentication are used for every hop; a password is only sent to jump hosts if you allow it below.",
   "sshAgent": "SSH Agent",
   "sshAgentDescription": "Uses keys already loaded in your SSH agent; OpenShell does not store or access private key material.",
   "localForwards": "Local port forwarding",
@@ -207,5 +207,8 @@
   "defaultTransferDirectory": "Default local directory",
   "defaultTransferDirectoryDescription": "Used for new sessions. SFTP and rz/sz/trz/tsz remember the last visited folder for each SSH session.",
   "chooseTransferDirectory": "Choose default local directory",
-  "resetTransferDirectory": "Reset"
+  "resetTransferDirectory": "Reset",
+  "jumpReusePassword": "Also send this password to the jump hosts",
+  "jumpReusePasswordDescription": "Only enable this if every jump host uses the same password and you trust them. Otherwise jump hosts authenticate with your SSH agent, and the target password is never sent to them.",
+  "aiInsecureBaseUrl": "This address uses unencrypted HTTP. Your API key, prompts and terminal output sent to the AI would be readable on the network. Use https:// unless the service runs on this computer."
 }

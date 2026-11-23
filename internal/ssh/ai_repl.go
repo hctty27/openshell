@@ -98,22 +98,9 @@ func psqlAICommand(command string) (string,error) {
 			return "",errors.New("当前仅支持 psql 只读元命令（如 \\d、\\dt、\\conninfo）")
 		}
 	}
-	if (strings.Contains(c,";") || strings.Contains(c,`\`)) || strings.Contains(c,"--") || strings.Contains(c,"/*") || strings.Contains(c,"*/") {
-		if !strings.HasSuffix(c,";") || (strings.Contains(strings.TrimSuffix(c,";"),";") || strings.Contains(strings.TrimSuffix(c,";"),`\`)) || strings.Contains(c,"--") || strings.Contains(c,"/*") || strings.Contains(c,"*/") {
-			return "",errors.New("psql 当前仅支持无注释的单条只读 SQL")
-		}
-		c=strings.TrimSuffix(c,";")
-	}
-	fields:=strings.Fields(c)
-	if len(fields)==0 || !psqlReadCommands[strings.ToUpper(fields[0])] {
-		return "",errors.New("psql 当前仅支持 SELECT、SHOW、EXPLAIN、TABLE、VALUES 和只读元命令")
-	}
-	upper:=" "+strings.ToUpper(strings.Join(fields," "))+" "
-	for _,blocked:=range []string{
-		" INTO ", " FOR UPDATE ", " FOR SHARE ", " PG_SLEEP(", " PG_READ_FILE(",
-		" PG_WRITE_FILE(", " PG_TERMINATE_BACKEND(", " EXPLAIN ANALYZE ",
-	} {
-		if strings.Contains(upper,blocked) { return "",errors.New("当前 SQL 包含暂不支持的操作") }
+	c=strings.TrimSpace(strings.TrimSuffix(c,";"))
+	if err:=validateReadOnlySQL(c,"psql",psqlReadCommands);err!=nil {
+		return "",fmt.Errorf("psql 当前仅支持单条只读 SQL（SELECT、SHOW、EXPLAIN、TABLE、VALUES）或只读元命令: %w",err)
 	}
 	return strings.TrimSpace(c)+";",nil
 }

@@ -9,6 +9,7 @@ export interface Session {
   privateKeyPath: string;
   useSSHConfig?: boolean;
   proxyJump?: string;
+  jumpReusePassword?: boolean;
   localForwards?: LocalForward[];
   credentialRef: string;
   terminalTheme?: TerminalTheme;
@@ -95,6 +96,9 @@ export interface AIMessage {
   content: string;
   tool_calls?: AIToolCall[];
   tool_call_id?: string;
+  /** Structured tool result status set by the backend (newer conversations). */
+  status?: "success" | "failed" | "rejected" | "cancelled" | "unknown";
+  exit_code?: number;
 }
 export interface AITargetBinding {
   sessionId: string;

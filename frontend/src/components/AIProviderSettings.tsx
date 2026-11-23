@@ -26,6 +26,18 @@ function providerSignature(provider: AIProvider, key: string): string {
   });
 }
 
+/** Plain HTTP exposes the API key and terminal content on the network. */
+export function insecureAIBaseUrl(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "http:") return false;
+    const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return !(host === "localhost" || host === "::1" || /^127\./.test(host));
+  } catch {
+    return false;
+  }
+}
+
 export default function AIProviderSettings({ onDirtyChange }: Props) {
   const dialogs = useDialogs();
   const [section, setSection] = useState<AISection>("providers");
@@ -213,6 +225,9 @@ export default function AIProviderSettings({ onDirtyChange }: Props) {
                 onChange={event => setDraft(current => ({ ...current, baseUrl: event.target.value }))}
                 placeholder="https://api.example.com/v1" required />
             </label>
+            {insecureAIBaseUrl(draft.baseUrl) && (
+              <p className="form-warning" role="status">{t("settings:aiInsecureBaseUrl")}</p>
+            )}
             <label>
               API Key
               <input type="password" value={key} disabled={busy || loading} autoComplete="new-password"

@@ -150,6 +150,15 @@
   line-height: 1.6;
   margin-top: 14px;
 }
+.form-warning {
+  color: var(--warning, #b7791f);
+  border: 1px solid currentColor;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 4px 0 8px;
+}
 .form-success {
   color: var(--accent);
   display: flex;

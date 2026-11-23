@@ -377,6 +377,19 @@ export default function SettingsDialog(p: Props) {
                 />
               </label>
               <p className="muted small">{t("settings:proxyJumpDescription")}</p>
+              {!!session.proxyJump?.trim() && session.authType === "password" && (
+                <>
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={session.jumpReusePassword ?? false}
+                      onChange={(e) => field("jumpReusePassword", e.target.checked)}
+                    />
+                    {t("settings:jumpReusePassword")}
+                  </label>
+                  <p className="muted small">{t("settings:jumpReusePasswordDescription")}</p>
+                </>
+              )}
               <div className="settings-panel-heading">
                 <h3>{t("settings:localForwards")}</h3>
                 <p>{t("settings:localForwardsDescription")}</p>

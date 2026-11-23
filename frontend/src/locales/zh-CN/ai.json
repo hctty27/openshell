@@ -97,5 +97,12 @@
   "compactAction": "压缩上下文",
   "contextCompactBusy": "任务进行中不可压缩",
   "resizeTerminalAiPanel": "调整终端 AI 侧栏宽度",
-  "resetTerminalAiPanelWidth": "拖动调整宽度，双击恢复默认宽度"
+  "resetTerminalAiPanelWidth": "拖动调整宽度，双击恢复默认宽度",
+  "toolRejected": "已拒绝",
+  "failedWithExitCode": "失败（退出码 {{code}}）",
+  "approvalPolicy_write": "审查模式：写入远程文件始终需要你确认。",
+  "approvalPolicy_python": "审查模式：Python 代码始终需要你确认。",
+  "approvalPolicy_unverified": "审查模式：OpenShell 无法确认这条命令是只读的。",
+  "approvalPolicy_dangerous": "这条命令可能删除数据、停止服务或执行下载的代码，始终需要你确认。",
+  "approvalPolicy_sensitive": "这会读取凭据或密钥（例如 SSH 私钥、/etc/shadow、.env），内容会发送给 AI 服务商。"
 }

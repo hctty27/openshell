@@ -221,7 +221,7 @@ func (lease *AITerminalLease) Run(ctx context.Context, command string) (string, 
 		lease.markFailed()
 		return "", fmt.Errorf("Shell 命令已结束，但未确认提示符恢复: %w", err)
 	}
-	return fmt.Sprintf("%s\n退出状态: %d", result.output, result.code), nil
+	return fmt.Sprintf("%s\nexit status: %d", result.output, result.code), nil
 }
 
 func (lease *AITerminalLease) waitForShellPrompt(ctx context.Context) error {

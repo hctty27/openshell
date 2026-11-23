@@ -63,7 +63,7 @@ func TestAITerminalMySQLUsesCurrentPTYAndIgnoresEchoedMarker(t *testing.T) {
 	defer cancel()
 	output,err:=lease.Run(ctx,"SHOW CREATE TABLE t_user\\G")
 	if err!=nil { t.Fatal(err) }
-	if !strings.Contains(output,"CREATE TABLE t_user") || !strings.Contains(output,"退出状态: 0") {
+	if !strings.Contains(output,"CREATE TABLE t_user") || !strings.Contains(output,"exit status: 0") {
 		t.Fatalf("unexpected output: %q",output)
 	}
 	if strings.Contains(output,"__openshell_ai_done") { t.Fatalf("completion query leaked into output: %q",output) }
