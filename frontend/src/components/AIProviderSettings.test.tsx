@@ -15,6 +15,7 @@ vi.mock("../bridge", () => ({
       ...request.provider, id: "new-provider", hasKey: true,
     })),
     AIDeleteProvider: vi.fn(async () => {}),
+    AITestProvider: vi.fn(async () => ({ latencyMs: 42 })),
     AIRuntimeSettings: vi.fn(async () => ({
       autoCompact: true, compactThreshold: 90, maxSteps: 12,
       taskTimeoutMinutes: 10, keepRecentTurns: 6,
@@ -103,4 +104,24 @@ test("discarding context edits on tab switch resets the runtime form", async () 
   expect(confirm).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole("tab", { name: "上下文" }));
   await waitFor(() => expect((screen.getByLabelText("自动压缩上下文") as HTMLInputElement).checked).toBe(true));
+});
+
+test("tests a provider connection with the first model before saving", async () => {
+  render(<AIProviderSettings />);
+  await screen.findByRole("button", { name: "添加 API" });
+  fireEvent.change(screen.getByPlaceholderText("https://api.example.com/v1"), {
+    target: { value: " https://example.test/v1 " },
+  });
+  fireEvent.change(screen.getByPlaceholderText("sk-..."), { target: { value: "sk-sample" } });
+  fireEvent.click(screen.getByRole("button", { name: "添加模型" }));
+  fireEvent.change(screen.getByLabelText("模型 ID"), { target: { value: "grok-4.7" } });
+  fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
+  expect(await screen.findByText("已连通 grok-4.7，耗时 42 ms")).toBeTruthy();
+  expect(api.AITestProvider).toHaveBeenCalledWith({
+    providerId: "", baseUrl: "https://example.test/v1", apiKey: "sk-sample", model: "grok-4.7",
+  });
+  expect(api.AISaveProvider).not.toHaveBeenCalled();
+  vi.mocked(api.AITestProvider).mockRejectedValueOnce("HTTP 401");
+  fireEvent.click(screen.getByRole("button", { name: "测试连接" }));
+  expect((await screen.findByRole("alert")).textContent).toContain("HTTP 401");
 });

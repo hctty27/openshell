@@ -177,7 +177,8 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
       if (!activeTaskRef.current || event.taskId !== activeTaskRef.current) return;
       setStatus(event.status === "completed" ? "" :
         event.status === "running" ? "running" :
-        event.detail || (event.status === "cancelled" ? t("ai:taskCancelled") : t("ai:executionFailed")));
+        (event.detail ? (decodeAppError(event.detail) ? errorText(event.detail) : event.detail) : "") ||
+        (event.status === "cancelled" ? t("ai:taskCancelled") : t("ai:executionFailed")));
       if (event.status !== "running") {
         finishedTasks.current.add(event.taskId);
         activeTaskRef.current = "";

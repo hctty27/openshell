@@ -1,11 +1,12 @@
 package sshclient
 
 import (
-	"errors"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hctty27/openshell/internal/apperror"
 )
 
 // The explicit shell integration markers (OSC 133/633) are preferred.
@@ -344,25 +345,25 @@ func (r *terminalShellReadiness) checkReady() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.assetMenu {
-		return errors.New("当前处于 JumpServer 资产菜单（Opt>），请先选择资产并进入 Shell")
+		return apperror.New("aiTerminalJumpServerMenu", nil)
 	}
 	if r.psqlPasswordPrompt {
-		return errors.New("psql 正在等待数据库密码，请先完成认证后再让 AI 执行")
+		return apperror.New("aiTerminalPsqlPassword", nil)
 	}
 	if r.alternate {
-		return errors.New("当前终端正在使用全屏程序，无法交给 AI 操作")
+		return apperror.New("aiTerminalFullscreen", nil)
 	}
 	if (r.program == "mysql" || r.program == "redis" || r.program == "python" || r.program == "psql") && (r.manualInput || !r.prompt) {
-		return errors.New("交互程序当前正在处理输入或命令未结束，请等待空白主提示符后重试")
+		return apperror.New("aiTerminalBusy", nil)
 	}
 	if r.manualInput {
-		return errors.New("终端存在未确认的交互输入，请返回空白 Shell 提示符后重试")
+		return apperror.New("aiTerminalPendingInput", nil)
 	}
 	if !r.prompt {
-		return errors.New("无法确认当前 Shell 已就绪。请退出交互程序，返回普通 Bash/Zsh 提示符；支持 OSC 133/633 Shell Integration 的终端可自动识别")
+		return apperror.New("aiTerminalShellUnknown", nil)
 	}
 	if (r.program != "" && r.program != "shell" || !r.integration) && time.Since(r.lastOutput) < 250*time.Millisecond {
-		return errors.New("终端提示符仍在更新，请稍后重试")
+		return apperror.New("aiTerminalPromptSettling", nil)
 	}
 	return nil
 }

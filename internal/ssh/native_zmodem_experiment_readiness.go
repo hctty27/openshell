@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 )
 
@@ -30,43 +31,43 @@ func (m *Manager) NativeZmodemExperimentalReadiness(
 	ref domain.ConnectionRef, sidecarPath string, optedIn bool,
 ) NativeZmodemExperimentReadiness {
 	if !optedIn {
-		return nativeZmodemReadiness("disabled", "当前平台未启用原生 ZMODEM")
+		return nativeZmodemReadiness("disabled", apperror.New("zmodemDisabledOnPlatform", nil).Error())
 	}
 	if m == nil {
-		return nativeZmodemReadiness("no_connection", "SSH 连接管理器不可用")
+		return nativeZmodemReadiness("no_connection", apperror.New("zmodemNoSSHManager", nil).Error())
 	}
 	if sidecarPath == "" || !filepath.IsAbs(sidecarPath) {
-		return nativeZmodemReadiness("sidecar_missing", "需要明确指定原生 ZMODEM sidecar 的绝对路径")
+		return nativeZmodemReadiness("sidecar_missing", apperror.New("zmodemSidecarPathRequired", nil).Error())
 	}
 	if runtime.GOOS == "windows" && !strings.EqualFold(filepath.Ext(sidecarPath), ".exe") {
-		return nativeZmodemReadiness("sidecar_invalid", "Windows 原生 sidecar 必须为 EXE")
+		return nativeZmodemReadiness("sidecar_invalid", apperror.New("zmodemSidecarMustBeExe", nil).Error())
 	}
 	info, err := os.Lstat(sidecarPath)
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-		return nativeZmodemReadiness("sidecar_invalid", "原生 ZMODEM sidecar 文件不存在或不是普通文件")
+		return nativeZmodemReadiness("sidecar_invalid", apperror.New("zmodemSidecarNotFile", nil).Error())
 	}
 	if runtime.GOOS != "windows" && info.Mode().Perm()&0111 == 0 {
-		return nativeZmodemReadiness("sidecar_invalid", "原生 ZMODEM sidecar 没有执行权限")
+		return nativeZmodemReadiness("sidecar_invalid", apperror.New("zmodemSidecarNotExecutable", nil).Error())
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
-		return nativeZmodemReadiness("no_connection", "SSH 管理器已关闭")
+		return nativeZmodemReadiness("no_connection", apperror.New("zmodemSSHManagerClosed", nil).Error())
 	}
 	c := m.connections[ref.TabID]
 	if c == nil || c.ref != ref || c.client == nil || c.terminal == nil ||
 		c.inputGate == nil || c.outputGate == nil {
-		return nativeZmodemReadiness("no_connection", "当前交互式 SSH 终端不可用或连接代际已变化")
+		return nativeZmodemReadiness("no_connection", apperror.New("zmodemTerminalGone", nil).Error())
 	}
 	if c.nativeTerminalPoisoned {
-		return nativeZmodemReadiness("needs_reconnect", "上次原生传输状态不确定，需要先重新连接 SSH 终端")
+		return nativeZmodemReadiness("needs_reconnect", apperror.New("zmodemNeedsReconnect", nil).Error())
 	}
 	if isJumpServerVersion(c.serverVersion) || c.readiness.isJumpServer() {
-		return nativeZmodemReadiness("jumpserver_unsupported", "JumpServer 暂不支持原生 ZMODEM 接管")
+		return nativeZmodemReadiness("jumpserver_unsupported", apperror.New("zmodemJumpServerUnsupported", nil).Error())
 	}
 	if c.aiController != nil || c.nativeTerminalTransfer != nil || c.nativeZmodemSelectionPassive {
-		return nativeZmodemReadiness("busy", "当前终端存在文件传输或 AI 独占任务")
+		return nativeZmodemReadiness("busy", apperror.New("zmodemTerminalBusy", nil).Error())
 	}
-	return nativeZmodemReadiness("ready", "原生 ZMODEM 已就绪，仍需选择文件和方向")
+	return nativeZmodemReadiness("ready", apperror.New("zmodemReady", nil).Error())
 }

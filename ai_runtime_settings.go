@@ -2,8 +2,8 @@ package main
 
 import (
     "encoding/json"
-    "errors"
-    "fmt"
+
+    "github.com/hctty27/openshell/internal/apperror"
 )
 
 const aiRuntimeSettingsPreference = "aiRuntimeSettings"
@@ -30,21 +30,21 @@ func defaultAIRuntimeSettings() AIRuntimeSettings {
 func (s AIRuntimeSettings) validate() error {
     if s.CompactThreshold != 80 && s.CompactThreshold != 85 &&
         s.CompactThreshold != 90 && s.CompactThreshold != 95 {
-        return errors.New("自动压缩阈值只能设置为 80%、85%、90% 或 95%")
+        return apperror.New("aiCompactThresholdInvalid", nil)
     }
     if s.MaxSteps != 6 && s.MaxSteps != 12 && s.MaxSteps != 20 &&
         s.MaxSteps != 30 && s.MaxSteps != 50 {
-        return errors.New("单次最大循环只能设置为 6、12、20、30 或 50 次")
+        return apperror.New("aiMaxStepsInvalid", nil)
     }
     if s.TaskTimeoutMinutes != 5 && s.TaskTimeoutMinutes != 10 &&
         s.TaskTimeoutMinutes != 20 && s.TaskTimeoutMinutes != 30 &&
         s.TaskTimeoutMinutes != 60 {
-        return errors.New("任务超时只能设置为 5、10、20、30 或 60 分钟")
+        return apperror.New("aiTaskTimeoutInvalid", nil)
     }
     if s.KeepRecentTurns != 2 && s.KeepRecentTurns != 4 &&
         s.KeepRecentTurns != 6 && s.KeepRecentTurns != 10 &&
         s.KeepRecentTurns != 20 {
-        return errors.New("保留最近完整对话只能设置为 2、4、6、10 或 20 轮")
+        return apperror.New("aiRecentTurnsInvalid", nil)
     }
     return nil
 }
@@ -59,7 +59,7 @@ func (a *App) AIRuntimeSettings() (AIRuntimeSettings, error) {
     }
     var settings AIRuntimeSettings
     if err := json.Unmarshal([]byte(raw), &settings); err != nil {
-        return AIRuntimeSettings{}, fmt.Errorf("读取 AI 设置失败: %w", err)
+        return AIRuntimeSettings{}, apperror.Wrap("aiSettingsReadFailed", err, nil)
     }
     if err := settings.validate(); err != nil {
         return AIRuntimeSettings{}, err

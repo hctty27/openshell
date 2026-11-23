@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 	"time"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"github.com/hctty27/openshell/internal/store"
 )
@@ -127,5 +128,21 @@ func TestAIOutputTruncationKeepsUTF8Valid(t *testing.T) {
 	_, _ = w.Write([]byte(text))
 	if out := w.String(); !utf8.ValidString(out) || !strings.Contains(out, "truncated") {
 		t.Fatalf("limited writer produced invalid UTF-8 or no truncation note")
+	}
+}
+
+func TestAIToolFailuresRenderCodedErrorsInEnglish(t *testing.T) {
+	coded := apperror.Wrap("zmodemAbortedRecovered", apperror.New("aiTerminalFullscreen", nil), nil).Error()
+	got := aiToolFailed("prefix: " + coded).Output
+	if strings.Contains(got, apperror.Prefix) || !strings.HasPrefix(got, "prefix: ZMODEM was stopped") ||
+		!strings.Contains(got, "full-screen program") {
+		t.Fatalf("coded error not rendered: %q", got)
+	}
+	withParams := aiReadableError(apperror.New("zmodemRemoteExitStatus", map[string]any{"status": 9}).Error())
+	if !strings.Contains(withParams, "status 9") {
+		t.Fatalf("params not interpolated: %q", withParams)
+	}
+	if aiReadableError("plain") != "plain" {
+		t.Fatal("plain text changed")
 	}
 }

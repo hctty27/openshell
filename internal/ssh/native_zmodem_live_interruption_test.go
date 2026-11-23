@@ -163,7 +163,7 @@ func TestNativeZmodemLiveInterruptedInteractivePTY(t *testing.T) {
 			select {
 			case err := <-done:
 				if err == nil { t.Fatal("interrupted native transfer reported success") }
-				safelyRecovered = kind == "cancel" && strings.Contains(err.Error(), "终端已安全恢复")
+				safelyRecovered = kind == "cancel" && strings.Contains(err.Error(), "zmodemAbortedRecovered")
 				if kind == "cancel" && !errors.Is(err, context.Canceled) {
 					t.Fatalf("cancel did not propagate: %v", err)
 				}

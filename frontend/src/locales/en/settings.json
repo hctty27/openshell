@@ -210,5 +210,7 @@
   "resetTransferDirectory": "Reset",
   "jumpReusePassword": "Also send this password to the jump hosts",
   "jumpReusePasswordDescription": "Only enable this if every jump host uses the same password and you trust them. Otherwise jump hosts authenticate with your SSH agent, and the target password is never sent to them.",
-  "aiInsecureBaseUrl": "This address uses unencrypted HTTP. Your API key, prompts and terminal output sent to the AI would be readable on the network. Use https:// unless the service runs on this computer."
+  "aiInsecureBaseUrl": "This address uses unencrypted HTTP. Your API key, prompts and terminal output sent to the AI would be readable on the network. Use https:// unless the service runs on this computer.",
+  "advancedOptions": "Advanced options",
+  "aiTestConnectionSucceeded": "Connected to {{model}} in {{ms}} ms"
 }

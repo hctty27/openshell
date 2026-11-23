@@ -63,6 +63,7 @@ interface FileRowProps {
   entry: SFTPEntry;
   size: string;
   modified: string;
+  modifiedFull: string;
   selected: boolean;
   deleting: boolean;
   side: Side;
@@ -71,7 +72,7 @@ interface FileRowProps {
 
 // A selection change only renders rows whose selection state actually changed.
 const FileRow = memo(function FileRow({
-  entry, size, modified, selected, deleting, side, callbacks,
+  entry, size, modified, modifiedFull, selected, deleting, side, callbacks,
 }: FileRowProps) {
   return (
     <button type="button" role="listitem"
@@ -93,7 +94,7 @@ const FileRow = memo(function FileRow({
       onContextMenu={event => callbacks.current.onContext(event, entry)}>
       <span className="sftp-file-name">{entry.isDir || entry.targetIsDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className="sftp-link-badge">↗</span>}</span>
       <span>{size}</span>
-      <span>{modified}</span><span>{entry.mode}</span>
+      <span title={modifiedFull}>{modified}</span><span>{entry.mode}</span>
     </button>
   );
 });
@@ -111,13 +112,15 @@ function FilePanel(p: PanelProps) {
     entry,
     size: entry.isDir ? "—" : niceSize(entry.size),
     modified: new Date(entry.modified).toLocaleDateString(locale),
+    // The narrow column shows the date; hover reveals the exact time.
+    modifiedFull: new Date(entry.modified).toLocaleString(locale),
   })), [visible, locale]);
   const deleting = Boolean(p.deleting?.running);
   // Build only lightweight row elements when selection changes. Memoized
   // rows skip their render work unless their own selection or metadata changes.
   // Callbacks stay current through a stable ref.
-  const fileRows = useMemo(() => displayEntries.map(({ entry, size, modified }) => (
-    <FileRow key={entry.path} entry={entry} size={size} modified={modified}
+  const fileRows = useMemo(() => displayEntries.map(({ entry, size, modified, modifiedFull }) => (
+    <FileRow key={entry.path} entry={entry} size={size} modified={modified} modifiedFull={modifiedFull}
       selected={selectedPaths.has(entry.path)} deleting={deleting}
       side={p.side} callbacks={callbacks} />
   )), [displayEntries, selectedPaths, p.side, deleting]);

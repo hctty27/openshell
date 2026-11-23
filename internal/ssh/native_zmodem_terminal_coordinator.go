@@ -3,12 +3,13 @@ package sshclient
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/hctty27/openshell/internal/apperror"
 )
 
 // nativeTerminalSidecarRunner isolates the protocol process from the SSH
@@ -64,7 +65,7 @@ func (s *nativeTerminalInboundSink) Write(p []byte) (int, error) {
 	}
 	if !s.activated {
 		if len(p) < nativeZmodemHeaderSize || p[5] != s.expected {
-			err := errors.New("远端 ZMODEM 启动帧方向不匹配，已禁止终端自动回退")
+			err := apperror.New("zmodemStartFrameMismatch", nil)
 			select {
 			case s.fail <- err:
 			default:
@@ -159,14 +160,14 @@ func (c *nativeTerminalCoordinator) run(
 	parent context.Context, direction, localPath, remotePath string,
 ) error {
 	if parent == nil || c == nil || c.input == nil || c.output == nil || c.runner == nil {
-		return errors.New("缺少原生终端传输协调参数")
+		return apperror.New("zmodemMissingContext", nil)
 	}
 	if err := parent.Err(); err != nil {
 		return err
 	}
 	preparationStarted := time.Now()
 	token, err := newNativeRemoteBoundaryToken()
-	if err != nil { return fmt.Errorf("远端传输结束令牌创建失败：%w", err) }
+	if err != nil { return apperror.Wrap("zmodemBoundaryTokenFailed", err, nil) }
 	command, action, err := nativeInteractiveFencedCommand(direction, remotePath, token)
 	if err != nil { return err }
 
@@ -235,7 +236,7 @@ func (c *nativeTerminalCoordinator) run(
 	recoverInterrupted := func(cause error) error {
 		if cause == nil { cause = context.Canceled }
 		if !sink.seenHeader() {
-			return fmt.Errorf("原生 ZMODEM 已中止，但未确认远端协议启动（需重连）：%w", cause)
+			return apperror.Wrap("zmodemAbortedStartUnknown", cause, nil)
 		}
 		var remote nativeRemoteExit
 		var confirmed bool
@@ -248,25 +249,25 @@ func (c *nativeTerminalCoordinator) run(
 			// ZMODEM cancel (CAN + backspace), not an ordinary shell Ctrl+C.
 			// Only send it after the remote ZMODEM header has been recognized.
 			if _, err := c.input.writeNative(inputLease, zmodemCancelSequence); err != nil {
-				return fmt.Errorf("原生 ZMODEM 中止通知发送失败（需重连）：%w", err)
+				return apperror.Wrap("zmodemAbortSendFailed", err, nil)
 			}
 			select {
 			case remote = <-fence.completion:
 				confirmed = true
 			case <-time.After(2 * time.Second):
-				return fmt.Errorf("原生 ZMODEM 已中止，但远端未确认退出（需重连）：%w", cause)
+				return apperror.Wrap("zmodemAbortedExitUnknown", cause, nil)
 			}
 		}
 		if !confirmed || remote.err != nil {
-			return fmt.Errorf("原生 ZMODEM 已中止，远端状态不确定（需重连）：%w", cause)
+			return apperror.Wrap("zmodemAbortedStateUnknown", cause, nil)
 		}
 		if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil {
-			return fmt.Errorf("远端已退出，但恢复终端输出失败（需重连）：%w", err)
+			return apperror.Wrap("zmodemRestoreOutputFailed", err, nil)
 		}
 		if err := c.input.restore(inputLease); err != nil {
-			return fmt.Errorf("远端已退出，但恢复终端输入失败（需重连）：%w", err)
+			return apperror.Wrap("zmodemRestoreInputFailed", err, nil)
 		}
-		return fmt.Errorf("原生 ZMODEM 已中止，终端已安全恢复：%w", cause)
+		return apperror.Wrap("zmodemAbortedRecovered", cause, nil)
 	}
 	// Start the remote command only after both ownership leases are held
 	// and the local sidecar reader has been launched.
@@ -277,7 +278,7 @@ func (c *nativeTerminalCoordinator) run(
 		if err == nil {
 			err = io.ErrShortWrite
 		}
-		return fmt.Errorf("启动远端原生 ZMODEM 失败（需要重连终端）：%w", err)
+		return apperror.Wrap("zmodemStartFailedReconnect", err, nil)
 	}
 
 	observeNativeZmodemStage(parent, "prepare", preparationStarted)
@@ -293,10 +294,10 @@ func (c *nativeTerminalCoordinator) run(
 			// before ZMODEM ever starts. Reap the still-waiting local sidecar,
 			// and restore only because the nonce-scoped shell fence was seen.
 			stopSidecar()
-			if remote.err != nil { return fmt.Errorf("远端 ZMODEM 结束标记异常（需要重连）：%w", remote.err) }
+			if remote.err != nil { return apperror.Wrap("zmodemBoundaryInvalidReconnect", remote.err, nil) }
 			if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil { return err }
 			if err := c.input.restore(inputLease); err != nil { return err }
-			return fmt.Errorf("远端 rz/sz 未能启动 ZMODEM 协议（退出状态 %d），终端已安全恢复", remote.code)
+			return apperror.New("zmodemRemoteDidNotStart", map[string]any{"status": remote.code})
 		}
 		// A valid protocol did start, but its remote exit marker arrived
 		// before the local sidecar finished. Bound the drain to avoid an
@@ -308,14 +309,14 @@ func (c *nativeTerminalCoordinator) run(
 			stopSidecar()
 			if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil { return err }
 			if err := c.input.restore(inputLease); err != nil { return err }
-			return errors.New("远端 rz/sz 已退出，但本地协议处理未结束；终端已安全恢复")
+			return apperror.New("zmodemRemoteExitedEarly", nil)
 		case <-ctx.Done():
 			stopSidecar()
 			return recoverInterrupted(nativeZmodemContextError(ctx))
 		}
 	case err = <-sink.fail:
 		stopSidecar()
-		return fmt.Errorf("原生 ZMODEM 启动或转发失败（需要重连终端）：%w", err)
+		return apperror.Wrap("zmodemForwardFailedReconnect", err, nil)
 	case <-ctx.Done():
 		stopSidecar()
 		return recoverInterrupted(nativeZmodemContextError(ctx))
@@ -331,12 +332,12 @@ func (c *nativeTerminalCoordinator) run(
 		if earlyCompletion != nil && earlyCompletion.err == nil {
 			if restoreErr := c.output.restoreWithReplay(outputLease, fence.replayTrailing); restoreErr != nil { return restoreErr }
 			if restoreErr := c.input.restore(inputLease); restoreErr != nil { return restoreErr }
-			return fmt.Errorf("原生 ZMODEM sidecar 执行失败，终端已安全恢复：%w", err)
+			return apperror.Wrap("zmodemSidecarFailedRecovered", err, nil)
 		}
-		return fmt.Errorf("原生 ZMODEM sidecar 执行失败（需要重连终端）：%w", err)
+		return apperror.Wrap("zmodemSidecarFailedReconnect", err, nil)
 	}
 	if !sink.seenHeader() {
-		return errors.New("未收到远程 ZMODEM 启动帧，终端状态不可确认（需要重连）")
+		return apperror.New("zmodemNoStartFrameReconnect", nil)
 	}
 
 	confirmationStarted := time.Now()
@@ -347,12 +348,12 @@ func (c *nativeTerminalCoordinator) run(
 	// the fenced marker still proves the remote command has terminated.
 	remoteExitCode := 0
 	if earlyCompletion != nil {
-		if earlyCompletion.err != nil { return fmt.Errorf("远端 ZMODEM 结束标记异常（需要重连）：%w", earlyCompletion.err) }
+		if earlyCompletion.err != nil { return apperror.Wrap("zmodemBoundaryInvalidReconnect", earlyCompletion.err, nil) }
 		remoteExitCode = earlyCompletion.code
 	} else {
 		select {
 		case remote := <-fence.completion:
-			if remote.err != nil { return fmt.Errorf("远端 ZMODEM 结束标记异常（需要重连）：%w", remote.err) }
+			if remote.err != nil { return apperror.Wrap("zmodemBoundaryInvalidReconnect", remote.err, nil) }
 			remoteExitCode = remote.code
 		case <-ctx.Done():
 			return recoverInterrupted(nativeZmodemContextError(ctx))
@@ -373,11 +374,11 @@ func (c *nativeTerminalCoordinator) run(
 	if remoteExitCode != 0 {
 		// Do not publish partially received downloads; preserve the remote
 		// failure while keeping the verified, restored shell interactive.
-		return fmt.Errorf("远端 rz/sz 退出状态为 %d，终端已安全恢复", remoteExitCode)
+		return apperror.New("zmodemRemoteExitStatus", map[string]any{"status": remoteExitCode})
 	}
 	if stage != "" {
 		if err := nativeZmodemPublish(stage, publishDestination); err != nil {
-			return fmt.Errorf("原生 ZMODEM 接收成功，但保存文件失败：%w", err)
+			return apperror.Wrap("zmodemSaveFailed", err, nil)
 		}
 	}
 	observeNativeZmodemStage(parent, "restorePublish", restoreStarted)

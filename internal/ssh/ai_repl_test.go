@@ -418,7 +418,7 @@ func TestPsqlPasswordPromptPreservesLaunchAndDoesNotStorePassword(t *testing.T) 
 			if !r.psqlPasswordPrompt || r.prompt {
 				t.Fatal("psql password prompt was not recognized as an input state")
 			}
-			if err := r.checkReady(); err == nil || !strings.Contains(err.Error(), "密码") {
+			if err := r.checkReady(); err == nil || !strings.Contains(err.Error(), "aiTerminalPsqlPassword") {
 				t.Fatalf("expected an explicit password prompt error, got %v", err)
 			}
 

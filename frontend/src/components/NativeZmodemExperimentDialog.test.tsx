@@ -263,6 +263,6 @@ test("manual sz rejects a multi-line preset path before SSH takeover", async () 
   await waitFor(() => expect(actions.downloadFolder).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole("checkbox"));
   fireEvent.click(screen.getByRole("button", { name: "开始传输" }));
-  expect(await screen.findByText("ZMODEM 每次只能传输一个文件")).toBeTruthy();
+  expect(await screen.findByText(/ZMODEM 每次只能传输一个文件/)).toBeTruthy();
   expect(actions.start).not.toHaveBeenCalled();
 });

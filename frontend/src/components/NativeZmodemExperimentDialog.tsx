@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, X } from "lucide-react";
 import { api, errorText, listen } from "../bridge";
 import { t } from "../i18n";
+import { decodeAppError } from "../i18n/errors";
 import type { NativeZmodemReadiness, Ref } from "../types";
 import ModalSurface from "./ModalSurface";
 
@@ -86,7 +87,7 @@ export default function NativeZmodemExperimentDialog({
     if (running || !readiness?.ready || !acknowledged || !localPath.trim() ||
       (direction === "download" && !remotePath.trim())) return;
     if (/[\r\n]/.test(localPath) || (direction === "download" && /[\r\n]/.test(remotePath))) {
-      setError("ZMODEM 每次只能传输一个文件");
+      setError(t("errors:zmodemSingleFileOnly"));
       return;
     }
     // A previous ready status is invalid as soon as a new PTY takeover starts.
@@ -167,7 +168,7 @@ export default function NativeZmodemExperimentDialog({
           {t("terminal:nativeZmodemWarning")}
         </p>
         {readiness && !readiness.ready && (
-          <p role="alert" className="native-zmodem-dialog__error">{readiness.message}</p>
+          <p role="alert" className="native-zmodem-dialog__error">{decodeAppError(readiness.message) ? errorText(readiness.message) : readiness.message}</p>
         )}
         <fieldset className="native-zmodem-dialog__directions" disabled={running}>
           <label>

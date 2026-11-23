@@ -152,6 +152,28 @@ export default function AIProviderSettings({ onDirtyChange }: Props) {
     }
   };
 
+  const testConnection = async () => {
+    if (busy || loading) return;
+    setError("");
+    setSuccess("");
+    const model = draft.models.find(item => item.id.trim())?.id.trim() ?? "";
+    if (!model) {
+      setError(t("settings:aiModelAtLeastOne"));
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.AITestProvider({
+        providerId: draft.id, baseUrl: draft.baseUrl.trim(), apiKey: key.trim(), model,
+      });
+      setSuccess(t("settings:aiTestConnectionSucceeded", { model, ms: result.latencyMs }));
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const remove = async () => {
     if (!draft.id || busy || loading) return;
     const confirmed = await dialogs.confirm({
@@ -278,6 +300,10 @@ export default function AIProviderSettings({ onDirtyChange }: Props) {
                   <Trash2 size={14} aria-hidden="true" />{t("settings:deleteProfile")}
                 </button>
               )}
+              <button type="button" disabled={busy || loading || !draft.baseUrl.trim()}
+                onClick={() => void testConnection()}>
+                {t("settings:testConnection")}
+              </button>
               <button type="submit" className="primary" disabled={busy || loading}>
                 {t("settings:saveProfile")}
               </button>

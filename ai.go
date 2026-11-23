@@ -79,7 +79,7 @@ func (a *App) AISaveProvider(req AISaveProviderRequest) (store.AIProvider, error
 		return store.AIProvider{}, apperror.New("aiInvalidProviderDetails", nil)
 	}
 	for _, model := range p.Models {
-		if model.ContextWindow != 0 && (model.ContextWindow < 4096 || model.ContextWindow > aiMaxContextTokens) { return store.AIProvider{}, fmt.Errorf("模型上下文窗口须在 4096 到 262144 Token 之间") }
+		if model.ContextWindow != 0 && (model.ContextWindow < 4096 || model.ContextWindow > aiMaxContextTokens) { return store.AIProvider{}, apperror.New("aiContextWindowOutOfRange", map[string]any{"min": 4096, "max": aiMaxContextTokens}) }
 		if model.ID == "" || len(model.ID) > 150 || strings.ContainsAny(model.ID, "\r\n") {
 			return store.AIProvider{}, apperror.New("aiInvalidModelID", nil)
 		}
@@ -429,13 +429,13 @@ func (a *App) runAI(ctx context.Context, cancel context.CancelFunc, taskID strin
 				aiCompactBoundary(c, historyEnd, settings.KeepRecentTurns) <= c.CompactedThrough { break }
 			a.emit("ai:context", map[string]any{"conversationId":c.ID, "status":"compacting"})
 			_, compactErr := a.aiCompact(ctx, &c, provider, key, historyEnd, settings.KeepRecentTurns)
-			if compactErr != nil { end("failed", "自动压缩上下文失败: "+compactErr.Error()); return }
+			if compactErr != nil { end("failed", apperror.Wrap("aiAutoCompactFailed", compactErr, nil).Error()); return }
 			chatMessages = aiPreparedMessages(c, system, historyEnd, true)
 			estimated = aiEstimateRequest(chatMessages, toolSpec)
 			a.emit("ai:context", map[string]any{"conversationId":c.ID, "status":"running"})
 		}
 		if estimated+reserve > window {
-			end("failed", "当前请求超出模型上下文容量，请缩小输入或切换更大的模型")
+			end("failed", apperror.New("aiRequestExceedsContext", nil).Error())
 			return
 		}
 		c.Context = aiContextState(c, provider, c.ModelID, estimated)
@@ -486,7 +486,7 @@ func aiCommandResult(output string) aiToolResult {
 	return aiToolResult{Output: output, Status: status, ExitCode: &code}
 }
 
-func aiToolFailed(output string) aiToolResult { return aiToolResult{Output: output, Status: "failed"} }
+func aiToolFailed(output string) aiToolResult { return aiToolResult{Output: aiReadableError(output), Status: "failed"} }
 
 func (a *App) executeAITool(ctx context.Context, taskID string, call store.AIToolCall, allowed map[string]domain.ConnectionRef, mode string, terminalLease *sshclient.AITerminalLease) aiToolResult {
 	var args struct {
