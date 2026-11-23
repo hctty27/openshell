@@ -354,7 +354,7 @@ func TestNativeZmodemInteractiveCoordinatorRemoteNonzeroExitRestoresVerifiedTerm
 	if _, err := output.Write(append(nativeTerminalCompletionFromCommand(t, command, 9), []byte("shell prompt")...)); err != nil { t.Fatal(err) }
 	select {
 	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), "退出状态为 9") {
+		if err == nil || !strings.Contains(err.Error(), `"zmodemRemoteExitStatus","params":{"status":9}`) {
 			t.Fatalf("nonzero remote shell exit not reported: %v", err)
 		}
 	case <-time.After(3*time.Second): t.Fatal("remote failure never completed")
@@ -389,7 +389,7 @@ func TestNativeZmodemInteractiveCoordinatorFailedDownloadDoesNotPublish(t *testi
 	if _, err := output.Write(append(nativeTerminalCompletionFromCommand(t, command, 2), []byte("shell-ready")...)); err != nil { t.Fatal(err) }
 	select {
 	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), "退出状态为 2") {
+		if err == nil || !strings.Contains(err.Error(), `"zmodemRemoteExitStatus","params":{"status":2}`) {
 			t.Fatalf("missing remote failure status: %v", err)
 		}
 	case <-time.After(3 * time.Second):
@@ -435,7 +435,7 @@ func TestNativeZmodemRemoteExitBeforeHeaderRestoresTerminal(t *testing.T) {
 	if _, err := output.Write([]byte("shell-ready")); err != nil { t.Fatal(err) }
 	select {
 	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), "退出状态 127") || !strings.Contains(err.Error(), "安全恢复") {
+		if err == nil || !strings.Contains(err.Error(), `"zmodemRemoteDidNotStart","params":{"status":127}`) {
 			t.Fatalf("missing safe early-exit error: %v", err)
 		}
 	case <-time.After(3 * time.Second):

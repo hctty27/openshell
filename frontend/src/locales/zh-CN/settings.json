@@ -210,5 +210,7 @@
   "resetTransferDirectory": "重置",
   "jumpReusePassword": "同时把这个密码发送给跳板机",
   "jumpReusePasswordDescription": "只有在所有跳板机密码相同并且你信任它们时才开启。否则跳板机使用 SSH Agent 认证，目标机的密码不会发送给跳板机。",
-  "aiInsecureBaseUrl": "这个地址使用未加密的 HTTP。API Key、提问内容以及发给 AI 的终端输出都可能在网络上被看到。除非服务运行在本机，否则请使用 https://。"
+  "aiInsecureBaseUrl": "这个地址使用未加密的 HTTP。API Key、提问内容以及发给 AI 的终端输出都可能在网络上被看到。除非服务运行在本机，否则请使用 https://。",
+  "advancedOptions": "高级选项",
+  "aiTestConnectionSucceeded": "已连通 {{model}}，耗时 {{ms}} ms"
 }

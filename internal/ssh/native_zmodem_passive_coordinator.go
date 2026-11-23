@@ -2,11 +2,11 @@ package sshclient
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"io"
 	"os"
 	"time"
+
+	"github.com/hctty27/openshell/internal/apperror"
 )
 
 // runPassive connects an already-running remote rz/sz process to the Rust
@@ -21,7 +21,7 @@ func (c *nativeTerminalCoordinator) runPassive(
 ) error {
 	if parent == nil || c == nil || c.input == nil || c.output == nil ||
 		c.runner == nil || guard == nil {
-		return errors.New("远端 ZMODEM 自动接管参数不完整")
+		return apperror.New("zmodemMissingContext", nil)
 	}
 	if err := parent.Err(); err != nil { return err }
 	action := ""
@@ -32,7 +32,7 @@ func (c *nativeTerminalCoordinator) runPassive(
 	case "download":
 		action, expected = "receive", '0'
 	default:
-		return errors.New("不支持的远端 ZMODEM 自动传输方向")
+		return apperror.New("zmodemUnsupportedDirection", nil)
 	}
 	path, err := nativeZmodemLocalPath(direction, localPath)
 	if err != nil { return err }
@@ -83,7 +83,7 @@ func (c *nativeTerminalCoordinator) runPassive(
 		// initial buffered Write failed. Keep it quarantined on this path.
 		if outputLease != 0 { _ = c.output.quarantineNative(outputLease) }
 		stopSidecar()
-		return fmt.Errorf("远端 ZMODEM 初始握手交接失败（需重连）：%w", err)
+		return apperror.Wrap("zmodemHandshakeFailedReconnect", err, nil)
 	}
 	var processErr error
 	abort, cancelled := false, false
@@ -108,24 +108,24 @@ func (c *nativeTerminalCoordinator) runPassive(
 		sink.finish(reader)
 	}
 	if cancelled {
-		return fmt.Errorf("远端 ZMODEM 自动传输已中止，终端需重连：%w", nativeZmodemContextError(ctx))
+		return apperror.Wrap("zmodemAbortedReconnect", nativeZmodemContextError(ctx), nil)
 	}
 	if quarantineErr != nil {
-		return fmt.Errorf("无法安全隔离远端 ZMODEM 结束后的输出（需重连）：%w", quarantineErr)
+		return apperror.Wrap("zmodemOutputIsolationFailed", quarantineErr, nil)
 	}
 	observeNativeZmodemStage(parent, "protocol", protocolStarted)
 	if processErr != nil {
 		if cause := nativeZmodemContextError(ctx); cause != nil {
-			return fmt.Errorf("远端 ZMODEM 自动传输失败，终端需重连：%w", cause)
+			return apperror.Wrap("zmodemFailedReconnect", cause, nil)
 		}
-		return fmt.Errorf("远端 ZMODEM 自动传输失败，终端需重连：%w", processErr)
+		return apperror.Wrap("zmodemFailedReconnect", processErr, nil)
 	}
 	if !sink.seenHeader() {
-		return errors.New("未收到有效远端 ZMODEM 起始帧，终端需重连")
+		return apperror.New("zmodemNoStartFrameReconnect", nil)
 	}
 	if stage != "" {
 		if err := nativeZmodemPublish(stage, publishTo); err != nil {
-			return fmt.Errorf("远端 ZMODEM 接收完成但保存文件失败，终端需重连：%w", err)
+			return apperror.Wrap("zmodemSaveFailedReconnect", err, nil)
 		}
 	}
 	// Receiving a complete ZFIN is protocol-level success, not shell exit

@@ -1,12 +1,11 @@
 package sshclient
 
 import (
-	"github.com/hctty27/openshell/internal/apperror"
 	"context"
 	"errors"
-	"fmt"
 	"os"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 )
 
@@ -106,17 +105,17 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 	progress func(uint64, uint64),
 ) error {
 	if parent == nil {
-		return errors.New("缺少原生终端传输上下文")
+		return apperror.New("zmodemMissingContext", nil)
 	}
 	if err := parent.Err(); err != nil {
 		return err
 	}
 	if sidecar == "" {
-		return errors.New("未指定实验原生 ZMODEM sidecar")
+		return apperror.New("zmodemSidecarMissing", nil)
 	}
 	info, err := os.Stat(sidecar)
 	if err != nil || !info.Mode().IsRegular() {
-		return errors.New("实验原生 ZMODEM sidecar 无效")
+		return apperror.New("zmodemSidecarInvalid", nil)
 	}
 
 	m.mu.Lock()
@@ -124,15 +123,15 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 	if c == nil || c.ref != ref || c.terminal == nil ||
 		c.inputGate == nil || c.outputGate == nil || m.closed {
 		m.mu.Unlock()
-		return errors.New("当前 SSH 终端已经关闭或引用失效")
+		return apperror.New("zmodemTerminalGone", nil)
 	}
 	if isJumpServerVersion(c.serverVersion) || c.readiness.isJumpServer() {
 		m.mu.Unlock()
-		return errors.New("JumpServer 暂不支持交互式原生 ZMODEM")
+		return apperror.New("zmodemJumpServerUnsupported", nil)
 	}
 	if c.aiController != nil || c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.nativeZmodemSelectionPassive {
 		m.mu.Unlock()
-		return errors.New("当前终端正被其他任务占用")
+		return apperror.New("zmodemTerminalBusy", nil)
 	}
 	ctx, cancel := context.WithCancel(parent)
 	task := &nativeTerminalTransferTask{ref: ref, cancel: cancel}
@@ -172,7 +171,7 @@ func (m *Manager) runNativeTerminalExperimentWithProgress(
 	m.mu.Unlock()
 	if result != nil {
 		if unsafe {
-			return fmt.Errorf("交互式原生 ZMODEM 未安全结束，当前终端需要重新连接：%w", result)
+			return apperror.Wrap("zmodemUnsafeEndReconnect", result, nil)
 		}
 		// A nonce-bound remote exit marker already proved the shell is back.
 		// Do not demand reconnect after a safely recovered cancellation.

@@ -51,7 +51,7 @@ func TestNativeZmodemCancelledTransferRestoresAfterRemoteProof(t *testing.T) {
 		if !errors.Is(err, context.Canceled) || err == nil {
 			t.Fatalf("cancel result lost: %v", err)
 		}
-		if !bytes.Contains([]byte(err.Error()), []byte("终端已安全恢复")) {
+		if !bytes.Contains([]byte(err.Error()), []byte("zmodemAbortedRecovered")) {
 			t.Fatalf("cancel still demanded reconnection: %v", err)
 		}
 	case <-time.After(4 * time.Second):

@@ -36,7 +36,7 @@ func nativeZmodemDesktopSidecarPath() string {
 func (a *App) NativeZmodemInteractiveReadiness(ref domain.ConnectionRef) sshclient.NativeZmodemExperimentReadiness {
 	if !a.nativeZmodemPreferred() {
 		return sshclient.NativeZmodemExperimentReadiness{
-			Code: "disabled", Message: "当前平台未启用原生 ZMODEM",
+			Code: "disabled", Message: apperror.New("zmodemDisabledOnPlatform", nil).Error(),
 		}
 	}
 	return a.ssh.NativeZmodemExperimentalReadiness(ref, nativeZmodemDesktopSidecarPath(), true)
@@ -48,16 +48,16 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	ref domain.ConnectionRef, direction, localPath, remotePath string,
 ) (err error) {
 	if direction != "upload" && direction != "upload-overwrite" && direction != "download" {
-		return errors.New("不支持的 ZMODEM 传输方向")
+		return apperror.New("zmodemUnsupportedDirection", nil)
 	}
 	isUpload := direction != "download"
 	displayDirection := "download"
 	if isUpload { displayDirection = "upload" }
 	if localPath == "" || strings.ContainsAny(localPath, "\r\n") {
-		return errors.New("请选择一个本地文件或保存目录")
+		return apperror.New("zmodemChooseLocalTarget", nil)
 	}
 	if direction == "download" && (remotePath == "" || strings.ContainsAny(remotePath, "\r\n")) {
-		return errors.New("ZMODEM 每次只能下载一个远程文件")
+		return apperror.New("zmodemSingleRemoteFile", nil)
 	}
 	if status := a.NativeZmodemInteractiveReadiness(ref); !status.Ready {
 		return errors.New(status.Message)
@@ -139,14 +139,14 @@ func (a *App) StartNativeZmodemPassiveTransfer(
 ) (err error) {
 	if os.Getenv("OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT") != "1" ||
 		!a.nativeZmodemPreferred() {
-		return errors.New("远端主动 ZMODEM 接管实验未启用")
+		return apperror.New("zmodemPassiveDisabled", nil)
 	}
 	if localPath == "" || strings.ContainsAny(localPath, "\r\n") {
-		return errors.New("请选择本地文件或保存目录")
+		return apperror.New("zmodemChooseLocalTarget", nil)
 	}
 	expected, err := a.ssh.PassiveZmodemSelection(ref, selectionID)
 	if err != nil { return err }
-	if expected != direction { return errors.New("远端 ZMODEM 接管方向与选择不匹配") }
+	if expected != direction { return apperror.New("zmodemDirectionMismatch", nil) }
 
 	id := domain.NewID()
 	sequence := nativeZmodemTransferSequence.Add(1)
@@ -177,7 +177,7 @@ func (a *App) StartNativeZmodemPassiveTransfer(
 		if err == nil && !terminalSafe {
 			a.emit("ssh:native-zmodem-unsupported", map[string]any{
 				"ref": ref,
-				"error": "远端 ZMODEM 文件传输完成；尚无法证明远端 Shell 已退出，必须重新连接 SSH 后继续输入命令",
+				"error": apperror.New("zmodemCompletedShellUnverified", nil).Error(),
 			})
 		}
 	}()
@@ -214,24 +214,24 @@ func (a *App) StartNativeZmodemPassiveTransfer(
 // A task already admitted to the native coordinator is never interrupted.
 func (a *App) CancelNativeZmodemSelection(ref domain.ConnectionRef, selectionID uint64) error {
 	if !a.ssh.ReleaseNativeZmodemSelection(ref, selectionID) {
-		return errors.New("原生 ZMODEM 文件选择已结束或不是当前会话")
+		return apperror.New("zmodemSelectionExpired", nil)
 	}
 	return nil
 }
 
 func (a *App) CancelNativeZmodemInteractiveTransfer(ref domain.ConnectionRef) error {
 	if !a.ssh.CancelExperimentalNativeTerminalTransfer(ref) {
-		return errors.New("没有可取消的原生 ZMODEM 传输")
+		return apperror.New("zmodemNothingToCancel", nil)
 	}
 	return nil
 }
 
 func (a *App) NativeZmodemChooseUploadFile() (string, error) {
 	if !a.nativeZmodemPreferred() {
-		return "", errors.New("当前平台未启用原生 ZMODEM")
+		return "", apperror.New("zmodemDisabledOnPlatform", nil)
 	}
 	if a.pickNativeZmodemFile == nil {
-		return "", errors.New("当前环境没有可用的文件选择对话框")
+		return "", apperror.New("fileDialogUnavailable", nil)
 	}
 	return a.pickNativeZmodemFile()
 }

@@ -1170,3 +1170,24 @@
     gap: 4px;
   }
 }
+.session-advanced {
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+  padding-top: 8px;
+}
+.session-advanced > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 4px 0 8px;
+  user-select: none;
+}
+.session-advanced[open] > summary {
+  color: var(--text-primary);
+}
+.session-advanced > label,
+.session-advanced > .form-row,
+.session-advanced > button {
+  margin-top: 8px;
+}

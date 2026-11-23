@@ -104,6 +104,12 @@ export default function SettingsDialog(p: Props) {
   const [tab, setTab] = useState(
     p.kind === "session" ? "session" : (p.initialTab ?? "general"),
   );
+  // Advanced options start expanded only when the session already uses them.
+  const [advancedOpen, setAdvancedOpen] = useState(() => !!(
+    p.session?.proxyJump?.trim() || p.session?.useSSHConfig ||
+    (p.session?.localForwards?.length ?? 0) > 0 ||
+    (p.session?.terminalTheme && p.session.terminalTheme !== "follow")
+  ));
   const [session, setSession] = useState({
     ...emptySession,
     groupId: p.groupID ?? "",
@@ -362,104 +368,6 @@ export default function SettingsDialog(p: Props) {
                 </label>
               </div>
               <label>
-                {t("settings:sessionTerminalTheme")}
-                <select
-                  value={session.terminalTheme ?? "follow"}
-                  onChange={(e) => field("terminalTheme", e.target.value)}
-                >
-                  <option value="follow">{t("settings:useGlobalTerminalTheme")}</option>
-                  <option value="classic">{t("settings:terminalThemeClassic")}</option>
-                  <option value="dark">{t("settings:terminalThemeDark")}</option>
-                  <option value="light">{t("settings:terminalThemeLight")}</option>
-                </select>
-              </label>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={session.useSSHConfig ?? false}
-                  onChange={(e) => field("useSSHConfig", e.target.checked)}
-                />
-                {t("settings:useOpenSSHConfig")}
-              </label>
-              <p className="muted small">{t("settings:useOpenSSHConfigDescription")}</p>
-              <label>
-                {t("settings:proxyJump")}
-                <input
-                  value={session.proxyJump ?? ""}
-                  onChange={(e) => field("proxyJump", e.target.value)}
-                  placeholder="user@bastion.example.com:22"
-                />
-              </label>
-              <p className="muted small">{t("settings:proxyJumpDescription")}</p>
-              {!!session.proxyJump?.trim() && session.authType === "password" && (
-                <>
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={session.jumpReusePassword ?? false}
-                      onChange={(e) => field("jumpReusePassword", e.target.checked)}
-                    />
-                    {t("settings:jumpReusePassword")}
-                  </label>
-                  <p className="muted small">{t("settings:jumpReusePasswordDescription")}</p>
-                </>
-              )}
-              <div className="settings-panel-heading">
-                <h3>{t("settings:localForwards")}</h3>
-                <p>{t("settings:localForwardsDescription")}</p>
-              </div>
-              {(session.localForwards ?? []).map((forward, index) => (
-                <div key={index} className="form-row">
-                  <input
-                    aria-label={t("settings:forwardBindHost")}
-                    value={forward.bindHost}
-                    onChange={(e) => updateForward(index, { bindHost: e.target.value })}
-                    placeholder="127.0.0.1"
-                  />
-                  <input
-                    type="number" min="1" max="65535"
-                    aria-label={t("settings:forwardBindPort")}
-                    value={forward.bindPort}
-                    onChange={(e) => updateForward(index, { bindPort: Number(e.target.value) })}
-                    placeholder="8080"
-                  />
-                  <input
-                    aria-label={t("settings:forwardTargetHost")}
-                    value={forward.targetHost}
-                    onChange={(e) => updateForward(index, { targetHost: e.target.value })}
-                    placeholder="127.0.0.1"
-                  />
-                  <input
-                    type="number" min="1" max="65535"
-                    aria-label={t("settings:forwardTargetPort")}
-                    value={forward.targetPort}
-                    onChange={(e) => updateForward(index, { targetPort: Number(e.target.value) })}
-                    placeholder="80"
-                  />
-                  <button
-                    type="button"
-                    title={t("settings:removeForward")}
-                    onClick={() => setSession((current) => ({
-                      ...current,
-                      localForwards: (current.localForwards ?? []).filter((_, i) => i !== index),
-                    }))}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
-              {(session.localForwards ?? []).length < 8 && (
-                <button type="button" onClick={() => setSession((current) => ({
-                  ...current,
-                  localForwards: [...(current.localForwards ?? []), {
-                    bindHost: "127.0.0.1", bindPort: 8080,
-                    targetHost: "127.0.0.1", targetPort: 80,
-                  }],
-                }))}>
-                  <Plus size={15} /> {t("settings:addForward")}
-                </button>
-              )}
-              <label>
                 {t("common:authentication")}
                 <select
                   value={session.authType}
@@ -524,6 +432,108 @@ export default function SettingsDialog(p: Props) {
               <p className="muted small">
                 {t(session.authType === "agent" ? "settings:sshAgentDescription" : "settings:passwordsAndKeyPassphrasesAreNotStoredIn")}
               </p>
+              <details className="session-advanced" open={advancedOpen}
+                onToggle={(e) => setAdvancedOpen((e.currentTarget as HTMLDetailsElement).open)}>
+                <summary>{t("settings:advancedOptions")}</summary>
+                <label>
+                  {t("settings:sessionTerminalTheme")}
+                  <select
+                    value={session.terminalTheme ?? "follow"}
+                    onChange={(e) => field("terminalTheme", e.target.value)}
+                  >
+                    <option value="follow">{t("settings:useGlobalTerminalTheme")}</option>
+                    <option value="classic">{t("settings:terminalThemeClassic")}</option>
+                    <option value="dark">{t("settings:terminalThemeDark")}</option>
+                    <option value="light">{t("settings:terminalThemeLight")}</option>
+                  </select>
+                </label>
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={session.useSSHConfig ?? false}
+                    onChange={(e) => field("useSSHConfig", e.target.checked)}
+                  />
+                  {t("settings:useOpenSSHConfig")}
+                </label>
+                <p className="muted small">{t("settings:useOpenSSHConfigDescription")}</p>
+                <label>
+                  {t("settings:proxyJump")}
+                  <input
+                    value={session.proxyJump ?? ""}
+                    onChange={(e) => field("proxyJump", e.target.value)}
+                    placeholder="user@bastion.example.com:22"
+                  />
+                </label>
+                <p className="muted small">{t("settings:proxyJumpDescription")}</p>
+                {!!session.proxyJump?.trim() && session.authType === "password" && (
+                  <>
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={session.jumpReusePassword ?? false}
+                        onChange={(e) => field("jumpReusePassword", e.target.checked)}
+                      />
+                      {t("settings:jumpReusePassword")}
+                    </label>
+                    <p className="muted small">{t("settings:jumpReusePasswordDescription")}</p>
+                  </>
+                )}
+                <div className="settings-panel-heading">
+                  <h3>{t("settings:localForwards")}</h3>
+                  <p>{t("settings:localForwardsDescription")}</p>
+                </div>
+                {(session.localForwards ?? []).map((forward, index) => (
+                  <div key={index} className="form-row">
+                    <input
+                      aria-label={t("settings:forwardBindHost")}
+                      value={forward.bindHost}
+                      onChange={(e) => updateForward(index, { bindHost: e.target.value })}
+                      placeholder="127.0.0.1"
+                    />
+                    <input
+                      type="number" min="1" max="65535"
+                      aria-label={t("settings:forwardBindPort")}
+                      value={forward.bindPort}
+                      onChange={(e) => updateForward(index, { bindPort: Number(e.target.value) })}
+                      placeholder="8080"
+                    />
+                    <input
+                      aria-label={t("settings:forwardTargetHost")}
+                      value={forward.targetHost}
+                      onChange={(e) => updateForward(index, { targetHost: e.target.value })}
+                      placeholder="127.0.0.1"
+                    />
+                    <input
+                      type="number" min="1" max="65535"
+                      aria-label={t("settings:forwardTargetPort")}
+                      value={forward.targetPort}
+                      onChange={(e) => updateForward(index, { targetPort: Number(e.target.value) })}
+                      placeholder="80"
+                    />
+                    <button
+                      type="button"
+                      title={t("settings:removeForward")}
+                      onClick={() => setSession((current) => ({
+                        ...current,
+                        localForwards: (current.localForwards ?? []).filter((_, i) => i !== index),
+                      }))}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+                {(session.localForwards ?? []).length < 8 && (
+                  <button type="button" onClick={() => setSession((current) => ({
+                    ...current,
+                    localForwards: [...(current.localForwards ?? []), {
+                      bindHost: "127.0.0.1", bindPort: 8080,
+                      targetHost: "127.0.0.1", targetPort: 80,
+                    }],
+                  }))}>
+                    <Plus size={15} /> {t("settings:addForward")}
+                  </button>
+                )}
+              </details>
             </>
           )}
           {tab === "general" && (

@@ -198,3 +198,12 @@ test("terminal settings no longer expose a ZMODEM engine selector", () => {
   expect(screen.queryByLabelText("ZMODEM 传输引擎")).toBeNull();
   expect(savePreference).not.toHaveBeenCalledWith("zmodemTransferMode", expect.anything());
 });
+
+test("advanced session options start collapsed for a plain session", () => {
+  renderSessionEditor();
+  const details = document.querySelector("details.session-advanced") as HTMLDetailsElement;
+  expect(details).toBeTruthy();
+  expect(details.open).toBe(false);
+  expect(screen.getByText("高级选项")).toBeTruthy();
+  expect(details.textContent).toContain("ProxyJump");
+});

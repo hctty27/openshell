@@ -25,6 +25,7 @@ type Backend = {
   AISaveRuntimeSettings(settings: import("./types").AIRuntimeSettings): Promise<void>;
   AISaveProvider(req: {provider: import("./types").AIProvider; apiKey: string}): Promise<import("./types").AIProvider>;
   AIDeleteProvider(id: string): Promise<void>;
+  AITestProvider(req: {providerId: string; baseUrl: string; apiKey: string; model: string}): Promise<{latencyMs: number}>;
   AIConversations(): Promise<import("./types").AIConversation[]>;
   AISetConversationModel(conversationID: string, providerID: string, modelID: string): Promise<import("./types").AIConversation>;
   AIDeleteConversation(id: string): Promise<void>;

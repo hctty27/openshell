@@ -70,12 +70,21 @@ export default function SFTPFileEditor({
         extensions: [
           basicSetup,
           search({ top: true }),
-          ...(i18n.language === "zh-CN" ? [EditorState.phrases.of({
-            "Find": "查找", "Replace": "替换", "next": "下一个", "previous": "上一个",
-            "all": "全部", "match case": "区分大小写", "regexp": "正则表达式",
-            "by word": "全词匹配", "replace": "替换", "replace all": "全部替换",
-            "close": "关闭", "Go to line": "跳转行号", "Go": "跳转",
-          })] : []),
+          EditorState.phrases.of({
+            "Find": i18n.t("sftp:editorFind"),
+            "Replace": i18n.t("sftp:editorReplaceField"),
+            "next": i18n.t("sftp:editorNext"),
+            "previous": i18n.t("sftp:editorPrevious"),
+            "all": i18n.t("sftp:editorAll"),
+            "match case": i18n.t("sftp:editorMatchCase"),
+            "regexp": i18n.t("sftp:editorRegexp"),
+            "by word": i18n.t("sftp:editorByWord"),
+            "replace": i18n.t("sftp:editorReplace"),
+            "replace all": i18n.t("sftp:editorReplaceAll"),
+            "close": i18n.t("sftp:editorClose"),
+            "Go to line": i18n.t("sftp:editorGoToLine"),
+            "Go": i18n.t("sftp:editorGo"),
+          }),
           Prec.high(keymap.of([
             { key: "Mod-s", run: onSaveKey },
             { key: "Mod-h", run: openSearchPanel },

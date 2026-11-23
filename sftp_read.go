@@ -2,9 +2,9 @@ package main
 
 import (
     "context"
-    "errors"
     "time"
 
+    "github.com/hctty27/openshell/internal/apperror"
     "github.com/hctty27/openshell/internal/diagnostics"
     "github.com/hctty27/openshell/internal/domain"
     files "github.com/hctty27/openshell/internal/sftp"
@@ -14,7 +14,7 @@ import (
 // the shared SSH connection or SFTP client used by directory browsing.
 func (a *App) SFTPReadRemoteTextRequest(ref domain.ConnectionRef, name, requestID string) (files.RemoteDocument, error) {
     if requestID == "" || len(requestID) > 128 {
-        return files.RemoteDocument{}, errors.New("无效的文件读取请求")
+        return files.RemoteDocument{}, apperror.New("fileReadRequestInvalid", nil)
     }
 
     parent := a.ctx
@@ -26,7 +26,7 @@ func (a *App) SFTPReadRemoteTextRequest(ref domain.ConnectionRef, name, requestI
     if _, exists := a.sftpReadCancels[requestID]; exists {
         a.sftpReadMu.Unlock()
         cancel()
-        return files.RemoteDocument{}, errors.New("文件读取请求正在执行")
+        return files.RemoteDocument{}, apperror.New("fileReadRequestBusy", nil)
     }
     if _, cancelled := a.sftpReadCancelled[requestID]; cancelled {
         delete(a.sftpReadCancelled, requestID)

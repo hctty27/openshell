@@ -1,14 +1,14 @@
 package sftp
 
 import (
-    "errors"
 
+"github.com/hctty27/openshell/internal/apperror"
     "github.com/hctty27/openshell/internal/domain"
     pkg "github.com/pkg/sftp"
 )
 
-var errRemotePoolClosed = errors.New("SFTP 文件管理器已关闭")
-var errRemoteConnectionChanged = errors.New("SFTP 连接已变化，请重试")
+var errRemotePoolClosed = apperror.New("sftpManagerClosed", nil)
+var errRemoteConnectionChanged = apperror.New("sftpConnectionChanged", nil)
 
 // cachedRemote keeps an interactive SFTP subsystem alive while its SSH tab exists.
 // Transfers deliberately use their own subsystem so cancellation is isolated.

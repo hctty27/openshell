@@ -3,6 +3,11 @@ import { ArrowUp, File, Folder, HardDrive, Home, RefreshCw, X } from "lucide-rea
 import { useTranslation } from "react-i18next";
 import { api, errorText, listen } from "../bridge";
 import { t } from "../i18n";
+import { decodeAppError } from "../i18n/errors";
+import { message, renderMessage, type LocalizedMessage } from "../i18n/message";
+
+const isLocalizedMessage = (value: unknown): value is LocalizedMessage =>
+  !!value && typeof value === "object" && typeof (value as { key?: unknown }).key === "string";
 import type { Ref, SFTPEntry } from "../types";
 import { requestTerminalFocus } from "../features/terminalFocus";
 
@@ -192,13 +197,13 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
       let pending: Promise<void> | undefined;
       if (paths.length > 0) {
         const download = request.direction === "download";
-        if (!download && paths.length !== 1) throw new Error("ZMODEM 每次只能上传一个文件");
+        if (!download && paths.length !== 1) throw message("errors:zmodemSingleUploadFile");
         if ((request.direction === "upload-overwrite" || (request.passive && request.direction === "upload")) && !overwriteConfirmed) {
-          throw new Error(t("sftp:zmodemOverwriteConfirm"));
+          throw message("sftp:zmodemOverwriteConfirm");
         }
         const remotePath = request.remotePath ?? "";
         if (download && (!request.passive && !remotePath || /[\r\n]/.test(remotePath))) {
-          throw new Error("ZMODEM 每次只能下载一个远程文件");
+          throw message("errors:zmodemSingleRemoteFile");
         }
         pending = request.passive
           ? api.StartNativeZmodemPassiveTransfer(
@@ -223,12 +228,15 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
         // The transfer may already have taken ownership, making release
         // correctly return "not active". Preserve the original error only.
         void api.CancelNativeZmodemSelection(request.ref, request.selectionId).catch(() => {});
-        const message = errorText(err);
-        if (message.includes("终端已安全恢复") && message.includes("context canceled")) return;
+        // A user-initiated stop that left the terminal usable is not an error.
+        const coded = decodeAppError(err);
+        if (coded?.code === "zmodemAbortedRecovered" && coded.detail?.includes("context canceled")) return;
+        const text = errorText(err);
+        if (text.includes("终端已安全恢复") && text.includes("context canceled")) return;
         onNotice(err);
       });
     } catch (err) {
-      setError(errorText(err));
+      setError(isLocalizedMessage(err) ? renderMessage(err) : errorText(err));
       submittingKey.current = "";
     }
   };

@@ -514,11 +514,7 @@ export default function SessionTree(props: Props) {
             <span>{t("common:details")}</span>
           </button>
           <small>
-            {selectedSession
-              ? "SSH"
-              : selectedGroup
-                ? t("common:folder3")
-                : t("common:directory")}
+            {selectedSession ? "SSH" : t("common:folder3")}
           </small>
         </div>
         <div className="details-body" id="session-details-content" hidden={!p.detailsExpanded}>
