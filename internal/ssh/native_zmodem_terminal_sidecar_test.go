@@ -165,3 +165,18 @@ func TestNativeZmodemFileEventsAreParsedWithoutPollutingWire(t *testing.T) {
     }
     if log.String() != "" { t.Fatalf("diagnostics leaked: %s", log.String()) }
 }
+
+func TestNativeZmodemDeclinedFileEventIsParsed(t *testing.T) {
+    var events []NativeZmodemFileProgress
+    writer := &nativeTerminalProgressLog{
+        log: &nativeZmodemLog{},
+        onFile: func(event NativeZmodemFileProgress) { events = append(events, event) },
+    }
+    input := "OSZF\tstart\t0\t5\t612e747874\n" +
+        "OSZF\tdeclined\t0\t0\n" +
+        "OSZF\tdeclined\t0\n"
+    if _, err := writer.Write([]byte(input)); err != nil { t.Fatal(err) }
+    if len(events) != 2 || events[1].Kind != "declined" || events[1].Index != 0 || events[1].Processed != 0 {
+        t.Fatalf("declined event parse failed: %+v", events)
+    }
+}

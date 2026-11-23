@@ -228,5 +228,14 @@
   "fingerprintUpdateConflict": "等待确认期间，已保存的服务器指纹发生变化。请重新连接并核验。",
   "fingerprintUpdateFailed": "无法更新已信任的服务器指纹。",
   "fingerprintTrustFailed": "无法保存服务器指纹。",
-  "proxyJumpPasswordNotForwarded": "跳板机需要单独认证。请把密钥加载到 SSH Agent、改用私钥认证，或在会话设置中允许把密码发送给跳板机"
+  "proxyJumpPasswordNotForwarded": "跳板机需要单独认证。请把密钥加载到 SSH Agent、改用私钥认证，或在会话设置中允许把密码发送给跳板机",
+  "zmodemRemoteDeclined": "远端 rz 拒收了文件，通常是因为已存在同名文件，文件没有上传。要覆盖请用 rz -y，要另存为新文件名请用 rz -E",
+  "hostMustNotIncludePort": "主机里不要带端口，端口请填到“端口”一栏",
+  "sessionNameTooLong": "会话名最多 {{max}} 个字符",
+  "privateKeyPathRequired": "请选择私钥文件，或者改用 OpenSSH 配置或 SSH Agent",
+  "zmodemUnclaimedProtocol": "收到了 OpenShell 无法接管的 ZMODEM 数据，已阻止它进入终端。rz/sz 需要在 Shell 提示符下作为单独的命令输入（不能写在 &&、管道、脚本或别名里）。请重新连接 SSH 后继续",
+  "zmodemHandshakeOverflow": "远端 ZMODEM 握手无法接管，已取消本次文件选择。请重新连接 SSH 后继续",
+  "zmodemSelectionTimeout": "远端 ZMODEM 等待选择文件超时，远端 Shell 状态无法确认，请重新连接 SSH",
+  "zmodemPassiveSelectionCancelled": "已取消远端主动发起的 ZMODEM 选择，但无法确认远端程序已经退出，请重新连接 SSH",
+  "zmodemShellSetupUnverified": "rz/sz 所需的 Bash 集成未能完成验证，当前终端状态不确定，请重新连接 SSH"
 }

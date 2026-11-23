@@ -62,7 +62,7 @@ func (s *Store) save(ctx context.Context, query, id string, value any) error {
 	return e
 }
 func (s *Store) ListSessions(ctx context.Context) ([]domain.Session, error) {
-	return list[domain.Session](ctx, s.db, "SELECT data FROM sessions ORDER BY id")
+	return list[domain.Session](ctx, s.db, "SELECT data FROM sessions ORDER BY lower(json_extract(data,'$.name')), id")
 }
 func (s *Store) GetSession(ctx context.Context, id string) (domain.Session, error) {
 	var data string
@@ -96,7 +96,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	return tx.Commit()
 }
 func (s *Store) ListGroups(ctx context.Context) ([]domain.Group, error) {
-	return list[domain.Group](ctx, s.db, "SELECT data FROM groups ORDER BY id")
+	return list[domain.Group](ctx, s.db, "SELECT data FROM groups ORDER BY lower(json_extract(data,'$.name')), id")
 }
 func (s *Store) SaveGroup(ctx context.Context, v domain.Group) error {
 	if v.ID == "" || v.Name == "" {

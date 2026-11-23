@@ -25,6 +25,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { api, desktop, listen, errorText } from "./bridge";
+import { decodeAppError } from "./i18n/errors";
 import { normalizeTerminalTheme, resolveTerminalTheme } from "./terminalThemes";
 import { reorderTabs } from "./features/sessions/tabOrder";
 import { hasInterruptibleWork, isActiveRemoteSession, needsCloseConfirmation, sessionLabel } from "./features/sessions/closeProtection";
@@ -751,6 +752,15 @@ function Workspace({ initialState }: { initialState: AppState }) {
         error: "",
       }));
     } catch (e) {
+      // A saved password that can no longer be read must be re-entered:
+      // open the login prompt instead of only telling the user to do so.
+      if (decodeAppError(e)?.code === "couldNotReadLoginCredentialsEnterThemAgain" &&
+          tab.session.authType === "password" &&
+          !tabsRef.current.find(t => t.id === tab.id)?.manualDisconnected) {
+        update(tab.id, (t) => ({ ...t, status: "disconnected", error: "" }));
+        setLogin({ tab, secret: "" });
+        return;
+      }
       update(tab.id, (t) => t.manualDisconnected ? t : ({ ...t, status: "error", error: e }));
       if (!tabsRef.current.find(t => t.id === tab.id)?.manualDisconnected) notify(e);
     }
@@ -1495,6 +1505,14 @@ function Workspace({ initialState }: { initialState: AppState }) {
                     setTerminalSearchOpen(current => setTerminalSearchState(current, tab.id, open))
                   }
                   transferFocusRequest={transferFocusRequest ?? undefined}
+                  onRetry={() => {
+                    const current = tabsRef.current.find(item => item.id === tab.id);
+                    if (current) manualConnect(current);
+                  }}
+                  onEditSession={() => {
+                    const session = state.sessions.find(item => item.id === tab.session.id) ?? tab.session;
+                    setDialog({ kind: "session", session });
+                  }}
                   onError={(text) => {
                     update(tab.id, (t) => ({
                       ...t,

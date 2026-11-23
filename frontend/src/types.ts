@@ -198,6 +198,7 @@ export interface SFTPEntry {
   path: string;
   isDir: boolean;
   isSymlink: boolean;
+  targetIsDir?: boolean;
   size: number;
   modified: number;
   mode: string;

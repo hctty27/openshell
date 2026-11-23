@@ -102,7 +102,7 @@ func (w *nativeTerminalProgressLog) processFileLine(line []byte) {
     fields := bytes.Split(bytes.TrimSuffix(line, []byte{'\r'}), []byte{'\t'})
     if len(fields) < 4 || len(fields) > 5 { return }
     kind := string(fields[1])
-    if kind != "start" && kind != "progress" && kind != "completed" && kind != "skipped" { return }
+    if kind != "start" && kind != "progress" && kind != "completed" && kind != "skipped" && kind != "declined" { return }
     index, err := strconv.Atoi(string(fields[2]))
     if err != nil || index < 0 || index >= 100 { return }
     event := NativeZmodemFileProgress{Kind: kind, Index: index}
@@ -117,7 +117,7 @@ func (w *nativeTerminalProgressLog) processFileLine(line []byte) {
         decoded, decodeErr := hex.DecodeString(string(fields[4]))
         if decodeErr != nil || len(decoded) == 0 || len(decoded) > 255 || !utf8.Valid(decoded) { return }
         event.Name = string(decoded)
-    case "progress", "completed", "skipped":
+    case "progress", "completed", "skipped", "declined":
         if len(fields) != 4 { return }
         processed, parseErr := strconv.ParseUint(string(fields[3]), 10, 64)
         if parseErr != nil || processed > uint64(nativeZmodemMaxFileSize) { return }

@@ -783,3 +783,49 @@
   color: var(--accent);
   background: var(--hover);
 }
+.terminal-connection-error {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 22;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(560px, calc(100% - 24px));
+  padding: 12px 14px;
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  background: var(--raised);
+  box-shadow: 0 6px 18px #0006;
+  color: var(--text-primary);
+}
+.terminal-connection-error.is-blocking {
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.terminal-connection-error > svg { flex: 0 0 auto; color: var(--danger); margin-top: 2px; }
+.terminal-connection-error-body { flex: 1 1 auto; min-width: 0; }
+.terminal-connection-error-body strong { display: block; font-size: 13px; margin-bottom: 4px; }
+.terminal-connection-error-body p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  max-height: 9em;
+  overflow: auto;
+  user-select: text;
+}
+.terminal-connection-error-actions { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.terminal-connection-error-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--field-bg);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.terminal-connection-error-actions button.primary { border-color: var(--accent); color: var(--accent); }

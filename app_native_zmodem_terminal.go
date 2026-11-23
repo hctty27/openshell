@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	sshclient "github.com/hctty27/openshell/internal/ssh"
 )
@@ -76,6 +77,7 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	}
 
 	started := false
+	var declined atomic.Int32
 	defer func() {
 		if !started {
 			// The manager rejected this task before obtaining SSH ownership.
@@ -85,6 +87,9 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 		payload := map[string]any{"ref": ref, "id": id, "sequence": sequence, "direction": displayDirection, "active": false}
 		terminalSafe := a.NativeZmodemInteractiveReadiness(ref).Ready
 		payload["terminalSafe"] = terminalSafe
+		if err == nil && declined.Load() > 0 {
+			payload["error"] = apperror.New("zmodemRemoteDeclined", nil).Error()
+		}
 		if err != nil {
 			payload["error"] = err.Error()
 			// An interrupted but unverified SSH session is a failure that
@@ -95,6 +100,9 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 	}()
 
 	ctx := sshclient.WithNativeZmodemFileObserver(a.ctx, func(event sshclient.NativeZmodemFileProgress) {
+		if event.Kind == "declined" {
+			declined.Add(1)
+		}
 		if event.Index != 0 {
 			return // Never surface a second file for a single-file transfer.
 		}
@@ -151,11 +159,15 @@ func (a *App) StartNativeZmodemPassiveTransfer(
 	}
 	started := false
 	terminalSafe := false
+	var declined atomic.Int32
 	defer func() {
 		if !started { return }
 		payload := map[string]any{
 			"ref": ref, "id": id, "sequence": sequence,
 			"direction": direction, "active": false, "terminalSafe": terminalSafe,
+		}
+		if err == nil && declined.Load() > 0 {
+			payload["error"] = apperror.New("zmodemRemoteDeclined", nil).Error()
 		}
 		if err != nil {
 			payload["error"] = err.Error()
@@ -170,6 +182,7 @@ func (a *App) StartNativeZmodemPassiveTransfer(
 		}
 	}()
 	ctx := sshclient.WithNativeZmodemFileObserver(a.ctx, func(event sshclient.NativeZmodemFileProgress) {
+		if event.Kind == "declined" { declined.Add(1) }
 		if event.Index != 0 { return }
 		a.emit("ssh:native-zmodem-file", map[string]any{
 			"ref": ref, "batchId": id, "kind": event.Kind,

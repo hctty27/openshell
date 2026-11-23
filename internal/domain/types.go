@@ -5,8 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"github.com/hctty27/openshell/internal/apperror"
+	"net"
 	"strings"
 	"strconv"
+	"unicode/utf8"
 )
 
 type Session struct {
@@ -60,9 +62,22 @@ func NewID() string {
 	}
 	return hex.EncodeToString(b[:])
 }
+// MaxSessionNameLength keeps names readable in the session tree and tabs.
+const MaxSessionNameLength = 100
+
 func ValidateSession(s Session) error {
 	if strings.TrimSpace(s.Host) == "" || strings.ContainsAny(s.Host, "\x00\r\n\t /@") || strings.TrimSpace(s.Username) == "" || strings.ContainsAny(s.Username, "\x00\r\n") {
 		return apperror.New("enterAValidHostAndUsername", nil)
+	}
+	if strings.Contains(s.Host, ":") && net.ParseIP(strings.Trim(s.Host, "[]")) == nil {
+		// "host:port" is a common mistake; the port has its own field.
+		return apperror.New("hostMustNotIncludePort", nil)
+	}
+	if utf8.RuneCountInString(s.Name) > MaxSessionNameLength {
+		return apperror.New("sessionNameTooLong", map[string]any{"max": MaxSessionNameLength})
+	}
+	if s.AuthType == "key" && strings.TrimSpace(s.PrivateKeyPath) == "" && !s.UseSSHConfig {
+		return apperror.New("privateKeyPathRequired", nil)
 	}
 	if s.Port < 1 || s.Port > 65535 {
 		return apperror.New("portMustBeBetween1And65535", nil)

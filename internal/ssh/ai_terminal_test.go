@@ -34,7 +34,7 @@ func TestAITerminalOutputIsBounded(t *testing.T) {
     cmd.consume([]byte(strings.Repeat("x",terminalAIOutputLimit+100)))
     cmd.consume([]byte("\x1b]777;OpenShellAI;nonce;0\x07"))
     result:=<-cmd.done
-    if result.code!=0 || !strings.Contains(result.output,"已截断") ||
+    if result.code!=0 || !strings.Contains(result.output,"truncated") ||
         len(result.output)>terminalAIOutputLimit+120 {
         t.Fatalf("unexpected output size %d or exit %d",len(result.output),result.code)
     }

@@ -10,6 +10,7 @@ import (
     "strings"
     "sync"
     "time"
+    "unicode/utf8"
 
     "github.com/hctty27/openshell/internal/domain"
 )
@@ -305,11 +306,18 @@ func (cmd *terminalAICommand) consume(p []byte) {
 }
 
 func cleanAITerminalOutput(p []byte, truncated bool) string {
+    if truncated {
+        // Drop a character split by the byte limit instead of showing U+FFFD.
+        for i := 0; i < utf8.UTFMax && len(p) > 0; i++ {
+            if r, size := utf8.DecodeLastRune(p); r != utf8.RuneError || size != 1 { break }
+            p = p[:len(p)-1]
+        }
+    }
     out:=strings.ToValidUTF8(string(p),"�")
     out=terminalAIOsc.ReplaceAllString(out,"")
     out=terminalAIColor.ReplaceAllString(out,"")
     out=strings.ReplaceAll(out,"\r","")
     out=strings.TrimSpace(out)
-    if truncated {out+="\n[终端输出超过 64 KiB，已截断]"}
+    if truncated {out+="\n[terminal output exceeded 64 KiB and was truncated]"}
     return out
 }

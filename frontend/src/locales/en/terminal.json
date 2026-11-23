@@ -101,5 +101,7 @@
   "nativeZmodemBatchUploadHint": "Select multiple files or enter one full local path per line (up to 100).",
   "nativeZmodemBatchRemoteHint": "Enter one remote file path per line; spaces and Unicode are supported (up to 100).",
   "nativeZmodemBatchLimit": "Select 1–100 file paths per transfer.",
-  "nativeZmodemBatchCompleted": "{{count}} files completed"
+  "nativeZmodemBatchCompleted": "{{count}} files completed",
+  "connectionFailedTitle": "Could not connect to {{name}}",
+  "connectionLostTitle": "Connection to {{name}} ended"
 }

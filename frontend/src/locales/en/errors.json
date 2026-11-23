@@ -228,5 +228,14 @@
   "fingerprintUpdateConflict": "The saved server fingerprint changed while confirmation was pending. Reconnect and verify it again.",
   "fingerprintUpdateFailed": "Could not update the trusted server fingerprint.",
   "fingerprintTrustFailed": "Could not save the server fingerprint.",
-  "proxyJumpPasswordNotForwarded": "The jump host needs its own credentials. Load a key into your SSH agent, switch to key authentication, or allow sending this password to the jump hosts in the session settings"
+  "proxyJumpPasswordNotForwarded": "The jump host needs its own credentials. Load a key into your SSH agent, switch to key authentication, or allow sending this password to the jump hosts in the session settings",
+  "zmodemRemoteDeclined": "The remote rz declined the file, usually because a file with the same name already exists. Nothing was uploaded. Run rz -y to overwrite, or rz -E to save under a new name",
+  "hostMustNotIncludePort": "Enter the host without a port, and put the port in the Port field",
+  "sessionNameTooLong": "Session names can have at most {{max}} characters",
+  "privateKeyPathRequired": "Choose a private key file, or use the OpenSSH config / SSH agent",
+  "zmodemUnclaimedProtocol": "ZMODEM data arrived that OpenShell could not take over, so it was blocked from the terminal. rz/sz must be typed as a standalone command at the shell prompt (not inside &&, pipes, scripts or aliases). Reconnect SSH to continue",
+  "zmodemHandshakeOverflow": "The remote ZMODEM handshake could not be taken over, so the file selection was cancelled. Reconnect SSH to continue",
+  "zmodemSelectionTimeout": "The remote ZMODEM transfer timed out while waiting for a file selection. The remote shell state is unknown; reconnect SSH to continue",
+  "zmodemPassiveSelectionCancelled": "The remote ZMODEM selection was cancelled. OpenShell cannot confirm that the remote program exited; reconnect SSH to continue",
+  "zmodemShellSetupUnverified": "The Bash integration for rz/sz could not be verified, so the terminal state is unknown. Reconnect SSH to continue"
 }

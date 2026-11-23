@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hctty27/openshell/internal/domain"
 	"github.com/hctty27/openshell/internal/apperror"
@@ -587,8 +588,17 @@ func aiHistoryContext(messages []store.AIMessage) []store.AIMessage {
 }
 
 func truncateAIOutput(data string, limit int) string {
-	if len(data)>limit {return data[:limit]+"\n[内容已截断]"}
+	if len(data)>limit {return utf8Prefix(data, limit)+"\n[output truncated]"}
 	return data
+}
+
+// utf8Prefix returns at most limit bytes without splitting a multi-byte
+// character, so truncated Chinese output never ends in U+FFFD garbage.
+func utf8Prefix(data string, limit int) string {
+	if len(data) <= limit { return data }
+	cut := limit
+	for cut > 0 && cut > limit-utf8.UTFMax && !utf8.RuneStart(data[cut]) { cut-- }
+	return data[:cut]
 }
 
 type aiLimitedWriter struct {
@@ -606,7 +616,18 @@ func (w *aiLimitedWriter) Write(p []byte)(int,error) {
 }
 func (w *aiLimitedWriter) String() string {
 	w.mu.Lock();defer w.mu.Unlock()
-	return w.data.String()
+	data := w.data.String()
+	if w.data.Len() >= 65536 {
+		// The byte cap may have split the last character.
+		data = utf8Prefix(data, len(data))
+		for len(data) > 0 {
+			r, size := utf8.DecodeLastRuneInString(data)
+			if r != utf8.RuneError || size != 1 { break }
+			data = data[:len(data)-1]
+		}
+		data += "\n[output truncated at 64 KiB]"
+	}
+	return data
 }
 func (a *App) executeAICommand(ctx context.Context, ref domain.ConnectionRef, command string) aiToolResult {
 	session,err:=a.ssh.OpenSession(ref)

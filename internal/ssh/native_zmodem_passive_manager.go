@@ -1,6 +1,7 @@
 package sshclient
 
 import (
+	"github.com/hctty27/openshell/internal/apperror"
 	"context"
 	"errors"
 	"fmt"
@@ -32,9 +33,9 @@ func (m *Manager) failNativePassiveGuard(ref domain.ConnectionRef, expected *con
 	}
 	m.mu.Unlock()
 	if guard != nil { guard.discardCapture() }
-	message := "检测到未经原生接管的 ZMODEM 数据；已阻止协议数据进入终端，请重新连接 SSH"
+	message := apperror.New("zmodemUnclaimedProtocol", nil).Error()
 	if selectionID != 0 {
-		message = "远端 ZMODEM 握手缓冲已溢出或无法继续接管；已取消本次文件选择，必须重新连接 SSH"
+		message = apperror.New("zmodemHandshakeOverflow", nil).Error()
 	}
 	m.emit("ssh:native-zmodem-unsupported", map[string]any{
 		"ref": ref, "error": message,
@@ -77,7 +78,7 @@ func (m *Manager) expireNativePassiveSelection(
 	// frontend event must never briefly reopen terminal stdin.
 	m.emit("ssh:native-zmodem-unsupported", map[string]any{
 		"ref": ref,
-		"error": "远端 ZMODEM 等待选择文件超时；远端 Shell 状态未确认，请重新连接 SSH",
+		"error": apperror.New("zmodemSelectionTimeout", nil).Error(),
 	})
 	m.emit("ssh:native-zmodem-selection", map[string]any{
 		"ref": ref, "selectionId": selectionID, "active": false,
@@ -134,7 +135,7 @@ func (m *Manager) handleNativePassiveFrame(
 	}
 	if !valid {
 		m.emit("ssh:native-zmodem-unsupported", map[string]any{
-			"ref": ref, "error": "检测到远端主动 ZMODEM 握手，但当前终端无法安全接管；协议数据已隔离，请重新连接 SSH",
+			"ref": ref, "error": apperror.New("zmodemUnclaimedProtocol", nil).Error(),
 		})
 		return
 	}

@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
+	"unicode/utf8"
 	"time"
 
 	"github.com/hctty27/openshell/internal/domain"
@@ -112,5 +114,18 @@ func TestAIWireMessagesOmitUIStatus(t *testing.T) {
 	data, _ := json.Marshal(aiWireMessages([]store.AIMessage{{Role: "tool", Content: "x", ToolCallID: "c", Status: "failed", ExitCode: &code}}))
 	if string(data) != `[{"role":"tool","content":"x","tool_call_id":"c"}]` {
 		t.Fatalf("provider payload leaked UI fields: %s", data)
+	}
+}
+
+func TestAIOutputTruncationKeepsUTF8Valid(t *testing.T) {
+	text := strings.Repeat("中", 30000) // 90000 bytes
+	got := truncateAIOutput(text, 65536)
+	if !utf8.ValidString(got) {
+		t.Fatal("truncated AI output split a multi-byte character")
+	}
+	w := &aiLimitedWriter{}
+	_, _ = w.Write([]byte(text))
+	if out := w.String(); !utf8.ValidString(out) || !strings.Contains(out, "truncated") {
+		t.Fatalf("limited writer produced invalid UTF-8 or no truncation note")
 	}
 }

@@ -213,6 +213,37 @@ struct SendSource {
     file: File,
     name: String,
     size: u64,
+    mode: u32,
+    modified: Option<u32>,
+}
+
+// Without a mode in the ZFILE header lrzsz creates the remote file 0600.
+// Send a regular-file mode instead: the local permission bits on Unix
+// (without group/other write or special bits), 0644 elsewhere.
+fn upload_mode(meta: &fs::Metadata) -> u32 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        0o100000 | (meta.permissions().mode() & 0o755)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = meta;
+        0o100644
+    }
+}
+
+fn upload_modified(meta: &fs::Metadata) -> Option<u32> {
+    let secs = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+    u32::try_from(secs).ok().filter(|value| *value > 0)
+}
+
+fn upload_info(source: &SendSource) -> FileInfo<'_> {
+    let info = FileInfo::new(source.name.as_bytes(), Some(Position::new(source.size as u32))).with_mode(source.mode);
+    match source.modified {
+        Some(modified) => info.with_modified(modified),
+        None => info,
+    }
 }
 
 // Private, NUL-delimited UTF-8 path manifest used by the Windows/Go desktop
@@ -256,11 +287,11 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
         let size = meta.len();
         checked_file_size(size)?;
         total = total.checked_add(size).ok_or("batch total size overflow")?;
-        files.push(SendSource { file: File::open(path)?, name, size });
+        files.push(SendSource { file: File::open(path)?, name, size, mode: upload_mode(&meta), modified: upload_modified(&meta) });
     }
 
     let mut sender = Sender::new()?;
-    sender.start_file(FileInfo::new(files[0].name.as_bytes(), Some(Position::new(files[0].size as u32))))?;
+    sender.start_file(upload_info(&files[0]))?;
     let rx = incoming_wire();
     let mut waiting = VecDeque::<u8>::new();
     let mut wire_scratch = Vec::<u8>::with_capacity(2048);
@@ -304,8 +335,17 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
             }
             Action::Event(Event::FileCompleted) => {
                 output.flush_pending()?;
-                completed_bytes += files[active_index].size;
-                report_file_bytes("completed", active_index, files[active_index].size);
+                // zmodem2 reports a receiver ZSKIP as FileCompleted. A
+                // non-empty file whose data was never requested was declined
+                // by the remote rz (for example because the file exists and
+                // -y was not given), so it must not be reported as uploaded.
+                if remote_declined(files[active_index].size, processed_in_file) {
+                    total = total.saturating_sub(files[active_index].size);
+                    report_file_bytes("declined", active_index, 0);
+                } else {
+                    completed_bytes += files[active_index].size;
+                    report_file_bytes("completed", active_index, files[active_index].size);
+                }
                 completed_files += 1;
                 report_progress(completed_bytes, total, &mut progress_at, true);
                 activity.touch();
@@ -353,7 +393,7 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
                 pending_next = false;
             } else {
                 let source = &files[active_index];
-                match sender.start_file(FileInfo::new(source.name.as_bytes(), Some(Position::new(source.size as u32)))) {
+                match sender.start_file(upload_info(source)) {
                     Ok(()) => {
                         report_file_start(active_index, &source.name, Some(source.size));
                         pending_next = false;
@@ -369,6 +409,10 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Err("ZMODEM sender inactive for 90 seconds".into())
+}
+
+fn remote_declined(size: u64, processed_in_file: u64) -> bool {
+    size > 0 && processed_in_file == 0
 }
 
 fn safe_name(raw: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
@@ -692,6 +736,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use super::remote_declined;
     use super::{checked_file_size, parse_wire_batch_bytes, read_source_chunk, safe_name, skip_requested_from_path, ActivityClock, ExperimentalWireWriter, INACTIVITY_TIMEOUT, MAX_SIZE};
     use std::fs::{self, OpenOptions};
     use std::io::{Seek, SeekFrom, Write};
@@ -719,6 +764,13 @@ mod tests {
         fs::remove_file(path).unwrap();
     }
 
+
+    #[test]
+    fn remote_zskip_is_not_reported_as_uploaded() {
+        assert!(remote_declined(10, 0));
+        assert!(!remote_declined(10, 10));
+        assert!(!remote_declined(0, 0));
+    }
 
     #[test]
     fn skips_only_requested_file_indices() {

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { Sparkles, X } from "lucide-react";
+import { TERMINAL_FOCUS_EVENT } from "../features/terminalFocus";
+import { AlertTriangle, Pencil, RotateCcw, Sparkles, X } from "lucide-react";
 import { message } from "../i18n/message";
 import { t } from "../i18n";
 import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
@@ -52,6 +53,10 @@ interface Props {
   onAlternateScreenChange?(ref: Ref, alternate: boolean): void;
   aiControlled?: boolean;
   onTakeControl?(): void;
+  /** Retry the SSH connection from the in-tab error panel. */
+  onRetry?(): void;
+  /** Open the session editor from the in-tab error panel. */
+  onEditSession?(): void;
 }
 export default function TerminalPane(p: Props) {
   const callbackProps = useRef(p);
@@ -87,6 +92,9 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       ? (p.tab.localFallbackPending || p.disconnectBehavior === "retain" || p.disconnectBehavior === "close" ? "offline" : "local")
       : "none";
   const searchOpen = p.searchOpen;
+  // The failure reason stays visible in the tab (toasts disappear quickly).
+  const [dismissedError, setDismissedError] = useState<unknown>(null);
+  const showConnectionError = p.tab.status === "error" && !!p.tab.error && dismissedError !== p.tab.error;
   const [searchText, setSearchText] = useState("");
   const [regexMode, setRegexMode] = useState(false);
   const resolvedTheme = resolveTerminalTheme(p.theme, p.terminalTheme, p.tab.session.terminalTheme);
@@ -825,6 +833,15 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
   useEffect(() => {
     if (p.active && p.commandFocusVersion && !searchOpen) terminal.current?.focus();
   }, [p.commandFocusVersion]);
+  // Popovers outside the terminal (e.g. the transfer center) hand focus back
+  // so keystrokes typed after closing them are not lost.
+  useEffect(() => {
+    const focus = () => {
+      if (p.active && !searchOpen && !document.querySelector("dialog[open], [role=dialog][aria-modal=true]")) terminal.current?.focus();
+    };
+    window.addEventListener(TERMINAL_FOCUS_EVENT, focus);
+    return () => window.removeEventListener(TERMINAL_FOCUS_EVENT, focus);
+  }, [p.active, searchOpen]);
   useEffect(() => {
     const requested = p.transferFocusRequest?.ref;
     const current = p.tab.ref;
@@ -882,6 +899,23 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
           width: p.paneBounds.width, height: p.paneBounds.height } : {}),
       } as CSSProperties}>
       <div className="terminal-surface" ref={container} />
+      {showConnectionError && (
+        <div className={`terminal-connection-error${terminalMode === "none" ? " is-blocking" : ""}`} role="alert">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <div className="terminal-connection-error-body">
+            <strong>{t(p.tab.everConnected ? "terminal:connectionLostTitle" : "terminal:connectionFailedTitle", { name: p.tab.session.name })}</strong>
+            <p>{errorText(p.tab.error)}</p>
+          </div>
+          <div className="terminal-connection-error-actions">
+            {p.onRetry && <button type="button" className="primary" onClick={() => callbacks.current.onRetry?.()}>
+              <RotateCcw size={14} aria-hidden="true" /> {t("common:retryConnection")}</button>}
+            {p.onEditSession && <button type="button" onClick={() => callbacks.current.onEditSession?.()}>
+              <Pencil size={14} aria-hidden="true" /> {t("common:editSession")}</button>}
+            {terminalMode !== "none" && <button type="button" aria-label={t("common:close")} title={t("common:close")}
+              onClick={() => setDismissedError(p.tab.error)}><X size={14} aria-hidden="true" /></button>}
+          </div>
+        </div>
+      )}
       {p.aiControlled && (
         <div className="terminal-ai-control" role="status">
           <Sparkles size={14} aria-hidden="true" />

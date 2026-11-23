@@ -2,6 +2,7 @@ import { t } from "../i18n";
 import { useTranslation } from "react-i18next";
 import {
   useCallback,
+  useMemo,
   useState,
   type KeyboardEvent,
   type MouseEvent,
@@ -48,7 +49,19 @@ interface Props {
   detailsExpanded?: boolean;
   onToggleDetails?(): void;
 }
-export default function SessionTree(p: Props) {
+const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+/** Sessions and folders are listed by name; ids are random and meaningless. */
+export function sortByName<T extends { id: string; name: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => nameCollator.compare(a.name, b.name) || a.id.localeCompare(b.id));
+}
+
+export default function SessionTree(props: Props) {
+  const p = useMemo(() => ({
+    ...props,
+    sessions: sortByName(props.sessions),
+    groups: sortByName(props.groups),
+  }), [props]);
   useTranslation();
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});

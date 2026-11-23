@@ -86,12 +86,12 @@ const FileRow = memo(function FileRow({
       }}
       onClick={event => callbacks.current.onSelect(entry, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "single")}
       onDoubleClick={() => {
+        if (entry.isDir || (entry.isSymlink && entry.targetIsDir)) { callbacks.current.onDir(entry.path); return; }
         if (entry.isSymlink) return;
-        if (entry.isDir) callbacks.current.onDir(entry.path);
         else callbacks.current.onOpenFile?.(entry);
       }}
       onContextMenu={event => callbacks.current.onContext(event, entry)}>
-      <span className="sftp-file-name">{entry.isDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className="sftp-link-badge">↗</span>}</span>
+      <span className="sftp-file-name">{entry.isDir || entry.targetIsDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className="sftp-link-badge">↗</span>}</span>
       <span>{size}</span>
       <span>{modified}</span><span>{entry.mode}</span>
     </button>
@@ -635,8 +635,12 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
     const other = side==="local" ? remoteDir : localDir;
     const files=(side==="local" ? localFiles : remoteFiles).filter(file=>hidden[side] || !file.name.startsWith("."));
     const selected=selection[side].includes(item.path) ? files.filter(file=>selection[side].includes(file.path)) : [item];
+    // Links are not transferred (they are not draggable either): following
+    // them could copy unexpected trees, and copying the link is unsupported.
+    const transferable=selected.filter(file=>!file.isSymlink);
     const items:ContextMenuAction[] = [
-      {label:t(side==="local"?"sftp:upload":"sftp:download"),icon:side==="local"?ArrowUpFromLine:ArrowDownToLine,onSelect:()=>void transfer(side,selected.map(file=>file.path),other)},
+      ...(transferable.length ? [{label:t(side==="local"?"sftp:upload":"sftp:download"),icon:side==="local"?ArrowUpFromLine:ArrowDownToLine,onSelect:()=>void transfer(side,transferable.map(file=>file.path),other)}] : []),
+      ...(selected.length===1 && item.isSymlink && item.targetIsDir ? [{label:t("sftp:openFolder"),icon:FolderOpen,onSelect:()=>changeDir(side,item.path)}] : []),
       ...(selected.length===1 && side==="remote" && !item.isDir && !item.isSymlink ? [{label:t("sftp:editText"),icon:FileText,onSelect:()=>void openEditor(item)}] : []),
       ...(selected.length===1 ? [{label:t("sftp:rename"),icon:Pencil,onSelect:()=>void operate(side,"rename",selected)}] : []),
       {label:t("sftp:chmod"),icon:Shield,onSelect:()=>void operate(side,"chmod",selected)},
