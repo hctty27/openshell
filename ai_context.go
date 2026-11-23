@@ -3,12 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/store"
 )
 
@@ -161,7 +160,7 @@ func aiSummarizeHistory(ctx context.Context, provider store.AIProvider, key, mod
 		}
 		summary = strings.TrimSpace(response.Content)
 		if summary == "" {
-			return errors.New("AI 历史压缩结果为空")
+			return apperror.New("aiCompactEmptyResult", nil)
 		}
 		if len(summary) > maxSummaryBytes {
 			summary = truncateAIOutput(summary, maxSummaryBytes-30)
@@ -257,7 +256,7 @@ func (a *App) AICompactConversation(conversationID string) (store.AIConversation
 	for _, task := range a.aiTasks {
 		if task.conversationID == conversationID {
 			a.aiMu.Unlock()
-			return store.AIConversation{}, errors.New("当前对话有任务进行中，无法压缩")
+			return store.AIConversation{}, apperror.New("aiCompactWhileRunning", nil)
 		}
 	}
 	a.aiTasks[taskID] = &aiRunningTask{conversationID: conversationID, cancel: cancel}
@@ -285,10 +284,10 @@ func (a *App) AICompactConversation(conversationID string) (store.AIConversation
 	}
 	changed, err := a.aiCompact(ctx, &c, provider, key, len(c.Messages), settings.KeepRecentTurns)
 	if err != nil {
-		return store.AIConversation{}, fmt.Errorf("压缩上下文失败: %w", err)
+		return store.AIConversation{}, apperror.Wrap("aiCompactFailed", err, nil)
 	}
 	if !changed {
-		return store.AIConversation{}, errors.New("目前没有可压缩的较早对话，最近的对话已保留")
+		return store.AIConversation{}, apperror.New("aiCompactNothingToCompact", nil)
 	}
 	c.Context = aiContextState(c, provider, c.ModelID, 0)
 	a.emit("ai:conversation", c)

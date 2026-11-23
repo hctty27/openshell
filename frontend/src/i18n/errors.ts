@@ -45,6 +45,20 @@ export function decodeAppError(value: unknown): AppErrorPayload | null {
     return null;
   }
 }
+// detailText renders a wrapped cause. Backend errors can wrap coded errors
+// several levels deep (apperror.Wrap of an apperror), so known codes are
+// translated all the way down instead of leaking OPENSHELL_ERROR JSON.
+function detailText(detail: string, depth: number): string {
+  const nested = depth < 6 ? decodeAppError(detail) : null;
+  if (!nested) return detail;
+  const known = i18n.exists(nested.code, { ns: "errors" });
+  const summary = known
+    ? t(`errors:${nested.code}` as MessageKey, nested.params)
+    : t("errors:unknown");
+  if (nested.detail) return `${summary}: ${detailText(nested.detail, depth + 1)}`;
+  return known ? summary : `${summary}: ${nested.code}`;
+}
+
 export function errorText(value: unknown): string {
   if (
     value &&
@@ -59,12 +73,7 @@ export function errorText(value: unknown): string {
   const summary = known
     ? t(`errors:${payload.code}` as MessageKey, payload.params)
     : t("errors:unknown");
-  const nested = payload.detail ? decodeAppError(payload.detail) : null;
-  const nestedKnown = nested && i18n.exists(nested.code, { ns: "errors" });
-  const detail = nestedKnown
-    ? t(`errors:${nested.code}` as MessageKey, nested.params) +
-      (nested.detail ? `: ${nested.detail}` : "")
-    : payload.detail;
+  const detail = payload.detail ? detailText(payload.detail, 0) : "";
   return detail
     ? `${summary}: ${detail}`
     : known

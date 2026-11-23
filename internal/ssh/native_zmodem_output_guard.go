@@ -1,9 +1,10 @@
 package sshclient
 
 import (
-	"errors"
 	"io"
 	"sync"
+
+	"github.com/hctty27/openshell/internal/apperror"
 )
 
 // The unclaimed ZMODEM path never writes protocol bytes to xterm. The passive
@@ -11,8 +12,8 @@ import (
 const nativePassiveHandshakeBufferLimit = 1 << 20
 
 var (
-	errNativePassiveNoHeader = errors.New("未检测到可交接的远端 ZMODEM 握手")
-	errNativePassiveOverflow = errors.New("远端 ZMODEM 预缓冲已溢出，必须重新连接")
+	errNativePassiveNoHeader = apperror.New("zmodemPassiveNoHandshake", nil)
+	errNativePassiveOverflow = apperror.New("zmodemHandshakeOverflow", nil)
 )
 
 // nativeOnlyOutputGuard sits behind terminalOutputGate. Normal sessions

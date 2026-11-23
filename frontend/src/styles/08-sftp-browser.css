@@ -88,6 +88,7 @@
 .sftp-file-name svg { color: var(--info); flex-shrink: 0; }
 .sftp-file-name > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .sftp-link-badge { color: var(--text-muted); }
+.sftp-link-badge.broken { color: var(--danger, #dc2626); }
 .sftp-placeholder { display: flex; padding: 20px; align-items: center; gap: 10px; color: var(--text-muted); overflow-wrap: anywhere; }
 .sftp-error { color: var(--info); }
 .sftp-panel-footer {

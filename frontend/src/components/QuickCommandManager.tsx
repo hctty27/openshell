@@ -8,6 +8,7 @@ import type { Group, QuickCommand, Session } from "../types";
 import { errorText } from "../bridge";
 import { useDialogs } from "./DialogProvider";
 import ModalSurface from "./ModalSurface";
+import { groupOptions } from "../features/groupOptions";
 
 interface Props {
   commands: QuickCommand[];
@@ -325,8 +326,8 @@ export default function QuickCommandManager(p: Props) {
                 onChange={(event) => setDraft({ ...draft, scopeId: event.target.value })}
               >
                 <option value="">{t("terminal:selectAFolder")}</option>
-                {p.groups.map((group) => (
-                  <option key={group.id} value={group.id}>{group.name}</option>
+                {groupOptions(p.groups).map(({ group, label }) => (
+                  <option key={group.id} value={group.id}>{label}</option>
                 ))}
               </select>
             </label>

@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -42,13 +43,13 @@ func (l *nativeZmodemLog) String() string {
 // RunNativeZmodemTransport is experimental and is not connected to the
 // interactive terminal. Each direction has exactly one reader of binary data.
 func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, direction, localPath, remoteCommand string) error {
-	if ctx == nil { return errors.New("缺少原生 ZMODEM 传输上下文") }
+	if ctx == nil { return apperror.New("zmodemMissingContext", nil) }
 	if err := ctx.Err(); err != nil { return err }
 	if client == nil || sidecar == "" || localPath == "" || remoteCommand == "" {
-		return errors.New("原生 ZMODEM 桥接参数不完整")
+		return apperror.New("zmodemBridgeArgumentsIncomplete", nil)
 	}
 	if direction != "send" && direction != "receive" {
-		return fmt.Errorf("不支持的 ZMODEM 方向：%s", direction)
+		return apperror.New("zmodemUnsupportedDirectionNamed", map[string]any{"direction": direction})
 	}
 
 	// A stalled channel-open reply must not block cancellation indefinitely.
@@ -79,7 +80,7 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 	if err != nil { return err }
 	remoteOut, err := session.StdoutPipe()
 	if err != nil { return err }
-	if err = nativeZmodemSSHRequest(ctx, session, "远程 PTY 创建", func() error {
+	if err = nativeZmodemSSHRequest(ctx, session, "Pty", func() error {
 		return session.RequestPty("dumb", 24, 80, ssh.TerminalModes{ssh.ECHO: 0})
 	}); err != nil { return err }
 
@@ -92,11 +93,11 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 	if err != nil { return err }
 	localOut, err := process.StdoutPipe()
 	if err != nil { return err }
-	if err = nativeZmodemSSHRequest(ctx, session, "远程 rz/sz 启动", func() error {
+	if err = nativeZmodemSSHRequest(ctx, session, "Start", func() error {
 		return session.Start(remoteCommand)
 	}); err != nil { return err }
 	if err = process.Start(); err != nil {
-		return fmt.Errorf("本地原生 ZMODEM 启动失败：%w", err)
+		return apperror.Wrap("zmodemSidecarStartFailed", err, nil)
 	}
 	defer func() {
 		if process.Process != nil { _ = process.Process.Kill() }
@@ -134,7 +135,7 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 			_ = session.Close()
 			_ = process.Process.Kill()
 			waitForNativeZmodemShutdown(localFinished, remoteFinished, localDone, remoteDone)
-			return fmt.Errorf("原生 ZMODEM 已取消或无活动超时：%w", nativeZmodemContextError(ctx))
+			return apperror.Wrap("zmodemCancelledOrIdle", nativeZmodemContextError(ctx), nil)
 		case localErr = <-localFinished:
 			localDone = true
 			localFinished = nil
@@ -150,8 +151,8 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 		}
 	}
 	if ctx.Err() != nil { return nativeZmodemContextError(ctx) }
-	if localErr != nil { return fmt.Errorf("原生 ZMODEM 进程异常：%w；%s", localErr, log.String()) }
-	if remoteErr != nil { return fmt.Errorf("远程 rz/sz 执行失败：%w", remoteErr) }
+	if localErr != nil { return apperror.Wrap("zmodemSidecarProcessFailed", fmt.Errorf("%w; %s", localErr, log.String()), nil) }
+	if remoteErr != nil { return apperror.Wrap("zmodemRemoteCommandFailed", remoteErr, nil) }
 
 	for range 2 {
 		select {
@@ -160,7 +161,7 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
 			// protocol peers have exited successfully.
 			if copyErr != nil && !errors.Is(copyErr, io.ErrClosedPipe) &&
 				!errors.Is(copyErr, os.ErrClosed) && !errors.Is(copyErr, syscall.EPIPE) {
-				return fmt.Errorf("ZMODEM 数据流中断：%w", copyErr)
+				return apperror.Wrap("zmodemStreamInterrupted", copyErr, nil)
 			}
 		case <-ctx.Done():
 			return ctx.Err()
@@ -173,19 +174,34 @@ func RunNativeZmodemTransport(ctx context.Context, client *ssh.Client, sidecar, 
  // nativeZmodemSSHRequest bounds SSH channel requests that can otherwise
  // wait indefinitely for a remote reply. Closing only this session leaves
  // the user's existing SSH connection and visible terminal untouched.
+// nativeZmodemSSHRequestCode names the localized error for a bounded SSH
+// request: label is "Pty" (remote PTY allocation) or "Start" (starting the
+// remote rz/sz).
+func nativeZmodemSSHRequestCode(label string, cancelled bool) string {
+	switch {
+	case label == "Pty" && cancelled:
+		return "zmodemRemotePtyCancelled"
+	case label == "Pty":
+		return "zmodemRemotePtyFailed"
+	case cancelled:
+		return "zmodemRemoteStartCancelled"
+	}
+	return "zmodemRemoteStartFailed"
+}
+
 func nativeZmodemSSHRequest(ctx context.Context, session *ssh.Session, label string, request func() error) error {
 	result := make(chan error, 1)
 	go func() { result <- request() }()
 	select {
 	case err := <-result:
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return fmt.Errorf("%s已取消或超时：%w", label, ctxErr)
+			return apperror.Wrap(nativeZmodemSSHRequestCode(label, true), ctxErr, nil)
 		}
-		if err != nil { return fmt.Errorf("%s失败：%w", label, err) }
+		if err != nil { return apperror.Wrap(nativeZmodemSSHRequestCode(label, false), err, nil) }
 		return nil
 	case <-ctx.Done():
 		_ = session.Close()
-		return fmt.Errorf("%s已取消或超时：%w", label, ctx.Err())
+		return apperror.Wrap(nativeZmodemSSHRequestCode(label, true), ctx.Err(), nil)
 	}
 }
 

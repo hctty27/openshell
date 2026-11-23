@@ -2,10 +2,10 @@ package sshclient
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 )
 
@@ -22,11 +22,11 @@ var mysqlReadCommands = map[string]bool{"SHOW": true, "DESCRIBE": true, "DESC": 
 func mysqlReadOnlyQuery(command string) (string, error) {
 	query := strings.TrimSpace(command)
 	if query == "" || len(query) > 8192 || strings.ContainsAny(query, "\r\x00") {
-		return "", errors.New("SQL 内容无效或过长")
+		return "", apperror.New("aiSQLInvalidOrTooLong", nil)
 	}
 	for _, ch := range query {
 		if (ch < 0x20 && ch != '\n' && ch != '\t') || ch == 0x7f {
-			return "", errors.New("SQL 包含不允许的终端控制字符")
+			return "", apperror.New("aiSQLControlCharacters", nil)
 		}
 	}
 	// Deliberately conservative: only one statement and no client-side
@@ -41,10 +41,10 @@ func mysqlReadOnlyQuery(command string) (string, error) {
 		query = strings.TrimSpace(query[:len(query)-1])
 	}
 	if query == "" {
-		return "", errors.New("SQL 为空")
+		return "", apperror.New("aiSQLEmpty", nil)
 	}
 	if err := validateReadOnlySQL(query, "mysql", mysqlReadCommands); err != nil {
-		return "", fmt.Errorf("MySQL 终端 AI 只允许单条只读查询（SHOW、DESCRIBE、DESC、SELECT、EXPLAIN）: %w", err)
+		return "", apperror.Wrap("aiMySQLReadOnlyOnly", err, nil)
 	}
 	return query + terminator, nil
 }
@@ -95,16 +95,16 @@ func (lease *AITerminalLease) runMySQL(ctx context.Context, command string) (str
 	query, err := mysqlReadOnlyQuery(command)
 	if err != nil { return "", err }
 	if !lease.connection.readiness.mysqlReady() {
-		return "", errors.New("MySQL 当前未处于空白提示符，请确认上一条语句已结束")
+		return "", apperror.New("aiMySQLNotAtPrompt", nil)
 	}
 	lease.mu.Lock()
 	if lease.poisoned {
 		lease.mu.Unlock()
-		return "", errors.New("终端命令状态不可确认，已暂停自动执行")
+		return "", apperror.New("aiTerminalStateUnknown", nil)
 	}
 	if lease.current != nil {
 		lease.mu.Unlock()
-		return "", errors.New("此终端已有一条 AI 命令正在执行")
+		return "", apperror.New("aiTerminalCommandRunning", nil)
 	}
 	marker := "OPEN_SHELL_AI_MYSQL_" + strings.ReplaceAll(domain.NewID(), "-", "")
 	running := &terminalAICommand{
@@ -136,7 +136,7 @@ func (lease *AITerminalLease) runMySQL(ctx context.Context, command string) (str
 		return "", ctx.Err()
 	case <-lease.closed:
 		lease.markFailed()
-		return "", errors.New("SSH 终端已经释放或断开")
+		return "", apperror.New("aiTerminalReleased", nil)
 	}
 }
 

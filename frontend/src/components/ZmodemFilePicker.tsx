@@ -10,6 +10,7 @@ const isLocalizedMessage = (value: unknown): value is LocalizedMessage =>
   !!value && typeof value === "object" && typeof (value as { key?: unknown }).key === "string";
 import type { Ref, SFTPEntry } from "../types";
 import { requestTerminalFocus } from "../features/terminalFocus";
+import { formatSize } from "../features/formatSize";
 
 type Direction = "upload" | "upload-overwrite" | "download";
 interface PickerRequest { ref: Ref; id: number; selectionId: number; direction: Direction; remotePath?: string; passive?: boolean }
@@ -26,9 +27,7 @@ const parentPath = (directory: string) => {
   const index = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
   return index < 0 ? directory : trimmed.slice(0, index + 1) || directory;
 };
-const niceSize = (size: number) =>
-  size < 1024 ? `${size} B` : size < 1048576 ? `${(size / 1024).toFixed(1)} KB` :
-    size < 1073741824 ? `${(size / 1048576).toFixed(1)} MB` : `${(size / 1073741824).toFixed(2)} GB`;
+const niceSize = formatSize;
 
 export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Props) {
   useTranslation();

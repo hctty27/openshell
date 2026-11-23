@@ -488,6 +488,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
   const aiPinned = aiSidebarMode === "pinned";
   const aiOpen = aiPinned || aiAutoOpen;
   const notify = (error: unknown) => setToast(error);
+  // A stale failure toast from an earlier attempt must not linger over a
+  // new login prompt.
+  const loginTabID = login?.tab.id;
+  useEffect(() => { if (loginTabID) setToast(""); }, [loginTabID]);
   const quitPromptInProgress = useRef(false);
   const onQuitRequested = useRef<() => void>(() => {});
   onQuitRequested.current = () => {
@@ -762,7 +766,10 @@ function Workspace({ initialState }: { initialState: AppState }) {
         return;
       }
       update(tab.id, (t) => t.manualDisconnected ? t : ({ ...t, status: "error", error: e }));
-      if (!tabsRef.current.find(t => t.id === tab.id)?.manualDisconnected) notify(e);
+      // The terminal pane already shows this error in its panel; a toast
+      // with the same text is only useful when the tab is in the background.
+      if (!tabsRef.current.find(t => t.id === tab.id)?.manualDisconnected &&
+          activeIDRef.current !== tab.id) notify(e);
     }
   };
   const open = (session: Session, afterTabID?: string, cloneCwd?: string) => {
@@ -1520,7 +1527,7 @@ function Workspace({ initialState }: { initialState: AppState }) {
                       error: text,
                     }));
                     if (tab.ref) api.Disconnect(tab.ref).catch(() => {});
-                    notify(text);
+                    if (activeIDRef.current !== tab.id) notify(text);
                   }}
                 />
               ))}

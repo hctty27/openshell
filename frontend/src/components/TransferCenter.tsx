@@ -13,6 +13,7 @@ export function transferErrorText(error?: string): string {
 import { t } from "../i18n";
 import type { Ref, SFTPTask, Tab } from "../types";
 import { mergeTransferHistory } from "../features/transfers/transferHistory";
+import { formatSize } from "../features/formatSize";
 
 type Direction = "upload" | "download";
 interface NativeFile {
@@ -42,9 +43,6 @@ interface Props {
 
 const refKey = (ref: Ref) => `${ref.tabId}:${ref.sessionId}:${ref.generation}`;
 const activeSftp = (task: SFTPTask) => task.status === "queued" || task.status === "running";
-const formatSize = (bytes: number) =>
-  bytes < 1024 ? `${bytes} B` : bytes < 1048576 ?
-    `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
 
 export default function TransferCenter({ tabs, onNotice }: Props) {
   useTranslation();
@@ -200,6 +198,18 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
   }, [refIDs]);
 
   useEffect(() => {
+    if (!open) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      setOpen(false);
+      requestTerminalFocus();
+    };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [open]);
+
+  useEffect(() => {
     const dismiss = (event: PointerEvent) => {
       if (panel.current && !panel.current.contains(event.target as Node)) setOpen(false);
     };
@@ -286,7 +296,12 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
     <div className="transfer-center" ref={panel}>
       <button type="button" className="transfer-center-toggle"
         title={t("sftp:transferQueue")} aria-label={t("sftp:transferQueue")}
-        aria-expanded={open} onClick={() => setOpen(value => !value)}>
+        aria-expanded={open} onClick={() => {
+          // Closing from the icon must not leave keyboard focus on the
+          // button, or typing no longer reaches the terminal (B16).
+          if (open) requestTerminalFocus();
+          setOpen(!open);
+        }}>
         <ArrowUpDown size={16} />
         {running > 0 && <span className="transfer-center-count">{running}</span>}
       </button>
@@ -406,6 +421,8 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                     </span>
                     <span>{percent == null ? t(`sftp:${task.status}`) : `${percent}%`}</span>
                   </div>
+                  {task.error && task.status === "failed" &&
+                    <div className="transfer-center-terminal-error" title={errorText(task.error)}>{errorText(task.error)}</div>}
                 </article>
               );
                   })}

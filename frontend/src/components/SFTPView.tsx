@@ -9,8 +9,10 @@ import { useDialogs } from "./DialogProvider";
 import FloatingContextMenu, { type ContextMenuAction } from "./FloatingContextMenu";
 import ModalSurface from "./ModalSurface";
 import { i18n, t } from "../i18n";
+import { message } from "../i18n/message";
 import { Clipboard } from "@wailsio/runtime";
 import { BASH_CWD_REPORT_COMMAND, normalizeRemoteDirectory } from "../terminalCwd";
+import { formatSize } from "../features/formatSize";
 const SFTPFileEditor = lazy(() => import("./editor/SFTPFileEditor"));
 
 type Side = "local" | "remote";
@@ -40,20 +42,14 @@ const parent = (side: Side, directory: string) => {
   const index = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
   return index < 0 ? directory : normalized.slice(0, index + 1) || directory;
 };
-const niceSize = (value: number) => {
-  if (value < 1024) return `${value} B`;
-  const units = ["KB","MB","GB","TB"];
-  let num = value, idx = -1;
-  do { num /= 1024; idx++; } while(num >= 1024 && idx < units.length-1);
-  return `${num.toFixed(num < 10 ? 1 : 0)} ${units[idx]}`;
-};
+const niceSize = formatSize;
 interface Props { refID: Ref; onNotice(error: unknown): void; hideTaskQueue?: boolean; onRemoteDirectoryChange?(directory: string): void; initialRemoteDirectory?: string; cwdReported?: boolean; terminalDirectory?: string; }
 interface PanelProps {
   side: Side; directory: string; entries: SFTPEntry[]; selected: string[]; loading: boolean; error: unknown; showHidden: boolean;
   onToggleHidden(): void; onChooseDirectory?(): void; onDir(directory: string): void; onReload(): void;
   onSelect(item: SFTPEntry, mode: SelectionMode): void; onSelectAll(paths: string[]): void; onMarqueeSelect(paths: string[], additive: boolean): void; onClearSelection(): void;
   deleting: DeleteProgress | null; onCancelDelete(): void;
-  onOpenFile?(entry:SFTPEntry): void; onTransfer(): void; onOperate(operation: Operation): void;
+  onOpenFile?(entry:SFTPEntry): void; onNotice?(error: unknown): void; onTransfer(): void; onOperate(operation: Operation): void;
   onContext(event: MouseEvent<HTMLButtonElement>, entry: SFTPEntry): void; onFileDrop(event: DragEvent<HTMLElement>): void;
   onCwdHelp?(): void;
   onJumpToTerminalDirectory?(): void;
@@ -88,11 +84,16 @@ const FileRow = memo(function FileRow({
       onClick={event => callbacks.current.onSelect(entry, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "single")}
       onDoubleClick={() => {
         if (entry.isDir || (entry.isSymlink && entry.targetIsDir)) { callbacks.current.onDir(entry.path); return; }
-        if (entry.isSymlink) return;
-        else callbacks.current.onOpenFile?.(entry);
+        // A link the panel cannot open still answers the double-click, so
+        // it never looks like nothing happened.
+        if (entry.isSymlink) {
+          callbacks.current.onNotice?.(message(entry.linkBroken ? "sftp:symlinkBroken" : "sftp:symlinkFileNotOpenable", { name: entry.name }));
+          return;
+        }
+        callbacks.current.onOpenFile?.(entry);
       }}
       onContextMenu={event => callbacks.current.onContext(event, entry)}>
-      <span className="sftp-file-name">{entry.isDir || entry.targetIsDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className="sftp-link-badge">↗</span>}</span>
+      <span className="sftp-file-name">{entry.isDir || entry.targetIsDir ? <Folder size={15}/> : <File size={15}/>}<span title={entry.path}>{entry.name}</span>{entry.isSymlink && <span className={"sftp-link-badge" + (entry.linkBroken ? " broken" : "")} title={entry.linkBroken ? t("sftp:symlinkBrokenBadge") : undefined}>{entry.linkBroken ? "⚠" : "↗"}</span>}</span>
       <span>{size}</span>
       <span title={modifiedFull}>{modified}</span><span>{entry.mode}</span>
     </button>
@@ -763,12 +764,12 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
   return (
     <div className="sftp-view">
       <div className="sftp-panes">
-        <FilePanel side="local" directory={localDir} entries={localListedKey===directoryCacheKey(refID,localDir)?localFiles:[]} selected={selection.local} loading={localBusy} error={localError} showHidden={hidden.local}
+        <FilePanel side="local" onNotice={onNotice} directory={localDir} entries={localListedKey===directoryCacheKey(refID,localDir)?localFiles:[]} selected={selection.local} loading={localBusy} error={localError} showHidden={hidden.local}
           onToggleHidden={()=>{setHidden(s=>({...s,local:!s.local}));clearSelection("local");}} onChooseDirectory={()=>void api.SFTPChooseDirectory().then(dir=>{if(dir)changeDir("local",dir);}).catch(onNotice)} onDir={dir=>changeDir("local",dir)} onReload={()=>refresh("local")}
           onSelect={(item,mode)=>choose("local",item,mode)} onSelectAll={paths=>selectAll("local",paths)} onMarqueeSelect={(paths,additive)=>selectMarquee("local",paths,additive)} onClearSelection={()=>clearSelection("local")} deleting={deleting.local} onCancelDelete={()=>{deletionCancelled.current.local=true;}} onTransfer={()=>void transfer("local",selection.local,remoteDir)}
           onOperate={action=>void operate("local",action)} onContext={(event,item)=>context(event,"local",item)}
           onFileDrop={event=>drop("local",event)}/>
-        <FilePanel side="remote" directory={remoteDir} entries={remoteListedKey===directoryCacheKey(refID,remoteDir)?remoteFiles:[]} selected={selection.remote} loading={remoteBusy} error={remoteError} showHidden={hidden.remote}
+        <FilePanel side="remote" onNotice={onNotice} directory={remoteDir} entries={remoteListedKey===directoryCacheKey(refID,remoteDir)?remoteFiles:[]} selected={selection.remote} loading={remoteBusy} error={remoteError} showHidden={hidden.remote}
           onToggleHidden={()=>{setHidden(s=>({...s,remote:!s.remote}));clearSelection("remote");}} onDir={dir=>changeDir("remote",dir)} onReload={()=>refresh("remote")}
           onJumpToTerminalDirectory={() => void jumpToTerminalDirectory()}
           canJumpToTerminalDirectory={cwdReported && Boolean(normalizeRemoteDirectory(terminalDirectory ?? ""))}

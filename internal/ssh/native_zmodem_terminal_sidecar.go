@@ -2,12 +2,13 @@ package sshclient
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/hctty27/openshell/internal/apperror"
 )
 
 // nativeTerminalProtocolWriter is the only route allowed to write native
@@ -39,13 +40,13 @@ func runNativeZmodemTerminalSidecarWithProgress(
 	ctx context.Context, executable, direction, path string,
 	inbound io.ReadCloser, outbound io.Writer, onProgress func(uint64, uint64),
 ) error {
-	if ctx == nil { return errors.New("缺少原生 ZMODEM 进程上下文") }
+	if ctx == nil { return apperror.New("zmodemMissingContext", nil) }
 	if err := ctx.Err(); err != nil { return err }
 	if executable == "" || path == "" || inbound == nil || outbound == nil {
-		return errors.New("原生 ZMODEM 进程参数不完整")
+		return apperror.New("zmodemBridgeArgumentsIncomplete", nil)
 	}
 	if direction != "send" && direction != "send-list" && direction != "receive" {
-		return fmt.Errorf("不支持的 ZMODEM 传输方向：%s", direction)
+		return apperror.New("zmodemUnsupportedDirectionNamed", map[string]any{"direction": direction})
 	}
 
 	cmd := exec.CommandContext(ctx, executable, direction, path)
@@ -66,7 +67,7 @@ func runNativeZmodemTerminalSidecarWithProgress(
 	if err := cmd.Start(); err != nil {
 		_ = stdin.Close()
 		_ = inbound.Close()
-		return fmt.Errorf("原生 ZMODEM sidecar 启动失败：%w", err)
+		return apperror.Wrap("zmodemSidecarStartFailed", err, nil)
 	}
 	// One goroutine in each direction; stdout is exclusively binary protocol,
 	// while bounded diagnostic text is captured from stderr.
@@ -106,7 +107,7 @@ func runNativeZmodemTerminalSidecarWithProgress(
 		case <-reap:
 		case <-time.After(nativeZmodemShutdownTimeout):
 		}
-		return fmt.Errorf("原生 ZMODEM sidecar 已取消或超时：%w", ctx.Err())
+		return apperror.Wrap("zmodemSidecarCancelled", ctx.Err(), nil)
 	}
 
 	// os/exec requires the stdout reader to finish before Cmd.Wait, otherwise
@@ -122,20 +123,20 @@ func runNativeZmodemTerminalSidecarWithProgress(
 		case <-waited:
 		case <-time.After(nativeZmodemShutdownTimeout):
 		}
-		return fmt.Errorf("原生 ZMODEM sidecar 已取消或超时：%w", ctx.Err())
+		return apperror.Wrap("zmodemSidecarCancelled", ctx.Err(), nil)
 	}
 	select {
 	case <-inputDone:
 	case <-time.After(nativeZmodemShutdownTimeout):
-		return errors.New("原生 ZMODEM sidecar 输入协程未正常退出")
+		return apperror.New("zmodemSidecarInputStuck", nil)
 	}
 	if meter := nativeZmodemIOMeterFromContext(ctx); meter != nil {
 		meter.recordReceiverDiagnostics(stderr.String())
 	}
 	if ctx.Err() != nil { return ctx.Err() }
-	if outputErr != nil { return fmt.Errorf("原生 ZMODEM 响应写入失败：%w", outputErr) }
+	if outputErr != nil { return apperror.Wrap("zmodemSidecarWriteFailed", outputErr, nil) }
 	if processErr != nil {
-		return fmt.Errorf("原生 ZMODEM sidecar 退出异常：%w；%s", processErr, stderr.String())
+		return apperror.Wrap("zmodemSidecarProcessFailed", fmt.Errorf("%w; %s", processErr, stderr.String()), nil)
 	}
 	return nil
 }
