@@ -26,7 +26,11 @@ var aiSensitivePath = regexp.MustCompile(`(?i)(^|[\s/'"=:~])(` +
 	`\.netrc\b|\.pgpass\b|\.my\.cnf\b|\.git-credentials\b|\.gnupg\b|\.password-store\b|\.vault-token\b|` +
 	`\.(bash|zsh|mysql|psql|python|node_repl)_history\b|\.env(\.[\w-]+)?(\s|$|['"])|` +
 	`proc/[^/\s]+/environ\b|` +
-	`[^\s/'"]+\.(pem|key|p12|pfx|jks|keystore|kdbx|ovpn)(\s|$|['"])` +
+	`etc/wireguard\b|etc/kubernetes/(admin|super-admin|kubelet|controller-manager|scheduler)\.conf\b|etc/kubernetes/pki\b|` +
+	`(k3s|rke2)\.yaml\b|rclone\.conf\b|\.s3cfg\b|etc/mysql/debian\.cnf\b|\.htpasswd\b|[\w.-]*\.keytab\b|etc/ppp/(chap|pap)-secrets\b|` +
+	`var/log/(auth\.log|secure|btmp)\b|` +
+	`169\.254\.169\.254\b|fd00:ec2::254\b|metadata\.google\.internal\b|100\.100\.100\.200\b|` +
+	`[^\s/'"]+\.(pem|key|p12|pfx|jks|keystore|kdbx|ovpn|tfstate|tfstate\.backup)(\s|$|['"])` +
 	`)`)
 
 func aiPathIsSensitive(p string) bool {
@@ -155,9 +159,10 @@ func aiLooksNumeric(s string) bool {
 	return true
 }
 
-// aiShellReadOnlyCommands may run without approval in review mode. Anything
-// outside this list, or using shell features such as redirection, command
-// substitution or chaining, requires approval.
+// aiShellReadOnlyCommands are the only programs that may run without
+// approval, in both modes (see aiShellReadOnly for the argument checks).
+// Anything outside this list, or using shell features such as redirection,
+// command substitution or chaining, requires approval.
 var aiShellReadOnlyCommands = map[string]bool{
 	"ls": true, "pwd": true, "whoami": true, "id": true, "hostname": true, "uname": true,
 	"uptime": true, "date": true, "df": true, "du": true, "free": true, "ps": true,
@@ -170,97 +175,8 @@ var aiShellReadOnlyCommands = map[string]bool{
 	"who": true, "last": true, "dmesg": true, "getent": true, "true": true,
 	"column": true, "nl": true, "ip": true, "vmstat": true, "iostat": true, "mpstat": true,
 	"lsmod": true, "locale": true, "timedatectl": true, "hostnamectl": true, "test": true,
-}
-
-func aiShellReadOnly(command string) bool {
-	trimmed := strings.TrimSpace(command)
-	// Discarding stderr is harmless; every other redirection needs approval.
-	trimmed = strings.ReplaceAll(trimmed, "2>/dev/null", " ")
-	trimmed = strings.ReplaceAll(trimmed, "2>&1", " ")
-	if trimmed == "" || strings.ContainsAny(trimmed, ";&$`<>(){}\n\r\\!") {
-		return false
-	}
-	for _, segment := range strings.Split(trimmed, "|") {
-		words := strings.Fields(segment)
-		if len(words) == 0 || !aiShellReadOnlyCommands[words[0]] {
-			return false
-		}
-		args := " " + strings.Join(words[1:], " ") + " "
-		sub := ""
-		if len(words) > 1 {
-			sub = words[1]
-		}
-		switch words[0] {
-		case "tail", "journalctl":
-			if strings.Contains(args, " -f") || strings.Contains(args, "--follow") || strings.Contains(args, " -F") ||
-				strings.Contains(args, "--vacuum") || strings.Contains(args, "--rotate") || strings.Contains(args, "--flush") {
-				return false
-			}
-		case "find":
-			for _, flag := range []string{" -exec", " -ok", " -delete", " -fprint", " -fls"} {
-				if strings.Contains(args, flag) {
-					return false
-				}
-			}
-		case "sort":
-			if strings.Contains(args, " -o") || strings.Contains(args, "--output") {
-				return false
-			}
-		case "dmesg":
-			if strings.Contains(args, " -c") || strings.Contains(args, " -C") || strings.Contains(args, "--clear") {
-				return false
-			}
-		case "date":
-			if strings.Contains(args, " -s") || strings.Contains(args, "--set") {
-				return false
-			}
-			if strings.TrimSpace(args) != "" && !strings.HasPrefix(strings.TrimSpace(args), "+") && !strings.HasPrefix(strings.TrimSpace(args), "-") {
-				return false
-			}
-		case "hostname", "timedatectl", "hostnamectl":
-			if strings.TrimSpace(args) != "" && !strings.HasPrefix(strings.TrimSpace(args), "+") && sub != "status" && sub != "-I" && sub != "-f" && sub != "-i" && sub != "-s" {
-				return false
-			}
-		case "systemctl":
-			if !map[string]bool{"status": true, "list-units": true, "list-unit-files": true, "is-active": true, "is-enabled": true, "is-failed": true, "show": true, "cat": true, "list-timers": true, "--failed": true}[sub] {
-				return false
-			}
-		case "docker":
-			if !map[string]bool{"ps": true, "images": true, "inspect": true, "logs": true, "version": true, "info": true, "stats": true}[sub] ||
-				(sub == "logs" && (strings.Contains(args, " -f") || strings.Contains(args, "--follow"))) ||
-				(sub == "stats" && !strings.Contains(args, "--no-stream")) {
-				return false
-			}
-		case "kubectl":
-			if !map[string]bool{"get": true, "describe": true, "logs": true, "version": true, "top": true, "explain": true, "api-resources": true}[sub] ||
-				strings.Contains(args, " -f") || strings.Contains(args, "--follow") || strings.Contains(args, " -w") || strings.Contains(args, "--watch") {
-				return false
-			}
-			if sub == "get" && regexp.MustCompile(`\bsecrets?\b`).MatchString(args) {
-				return false
-			}
-		case "tree":
-			if strings.Contains(args, " -o") || strings.Contains(args, "--output") {
-				return false
-			}
-		case "git":
-			// --output=FILE (diff, log, show) writes the result to a file.
-			if strings.Contains(args, "--output") || regexp.MustCompile(`\s-o\S*\s`).MatchString(args) {
-				return false
-			}
-			if !map[string]bool{"status": true, "log": true, "diff": true, "show": true, "rev-parse": true, "remote": true, "branch": true, "describe": true}[sub] ||
-				(sub == "branch" && len(words) > 2 && words[2] != "-a" && words[2] != "-r" && words[2] != "--list" && words[2] != "-v" && words[2] != "-vv") ||
-				(sub == "remote" && len(words) > 2 && words[2] != "-v") {
-				return false
-			}
-		case "ip":
-			if len(words) < 2 || !map[string]bool{"a": true, "addr": true, "address": true, "r": true, "route": true, "link": true, "l": true, "-br": true, "-s": true, "neigh": true, "-4": true, "-6": true}[sub] ||
-				regexp.MustCompile(`\b(add|del|delete|set|flush|change|replace|append)\b`).MatchString(args) {
-				return false
-			}
-		}
-	}
-	return true
+	"uniq": true, "diff": true, "cmp": true, "comm": true, "strings": true, "groups": true, "arch": true,
+	"sha512sum": true, "cksum": true, "lsb_release": true, "pgrep": true, "lsusb": true, "lspci": true,
 }
 
 // aiToolApproval decides whether a tool call must be approved by the user.
@@ -278,14 +194,16 @@ func aiToolApproval(mode, tool, program, command, filePath string, modelAsked bo
 		if aiPathIsSensitive(filePath) {
 			return aiApprovalPolicy{true, "sensitive"}
 		}
-		if review {
+		// A write into /etc, a shell startup file or similar needs approval
+		// in automatic mode too, as the same write through ssh_exec would.
+		if review || aiWriteIsSystem(filePath) {
 			return aiApprovalPolicy{true, "write"}
 		}
 		return aiApprovalPolicy{}
 	case "ssh_exec":
 		switch program {
 		case "python":
-			if review {
+			if review || !aiPythonSafe(command) {
 				return aiApprovalPolicy{true, "python"}
 			}
 			return aiApprovalPolicy{}
@@ -303,18 +221,20 @@ func aiToolApproval(mode, tool, program, command, filePath string, modelAsked bo
 		if aiShellDangerous(command) {
 			return aiApprovalPolicy{true, "dangerous"}
 		}
-		if aiPathIsSensitive(command) || aiShellGlobSensitive(command) || aiShellExposesSecrets(command) {
+		if aiShellSensitive(command) {
 			return aiApprovalPolicy{true, "sensitive"}
 		}
-		if aiShellOpaque(command) {
-			// The program is computed at run time ($(...), $VAR, eval), so
-			// none of the checks above can be trusted.
+		if aiShellOpaque(command) || strings.ContainsAny(command, "$`") {
+			// The program or a path is computed at run time ($(...), $VAR,
+			// eval), so none of the checks above can be trusted.
 			return aiApprovalPolicy{true, "opaque"}
 		}
 		if review && modelAsked {
 			return aiApprovalPolicy{true, "model"}
 		}
-		if review && !aiShellReadOnly(command) {
+		// Allowlist: in both modes only commands that parse cleanly and are
+		// known to be read-only run without approval.
+		if !aiShellReadOnly(command) {
 			return aiApprovalPolicy{true, "unverified"}
 		}
 		return aiApprovalPolicy{}

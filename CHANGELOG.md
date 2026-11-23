@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- AI 完全自动模式改为白名单：只有能确认只读的简单命令（`ls`、`cat`、`grep`、`ps`、`df`、`git status/log/diff` 等）直接执行，其余写入、组合命令、变量/命令替换、解释器和 `sudo -u`/`xargs`/`timeout` 等包装一律需确认；引号或转义拆开的敏感路径（`/etc/sha""dow`）、WireGuard、kubeconfig、rclone、tfstate、云元数据地址、递归搜索 `/root` 等也需确认；完全自动模式下 SFTP 写系统文件或 Shell 启动文件同样需确认；补上 `git diff --ext-diff`、`sort --compress-program`、`dmesg -n`、`ss -K`、`getent shadow`、`ps e` 等审查模式漏洞。
+
 ## 1.0.34 — 2026-11-23
 
 - 审核模式下，通配符不能再绕过敏感文件审批；自动模式可识别 `bash -c`、`find -delete`、`\rm`、`sed -i` 等危险写法，程序名无法判断的命令一律需确认；`git --output=` 和 `tree -o` 不再当作只读命令（#305）。
