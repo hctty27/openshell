@@ -250,14 +250,14 @@ var aiProbeQuiet = []string{
 	"fgrep x y",
 	"git status",
 	"git log",
-	"git diff",
-	"git show",
+	"git diff --no-ext-diff --no-textconv",
+	"git show --no-ext-diff --no-textconv",
 	"git rev-parse HEAD",
 	"git remote -v",
 	"git branch",
 	"git branch -a",
 	"git describe",
-	"git log --all -p -S password",
+	"git log --no-ext-diff --no-textconv --all -p -S password",
 	"git status --porcelain --ignored",
 }
 
