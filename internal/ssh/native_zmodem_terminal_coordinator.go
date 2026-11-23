@@ -2,7 +2,6 @@ package sshclient
 
 import (
 	"context"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -66,12 +65,15 @@ func (s *nativeTerminalInboundSink) Write(p []byte) (int, error) {
 	if !s.activated {
 		if len(p) < nativeZmodemHeaderSize || p[5] != s.expected {
 			err := apperror.New("zmodemStartFrameMismatch", nil)
+			s.finished = true
 			select {
 			case s.fail <- err:
 			default:
 			}
 			s.mu.Unlock()
-			return 0, err
+			// Native protocol failure must not abort the SSH stdout copier.
+			// The transfer coordinator handles the error while output remains isolated.
+			return len(p), nil
 		}
 		s.activated = true
 		close(s.ready)
@@ -85,22 +87,22 @@ func (s *nativeTerminalInboundSink) Write(p []byte) (int, error) {
 	if err != nil {
 		s.mu.Lock()
 		finished := s.finished
+		if !finished {
+			s.finished = true
+		}
 		s.mu.Unlock()
-		// The Rust sidecar may finish immediately after it consumes the
-		// final control frame, while the SSH stdout goroutine still holds
-		// one in-flight pipe.Write. Closing that dedicated reader to clean
-		// up must not turn a successful transfer into a fatal SSH writer
-		// error. The output gate continues to own subsequent bytes; none
-		// are allowed to fall back into the visible terminal.
-		if finished && errors.Is(err, io.ErrClosedPipe) {
-			return len(p), nil
+		// Rust may close its inbound pipe while SSH stdout is still active.
+		// Report the task failure without surfacing it as a session stdout
+		// error. Keep all subsequent bytes isolated until trusted recovery.
+		if !finished {
+			select {
+			case s.fail <- err:
+			default:
+			}
 		}
-		select {
-		case s.fail <- err:
-		default:
-		}
+		return len(p), nil
 	}
-	return n, err
+	return n, nil
 }
 
 func (s *nativeTerminalInboundSink) seenHeader() bool {
