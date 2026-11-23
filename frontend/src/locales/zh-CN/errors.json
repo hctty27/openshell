@@ -241,7 +241,6 @@
   "zmodemLocalDirectoryNotWritable": "本地文件夹 {{path}} 无法写入，请换一个文件夹",
   "zmodemChooseLocalTarget": "请选择一个本地文件或保存目录",
   "zmodemSingleRemoteFile": "ZMODEM 每次只能下载一个远程文件",
-  "zmodemPassiveDisabled": "远端主动 ZMODEM 接管实验未启用",
   "zmodemDirectionMismatch": "远端 ZMODEM 接管方向与选择不匹配",
   "zmodemCompletedShellUnverified": "远端 ZMODEM 文件传输完成；尚无法证明远端 Shell 已退出，必须重新连接 SSH 后继续输入命令",
   "zmodemSelectionExpired": "原生 ZMODEM 文件选择已结束或不是当前会话",
