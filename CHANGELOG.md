@@ -2,6 +2,8 @@
 
 ## 未发布
 
+## 1.0.35 — 2026-11-23
+
 - 远端主动 rz/sz 接管和 Bash 恢复改为默认开启，不再需要 `OPENSHELL_ZMODEM_PASSIVE_EXPERIMENT` / `OPENSHELL_ZMODEM_PASSIVE_BASH_RECOVERY` 环境变量。非 Bash、钩子未安装、传输未验证结束时，仍在终端页内提示重新连接。
 - AI 完全自动模式改为白名单：只有能确认只读的简单命令（`ls`、`cat`、`grep`、`ps`、`df`、`git status/log/diff` 等）直接执行，其余写入、组合命令、变量/命令替换、解释器和 `sudo -u`/`xargs`/`timeout` 等包装一律需确认；引号或转义拆开的敏感路径（`/etc/sha""dow`）、WireGuard、kubeconfig、rclone、tfstate、云元数据地址、递归搜索 `/root` 等也需确认；完全自动模式下 SFTP 写系统文件或 Shell 启动文件同样需确认；补上 `git diff --ext-diff`、`sort --compress-program`、`dmesg -n`、`ss -K`、`getent shadow`、`ps e` 等审查模式漏洞。
 - 被动 rz/sz：zsh、dash、fish 等非 Bash Shell 不再被注入 Bash 引导导致锁死；引导不再回显、不再写入 history；嵌套 Shell 里完成的下载不再被丢弃；需要重连时在终端页内显示原因和「重新连接」按钮，不再自动断开。
