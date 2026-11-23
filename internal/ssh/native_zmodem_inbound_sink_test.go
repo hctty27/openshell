@@ -73,9 +73,11 @@ func TestNativeZmodemInboundSinkUnexpectedPipeCloseStillFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	payload := nativeZmodemHeaderTestStream()
-	if _, err := sink.Write(payload); !errors.Is(err, io.ErrClosedPipe) {
-		t.Fatalf("unplanned pipe closure was swallowed: %v", err)
+	if n, err := sink.Write(payload); err != nil || n != len(payload) {
+		t.Fatalf("unplanned pipe closure leaked into SSH stdout: n=%d, err=%v", n, err)
 	}
+	// The pipe error must be reported to the transfer coordinator instead of
+	// closing the SSH terminal or releasing its unverified output lease.
 	select {
 	case err := <-sink.fail:
 		if !errors.Is(err, io.ErrClosedPipe) {
