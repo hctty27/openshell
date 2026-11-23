@@ -18,6 +18,7 @@ vi.mock("../bridge", () => ({
     StartNativeZmodemInteractiveTransfer: vi.fn(async () => {}),
     StartNativeZmodemPassiveTransfer: vi.fn(async () => {}),
     CancelNativeZmodemSelection: vi.fn(async () => {}),
+    CheckNativeZmodemRemote: vi.fn(async () => {}),
   },
   listen: (name: string, callback: (payload: any) => void) => {
     events.callbacks.set(name, callback);
@@ -61,6 +62,19 @@ test("native sz downloads exactly one file into remembered directory", async () 
   fireEvent.click(screen.getByRole("button", { name: "保存到此处" }));
   await waitFor(() => expect(api.StartNativeZmodemInteractiveTransfer)
     .toHaveBeenCalledWith(ref, "download", "/home/user", "/var/log/a.log"));
+});
+
+test("a failed remote check reports the reason and never opens the picker", async () => {
+  const onNotice = vi.fn();
+  const failure = new Error("zmodemRemoteNotFound");
+  vi.mocked(api.CheckNativeZmodemRemote).mockRejectedValueOnce(failure);
+  render(<ZmodemFilePicker activeRef={ref} onNotice={onNotice} />);
+  intent("download", "missing.bin");
+  await waitFor(() => expect(onNotice).toHaveBeenCalledWith(failure));
+  expect(api.CheckNativeZmodemRemote).toHaveBeenCalledWith(ref, 1, "download", "missing.bin");
+  expect(api.CancelNativeZmodemSelection).toHaveBeenCalledWith(ref, 1);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(api.ZmodemLocalPlaces).not.toHaveBeenCalled();
 });
 
 test("native picker cancellation never starts a transfer", async () => {

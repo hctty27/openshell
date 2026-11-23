@@ -35,10 +35,11 @@ interface Props {
 interface Approval {
   taskId: string;
   approvalId: string;
-  policy?: "model" | "write" | "python" | "unverified" | "dangerous" | "sensitive";
+  policy?: "model" | "write" | "python" | "unverified" | "dangerous" | "sensitive" | "opaque";
   command: string;
   reason: string;
   tabId: string;
+  callId?: string;
 }
 
 export default function AISidebar({ tabs, active, pinned, isOpen, terminalAlternate = false, terminalScopeId, onTogglePin, onOpenAISettings }: Props) {
@@ -559,7 +560,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
           )}
           <div className="ai-messages" ref={messagesRef} onScroll={onMessagesScroll}>
             {!current?.messages.length && <div className="ai-welcome"><Sparkles size={26}/><h3>{t("ai:welcomeTitle")}</h3><p>{t("ai:welcomeDescription")}</p></div>}
-            <AITranscript messages={current?.messages ?? []}
+            <AITranscript messages={current?.messages ?? []} awaitingCallId={approval?.callId}
               execution={current?.execution === "terminal" ? "terminal" : "independent"} />
             {stream && <div className="ai-message ai-message--assistant ai-message--stream"><pre>{stream}</pre></div>}
             {approval && (
@@ -572,6 +573,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
                     unverified: "ai:approvalPolicy_unverified",
                     dangerous: "ai:approvalPolicy_dangerous",
                     sensitive: "ai:approvalPolicy_sensitive",
+                    opaque: "ai:approvalPolicy_opaque",
                   } as const)[approval.policy])}</p>
                 )}
                 {(approval.reason || !approval.policy || approval.policy === "model") &&
@@ -582,7 +584,7 @@ export default function AISidebar({ tabs, active, pinned, isOpen, terminalAltern
               </div>
             )}
             {status && <p className={`ai-status ${running ? "" : "ai-status--error"}`}>
-              {running && <LoaderCircle size={13} className="spin" />} {status === "running" ? t("ai:running") : decodeAppError(status) ? errorText(status) : status}
+              {running && !approval && <LoaderCircle size={13} className="spin" />} {status === "running" ? t(approval ? "ai:awaitingApproval" : "ai:running") : decodeAppError(status) ? errorText(status) : status}
             </p>}
             {error && <p className="ai-error" role="alert">{error}</p>}
           </div>

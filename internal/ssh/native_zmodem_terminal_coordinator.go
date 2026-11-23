@@ -261,7 +261,7 @@ func (c *nativeTerminalCoordinator) run(
 		if !confirmed || remote.err != nil {
 			return apperror.Wrap("zmodemAbortedStateUnknown", cause, nil)
 		}
-		if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil {
+		if err := c.output.restoreWithReplay(outputLease, eraseThenReplay(fence.replayTrailing)); err != nil {
 			return apperror.Wrap("zmodemRestoreOutputFailed", err, nil)
 		}
 		if err := c.input.restore(inputLease); err != nil {
@@ -295,9 +295,9 @@ func (c *nativeTerminalCoordinator) run(
 			// and restore only because the nonce-scoped shell fence was seen.
 			stopSidecar()
 			if remote.err != nil { return apperror.Wrap("zmodemBoundaryInvalidReconnect", remote.err, nil) }
-			if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil { return err }
+			if err := c.output.restoreWithReplay(outputLease, eraseThenReplay(fence.replayTrailing)); err != nil { return err }
 			if err := c.input.restore(inputLease); err != nil { return err }
-			return apperror.New("zmodemRemoteDidNotStart", map[string]any{"status": remote.code})
+			return zmodemRemoteDidNotStartError(remote.code, remotePath)
 		}
 		// A valid protocol did start, but its remote exit marker arrived
 		// before the local sidecar finished. Bound the drain to avoid an
@@ -307,7 +307,7 @@ func (c *nativeTerminalCoordinator) run(
 		case err = <-sidecarDone:
 		case <-time.After(nativeZmodemShutdownTimeout):
 			stopSidecar()
-			if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil { return err }
+			if err := c.output.restoreWithReplay(outputLease, eraseThenReplay(fence.replayTrailing)); err != nil { return err }
 			if err := c.input.restore(inputLease); err != nil { return err }
 			return apperror.New("zmodemRemoteExitedEarly", nil)
 		case <-ctx.Done():
@@ -330,7 +330,7 @@ func (c *nativeTerminalCoordinator) run(
 		// Even if the protocol process failed, a verified remote exit
 		// means no binary data can still arrive at this terminal.
 		if earlyCompletion != nil && earlyCompletion.err == nil {
-			if restoreErr := c.output.restoreWithReplay(outputLease, fence.replayTrailing); restoreErr != nil { return restoreErr }
+			if restoreErr := c.output.restoreWithReplay(outputLease, eraseThenReplay(fence.replayTrailing)); restoreErr != nil { return restoreErr }
 			if restoreErr := c.input.restore(inputLease); restoreErr != nil { return restoreErr }
 			return apperror.Wrap("zmodemSidecarFailedRecovered", err, nil)
 		}
@@ -365,7 +365,7 @@ func (c *nativeTerminalCoordinator) run(
 	restoreStarted := time.Now()
 	// Replay bytes received after the completion marker while holding the
 	// output gate lock, before admitting any new ordinary SSH output.
-	if err := c.output.restoreWithReplay(outputLease, fence.replayTrailing); err != nil {
+	if err := c.output.restoreWithReplay(outputLease, eraseThenReplay(fence.replayTrailing)); err != nil {
 		return err
 	}
 	if err := c.input.restore(inputLease); err != nil {
