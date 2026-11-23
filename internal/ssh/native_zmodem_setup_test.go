@@ -67,7 +67,7 @@ func TestNativeZmodemSSHSetupDeadline(t *testing.T) {
 
 func TestNativeZmodemTransportRejectsNilContext(t *testing.T) {
 	err := RunNativeZmodemTransport(nil, nil, "sidecar", "send", "file", "command")
-	if err == nil || !strings.Contains(err.Error(), "上下文") {
+	if err == nil || !strings.Contains(err.Error(), "zmodemMissingContext") {
 		t.Fatal(fmt.Sprintf("nil context was not rejected: %v", err))
 	}
 }

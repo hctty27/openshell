@@ -1,13 +1,11 @@
 package sshclient
 
 import (
-	"github.com/hctty27/openshell/internal/apperror"
 	"context"
-	"errors"
-	"fmt"
 	"os"
 	"time"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 )
 
@@ -155,11 +153,11 @@ func (m *Manager) PassiveZmodemSelection(ref domain.ConnectionRef, id uint64) (s
 	c := m.connections[ref.TabID]
 	if c == nil || c.ref != ref || !c.nativeZmodemSelection ||
 		!c.nativeZmodemSelectionPassive || id == 0 || c.nativeZmodemSelectionID != id {
-		return "", errors.New("远端 ZMODEM 文件选择已失效")
+		return "", apperror.New("zmodemSelectionExpired", nil)
 	}
 	if c.nativeZmodemPassiveFrame == 0 { return "download", nil }
 	if c.nativeZmodemPassiveFrame == 1 { return "upload", nil }
-	return "", errors.New("未知的远端 ZMODEM 握手类型")
+	return "", apperror.New("zmodemUnknownHandshake", nil)
 }
 
 
@@ -184,12 +182,12 @@ func (m *Manager) RunPassiveNativeZmodemTransferWithResult(
 	parent context.Context, ref domain.ConnectionRef, selectionID uint64,
 	sidecar, direction, localPath string, progress func(uint64, uint64),
 ) (terminalSafe bool, resultErr error) {
-	if parent == nil { return false, errors.New("缺少远端 ZMODEM 自动传输上下文") }
+	if parent == nil { return false, apperror.New("zmodemMissingContext", nil) }
 	if err := parent.Err(); err != nil { return false, err }
-	if sidecar == "" { return false, errors.New("未配置原生 ZMODEM sidecar") }
+	if sidecar == "" { return false, apperror.New("zmodemSidecarMissing", nil) }
 	if info, err := os.Lstat(sidecar); err != nil || !info.Mode().IsRegular() ||
 		info.Mode()&os.ModeSymlink != 0 {
-		return false, errors.New("远端 ZMODEM 的本地原生 sidecar 无效")
+		return false, apperror.New("zmodemSidecarInvalid", nil)
 	}
 	m.mu.Lock()
 	c := m.connections[ref.TabID]
@@ -208,7 +206,7 @@ func (m *Manager) RunPassiveNativeZmodemTransferWithResult(
 	}
 	if !valid {
 		m.mu.Unlock()
-		return false, errors.New("远端 ZMODEM 自动传输选择已失效或方向不匹配")
+		return false, apperror.New("zmodemDirectionMismatch", nil)
 	}
 	ctx, cancel := context.WithCancel(parent)
 	task := &nativeTerminalTransferTask{ref: ref, cancel: cancel}
@@ -250,9 +248,9 @@ func (m *Manager) RunPassiveNativeZmodemTransferWithResult(
 	m.mu.Unlock()
 	if err != nil {
 		if terminalSafe {
-			return true, fmt.Errorf("远端 ZMODEM 传输异常，但原 SSH 终端已验证恢复：%w", err)
+			return true, apperror.Wrap("zmodemPassiveFailedRecovered", err, nil)
 		}
-		return false, fmt.Errorf("远端 ZMODEM 自动传输异常（当前终端不可继续输入，需重连）：%w", err)
+		return false, apperror.Wrap("zmodemFailedReconnect", err, nil)
 	}
 	return terminalSafe, nil
 }

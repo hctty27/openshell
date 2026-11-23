@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 )
 
@@ -137,7 +138,7 @@ func (s *Store) GetAIConversation(ctx context.Context, id string) (AIConversatio
 }
 
 func (s *Store) SaveAIConversation(ctx context.Context, c AIConversation) error {
-	if len(c.Messages) == 0 { return errors.New("空对话不保存") }
+	if len(c.Messages) == 0 { return apperror.New("aiEmptyConversationNotSaved", nil) }
 	c.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	c.Title = strings.TrimSpace(c.Title)
 	if c.Title == "" { c.Title = "新对话" }

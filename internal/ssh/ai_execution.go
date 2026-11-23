@@ -2,11 +2,11 @@ package sshclient
 
 import (
 	"context"
-	"errors"
 	"io"
 	"strings"
 	"time"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
 )
@@ -18,7 +18,7 @@ func (m *Manager) AIExecutionMode(ctx context.Context, ref domain.ConnectionRef)
 	c := m.connections[ref.TabID]
 	if c == nil || c.ref != ref {
 		m.mu.Unlock()
-		return "", errors.New("SSH 会话已断开或发生变化，请重新连接")
+		return "", apperror.New("sshSessionChangedReconnect", nil)
 	}
 	if isJumpServerVersion(c.serverVersion) || c.readiness.isJumpServer() {
 		m.mu.Unlock()
@@ -45,7 +45,7 @@ func (m *Manager) AIExecutionMode(ctx context.Context, ref domain.ConnectionRef)
 		c.aiExecSupported = supported
 	}
 	m.mu.Unlock()
-	if !active { return "", errors.New("SSH 会话已断开或发生变化，请重新连接") }
+	if !active { return "", apperror.New("sshSessionChangedReconnect", nil) }
 	// A slow server may show the KoKo menu while the probe is in flight.
 	if c.readiness.isJumpServer() { return "terminal", nil }
 	if supported { return "independent", nil }

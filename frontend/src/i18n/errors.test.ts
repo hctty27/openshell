@@ -68,3 +68,16 @@ test("nested application errors localize both layers without displaying wire env
   await initializeI18n("zh-CN");
   expect(errorText(wire)).toBe("SSH 连接配置无效: 缺少主机地址");
 });
+
+test("deeply nested application errors localize every layer", async () => {
+  const innermost = 'OPENSHELL_ERROR:{"code":"zmodemStreamInterrupted","detail":"EOF"}';
+  const middle = "OPENSHELL_ERROR:" + JSON.stringify({ code: "zmodemSidecarProcessFailed", detail: innermost });
+  const wire = "OPENSHELL_ERROR:" + JSON.stringify({ code: "zmodemRemoteCommandFailed", detail: middle });
+  await initializeI18n("en");
+  expect(errorText(wire)).toBe(
+    "The remote rz/sz command failed: The local ZMODEM helper failed: The ZMODEM data stream was interrupted: EOF",
+  );
+  expect(errorText(wire)).not.toContain("OPENSHELL_ERROR");
+  await initializeI18n("zh-CN");
+  expect(errorText(wire)).toBe("远程 rz/sz 执行失败: 原生 ZMODEM 进程异常: ZMODEM 数据流中断: EOF");
+});

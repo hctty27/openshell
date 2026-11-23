@@ -2,14 +2,15 @@ package sshclient
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"sync"
+
+	"github.com/hctty27/openshell/internal/apperror"
 )
 
 var (
-	errTerminalStreamOwned = errors.New("终端输出已由另一项传输独占")
-	errTerminalStreamLease = errors.New("终端输出独占令牌已失效")
+	errTerminalStreamOwned = apperror.New("terminalOutputOwned", nil)
+	errTerminalStreamLease = apperror.New("terminalOutputLeaseExpired", nil)
 )
 
 // terminalOutputGate serializes access to one SSH terminal output stream.
@@ -115,7 +116,7 @@ func writeNativeGateBytes(writer io.Writer, p []byte) error {
 // any in-progress legacy Write, and cannot interrupt an armed header probe.
 func (g *terminalOutputGate) takeover(native io.Writer) (uint64, error) {
 	if native == nil {
-		return 0, errors.New("原生协议输出目标为空")
+		return 0, apperror.New("zmodemNoOutputTarget", nil)
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -177,7 +178,7 @@ func (g *terminalOutputGate) quarantineNative(lease uint64) error {
 // while the underlying protocol pipe is never written after sidecar exit.
 // This API by itself does not authorize restoring the terminal.
 func (g *terminalOutputGate) quarantineWithBoundary(lease uint64, boundary *nativeRemoteBoundarySink) error {
-	if boundary == nil { return errors.New("缺少已注册的远端命令完成标记") }
+	if boundary == nil { return apperror.New("zmodemCompletionMarkerMissing", nil) }
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.closed { return io.ErrClosedPipe }
@@ -212,14 +213,14 @@ func (g *terminalOutputGate) armOnZmodemHeaderQuiet(native io.Writer) (uint64, e
 // to the terminal or enabling unverified input.
 func (g *terminalOutputGate) armOnZmodemHeaderQuietBoundary(native io.Writer, marker []byte) (uint64, error) {
 	if len(marker) == 0 || len(marker) > 256 {
-		return 0, errors.New("无效的远端 ZMODEM 完成标记")
+		return 0, apperror.New("zmodemCompletionMarkerInvalid", nil)
 	}
 	return g.armOnZmodemHeaderMode(native, true, marker)
 }
 
 func (g *terminalOutputGate) armOnZmodemHeaderMode(native io.Writer, quiet bool, marker []byte) (uint64, error) {
 	if native == nil {
-		return 0, errors.New("原生协议输出目标为空")
+		return 0, apperror.New("zmodemNoOutputTarget", nil)
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -291,7 +292,7 @@ func (g *terminalOutputGate) restoreVerifiedPassive(
 	lease uint64, boundary *nativeRemoteBoundarySink, guard *nativeOnlyOutputGuard,
 ) error {
 	if boundary == nil || guard == nil {
-		return errors.New("缺少可信 Shell 退出证明")
+		return apperror.New("zmodemShellExitUnproven", nil)
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -328,7 +329,7 @@ func (g *terminalOutputGate) restoreVerifiedPassive(
 // protocol shell output. Without the lock, fresh PTY output could overtake
 // bytes withheld after the remote completion marker.
 func (g *terminalOutputGate) restoreWithReplay(lease uint64, trailing func() []byte) error {
-	if trailing == nil { return errors.New("缺少远端输出恢复数据源") }
+	if trailing == nil { return apperror.New("zmodemReplaySourceMissing", nil) }
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.closed { return io.ErrClosedPipe }

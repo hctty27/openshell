@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/hctty27/openshell/internal/apperror"
 )
 
 const (
@@ -34,7 +35,7 @@ func newNativeRemoteBoundaryToken() (string, error) {
 func nativeInteractiveFencedCommand(direction, remotePath, token string) (string, string, error) {
 	rawToken, err := hex.DecodeString(token)
 	if err != nil || len(rawToken) != 16 || hex.EncodeToString(rawToken) != token {
-		return "", "", errors.New("无效的原生 ZMODEM 远端结束令牌")
+		return "", "", apperror.New("zmodemCompletionMarkerInvalid", nil)
 	}
 	var command, action string
 	switch direction {
@@ -48,12 +49,12 @@ func nativeInteractiveFencedCommand(direction, remotePath, token string) (string
 		if remotePath == "" || strings.IndexFunc(remotePath, func(r rune) bool {
 			return r < 32 || r == 127
 		}) >= 0 {
-			return "", "", errors.New("下载文件的远程路径无效")
+			return "", "", apperror.New("zmodemInvalidRemotePath", nil)
 		}
 		quoted := "'" + strings.ReplaceAll(remotePath, "'", "'\\''") + "'"
 		command, action = "sz -q -- " + quoted, "receive"
 	default:
-		return "", "", errors.New("不支持的原生 ZMODEM 方向")
+		return "", "", apperror.New("zmodemUnsupportedDirection", nil)
 	}
 	// The shell echoes literal backslash sequences, not ESC/BEL, so its own
 	// command echo cannot look like the binary completion marker. The marker
@@ -89,7 +90,7 @@ func newNativeRemoteBoundarySink(downstream io.Writer, token string) *nativeRemo
 
 func (s *nativeRemoteBoundarySink) appendTrailing(data []byte) error {
 	if len(data) > nativeRemoteBoundaryPostLimit-len(s.trailing) {
-		return errors.New("远端 ZMODEM 完成标记之后输出过多，已停止自动恢复")
+		return apperror.New("zmodemTrailingOutputTooLarge", nil)
 	}
 	s.trailing = append(s.trailing, data...)
 	return nil
@@ -115,22 +116,22 @@ func (s *nativeRemoteBoundarySink) Write(p []byte) (int, error) {
 		end := bytes.IndexByte(suffix, '\x07')
 		if end == -1 {
 			if len(suffix) > 3 {
-				return 0, errors.New("远端 ZMODEM 结束标记的退出码格式无效")
+				return 0, apperror.New("zmodemCompletionMarkerInvalid", nil)
 			}
 			s.pending = append(s.pending, data[start:]...)
 			return len(p), nil
 		}
 		if end == 0 || end > 3 {
-			return 0, errors.New("远端 ZMODEM 结束标记的退出码长度无效")
+			return 0, apperror.New("zmodemCompletionMarkerInvalid", nil)
 		}
 		for _, ch := range suffix[:end] {
 			if ch < '0' || ch > '9' {
-				return 0, errors.New("远端 ZMODEM 结束标记的退出码无效")
+				return 0, apperror.New("zmodemCompletionMarkerInvalid", nil)
 			}
 		}
 		code, err := strconv.Atoi(string(suffix[:end]))
 		if err != nil || code > 255 {
-			return 0, errors.New("远端 ZMODEM 退出码超出允许范围")
+			return 0, apperror.New("zmodemCompletionMarkerInvalid", nil)
 		}
 		if err := s.appendTrailing(suffix[end+1:]); err != nil {
 			return 0, err

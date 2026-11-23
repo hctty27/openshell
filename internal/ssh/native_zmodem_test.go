@@ -103,7 +103,7 @@ func TestNativeZmodemManagerCancelAndIsolation(t *testing.T) {
 	case <-started:
 	case <-time.After(5*time.Second): t.Fatal("transfer never started")
 	}
-	if err := manager.Run(context.Background(), request); err == nil || !strings.Contains(err.Error(), "已经存在") {
+	if err := manager.Run(context.Background(), request); err == nil || !strings.Contains(err.Error(), "zmodemTerminalBusy") {
 		t.Fatalf("concurrent transfer accepted: %v", err)
 	}
 	old := domain.ConnectionRef{TabID: ref.TabID, SessionID: ref.SessionID, Generation: ref.Generation + 1}

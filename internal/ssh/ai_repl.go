@@ -2,12 +2,12 @@ package sshclient
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 )
 
@@ -40,11 +40,11 @@ var psqlReadCommands = map[string]bool{
 }
 
 func validREPLText(value string, multiline bool) error {
-	if value == "" || len(value)>8192 { return errors.New("交互命令内容为空或过长") }
+	if value == "" || len(value)>8192 { return apperror.New("aiREPLInputInvalid", nil) }
 	for _,ch:=range value {
 		if ch == 0 || ch == '\r' || ch == 0x7f || ch == 0x1b || (!multiline && ch == '\n') ||
 			(ch < 0x20 && ch != '\n' && ch != '\t') {
-			return errors.New("交互命令包含不允许的控制字符")
+			return apperror.New("aiREPLControlCharacters", nil)
 		}
 	}
 	return nil
@@ -55,7 +55,7 @@ func redisAICommand(command string) (string,error) {
 	if err:=validREPLText(c,false);err!=nil { return "",err }
 	fields:=strings.Fields(c)
 	if len(fields)==0 || !redisReadCommands[strings.ToUpper(fields[0])] {
-		return "",errors.New("Redis 终端 AI 当前只支持白名单内的只读命令（如 INFO、SCAN、GET、HGETALL）")
+		return "",apperror.New("aiRedisReadOnlyOnly", nil)
 	}
 	return c,nil
 }
@@ -80,27 +80,27 @@ func psqlAICommand(command string) (string,error) {
 	if err:=validREPLText(c,false);err!=nil { return "",err }
 	if strings.HasPrefix(c,`\`) {
 		fields:=strings.Fields(c)
-		if len(fields)==0 { return "",errors.New("psql 元命令为空") }
+		if len(fields)==0 { return "",apperror.New("aiPsqlMetaEmpty", nil) }
 		switch fields[0] {
 		case `\c`, `\connect`:
 			if len(fields) != 2 || !validPsqlDatabaseName(fields[1]) ||
 				strings.ContainsAny(c, ";|") || strings.Count(c, "\\") != 1 {
-				return "", errors.New("psql 数据库切换仅允许单个简单数据库名")
+				return "", apperror.New("aiPsqlConnectSimpleNameOnly", nil)
 			}
 			return c, nil
 		case `\d`,`\d+`,`\dt`,`\dt+`,`\di`,`\di+`,`\dn`,`\dn+`,`\dv`,`\dv+`,`\df`,`\df+`,`\l`,`\l+`,`\conninfo`:
 			// Meta-commands cannot run shell commands or write server state.
 			if strings.ContainsAny(c,";|") || strings.Count(c,"\\") != 1 {
-				return "",errors.New("psql 元命令不支持链式执行")
+				return "",apperror.New("aiPsqlMetaChained", nil)
 			}
 			return c,nil
 		default:
-			return "",errors.New("当前仅支持 psql 只读元命令（如 \\d、\\dt、\\conninfo）")
+			return "",apperror.New("aiPsqlReadOnlyMeta", nil)
 		}
 	}
 	c=strings.TrimSpace(strings.TrimSuffix(c,";"))
 	if err:=validateReadOnlySQL(c,"psql",psqlReadCommands);err!=nil {
-		return "",fmt.Errorf("psql 当前仅支持单条只读 SQL（SELECT、SHOW、EXPLAIN、TABLE、VALUES）或只读元命令: %w",err)
+		return "",apperror.Wrap("aiPsqlReadOnlyOnly", err, nil)
 	}
 	return strings.TrimSpace(c)+";",nil
 }
@@ -121,7 +121,7 @@ func replSource(program, command, marker string) (string,error) {
 		lower:=strings.ToLower(c)
 		for _,blocked:=range []string{"exit(", "quit(", "input(", "breakpoint(", "getpass(", "os._exit("} {
 			if strings.Contains(lower,blocked) {
-				return "",errors.New("Python 当前不支持退出解释器或等待人工交互的操作")
+				return "",apperror.New("aiPythonInteractiveBlocked", nil)
 			}
 		}
 		compileMode:="single"
@@ -129,12 +129,12 @@ func replSource(program, command, marker string) (string,error) {
 		inner:="try:\n    exec(compile("+strconv.Quote(c)+", '<openshell-ai>', '"+compileMode+"'))\nfinally:\n    print("+strconv.Quote(marker)+")\n"
 		return "exec("+strconv.Quote(inner)+")\r",nil
 	}
-	return "",errors.New("未知交互程序")
+	return "",apperror.New("aiREPLUnknownProgram", nil)
 }
 
 func replCompletionSource(program, marker string) (string,error) {
 	if program != "redis" {
-		return "",errors.New("当前交互程序不支持独立结束标记")
+		return "",apperror.New("aiREPLNoCompletionMarker", nil)
 	}
 	return "ECHO "+marker+"\r",nil
 }
@@ -217,7 +217,7 @@ func (lease *AITerminalLease) waitForREPLPrompt(ctx context.Context) error {
 	defer ticker.Stop()
 	for {
 		if lease.connection.readiness.readyProgram()!=lease.program {
-			return errors.New("交互程序已退出或提示符发生变化，无法确认命令结束")
+			return apperror.New("aiREPLPromptChanged", nil)
 		}
 		if lease.connection.readiness.programReady(lease.program) {
 			if err:=lease.connection.readiness.checkReady();err==nil {
@@ -228,7 +228,7 @@ func (lease *AITerminalLease) waitForREPLPrompt(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-lease.closed:
-			return errors.New("SSH 终端已释放或断开")
+			return apperror.New("aiTerminalReleased", nil)
 		case <-ticker.C:
 		}
 	}
@@ -236,16 +236,16 @@ func (lease *AITerminalLease) waitForREPLPrompt(ctx context.Context) error {
 
 func (lease *AITerminalLease) runREPL(ctx context.Context,command string) (string,error) {
 	if !lease.connection.readiness.programReady(lease.program) {
-		return "",errors.New("交互程序未处于空白主提示符，请等待上一条命令结束")
+		return "",apperror.New("aiREPLNotAtPrompt", nil)
 	}
 	lease.mu.Lock()
 	if lease.poisoned {
 		lease.mu.Unlock()
-		return "",errors.New("终端状态不可确认，已停止自动执行")
+		return "",apperror.New("aiTerminalStateUnknown", nil)
 	}
 	if lease.current!=nil {
 		lease.mu.Unlock()
-		return "",errors.New("此终端已有一条 AI 命令正在执行")
+		return "",apperror.New("aiTerminalCommandRunning", nil)
 	}
 	marker:="OPEN_SHELL_AI_REPL_"+strings.ReplaceAll(domain.NewID(),"-","")
 	source,err:=replSource(lease.program,command,marker)
@@ -280,7 +280,7 @@ func (lease *AITerminalLease) runREPL(ctx context.Context,command string) (strin
 			return "",ctx.Err()
 		case <-lease.closed:
 			lease.markFailed()
-			return "",errors.New("SSH 终端已释放或断开")
+			return "",apperror.New("aiTerminalReleased", nil)
 		}
 		if err:=lease.waitForREPLPrompt(ctx);err!=nil {
 			lease.markFailed()
@@ -296,7 +296,7 @@ func (lease *AITerminalLease) runREPL(ctx context.Context,command string) (strin
 		if lease.current!=running || running.finished {
 			lease.mu.Unlock()
 			lease.markFailed()
-			return "",errors.New("Redis 终端执行状态已变化，已停止继续操作")
+			return "",apperror.New("aiRedisStateChanged", nil)
 		}
 		running.repl.markerSent=true
 		lease.mu.Unlock()
@@ -317,6 +317,6 @@ func (lease *AITerminalLease) runREPL(ctx context.Context,command string) (strin
 		return "",ctx.Err()
 	case <-lease.closed:
 		lease.markFailed()
-		return "",errors.New("SSH 终端已释放或断开")
+		return "",apperror.New("aiTerminalReleased", nil)
 	}
 }

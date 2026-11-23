@@ -3,7 +3,6 @@ package sshclient
 import (
     "bytes"
     "context"
-    "errors"
     "fmt"
     "regexp"
     "strconv"
@@ -12,14 +11,15 @@ import (
     "time"
     "unicode/utf8"
 
+	"github.com/hctty27/openshell/internal/apperror"
     "github.com/hctty27/openshell/internal/domain"
 )
 
 const terminalAIOutputLimit = 64 * 1024
 
 var (
-    errAITerminalBusy = errors.New("此终端已由 AI 接管")
-    errAITerminalUnavailable = errors.New("当前终端未就绪或正在传输文件")
+    errAITerminalBusy = apperror.New("aiTerminalTakenOver", nil)
+    errAITerminalUnavailable = apperror.New("aiTerminalNotReady", nil)
     terminalAIColor = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
     terminalAIOsc = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
 )
@@ -135,11 +135,11 @@ func (lease *AITerminalLease) runMarker(ctx context.Context, command string, isP
     lease.mu.Lock()
     if lease.poisoned {
         lease.mu.Unlock()
-        return terminalAIResult{}, errors.New("终端命令状态不可确认，已暂停自动执行")
+        return terminalAIResult{}, apperror.New("aiTerminalStateUnknown", nil)
     }
     if lease.current != nil {
         lease.mu.Unlock()
-        return terminalAIResult{}, errors.New("此终端已有一条 AI 命令正在执行")
+        return terminalAIResult{}, apperror.New("aiTerminalCommandRunning", nil)
     }
     nonce := strings.ReplaceAll(domain.NewID(), "-", "")
     marker := []byte("\x1b]777;OpenShellAI;" + nonce + ";")
@@ -177,7 +177,7 @@ func (lease *AITerminalLease) runMarker(ctx context.Context, command string, isP
         return terminalAIResult{},ctx.Err()
     case <-lease.closed:
         lease.markFailed()
-        return terminalAIResult{}, errors.New("SSH 终端已经释放或断开")
+        return terminalAIResult{}, apperror.New("aiTerminalReleased", nil)
     }
 }
 
@@ -186,7 +186,7 @@ func (lease *AITerminalLease) runMarker(ctx context.Context, command string, isP
 func (lease *AITerminalLease) Run(ctx context.Context, command string) (string, error) {
 	if strings.TrimSpace(command) == "" || len(command) > 8192 ||
 		strings.ContainsRune(command, 0) {
-		return "", errors.New("终端命令长度或内容无效")
+		return "", apperror.New("aiTerminalCommandInvalid", nil)
 	}
 	if lease.program == "mysql" {
 		return lease.runMySQL(ctx, command)
@@ -203,7 +203,7 @@ func (lease *AITerminalLease) Run(ctx context.Context, command string) (string, 
 		cancel()
 		if err != nil {
 			lease.markFailed()
-			return "", fmt.Errorf("终端未返回就绪标记或 Shell 提示符未恢复，请确认处于空白的 Shell 提示符（非 vim/top/传输）：%w", err)
+			return "", apperror.Wrap("aiTerminalReadyMarkerMissing", err, nil)
 		}
 		lease.ready = true
 	}
@@ -213,14 +213,14 @@ func (lease *AITerminalLease) Run(ctx context.Context, command string) (string, 
 	}
 	if result.code < 0 {
 		lease.markFailed()
-		return "", errors.New("终端命令结束标记格式无效，已停止继续执行")
+		return "", apperror.New("aiTerminalMarkerInvalid", nil)
 	}
 	promptCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	err = lease.waitForShellPrompt(promptCtx)
 	cancel()
 	if err != nil {
 		lease.markFailed()
-		return "", fmt.Errorf("Shell 命令已结束，但未确认提示符恢复: %w", err)
+		return "", apperror.Wrap("aiTerminalPromptNotRestored", err, nil)
 	}
 	return fmt.Sprintf("%s\nexit status: %d", result.output, result.code), nil
 }
@@ -230,16 +230,16 @@ func (lease *AITerminalLease) waitForShellPrompt(ctx context.Context) error {
 	defer ticker.Stop()
 	for {
 		if lease.connection.readiness.readyProgram() != "shell" {
-			return errors.New("Shell 已退出或提示符发生变化，无法确认命令结束")
+			return apperror.New("aiTerminalPromptChanged", nil)
 		}
 		if err := lease.connection.readiness.checkReady(); err == nil {
 			return nil
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("等待 Shell 提示符恢复超时: %w", ctx.Err())
+			return apperror.Wrap("aiTerminalPromptTimeout", ctx.Err(), nil)
 		case <-lease.closed:
-			return errors.New("SSH 终端已经释放或断开")
+			return apperror.New("aiTerminalReleased", nil)
 		case <-ticker.C:
 		}
 	}

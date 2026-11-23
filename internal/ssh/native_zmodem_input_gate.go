@@ -5,6 +5,8 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
+
+	"github.com/hctty27/openshell/internal/apperror"
 )
 
 // Native-only ZMODEM cancel sequence (CAN followed by backspaces).
@@ -13,7 +15,7 @@ var zmodemCancelSequence = []byte("\x18\x18\x18\x18\x18\x18\x18\x18\x18\x18\x08\
 
 var (
 	errNativeTerminalInputBusy = errors.New("native terminal input busy")
-	errNativeTerminalInputLease = errors.New("终端输入独占令牌已失效")
+	errNativeTerminalInputLease = apperror.New("terminalInputLeaseExpired", nil)
 )
 
 // terminalInputGate keeps interactive input separate from the native protocol.

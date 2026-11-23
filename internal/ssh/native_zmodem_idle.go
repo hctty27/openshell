@@ -6,11 +6,13 @@ import (
 	"io"
 	"sync/atomic"
 	"time"
+
+	"github.com/hctty27/openshell/internal/apperror"
 )
 
 const nativeZmodemTransferIdleTimeout = 90 * time.Second
 
-var errNativeZmodemIdleTimeout = errors.New("原生 ZMODEM 连续 90 秒无协议活动，传输已停止")
+var errNativeZmodemIdleTimeout = apperror.New("zmodemIdleTimeout", nil)
 
 type nativeZmodemActivityKey struct{}
 

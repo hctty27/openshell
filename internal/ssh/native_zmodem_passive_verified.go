@@ -3,11 +3,11 @@ package sshclient
 import (
 	"context"
 	"encoding/hex"
-	"errors"
-	"fmt"
 	"io"
 	"os"
 	"time"
+
+	"github.com/hctty27/openshell/internal/apperror"
 )
 
 // nativePassiveRemoteConfirmTimeout applies only after Rust reports complete.
@@ -28,11 +28,11 @@ func (c *nativeTerminalCoordinator) runPassiveVerified(
 ) (restored bool, resultErr error) {
 	rawToken, err := hex.DecodeString(registeredToken)
 	if err != nil || len(rawToken) != 16 || hex.EncodeToString(rawToken) != registeredToken {
-		return false, errors.New("缺少预先注册并验证的远端 Shell 会话标记")
+		return false, apperror.New("zmodemPassiveMarkerMissing", nil)
 	}
 	if parent == nil || c == nil || c.input == nil || c.output == nil ||
 		c.runner == nil || guard == nil {
-		return false, errors.New("远端 ZMODEM 安全恢复参数不完整")
+		return false, apperror.New("zmodemPassiveRecoveryIncomplete", nil)
 	}
 	if err := parent.Err(); err != nil { return false, err }
 
@@ -44,7 +44,7 @@ func (c *nativeTerminalCoordinator) runPassiveVerified(
 	case "download":
 		action, expected = "receive", '0'
 	default:
-		return false, errors.New("不支持的 ZMODEM 方向")
+		return false, apperror.New("zmodemUnsupportedDirection", nil)
 	}
 	path, err := nativeZmodemLocalPath(direction, localPath)
 	if err != nil { return false, err }
@@ -97,7 +97,7 @@ func (c *nativeTerminalCoordinator) runPassiveVerified(
 	if err != nil {
 		if lease != 0 { _ = c.output.quarantineNative(lease) }
 		stopSidecar()
-		return false, fmt.Errorf("预注册 ZMODEM 握手交接失败（需重连）：%w", err)
+		return false, apperror.Wrap("zmodemHandshakeFailedReconnect", err, nil)
 	}
 	var protocolErr error
 	switch {
@@ -107,26 +107,26 @@ func (c *nativeTerminalCoordinator) runPassiveVerified(
 		case protocolErr = <-sink.fail:
 			_ = c.output.quarantineNative(lease)
 			stopSidecar()
-			return false, fmt.Errorf("远端协议字节转发失败（需重连）：%w", protocolErr)
+			return false, apperror.Wrap("zmodemForwardFailedReconnect", protocolErr, nil)
 		case <-ctx.Done():
 			_, _ = c.input.writeNative(inputLease, zmodemCancelSequence)
 			_ = c.output.quarantineNative(lease)
 			stopSidecar()
-			return false, fmt.Errorf("远端协议未完成（需重连）：%w", nativeZmodemContextError(ctx))
+			return false, apperror.Wrap("zmodemProtocolIncompleteReconnect", nativeZmodemContextError(ctx), nil)
 		}
 	}
 	// After Rust returns, the exit detector must remain active but it
 	// must no longer forward any SSH output into Rust's closed pipe.
 	if err := c.output.quarantineWithBoundary(lease, boundary); err != nil {
 		stopSidecar()
-		return false, fmt.Errorf("原生协议结束后输出隔离失败（需重连）：%w", err)
+		return false, apperror.Wrap("zmodemOutputIsolationFailed", err, nil)
 	}
 	sink.finish(reader)
 	if protocolErr != nil {
-		return false, fmt.Errorf("Rust 协议执行失败，远端 Shell 未确认（需重连）：%w", protocolErr)
+		return false, apperror.Wrap("zmodemSidecarFailedReconnect", protocolErr, nil)
 	}
 	if !sink.seenHeader() {
-		return false, errors.New("未收到远端 ZMODEM 握手（需重连）")
+		return false, apperror.New("zmodemNoStartFrameReconnect", nil)
 	}
 
 	var remote nativeRemoteExit
@@ -134,29 +134,29 @@ func (c *nativeTerminalCoordinator) runPassiveVerified(
 	case remote = <-boundary.completion:
 	case <-time.After(nativePassiveRemoteConfirmTimeout):
 		_ = c.output.quarantineNative(lease)
-		return false, errors.New("远端 Shell 未提供匹配会话标记（需重连）")
+		return false, apperror.New("zmodemPassiveMarkerMismatchReconnect", nil)
 	case <-ctx.Done():
 		_ = c.output.quarantineNative(lease)
-		return false, fmt.Errorf("等待远端完成标记超时（需重连）：%w", nativeZmodemContextError(ctx))
+		return false, apperror.Wrap("zmodemCompletionTimeoutReconnect", nativeZmodemContextError(ctx), nil)
 	}
 	if remote.err != nil {
 		_ = c.output.quarantineNative(lease)
-		return false, fmt.Errorf("远端完成标记无效（需重连）：%w", remote.err)
+		return false, apperror.Wrap("zmodemBoundaryInvalidReconnect", remote.err, nil)
 	}
 	// Output first, manual stdin second: no typing can cross a half-restored
 	// boundary. The guard's quarantine and scanner reset under output.mu.
 	if err := c.output.restoreVerifiedPassive(lease, boundary, guard); err != nil {
-		return false, fmt.Errorf("可信退出后恢复终端输出失败（需重连）：%w", err)
+		return false, apperror.Wrap("zmodemRestoreOutputFailed", err, nil)
 	}
 	if err := c.input.restoreVerifiedPassive(inputLease); err != nil {
-		return false, fmt.Errorf("可信退出后恢复终端输入失败（需重连）：%w", err)
+		return false, apperror.Wrap("zmodemRestoreInputFailed", err, nil)
 	}
 	if remote.code != 0 {
-		return true, fmt.Errorf("远端 ZMODEM 退出码 %d，终端已恢复", remote.code)
+		return true, apperror.New("zmodemRemoteExitStatus", map[string]any{"status": remote.code})
 	}
 	if staging != "" {
 		if err := nativeZmodemPublish(staging, publishTo); err != nil {
-			return true, fmt.Errorf("原生文件接收完成但保存失败，终端已恢复：%w", err)
+			return true, apperror.Wrap("zmodemSaveFailed", err, nil)
 		}
 	}
 	return true, nil

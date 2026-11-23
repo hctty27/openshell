@@ -3,7 +3,6 @@ package sshclient
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/hctty27/openshell/internal/apperror"
 	"github.com/hctty27/openshell/internal/domain"
 	"golang.org/x/crypto/ssh"
 )
@@ -23,7 +23,7 @@ const (
 
 func nativeZmodemCheckFileSize(size int64) error {
 	if size < 0 || size > nativeZmodemMaxFileSize {
-		return errors.New("原生 ZMODEM 单文件最大支持 2 GiB 以下")
+		return apperror.New("zmodemFileTooLarge", nil)
 	}
 	return nil
 }
@@ -62,12 +62,12 @@ func NewNativeZmodemManager(manager *Manager, emit EmitFunc, sidecar string) *Na
 // Run is an opt-in developer experiment. It does not take ownership of the
 // visible terminal's PTY, input stream or active trzsz-go filter.
 func (n *NativeZmodemManager) Run(ctx context.Context, req NativeZmodemRequest) (err error) {
-	if n == nil || n.sidecar == "" { return errors.New("原生 ZMODEM 实验未启用") }
-	if ctx == nil { return errors.New("缺少传输上下文") }
+	if n == nil || n.sidecar == "" { return apperror.New("zmodemExperimentDisabled", nil) }
+	if ctx == nil { return apperror.New("zmodemMissingContext", nil) }
 	if err := ctx.Err(); err != nil { return err }
-	if req.Ref.TabID == "" { return errors.New("缺少有效的 SSH 标签页") }
+	if req.Ref.TabID == "" { return apperror.New("zmodemMissingTab", nil) }
 	if info, err := os.Stat(n.sidecar); err != nil || !info.Mode().IsRegular() {
-		return errors.New("原生 ZMODEM sidecar 不存在或不是可执行文件")
+		return apperror.New("zmodemSidecarNotFile", nil)
 	}
 	command, direction, err := nativeZmodemRemoteCommand(req.Direction, req.RemotePath)
 	if err != nil { return err }
@@ -82,12 +82,12 @@ func (n *NativeZmodemManager) Run(ctx context.Context, req NativeZmodemRequest) 
 	if n.closed {
 		n.mu.Unlock()
 		cancel()
-		return errors.New("原生 ZMODEM 管理器已关闭")
+		return apperror.New("zmodemSSHManagerClosed", nil)
 	}
 	if n.active[req.Ref.TabID] != nil {
 		n.mu.Unlock()
 		cancel()
-		return errors.New("当前标签页已经存在原生 ZMODEM 传输")
+		return apperror.New("zmodemTerminalBusy", nil)
 	}
 	n.active[req.Ref.TabID] = task
 	n.mu.Unlock()
@@ -124,12 +124,12 @@ func (m *Manager) nativeZmodemClient(ref domain.ConnectionRef) (*ssh.Client, err
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	c := m.connections[ref.TabID]
-	if c == nil || c.ref != ref { return nil, errors.New("SSH 会话已断开或发生变化") }
+	if c == nil || c.ref != ref { return nil, apperror.New("sshDisconnectedOrConnectionChanged", nil) }
 	if isJumpServerVersion(c.serverVersion) || c.readiness.isJumpServer() {
-		return nil, errors.New("JumpServer 暂不支持原生 ZMODEM 独立执行")
+		return nil, apperror.New("zmodemJumpServerUnsupported", nil)
 	}
 	if c.nativeTerminalTransfer != nil || c.nativeTerminalPoisoned || c.aiController != nil {
-		return nil, errors.New("请先完成当前终端文件传输")
+		return nil, apperror.New("zmodemTerminalBusy", nil)
 	}
 	return c.client, nil
 }
@@ -160,7 +160,7 @@ func (n *NativeZmodemManager) Close() {
 
 func nativeZmodemRemoteCommand(direction, remotePath string) (string, string, error) {
 	if remotePath == "" || strings.IndexFunc(remotePath, unicode.IsControl) >= 0 {
-		return "", "", errors.New("无效的远程路径")
+		return "", "", apperror.New("zmodemInvalidRemotePath", nil)
 	}
 	path := "'" + strings.ReplaceAll(remotePath, "'", "'\\''") + "'"
 	switch direction {
@@ -169,28 +169,28 @@ func nativeZmodemRemoteCommand(direction, remotePath string) (string, string, er
 	case "download":
 		return "stty raw -echo && exec sz -q -- " + path, "receive", nil
 	default:
-		return "", "", fmt.Errorf("不支持的 ZMODEM 传输方向：%s", direction)
+		return "", "", apperror.New("zmodemUnsupportedDirectionNamed", map[string]any{"direction": direction})
 	}
 }
 
 func nativeZmodemLocalPath(direction, localPath string) (string, error) {
-	if localPath == "" { return "", errors.New("缺少本地路径") }
+	if localPath == "" { return "", apperror.New("zmodemChooseLocalTarget", nil) }
 	absolute, err := filepath.Abs(localPath)
 	if err != nil { return "", err }
 	info, err := os.Lstat(absolute)
 	if err != nil { return "", err }
 	if info.Mode()&os.ModeSymlink != 0 {
-		return "", errors.New("原生 ZMODEM 实验不允许符号链接路径")
+		return "", apperror.New("zmodemLocalSymlinkNotAllowed", nil)
 	}
 	switch direction {
 	case "upload":
-		if !info.Mode().IsRegular() { return "", errors.New("上传仅支持普通文件") }
+		if !info.Mode().IsRegular() { return "", apperror.New("zmodemUploadRegularFileOnly", nil) }
 		if err := nativeZmodemCheckFileSize(info.Size()); err != nil { return "", err }
-		if !utf8.ValidString(filepath.Base(absolute)) { return "", errors.New("文件名必须是 UTF-8") }
+		if !utf8.ValidString(filepath.Base(absolute)) { return "", apperror.New("zmodemFileNameNotUTF8", nil) }
 	case "download":
-		if !info.IsDir() { return "", errors.New("下载目标必须是目录") }
+		if !info.IsDir() { return "", apperror.New("zmodemDownloadTargetNotDirectory", nil) }
 	default:
-		return "", errors.New("无效的 ZMODEM 方向")
+		return "", apperror.New("zmodemUnsupportedDirection", nil)
 	}
 	return absolute, nil
 }
@@ -201,24 +201,24 @@ func nativeZmodemPublish(stage, destination string) error {
 	entries, err := os.ReadDir(stage)
 	if err != nil { return err }
 	if len(entries) != 1 {
-		return fmt.Errorf("原生 ZMODEM 每次只能接收一个普通文件，实际收到 %d 项", len(entries))
+		return apperror.New("zmodemReceivedUnexpectedCount", map[string]any{"count": len(entries)})
 	}
 	name := entries[0].Name()
 	if name == "." || name == ".." || filepath.Base(name) != name || !utf8.ValidString(name) {
-		return errors.New("远程文件名无效")
+		return apperror.New("zmodemInvalidRemoteFileName", nil)
 	}
 	source := filepath.Join(stage, name)
 	info, err := os.Lstat(source)
 	if err != nil { return err }
-	if !info.Mode().IsRegular() { return errors.New("接收对象不是普通文件") }
+	if !info.Mode().IsRegular() { return apperror.New("zmodemReceivedNotRegularFile", nil) }
 	target := filepath.Join(destination, name)
 	if _, err := os.Lstat(target); err == nil {
-		return fmt.Errorf("目标文件已存在，不允许覆盖：%s", name)
+		return apperror.New("zmodemLocalFileExists", map[string]any{"name": name})
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	if err := os.Link(source, target); err != nil {
-		return fmt.Errorf("文件保存失败（不允许覆盖）：%w", err)
+		return apperror.Wrap("zmodemLocalSaveFailed", err, nil)
 	}
 	return nil
 }
