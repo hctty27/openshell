@@ -65,12 +65,17 @@ func (s *nativeTerminalInboundSink) Write(p []byte) (int, error) {
 	if !s.activated {
 		if len(p) < nativeZmodemHeaderSize || p[5] != s.expected {
 			err := errors.New("远端 ZMODEM 启动帧方向不匹配，已禁止终端自动回退")
+			s.finished = true
 			select {
 			case s.fail <- err:
 			default:
 			}
 			s.mu.Unlock()
-			return 0, err
+			// A protocol error must not escape into ssh.Session's stdout
+			// copier, which could tear down an otherwise live terminal.
+			// The coordinator receives the failure while the output gate
+			// continues to quarantine every subsequent protocol byte.
+			return len(p), nil
 		}
 		s.activated = true
 		close(s.ready)
@@ -84,22 +89,25 @@ func (s *nativeTerminalInboundSink) Write(p []byte) (int, error) {
 	if err != nil {
 		s.mu.Lock()
 		finished := s.finished
+		if !finished {
+			s.finished = true
+		}
 		s.mu.Unlock()
-		// The Rust sidecar may finish immediately after it consumes the
-		// final control frame, while the SSH stdout goroutine still holds
-		// one in-flight pipe.Write. Closing that dedicated reader to clean
-		// up must not turn a successful transfer into a fatal SSH writer
-		// error. The output gate continues to own subsequent bytes; none
-		// are allowed to fall back into the visible terminal.
-		if finished && errors.Is(err, io.ErrClosedPipe) {
-			return len(p), nil
+		// Rust may close its dedicated inbound pipe while SSH stdout is
+		// still delivering bytes. Never propagate a local pipe failure to
+		// ssh.Session's stdout copier: doing so can terminate the terminal
+		// even though the SSH transport and remote Shell are still alive.
+		// Failure is reported to the coordinator, which keeps the PTY
+		// isolated until a separately verified remote completion boundary.
+		if !finished {
+			select {
+			case s.fail <- err:
+			default:
+			}
 		}
-		select {
-		case s.fail <- err:
-		default:
-		}
+		return len(p), nil
 	}
-	return n, err
+	return n, nil
 }
 
 func (s *nativeTerminalInboundSink) seenHeader() bool {
