@@ -80,3 +80,14 @@ test("search stays focused while filtering; delete does not select a conversatio
   fireEvent.mouseDown(document.body);
   expect(screen.queryByRole("dialog")).toBeNull();
 });
+
+test("untitled conversations use the localized new-conversation label", async () => {
+  const { conversationTitle } = await import("./AIHistoryPopover");
+  expect(conversationTitle("")).toBe("新对话");
+  expect(conversationTitle("  ")).toBe("新对话");
+  await initializeI18n("en");
+  expect(conversationTitle("")).toBe("New conversation");
+  // Saved by older versions with the fixed Chinese fallback.
+  expect(conversationTitle("新对话")).toBe("New conversation");
+  expect(conversationTitle("查看进程")).toBe("查看进程");
+});

@@ -189,7 +189,7 @@ func TestREPLLeaseUsesExistingPTY(t *testing.T) {
 			ctx,cancel:=context.WithTimeout(context.Background(),time.Second)
 			defer cancel()
 			out,err:=lease.Run(ctx,tc.command)
-			if err!=nil || !strings.Contains(out,tc.result) || !strings.Contains(out,"执行状态: 成功") {
+			if err!=nil || !strings.Contains(out,tc.result) || !strings.Contains(out,"exit status: 0") {
 				t.Fatalf("bad output %q, err %v",out,err)
 			}
 			lease.Release()
@@ -249,7 +249,7 @@ func TestRedisCompletionMarkerWaitsForClusterRedirectPrompt(t *testing.T) {
 	got:=<-resultCh
 	if got.err!=nil || !strings.Contains(got.output,"(nil)") ||
 		!strings.Contains(got.output,"Redirected to slot") ||
-		!strings.Contains(got.output,"执行状态: 成功") {
+		!strings.Contains(got.output,"exit status: 0") {
 		t.Fatalf("unexpected Redis result: %q, %v",got.output,got.err)
 	}
 	lease.Release()

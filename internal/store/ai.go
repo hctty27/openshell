@@ -141,7 +141,7 @@ func (s *Store) SaveAIConversation(ctx context.Context, c AIConversation) error 
 	if len(c.Messages) == 0 { return apperror.New("aiEmptyConversationNotSaved", nil) }
 	c.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	c.Title = strings.TrimSpace(c.Title)
-	if c.Title == "" { c.Title = "新对话" }
+	// An empty title is shown as the localized "New conversation" label.
 	return s.save(ctx, "INSERT INTO ai_conversations(id,data)VALUES(?,?) ON CONFLICT(id)DO UPDATE SET data=excluded.data", c.ID, c)
 }
 

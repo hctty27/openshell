@@ -41,4 +41,8 @@ func TestAIConversationsIgnoreEmptyDrafts(t *testing.T) {
 	if len(conversations) != 1 || conversations[0].ID != "with-messages" {
 		t.Fatalf("unexpected visible conversations: %#v", conversations)
 	}
+	// An untitled conversation stays untitled; the UI shows a localized label.
+	if conversations[0].Title != "" {
+		t.Fatalf("untitled conversation got a fixed title: %q", conversations[0].Title)
+	}
 }

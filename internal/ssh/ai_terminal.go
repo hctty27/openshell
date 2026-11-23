@@ -292,7 +292,8 @@ func (cmd *terminalAICommand) consume(p []byte) {
         if len(cmd.pending)>256 {
             cmd.pending=cmd.pending[:0]
             cmd.finished=true
-            cmd.done<-terminalAIResult{output:"终端返回的结束标记格式无效",code:-1}
+            // code -1 is reported as the localized aiTerminalMarkerInvalid error.
+            cmd.done<-terminalAIResult{code:-1}
         }
         return
     }
