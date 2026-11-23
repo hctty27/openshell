@@ -88,7 +88,9 @@ func (a *App) StartNativeZmodemInteractiveTransfer(
 		terminalSafe := a.NativeZmodemInteractiveReadiness(ref).Ready
 		payload["terminalSafe"] = terminalSafe
 		if err == nil && declined.Load() > 0 {
-			payload["error"] = apperror.New("zmodemRemoteDeclined", nil).Error()
+			// Also return it, so the caller shows a notification and not
+			// only a row in the transfer center.
+			err = apperror.New("zmodemRemoteDeclined", nil)
 		}
 		if err != nil {
 			payload["error"] = err.Error()
@@ -217,6 +219,17 @@ func (a *App) CancelNativeZmodemSelection(ref domain.ConnectionRef, selectionID 
 		return apperror.New("zmodemSelectionExpired", nil)
 	}
 	return nil
+}
+
+// CheckNativeZmodemRemote runs before the file picker opens. It checks in the
+// remote shell that an sz source is an existing, readable regular file, or
+// that the rz target directory is writable, so the user is not asked to pick
+// a file for a transfer that cannot work.
+func (a *App) CheckNativeZmodemRemote(ref domain.ConnectionRef, selectionID uint64, direction, remotePath string) error {
+	if !a.nativeZmodemPreferred() {
+		return apperror.New("zmodemDisabledOnPlatform", nil)
+	}
+	return a.ssh.CheckNativeZmodemRemote(a.ctx, ref, selectionID, direction, remotePath)
 }
 
 func (a *App) CancelNativeZmodemInteractiveTransfer(ref domain.ConnectionRef) error {

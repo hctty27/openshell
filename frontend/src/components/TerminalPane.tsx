@@ -250,11 +250,13 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
           }),
         )
       : [];
-    if (scrollbackSnapshot.current && p.preserveHistory !== false) {
-      term.write(scrollbackSnapshot.current + "\r\n");
+    const disconnectNotice = `[${t("terminal:remoteConnectionClosed")}]`;
+    const restoredHistory = scrollbackSnapshot.current && p.preserveHistory !== false ? scrollbackSnapshot.current : "";
+    if (restoredHistory) {
+      term.write(restoredHistory + "\r\n");
     }
     if (local && p.showDisconnectReason !== false) {
-      term.write(`\r\n\x1b[90m[${t("terminal:remoteConnectionClosed")}]\x1b[0m\r\n`);
+      term.write(`\r\n\x1b[90m${disconnectNotice}\x1b[0m\r\n`);
     }
     let initialReportedDirectory: string | undefined;
     const reportDirectory = (directory: string | null) => {
@@ -722,8 +724,13 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
         let end = lines.length;
         while (start < end && !lines[start].trim()) start++;
         while (end > start && !lines[end - 1].trim()) end--;
+        // The disconnect notice is written by OpenShell, not the remote
+        // host. The terminal can be rebuilt more than once for the same
+        // disconnect, and every rebuild writes the notice again, so keep it
+        // out of the restored history to avoid printing it twice.
+        const notice = `[${t("terminal:remoteConnectionClosed")}]`;
         scrollbackSnapshot.current = p.preserveHistory !== false
-          ? lines.slice(start, end).join("\r\n").slice(-1048576)
+          ? lines.slice(start, end).filter(line => line.trim() !== notice).join("\r\n").slice(-1048576)
           : "";
       }
       term.dispose();

@@ -73,7 +73,20 @@ export default function ZmodemFilePicker({ activeRef, onNotice, onClosed }: Prop
         direction: event.direction,
         remotePath: event.remotePath ?? "",
       };
-      setRequests(previous => ({ ...previous, [refKey(request.ref)]: request }));
+      if (request.passive) {
+        setRequests(previous => ({ ...previous, [refKey(request.ref)]: request }));
+        return;
+      }
+      // Check the remote side first (sz source exists and is a readable
+      // file, rz target directory is writable) so the picker never opens
+      // for a transfer that cannot work.
+      void api.CheckNativeZmodemRemote(request.ref, request.selectionId, request.direction, request.remotePath ?? "")
+        .then(() => setRequests(previous => ({ ...previous, [refKey(request.ref)]: request })))
+        .catch(err => {
+          void api.CancelNativeZmodemSelection(request.ref, request.selectionId).catch(() => {});
+          onNotice(err);
+          setTimeout(requestTerminalFocus, 0);
+        });
     });
     const offDisconnected = listen("ssh:disconnected", (ref: Ref) => {
       if (!ref) return;

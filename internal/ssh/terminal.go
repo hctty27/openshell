@@ -335,6 +335,8 @@ func (m *Manager) Write(ref domain.ConnectionRef, data string) error {
 		autoError = apperror.New("zmodemMultilinePasteBlocked", nil).Error()
 	} else if direction == "reject-unsupported" {
 		autoError = apperror.New("zmodemUnsupportedArguments", nil).Error()
+	} else if direction == "reject-compound" {
+		autoError = apperror.New("zmodemCompoundCommand", nil).Error()
 	} else if direction == "reject-unavailable" {
 		// A missing/unstable prompt (or a missing sidecar) is never permission
 		// to start the remote rz/sz program. Ctrl-U already erased its line.

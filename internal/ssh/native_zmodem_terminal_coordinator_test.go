@@ -122,7 +122,7 @@ func TestNativeZmodemInteractiveCoordinatorUploadHandoffAndRecovery(t *testing.T
 	}
 	if _, err := input.Write([]byte("normal")); err != nil { t.Fatal(err) }
 	if _, err := output.Write([]byte("prompt")); err != nil { t.Fatal(err) }
-	if got := legacy.String(); got != "shell-readyprompt" {
+	if got := legacy.String(); got != "\r\x1b[Kshell-readyprompt" {
 		t.Fatalf("legacy output not restored: %q", got)
 	}
 }
@@ -363,7 +363,7 @@ func TestNativeZmodemInteractiveCoordinatorRemoteNonzeroExitRestoresVerifiedTerm
 		t.Fatalf("verified remote exit did not restore input: %v", err)
 	}
 	if _, err := output.Write([]byte(" next prompt")); err != nil { t.Fatal(err) }
-	if legacy.String() != "shell prompt next prompt" {
+	if legacy.String() != "\r\x1b[Kshell prompt next prompt" {
 		t.Fatalf("verified shell output not correctly replayed: %q", legacy.String())
 	}
 }
@@ -401,7 +401,7 @@ func TestNativeZmodemInteractiveCoordinatorFailedDownloadDoesNotPublish(t *testi
 	if _, err := input.Write([]byte("normal")); err != nil {
 		t.Fatalf("failed download left terminal leased: %v", err)
 	}
-	if legacy.String() != "shell-ready" {
+	if legacy.String() != "\r\x1b[Kshell-ready" {
 		t.Fatalf("failed download did not restore prompt: %q", legacy.String())
 	}
 }
@@ -435,7 +435,7 @@ func TestNativeZmodemRemoteExitBeforeHeaderRestoresTerminal(t *testing.T) {
 	if _, err := output.Write([]byte("shell-ready")); err != nil { t.Fatal(err) }
 	select {
 	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), `"zmodemRemoteDidNotStart","params":{"status":127}`) {
+		if err == nil || !strings.Contains(err.Error(), `"zmodemRemoteLrzszMissing"`) {
 			t.Fatalf("missing safe early-exit error: %v", err)
 		}
 	case <-time.After(3 * time.Second):
@@ -445,7 +445,7 @@ func TestNativeZmodemRemoteExitBeforeHeaderRestoresTerminal(t *testing.T) {
 		t.Fatalf("early remote exit did not restore shell input: %v", err)
 	}
 	if _, err := output.Write([]byte(" prompt")); err != nil { t.Fatal(err) }
-	if got := legacy.String(); got != "shell-ready prompt" {
+	if got := legacy.String(); got != "\r\x1b[Kshell-ready prompt" {
 		t.Fatalf("incorrect replay after early remote exit: %q", got)
 	}
 }
