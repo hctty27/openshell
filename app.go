@@ -361,7 +361,7 @@ func (a *App) clearSessionCredentialsLocked(sessionID string) {
 func (a *App) SaveSession(req SaveSessionRequest) (domain.Session, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	req.Session.Host = strings.TrimSpace(req.Session.Host)
+	req.Session.Host = domain.NormalizeHost(req.Session.Host)
 	req.Session.Username = strings.TrimSpace(req.Session.Username)
 	req.Session.Name = strings.TrimSpace(req.Session.Name)
 	if req.Session.Name == "" {
@@ -644,7 +644,7 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 				PreviousFingerprint: h.PreviousFingerprint, Changed: h.Changed,
 			}}, nil
 		}
-		return ConnectResult{Ref: ref}, e
+		return ConnectResult{Ref: ref}, sshclient.FriendlyConnectError(e)
 	}
 	home, _ := a.ssh.Home(ref)
 	a.mu.Lock()

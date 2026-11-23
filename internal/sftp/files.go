@@ -25,6 +25,8 @@ type Entry struct {
     // TargetIsDir is set for symbolic links that resolve to a directory so
     // the browser can open them like folders.
     TargetIsDir bool `json:"targetIsDir,omitempty"`
+    // LinkBroken is set for symbolic links whose target cannot be resolved.
+    LinkBroken bool `json:"linkBroken,omitempty"`
     Size int64 `json:"size"`
     Modified int64 `json:"modified"`
     Mode string `json:"mode"`
@@ -148,7 +150,8 @@ func (m *Manager) List(ref domain.ConnectionRef, side, directory string) ([]Entr
             entry := makeEntry(directory, info, true)
             if entry.IsSymlink && resolved < maxResolvedSymlinks {
                 resolved++
-                if target, statErr := c.Stat(entry.Path); statErr == nil { entry.TargetIsDir = target.IsDir() }
+                target, statErr := c.Stat(entry.Path)
+                resolveLink(&entry, target, statErr)
             }
             out = append(out, entry)
         }
@@ -161,12 +164,27 @@ func (m *Manager) List(ref domain.ConnectionRef, side, directory string) ([]Entr
         entry := makeEntry(directory, info, false)
         if entry.IsSymlink && resolved < maxResolvedSymlinks {
             resolved++
-            if target, statErr := os.Stat(entry.Path); statErr == nil { entry.TargetIsDir = target.IsDir() }
+            target, statErr := os.Stat(entry.Path)
+            resolveLink(&entry, target, statErr)
         }
         out = append(out, entry)
     }
     sortEntries(out)
     return out, nil
+}
+
+// resolveLink shows a symbolic link with its target's size, permissions and
+// time (the link's own 7 B / 0777 means nothing to the user), or marks it
+// broken when the target cannot be reached.
+func resolveLink(entry *Entry, target os.FileInfo, err error) {
+    if err != nil || target == nil {
+        entry.LinkBroken = true
+        return
+    }
+    entry.TargetIsDir = target.IsDir()
+    entry.Size = target.Size()
+    entry.Modified = target.ModTime().UnixMilli()
+    entry.Mode = fmt.Sprintf("%04o", target.Mode().Perm())
 }
 
 // maxResolvedSymlinks bounds extra stat round trips in huge directories.

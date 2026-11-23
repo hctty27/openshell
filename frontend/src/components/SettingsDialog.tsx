@@ -39,6 +39,7 @@ import type {
   Theme,
   TerminalTheme,
 } from "../types";
+import { groupOptions } from "../features/groupOptions";
 interface Props {
   language?: Language;
   languageSaving?: boolean;
@@ -210,19 +211,6 @@ export default function SettingsDialog(p: Props) {
       if (discard) p.onClose();
     });
   };
-  const groupPath = (g: Group): string => {
-    const names = [g.name];
-    const seen = new Set([g.id]);
-    let parent = g.parentId;
-    while (parent && !seen.has(parent)) {
-      const item = p.groups.find((entry) => entry.id === parent);
-      if (!item) break;
-      names.unshift(item.name);
-      seen.add(parent);
-      parent = item.parentId;
-    }
-    return names.join(" / ");
-  };
   const field = (name: keyof Session, value: string | number | boolean) =>
     setSession({ ...session, [name]: value });
   const updateForward = (index: number, update: Partial<LocalForward>) => {
@@ -359,9 +347,9 @@ export default function SettingsDialog(p: Props) {
                     onChange={(e) => field("groupId", e.target.value)}
                   >
                     <option value="">{t("common:defaultFolder")}</option>
-                    {p.groups.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {groupPath(g)}
+                    {groupOptions(p.groups).map(({ group, label }) => (
+                      <option key={group.id} value={group.id}>
+                        {label}
                       </option>
                     ))}
                   </select>

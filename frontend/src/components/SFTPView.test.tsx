@@ -719,3 +719,19 @@ test("SFTP batch transfer can decide each overwrite conflict independently", asy
     { direction: "upload", source: "C:/temp/two.txt", destination: "/root/two.txt", overwrite: true, resume: true },
   ]));
 });
+
+test("double-clicking a symbolic link the panel cannot open explains why", async () => {
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) => side === "remote"
+    ? [
+      { name: "dead", path: "/root/dead", isDir: false, isSymlink: true, linkBroken: true, size: 0, modified: 0, mode: "0777" },
+      { name: "conf", path: "/root/conf", isDir: false, isSymlink: true, size: 4096, modified: 0, mode: "0644" },
+    ]
+    : []);
+  const onNotice = vi.fn();
+  render(<DialogProvider><SFTPView refID={ref} onNotice={onNotice}/></DialogProvider>);
+  fireEvent.doubleClick((await screen.findByText("dead")).closest('[role="listitem"]')!);
+  expect(onNotice).toHaveBeenLastCalledWith(expect.objectContaining({ key: "sftp:symlinkBroken", values: { name: "dead" } }));
+  fireEvent.doubleClick(screen.getByText("conf").closest('[role="listitem"]')!);
+  expect(onNotice).toHaveBeenLastCalledWith(expect.objectContaining({ key: "sftp:symlinkFileNotOpenable" }));
+  expect(screen.getByTitle("失效的链接")).toBeTruthy();
+});

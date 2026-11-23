@@ -6,6 +6,7 @@ import (
     "errors"
     "os"
     "path/filepath"
+    "runtime"
     "strings"
     "testing"
 
@@ -79,5 +80,27 @@ func TestLocalListResolvesSymlinkedDirectories(t *testing.T) {
     }
     if link := byName["c-file-link"]; !link.IsSymlink || link.TargetIsDir {
         t.Fatalf("file symlink marked as directory: %+v", link)
+    }
+}
+
+func TestLocalListShowsSymlinkTargetDetailsAndBrokenLinks(t *testing.T) {
+    root := t.TempDir()
+    file := filepath.Join(root, "data.bin")
+    if err := os.WriteFile(file, make([]byte, 4096), 0o640); err != nil { t.Fatal(err) }
+    if err := os.Symlink(file, filepath.Join(root, "good")); err != nil { t.Skipf("symlinks unavailable: %v", err) }
+    if err := os.Symlink(filepath.Join(root, "missing"), filepath.Join(root, "broken")); err != nil { t.Fatal(err) }
+    items, err := testManager().List(domain.ConnectionRef{}, "local", root)
+    if err != nil { t.Fatal(err) }
+    byName := map[string]Entry{}
+    for _, item := range items { byName[item.Name] = item }
+    good := byName["good"]
+    if !good.IsSymlink || good.LinkBroken || good.Size != 4096 {
+        t.Fatalf("file symlink should show its target size: %+v", good)
+    }
+    if runtime.GOOS != "windows" && good.Mode != "0640" {
+        t.Fatalf("file symlink should show its target mode: %+v", good)
+    }
+    if broken := byName["broken"]; !broken.IsSymlink || !broken.LinkBroken || broken.TargetIsDir {
+        t.Fatalf("broken symlink not marked: %+v", broken)
     }
 }

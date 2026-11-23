@@ -62,12 +62,33 @@ func NewID() string {
 	}
 	return hex.EncodeToString(b[:])
 }
+// NormalizeHost trims spaces and drops the square brackets around an IPv6
+// literal ("[::1]" is saved as "::1"), since the port has its own field.
+func NormalizeHost(host string) string {
+	host = strings.TrimSpace(host)
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		inner := host[1 : len(host)-1]
+		if strings.Contains(inner, ":") && net.ParseIP(inner) != nil {
+			return inner
+		}
+	}
+	return host
+}
+
 // MaxSessionNameLength keeps names readable in the session tree and tabs.
 const MaxSessionNameLength = 100
 
 func ValidateSession(s Session) error {
 	if strings.TrimSpace(s.Host) == "" || strings.ContainsAny(s.Host, "\x00\r\n\t /@") || strings.TrimSpace(s.Username) == "" || strings.ContainsAny(s.Username, "\x00\r\n") {
 		return apperror.New("enterAValidHostAndUsername", nil)
+	}
+	if bracketed := strings.HasPrefix(s.Host, "[") || strings.HasSuffix(s.Host, "]"); bracketed {
+		// Only a whole bracketed IPv6 literal ("[::1]") is allowed; anything
+		// else ("[::1", "[host]", "[::1]:22") is a typo.
+		inner := strings.TrimSuffix(strings.TrimPrefix(s.Host, "["), "]")
+		if !strings.HasPrefix(s.Host, "[") || !strings.HasSuffix(s.Host, "]") || !strings.Contains(inner, ":") || net.ParseIP(inner) == nil {
+			return apperror.New("hostInvalidBrackets", nil)
+		}
 	}
 	if strings.Contains(s.Host, ":") && net.ParseIP(strings.Trim(s.Host, "[]")) == nil {
 		// "host:port" is a common mistake; the port has its own field.

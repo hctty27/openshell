@@ -64,3 +64,19 @@ func TestValidateSessionRejectsCommonInputMistakes(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestBracketedHostsAreNormalizedOrRejected(t *testing.T) {
+	for in, want := range map[string]string{" [::1] ": "::1", "[fe80::1]": "fe80::1", "example.com": "example.com", "[example.com]": "[example.com]"} {
+		if got := NormalizeHost(in); got != want {
+			t.Errorf("NormalizeHost(%q) = %q, want %q", in, got, want)
+		}
+	}
+	base := Session{Host: "example.com", Port: 22, Username: "root", AuthType: "password"}
+	for _, host := range []string{"[::1", "::1]", "[example.com]", "[::1]:22", "[127.0.0.1]"} {
+		s := base
+		s.Host = host
+		if err := ValidateSession(s); err == nil {
+			t.Errorf("accepted malformed bracketed host %q", host)
+		}
+	}
+}

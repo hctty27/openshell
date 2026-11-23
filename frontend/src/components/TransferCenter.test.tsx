@@ -272,3 +272,25 @@ test("native progress is monotonic and stops at 99 percent before remote confirm
   });
   expect(screen.getByText("已完成")).toBeTruthy();
 });
+
+test("closing from the icon or Escape hands focus back to the terminal", () => {
+  const focus = vi.fn();
+  window.addEventListener("openshell:focus-terminal", focus);
+  try {
+    render(<TransferCenter tabs={tabs} onNotice={vi.fn()} />);
+    const toggle = screen.getByRole("button", { name: "传输任务" });
+    fireEvent.click(toggle);
+    expect(focus).not.toHaveBeenCalled();
+    fireEvent.click(toggle);
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(focus).toHaveBeenCalledTimes(2);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(focus).toHaveBeenCalledTimes(2);
+  } finally {
+    window.removeEventListener("openshell:focus-terminal", focus);
+  }
+});
