@@ -308,9 +308,8 @@ func (lease *AITerminalLease) runREPL(ctx context.Context,command string) (strin
 	}
 	select {
 	case result:=<-running.done:
-		status:="成功"
-		if result.code!=0 {status="失败"}
-		return fmt.Sprintf("%s\n执行状态: %s",result.output,status),nil
+		// Same language-neutral form as ssh_exec and the shell terminal.
+		return fmt.Sprintf("%s\nexit status: %d",result.output,result.code),nil
 	case <-ctx.Done():
 		lease.markFailed()
 		lease.interrupt()

@@ -3,6 +3,11 @@ import { Check, Search, Trash2 } from "lucide-react";
 import type { AIConversation } from "../types";
 import { t } from "../i18n";
 
+export function conversationTitle(title: string): string {
+  const trimmed = title.trim();
+  return trimmed === "" || trimmed === "新对话" ? t("ai:newConversation") : trimmed;
+}
+
 interface Props {
   items: AIConversation[];
   selectedID: string;
@@ -96,16 +101,19 @@ export default function AIHistoryPopover({
             <div className="ai-history-group-label">{group.label}</div>
             {grouped.map(item => {
               const selected = item.id === selectedID;
+              // Untitled conversations (and ones saved by older versions with
+              // the fixed Chinese fallback) use the localized label.
+              const title = conversationTitle(item.title);
               return <div key={item.id} className={"ai-history-entry" + (selected ? " is-active" : "")}>
                 <button type="button" className="ai-history-choice" onClick={() => onSelect(item)}
-                  title={item.title} aria-current={selected ? "true" : undefined}>
-                  <span className="ai-history-entry-title">{item.title}</span>
+                  title={title} aria-current={selected ? "true" : undefined}>
+                  <span className="ai-history-entry-title">{title}</span>
                   <span className="ai-history-entry-meta">
                     <small>{displayDate(item.updatedAt, group.key === "earlier")}</small>
                     {selected && <Check size={13} className="ai-history-selected" aria-hidden="true" />}
                   </span>
                 </button>
-                <button type="button" className="ai-history-delete" title={t("ai:deleteConversation") + ": " + item.title}
+                <button type="button" className="ai-history-delete" title={t("ai:deleteConversation") + ": " + title}
                   aria-label={t("ai:deleteConversation")} onClick={() => onDelete(item.id)}>
                   <Trash2 size={13} aria-hidden="true" />
                 </button>
