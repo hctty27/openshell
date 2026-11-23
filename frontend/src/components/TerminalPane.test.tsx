@@ -8,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useState } from "react";
@@ -1128,7 +1129,8 @@ test("does not report a native ZMODEM input ownership rejection as an SSH failur
 
 test("unexpected ZMODEM handshake quarantines input until reconnect", async () => {
   const onError = vi.fn();
-  renderTerminal({ onError });
+  const onReconnect = vi.fn();
+  renderTerminal({ onError, onReconnect });
   const term = refs.terms[0];
   const emit = (name: string, payload: unknown) =>
     act(() => events.listeners.get(name)?.(payload));
@@ -1138,9 +1140,30 @@ test("unexpected ZMODEM handshake quarantines input until reconnect", async () =
   expect(term.options.disableStdin).toBe(true);
   act(() => term.onDataCallback("echo never sent\\r"));
   expect(api.WriteTerminal).not.toHaveBeenCalled();
-  expect(onError).toHaveBeenCalledTimes(1);
+  // B3: the SSH connection is not dropped automatically; the real reason is
+  // shown with a reconnect action instead.
+  expect(onError).not.toHaveBeenCalled();
+  expect(api.Disconnect).not.toHaveBeenCalled();
+  const alert = screen.getByRole("alert");
+  expect(alert.textContent).toContain("未接管，需重连");
+  fireEvent.click(within(alert).getByRole("button", { name: /重新连接|Reconnect/ }));
+  expect(onReconnect).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("alert")).toBeNull();
   emit("ssh:disconnected", tab.ref);
   expect(term.options.disableStdin).toBe(false);
+});
+
+test("a ZMODEM transfer that ends with an unverified terminal offers a reconnect", async () => {
+  const onError = vi.fn();
+  renderTerminal({ onError, onReconnect: vi.fn() });
+  const term = refs.terms[0];
+  const emit = (name: string, payload: unknown) =>
+    act(() => events.listeners.get(name)?.(payload));
+  emit("ssh:native-zmodem-batch", { ref: tab.ref, id: "t1", sequence: 900, active: true });
+  emit("ssh:native-zmodem-batch", { ref: tab.ref, id: "t1", sequence: 900, active: false, terminalSafe: false, error: "timed out" });
+  expect(term.options.disableStdin).toBe(true);
+  expect(screen.getByRole("alert").textContent).toContain("timed out");
+  expect(onError).not.toHaveBeenCalled();
 });
 
 

@@ -129,19 +129,29 @@ func (c *nativeTerminalCoordinator) runPassiveVerified(
 		return false, apperror.New("zmodemNoStartFrameReconnect", nil)
 	}
 
+	// Rust has received or sent the whole file at this point (lengths and
+	// CRCs checked). If the remote shell does not confirm its return - a
+	// nested shell (bash -l, sudo -i, su -, vim :!) never prints our marker
+	// - the file is still kept; only the terminal needs a reconnect.
+	keepFile := func() (bool, error) {
+		_ = c.output.quarantineNative(lease)
+		if staging != "" {
+			if err := nativeZmodemPublish(staging, publishTo); err != nil {
+				return false, apperror.Wrap("zmodemSaveFailed", err, nil)
+			}
+		}
+		return false, nil
+	}
 	var remote nativeRemoteExit
 	select {
 	case remote = <-boundary.completion:
 	case <-time.After(nativePassiveRemoteConfirmTimeout):
-		_ = c.output.quarantineNative(lease)
-		return false, apperror.New("zmodemPassiveMarkerMismatchReconnect", nil)
+		return keepFile()
 	case <-ctx.Done():
-		_ = c.output.quarantineNative(lease)
-		return false, apperror.Wrap("zmodemCompletionTimeoutReconnect", nativeZmodemContextError(ctx), nil)
+		return keepFile()
 	}
 	if remote.err != nil {
-		_ = c.output.quarantineNative(lease)
-		return false, apperror.Wrap("zmodemBoundaryInvalidReconnect", remote.err, nil)
+		return keepFile()
 	}
 	// Output first, manual stdin second: no typing can cross a half-restored
 	// boundary. The guard's quarantine and scanner reset under output.mu.

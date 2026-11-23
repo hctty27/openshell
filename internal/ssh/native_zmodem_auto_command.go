@@ -15,6 +15,10 @@ type nativeAutoInputTracker struct {
 	started bool
 	blocked bool
 	authorized bool
+	// erasedAtPrompt is set by prepare when it replaced Enter with Ctrl-U
+	// on a line that started at a verified Shell prompt. Nothing ran, so
+	// the prompt is still valid and the next rz/sz must not be refused.
+	erasedAtPrompt bool
 }
 
 func (t *nativeAutoInputTracker) reset() {
@@ -185,6 +189,10 @@ func parseNativeAutoCommand(line string) (direction, remotePath string) {
 		if len(args) > start && args[start] == "-q" { start++ }
 		if len(args) > start && args[start] == "--" { start++ }
 		if len(args)-start < 1 { return "reject-unsupported", "" }
+		// An unsupported switch (sz -y x) is not a second file.
+		for _, file := range args[start:] {
+			if strings.HasPrefix(file, "-") { return "reject-unsupported", "" }
+		}
 		if len(args)-start > 1 { return "reject-multi", "" }
 		for _, file := range args[start:] {
 			if file == "" || strings.HasPrefix(file, "-") || strings.ContainsAny(file, "\r\n\x00") {
@@ -217,7 +225,9 @@ func nativeTransferMultilinePaste(line []byte, p []byte) bool {
 // bounded shadow buffer; the remote shell still owns the actual line editor.
 func (t *nativeAutoInputTracker) prepare(p []byte, shellReady, shellCandidate bool) (wire []byte, direction, remotePath string) {
 	wire = append([]byte(nil), p...)
+	t.erasedAtPrompt = false
 	if nativeTransferMultilinePaste(t.line, p) {
+		t.erasedAtPrompt = t.authorized || !t.started && shellReady
 		t.reset()
 		return []byte{0x15}, "reject-multiline", ""
 	}
@@ -231,11 +241,13 @@ func (t *nativeAutoInputTracker) prepare(p []byte, shellReady, shellCandidate bo
 					// the file picker opens. A final CRLF is one newline.
 					trailingLF := b == '\r' && index == len(p)-2 && p[index+1] == '\n'
 					if index != len(p)-1 && !trailingLF {
+						t.erasedAtPrompt = t.authorized
 						t.reset()
 						return append(wire[:index:index], 0x15), "reject-multiline", ""
 					}
 					authorized := t.authorized
 					t.reset()
+					t.erasedAtPrompt = authorized
 					wire = append(wire[:index:index], 0x15)
 					if !authorized {
 						return wire, "reject-unavailable", ""

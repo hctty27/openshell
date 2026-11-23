@@ -19,6 +19,7 @@ vi.mock("../bridge", () => ({
     StartNativeZmodemPassiveTransfer: vi.fn(async () => {}),
     CancelNativeZmodemSelection: vi.fn(async () => {}),
     CheckNativeZmodemRemote: vi.fn(async () => {}),
+    CheckNativeZmodemLocalDirectory: vi.fn(async () => {}),
   },
   listen: (name: string, callback: (payload: any) => void) => {
     events.callbacks.set(name, callback);
@@ -59,6 +60,22 @@ test("native sz downloads exactly one file into remembered directory", async () 
   render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
   intent("download", "/var/log/a.log");
   expect(await screen.findByText("hello.txt")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "保存到此处" }));
+  await waitFor(() => expect(api.StartNativeZmodemInteractiveTransfer)
+    .toHaveBeenCalledWith(ref, "download", "/home/user", "/var/log/a.log"));
+});
+
+test("an unwritable download folder is reported in the picker before any transfer starts", async () => {
+  vi.mocked(api.CheckNativeZmodemLocalDirectory).mockRejectedValueOnce("folder not writable");
+  render(<ZmodemFilePicker activeRef={ref} onNotice={vi.fn()} />);
+  intent("download", "/var/log/a.log");
+  expect(await screen.findByText("hello.txt")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "保存到此处" }));
+  expect(await screen.findByText("folder not writable")).toBeTruthy();
+  expect(api.CheckNativeZmodemLocalDirectory).toHaveBeenCalledWith("/home/user");
+  expect(api.StartNativeZmodemInteractiveTransfer).not.toHaveBeenCalled();
+  expect(api.CancelNativeZmodemSelection).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "保存到此处" }));
   await waitFor(() => expect(api.StartNativeZmodemInteractiveTransfer)
     .toHaveBeenCalledWith(ref, "download", "/home/user", "/var/log/a.log"));

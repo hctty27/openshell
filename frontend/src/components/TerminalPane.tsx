@@ -57,6 +57,8 @@ interface Props {
   onRetry?(): void;
   /** Open the session editor from the in-tab error panel. */
   onEditSession?(): void;
+  /** Reconnect a live SSH tab whose terminal was left unsafe by ZMODEM. */
+  onReconnect?(): void;
 }
 export default function TerminalPane(p: Props) {
   const callbackProps = useRef(p);
@@ -95,6 +97,13 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
   // The failure reason stays visible in the tab (toasts disappear quickly).
   const [dismissedError, setDismissedError] = useState<unknown>(null);
   const showConnectionError = p.tab.status === "error" && !!p.tab.error && dismissedError !== p.tab.error;
+  // A ZMODEM transfer (or its picker) that ended without proof that the
+  // remote shell is back leaves terminal input locked. The SSH connection
+  // stays up - the file may already be saved - and the user decides when
+  // to reconnect, instead of OpenShell disconnecting on its own.
+  const [nativeRecovery, setNativeRecovery] = useState<{ ref: Ref; error: string } | null>(null);
+  const showNativeRecovery = !!nativeRecovery && p.tab.status === "connected" && !!p.tab.ref &&
+    nativeRecovery.ref.tabId === p.tab.ref.tabId && nativeRecovery.ref.generation === p.tab.ref.generation;
   const [searchText, setSearchText] = useState("");
   const [regexMode, setRegexMode] = useState(false);
   const resolvedTheme = resolveTerminalTheme(p.theme, p.terminalTheme, p.tab.session.terminalTheme);
@@ -403,7 +412,10 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       const terminalSafe = event.terminalSafe === true ||
         (event.terminalSafe == null && !event.error);
       if (terminalSafe) nativeTransferIDs.current.delete(transferID);
-      else nativeTransferIDs.current.add(transferID);
+      else {
+        nativeTransferIDs.current.add(transferID);
+        setNativeRecovery({ ref: event.ref, error: event.error ?? "" });
+      }
       updateNativeInputLock();
     });
     const offUnsupported = listen("ssh:native-zmodem-unsupported", (event: {
@@ -412,7 +424,7 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
       if (!event?.ref || !matchesConnection(event.ref)) return;
       nativeTransferIDs.current.add("unsafe-protocol");
       updateNativeInputLock();
-      callbacks.current.onError(new Error(event.error ?? "Unclaimed ZMODEM protocol; reconnect SSH"));
+      setNativeRecovery({ ref: event.ref, error: event.error ?? "" });
     });
     const offDisconnected = listen("ssh:disconnected", (disconnectedRef: Ref) => {
       if (!matchesConnection(disconnectedRef)) return;
@@ -920,6 +932,25 @@ function TerminalPaneImpl(p: Props & { callbackProps: { current: Props } }) {
               <Pencil size={14} aria-hidden="true" /> {t("common:editSession")}</button>}
             {terminalMode !== "none" && <button type="button" aria-label={t("common:close")} title={t("common:close")}
               onClick={() => setDismissedError(p.tab.error)}><X size={14} aria-hidden="true" /></button>}
+          </div>
+        </div>
+      )}
+      {showNativeRecovery && (
+        <div className="terminal-connection-error" role="alert">
+          <AlertTriangle size={18} aria-hidden="true" />
+          <div className="terminal-connection-error-body">
+            <strong>{t("terminal:nativeZmodemReconnectTitle")}</strong>
+            {nativeRecovery.error && <p>{errorText(nativeRecovery.error)}</p>}
+            <p>{t("terminal:nativeZmodemReconnectHint")}</p>
+          </div>
+          <div className="terminal-connection-error-actions">
+            {p.onReconnect && <button type="button" className="primary" onClick={() => {
+              setNativeRecovery(null);
+              callbacks.current.onReconnect?.();
+            }}>
+              <RotateCcw size={14} aria-hidden="true" /> {t("terminal:nativeZmodemReconnect")}</button>}
+            <button type="button" aria-label={t("common:close")} title={t("common:close")}
+              onClick={() => setNativeRecovery(null)}><X size={14} aria-hidden="true" /></button>
           </div>
         </div>
       )}

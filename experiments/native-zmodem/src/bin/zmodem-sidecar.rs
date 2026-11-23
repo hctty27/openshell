@@ -17,6 +17,29 @@ use zmodem2::{Action, Event, FileInfo, Position, Receiver, Sender};
 const MAX_SIZE: u64 = (2 * 1024 * 1024 * 1024) - 1;
 const MAX_FILES_PER_SESSION: usize = 100;
 const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(90);
+// Until the peer has offered (receive) or requested (send) the first file,
+// a much shorter limit applies: a remote sz of an unreadable file sends
+// ZRQINIT but never ZFILE, and a remote rz/sz may have exited while the
+// file picker was open. Without this the transfer hung for 90 seconds.
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
+// Subpackets (1 KiB each) sent before waiting for a ZACK when the receiver
+// advertises nonstop I/O. zmodem2 defaults to 10, which bounds uploads to
+// about 10 KiB per round trip (3 MiB took 105 s at 300 ms RTT).
+const DEFAULT_STREAMING_WINDOW: usize = 256;
+
+fn handshake_timeout() -> Duration {
+    env::var("OPENSHELL_ZMODEM_HANDSHAKE_TIMEOUT_MS").ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .filter(|ms| (100..=120_000).contains(ms))
+        .map_or(HANDSHAKE_TIMEOUT, Duration::from_millis)
+}
+
+fn streaming_window() -> usize {
+    env::var("OPENSHELL_ZMODEM_STREAMING_WINDOW").ok()
+        .and_then(|raw| raw.parse::<usize>().ok())
+        .filter(|n| (1..=4096).contains(n))
+        .unwrap_or(DEFAULT_STREAMING_WINDOW)
+}
 
 fn checked_file_size(size: u64) -> io::Result<()> {
     if size > MAX_SIZE {
@@ -291,6 +314,7 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut sender = Sender::new()?;
+    sender.set_streaming_window(streaming_window());
     sender.start_file(upload_info(&files[0]))?;
     let rx = incoming_wire();
     let mut waiting = VecDeque::<u8>::new();
@@ -307,10 +331,16 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
     let mut session_completed = false;
     let mut progress_at = Instant::now() - PROGRESS_INTERVAL;
     let mut activity = ActivityClock::new();
+    let handshake_started = Instant::now();
+    let handshake_limit = handshake_timeout();
+    let mut peer_answered = false;
     report_progress(0, total, &mut progress_at, true);
     report_file_start(0, &files[0].name, Some(files[0].size));
 
     while !activity.expired() {
+        if !peer_answered && handshake_started.elapsed() >= handshake_limit {
+            return Err("ZMODEM receiver did not answer: the remote rz may have exited".into());
+        }
         match sender.poll() {
             Action::WriteWire(data) => {
                 output.write_wire(data)?;
@@ -319,6 +349,7 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
                 if count > 0 { activity.touch(); }
             }
             Action::ReadFile { offset, max_len } => {
+                peer_answered = true;
                 let source = &mut files[active_index];
                 let start = u64::from(offset.get());
                 if start >= source.size {
@@ -334,6 +365,7 @@ fn send(paths: &[PathBuf]) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             Action::Event(Event::FileCompleted) => {
+                peer_answered = true;
                 output.flush_pending()?;
                 // zmodem2 reports a receiver ZSKIP as FileCompleted. A
                 // non-empty file whose data was never requested was declined
@@ -497,8 +529,13 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
     let mut file_write_scratch = Vec::<u8>::new();
     let mut diag = ReceiverDiagnostics::new();
     let mut activity = ActivityClock::new();
+    let handshake_started = Instant::now();
+    let handshake_limit = handshake_timeout();
 
     while !activity.expired() {
+        if seen_files == 0 && handshake_started.elapsed() >= handshake_limit {
+            return Err("ZMODEM sender offered no file: the remote file may be unreadable or the remote sz exited".into());
+        }
         let poll_started = if diag.enabled { Some(Instant::now()) } else { None };
         let action = receiver.poll();
         if let Some(started) = poll_started {
@@ -617,7 +654,10 @@ fn receive(dir: &Path, auto_rename: bool) -> Result<(), Box<dyn std::error::Erro
             }
             Action::Event(Event::SessionCompleted) => {
                 output.flush_pending()?;
-                if seen_files == 0 || completed_files + skipped_files != seen_files ||
+                if seen_files == 0 {
+                    return Err("ZMODEM sender ended the session without offering a file".into());
+                }
+                if completed_files + skipped_files != seen_files ||
                     open_file.is_some() || pending_decision.is_some() {
                     return Err("session ended without completing all files".into());
                 }

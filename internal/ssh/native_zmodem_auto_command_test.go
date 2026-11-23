@@ -42,6 +42,7 @@ func TestNativeAutoCommandTrackerPreservesUnrecognizedTerminalInput(t *testing.T
 		{"unsupported shell chain blocked", []string{"sz /tmp/a;rm -rf /\r"}, true, "sz /tmp/a;rm -rf /\x15", "reject-unsupported", ""},
 		{"quoted spaces", []string{"sz '/tmp/a b'\r"}, true, "sz '/tmp/a b'\x15", "download", "/tmp/a b"},
 		{"empty line", []string{"\r"}, true, "\r", "", ""},
+		{"unsupported sz switch is not a second file", []string{"sz -y x\r"}, true, "sz -y x\x15", "reject-unsupported", ""},
 		{"multi download rejected before remote command", []string{"sz -q -- one.bin 'two files.bin'\r"}, true, "sz -q -- one.bin 'two files.bin'\x15", "reject-multi", ""},
 		{"unicode download", []string{"sz '中文 文件.bin'\r"}, true, "sz '中文 文件.bin'\x15", "download", "中文 文件.bin"},
 		{"escaped space", []string{"sz name\\ with\\ spaces.bin\r"}, true, "sz name\\ with\\ spaces.bin\x15", "download", "name with spaces.bin"},
@@ -406,5 +407,81 @@ func TestNativeAutoCommandKnownREPLAndAlternateScreenBypass(t *testing.T) {
 				t.Fatalf("modified a non-Shell input: %q", input.String())
 			}
 		})
+	}
+}
+
+// v1.0.34 report C: after a refused line (rz -b, sz a b, true && rz) was
+// erased with Ctrl-U at a verified prompt, the next rz was refused with
+// zmodemPromptUnverified until another command or Enter was sent.
+func TestNativeAutoCommandRefusedLineKeepsPromptVerified(t *testing.T) {
+	for _, refused := range []string{"rz -b", "sz a b", "true && rz", "sz -y x", "rz\rwhoami"} {
+		t.Run(refused, func(t *testing.T) {
+			m, ref, input, events := nativeAutoTestManager(t, true, true)
+			var notices []string
+			m.emit = func(name string, payload any) {
+				if name == "ssh:native-zmodem-command-error" {
+					notices = append(notices, payload.(map[string]any)["error"].(string))
+				}
+				if name == "ssh:native-zmodem-auto-intent" {
+					events <- payload.(map[string]any)
+				}
+			}
+			nativeAutoType(t, m, ref, refused+"\r")
+			if len(notices) != 1 || strings.Contains(notices[0], "zmodemPromptUnverified") {
+				t.Fatalf("unexpected first notice: %v", notices)
+			}
+			input.Reset()
+			nativeAutoType(t, m, ref, "rz\r")
+			if got := input.String(); got != "rz\x15" {
+				t.Fatalf("unexpected wire: %q", got)
+			}
+			select {
+			case event := <-events:
+				if event["direction"] != "upload" {
+					t.Fatalf("unexpected intent: %v", event)
+				}
+			default:
+				t.Fatalf("rz after refused %q did not open the picker: %v", refused, notices)
+			}
+		})
+	}
+}
+
+// B4: with passive ZMODEM, rz/sz that cannot be pre-checked is sent to the
+// remote unchanged instead of being erased; the passive guard takes over.
+func TestNativeAutoCommandPassivePassesUncheckedTransfersThrough(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		ready   bool
+		command string
+	}{
+		{"compound", true, "cd /tmp && rz -y"},
+		{"sudo", true, "sudo sz f"},
+		{"function", true, "f(){ sz \"$@\"; }; f a"},
+		{"unknown prompt", false, "sz -q /tmp/x"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, ref, input, events := nativeAutoTestManager(t, tc.ready, true)
+			m.connections[ref.TabID].passiveZmodem = true
+			var notices []string
+			m.emit = func(name string, payload any) {
+				if name == "ssh:native-zmodem-command-error" {
+					notices = append(notices, payload.(map[string]any)["error"].(string))
+				}
+			}
+			nativeAutoType(t, m, ref, tc.command+"\r")
+			if got := input.String(); got != tc.command+"\r" {
+				t.Fatalf("passive command was not sent unchanged: %q", got)
+			}
+			if len(notices) != 0 || len(events) != 0 {
+				t.Fatalf("unexpected rejection or picker: %v %d", notices, len(events))
+			}
+		})
+	}
+	// Without passive the same input is still refused.
+	m, ref, input, _ := nativeAutoTestManager(t, true, true)
+	nativeAutoType(t, m, ref, "cd /tmp && rz -y\r")
+	if got := input.String(); got != "cd /tmp && rz -y\x15" {
+		t.Fatalf("non-passive compound transfer escaped: %q", got)
 	}
 }

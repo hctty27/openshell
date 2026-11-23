@@ -222,7 +222,10 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
       setNativeBatches(previous => {
         const next = { ...previous };
         for (const [key, batch] of Object.entries(previous)) {
-          if (batch.status !== "running" && batch.status !== "cancelling") delete next[key];
+          // Failed rows stay until the next transfer on that terminal so the
+          // reason (for example a remote rz that declined the file) is not
+          // lost while the user is still looking at the terminal.
+          if (batch.status === "completed" || batch.status === "cancelled") delete next[key];
         }
         return Object.keys(next).length === Object.keys(previous).length ? previous : next;
       });
@@ -339,7 +342,7 @@ export default function TransferCenter({ tabs, onNotice }: Props) {
                 <article key={"native-" + key} className="transfer-center-job">
                   <div className="transfer-center-line">
                     {batch.direction === "download" ? <ArrowDownToLine size={15}/> : <ArrowUpFromLine size={15}/>}
-                    <strong title={file?.name ?? "ZMODEM"}>{file?.name ?? "ZMODEM"}{batch.overwrite ? " · " + t("sftp:zmodemOverwriteMode") : ""}</strong>
+                    <strong title={file?.name || t("sftp:zmodemRemoteFile")}>{file?.name || t("sftp:zmodemRemoteFile")}{batch.overwrite ? " · " + t("sftp:zmodemOverwriteMode") : ""}</strong>
                     <span className="transfer-center-session" title={sessionName(batch.ref)}>{sessionName(batch.ref)}</span>
                     {active ?
                       <button type="button" disabled={batch.status === "cancelling"}
