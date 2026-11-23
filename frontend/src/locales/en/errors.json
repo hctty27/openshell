@@ -303,7 +303,7 @@
   "zmodemBoundaryInvalidReconnect": "The remote ZMODEM completion marker was invalid. Reconnect the terminal",
   "zmodemRemoteDidNotStart": "The remote rz/sz did not start ZMODEM (exit status {{status}}). The terminal was restored",
   "zmodemRemoteIsDirectory": "sz can only download a file, and {{path}} is a directory on the remote host. Pack it first, for example with tar",
-  "zmodemRemoteNotFound": "The remote file {{path}} does not exist in the current directory of the remote shell",
+  "zmodemRemoteNotFound": "The remote file {{path}} does not exist. Relative paths are resolved from the remote shell's current directory",
   "zmodemRemoteNotReadable": "You do not have permission to read the remote file {{path}}",
   "zmodemRemoteDirNotWritable": "You do not have permission to write to the current directory on the remote host. cd to a writable directory and run rz again",
   "zmodemRemoteLrzszMissing": "rz/sz (lrzsz) is not installed on the remote host. Install the lrzsz package, or use the SFTP panel",

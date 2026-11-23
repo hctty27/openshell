@@ -303,7 +303,7 @@
   "zmodemBoundaryInvalidReconnect": "远端 ZMODEM 结束标记异常（需要重连）",
   "zmodemRemoteDidNotStart": "远端 rz/sz 未能启动 ZMODEM 协议（退出状态 {{status}}），终端已安全恢复",
   "zmodemRemoteIsDirectory": "sz 只能下载文件，远端的 {{path}} 是目录。请先打包，例如用 tar",
-  "zmodemRemoteNotFound": "远端 Shell 当前目录下没有文件 {{path}}",
+  "zmodemRemoteNotFound": "远端文件 {{path}} 不存在（相对路径按远端 Shell 的当前目录计算）",
   "zmodemRemoteNotReadable": "没有权限读取远端文件 {{path}}",
   "zmodemRemoteDirNotWritable": "没有权限写入远端当前目录。请先 cd 到可写的目录，再运行 rz",
   "zmodemRemoteLrzszMissing": "远端没有安装 rz/sz（lrzsz）。请安装 lrzsz，或改用 SFTP 面板",
