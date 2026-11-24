@@ -234,7 +234,7 @@ func aiToolApproval(mode, tool, program, command, filePath string, modelAsked bo
 		}
 		// Allowlist: in both modes only commands that parse cleanly and are
 		// known to be read-only run without approval.
-		if !aiShellReadOnly(command) {
+		if !aiShellReadOnly(command) || aiShellFileAccessNeedsApproval(command) {
 			return aiApprovalPolicy{true, "unverified"}
 		}
 		return aiApprovalPolicy{}
