@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -68,11 +70,52 @@ func TestNativeZmodemPassiveSidecarFailureRecoversWithoutPublishingPartial(t *te
 	header:=nativeZmodemHeaderFixture(0)
 	if _,err:=output.Write(header);err!=nil{t.Fatal(err)}
 	failure:=errors.New("remote sz did not provide a file")
-	c:=&nativeTerminalCoordinator{input:input,output:output,runner:func(_ context.Context,_ string,_ string,in io.ReadCloser,_ io.Writer)error{
+	c:=&nativeTerminalCoordinator{input:input,output:output,runner:func(_ context.Context,_ string,dir string,in io.ReadCloser,_ io.Writer)error{
 		if _,err:=io.ReadFull(in,make([]byte,len(header)));err!=nil{return err}
+		if err:=os.WriteFile(filepath.Join(dir,"partial.bin"),[]byte("incomplete"),0600);err!=nil{return err}
 		return failure
 	}}
-	restored,err:=c.runPassiveVerified(context.Background(),"download",t.TempDir(),guard,testNativePassiveSessionToken)
+	target:=t.TempDir()
+	restored,err:=c.runPassiveVerified(context.Background(),"download",target,guard,testNativePassiveSessionToken)
 	if !restored||!errors.Is(err,failure){t.Fatalf("restored=%v err=%v",restored,err)}
+	if entries,err:=os.ReadDir(target);err!=nil||len(entries)!=0{t.Fatalf("failed download published or left staging: %v %v",entries,err)}
 	if _,err:=input.Write([]byte("pwd\r"));err!=nil{t.Fatal(err)}
+}
+
+// A picker cancellation may only recover the exact current connection and
+// selection generation. Late callbacks must not affect a subsequent picker.
+func TestNativeZmodemPassiveCancelPickerManagerGeneration(t *testing.T) {
+	m,ref,remote,intents:=nativeAutoTestManager(t,true,true)
+	conn:=m.connections[ref.TabID]
+	conn.passiveBashHookToken=testNativePassiveSessionToken
+	var visible bytes.Buffer
+	guard:=newNativeOnlyOutputGuardPassive(&visible,nil,conn.inputGate.blockPassiveInput,func(frame byte){go m.handleNativePassiveFrame(ref,conn,frame)})
+	conn.outputGuard=guard
+	conn.outputGate=newTerminalOutputGate(guard)
+	marker:=[]byte("\x1b]777;OpenShellNativeZmodem;"+testNativePassiveSessionToken+";128\x07shell$ ")
+	if _,err:=conn.outputGate.Write(append(nativeZmodemHeaderFixture(1),marker...));err!=nil{t.Fatal(err)}
+	var id uint64
+	select{
+	case event:=<-intents:
+		id=event["selectionId"].(uint64)
+	case <-time.After(2*time.Second):t.Fatal("picker missing")
+	}
+	stale:=ref
+	stale.Generation++
+	if m.ReleaseNativeZmodemSelection(stale,id)||m.ReleaseNativeZmodemSelection(ref,id+1){t.Fatal("stale cancellation accepted")}
+	if _,err:=conn.inputGate.Write([]byte("pwd\r"));!errors.Is(err,errNativeTerminalInputBusy){t.Fatalf("stale cancellation unlocked input: %v",err)}
+	if !m.ReleaseNativeZmodemSelection(ref,id){t.Fatal("current picker not released")}
+	m.mu.Lock()
+	unsafe:=conn.nativeTerminalPoisoned||conn.nativeTerminalTransfer!=nil||conn.nativeZmodemSelection
+	m.mu.Unlock()
+	if unsafe||remote.Len()!=0{t.Fatalf("verified picker remained unsafe or wrote cancel after exit: %v %q",unsafe,remote.String())}
+	if _,err:=conn.inputGate.Write([]byte("pwd\r"));err!=nil{t.Fatal(err)}
+	if _,err:=conn.outputGate.Write(nativeZmodemHeaderFixture(1));err!=nil{t.Fatal(err)}
+	select{
+	case event:=<-intents:
+		if event["selectionId"].(uint64)<=id{t.Fatalf("new picker has stale id: %v",event)}
+	case <-time.After(2*time.Second):t.Fatal("second picker missing")
+	}
+	if m.ReleaseNativeZmodemSelection(ref,id){t.Fatal("old cancellation affected second picker")}
+	if _,err:=conn.inputGate.Write([]byte("pwd\r"));!errors.Is(err,errNativeTerminalInputBusy){t.Fatalf("second picker input escaped: %v",err)}
 }
