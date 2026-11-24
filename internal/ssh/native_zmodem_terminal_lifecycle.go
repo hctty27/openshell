@@ -55,17 +55,45 @@ func (m *Manager) ReleaseNativeZmodemSelection(ref domain.ConnectionRef, selecti
 	guard := c.outputGuard
 	c.nativeZmodemSelection = false
 	c.nativeZmodemSelectionPassive = false
+	var recovery *nativeTerminalTransferTask
+	var recoveryCtx context.Context
+	var token string
 	if passive {
-		// The remote program is already executing. Dismissing its picker
-		// is not proof that the remote shell has exited.
+		// Reserve the exact generation until the cancellation handshake and
+		// verified Bash boundary finish. The UI remains locked until then.
 		c.nativeTerminalPoisoned = true
+		if !c.passiveBashHookInstalling && c.passiveBashHookToken != "" &&
+			c.nativeTerminalTransfer == nil && c.aiController == nil &&
+			c.inputGate != nil && c.outputGate != nil && guard != nil {
+			var cancel context.CancelFunc
+			recoveryCtx, cancel = context.WithCancel(context.Background())
+			recovery = &nativeTerminalTransferTask{ref: ref, cancel: cancel}
+			c.nativeTerminalTransfer = recovery
+			token = c.passiveBashHookToken
+		}
 	} else if c.nativeTerminalTransfer == nil && !c.nativeTerminalPoisoned {
 		// The explicit command was erased with Ctrl-U before executing.
 		c.readiness.restoreClearedNativeZmodemPrompt()
 	}
+	input, output := c.inputGate, c.outputGate
 	m.mu.Unlock()
-	if passive && guard != nil { guard.discardCapture() }
-	if passive {
+	restored := false
+	if recovery != nil {
+		coordinator := &nativeTerminalCoordinator{input: input, output: output}
+		restored = coordinator.cancelPassivePicker(recoveryCtx, guard, token)
+		recovery.cancel()
+		m.mu.Lock()
+		if current := m.connections[ref.TabID]; current != c || c.ref != ref ||
+			c.nativeTerminalTransfer != recovery {
+			m.mu.Unlock()
+			return true // stale generation; do not emit a late recovery event
+		}
+		c.nativeTerminalTransfer = nil
+		if restored { c.nativeTerminalPoisoned = false }
+		m.mu.Unlock()
+	}
+	if passive && !restored && guard != nil { guard.discardCapture() }
+	if passive && !restored {
 		// The frontend must learn that the PTY is unsafe before receiving
 		// the selection-release event. Never create a brief typing window.
 		m.emit("ssh:native-zmodem-unsupported", map[string]any{
