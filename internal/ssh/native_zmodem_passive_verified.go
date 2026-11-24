@@ -26,8 +26,7 @@ func (c *nativeTerminalCoordinator) runPassiveVerified(
 	parent context.Context, direction, localPath string,
 	guard *nativeOnlyOutputGuard, registeredToken string,
 ) (restored bool, resultErr error) {
-	rawToken, err := hex.DecodeString(registeredToken)
-	if err != nil || len(rawToken) != 16 || hex.EncodeToString(rawToken) != registeredToken {
+	if !nativePassiveTokenValid(registeredToken) {
 		return false, apperror.New("zmodemPassiveMarkerMissing", nil)
 	}
 	if parent == nil || c == nil || c.input == nil || c.output == nil ||
@@ -100,20 +99,13 @@ func (c *nativeTerminalCoordinator) runPassiveVerified(
 		return false, apperror.Wrap("zmodemHandshakeFailedReconnect", err, nil)
 	}
 	var protocolErr error
-	switch {
-	default:
-		select {
-		case protocolErr = <-done:
-		case protocolErr = <-sink.fail:
-			_ = c.output.quarantineNative(lease)
-			stopSidecar()
-			return false, apperror.Wrap("zmodemForwardFailedReconnect", protocolErr, nil)
-		case <-ctx.Done():
-			_, _ = c.input.writeNative(inputLease, zmodemCancelSequence)
-			_ = c.output.quarantineNative(lease)
-			stopSidecar()
-			return false, apperror.Wrap("zmodemProtocolIncompleteReconnect", nativeZmodemContextError(ctx), nil)
-		}
+	select {
+	case protocolErr = <-done:
+	case protocolErr = <-sink.fail:
+		stopSidecar()
+	case <-ctx.Done():
+		protocolErr = nativeZmodemContextError(ctx)
+		stopSidecar()
 	}
 	// After Rust returns, the exit detector must remain active but it
 	// must no longer forward any SSH output into Rust's closed pipe.
@@ -123,6 +115,11 @@ func (c *nativeTerminalCoordinator) runPassiveVerified(
 	}
 	sink.finish(reader)
 	if protocolErr != nil {
+		// Do not publish a partial download. A failed Rust task can still
+		// return to the original shell when its Bash exit marker is proven.
+		if c.recoverPassiveAbort(context.WithoutCancel(parent), inputLease, lease, boundary, guard) {
+			return true, protocolErr
+		}
 		return false, apperror.Wrap("zmodemSidecarFailedReconnect", protocolErr, nil)
 	}
 	if !sink.seenHeader() {
@@ -170,4 +167,75 @@ func (c *nativeTerminalCoordinator) runPassiveVerified(
 		}
 	}
 	return true, nil
+}
+
+// nativePassiveTokenValid accepts only the nonce format installed by the Bash
+// hook before the remote command was started.
+func nativePassiveTokenValid(token string) bool {
+	raw, err := hex.DecodeString(token)
+	return err == nil && len(raw) == 16 && hex.EncodeToString(raw) == token
+}
+
+// recoverPassiveAbort operates only on an already-claimed output boundary,
+// after the Rust reader (if any) has stopped. Cancel only if no matching
+// completion marker was already captured. Never restore on CAN, a prompt,
+// a timer, or local sidecar exit alone.
+func (c *nativeTerminalCoordinator) recoverPassiveAbort(
+	ctx context.Context, inputLease, outputLease uint64,
+	boundary *nativeRemoteBoundarySink, guard *nativeOnlyOutputGuard,
+) bool {
+	var remote nativeRemoteExit
+	select {
+	case remote = <-boundary.completion:
+	default:
+		if ctx.Err() != nil {
+			_ = c.output.quarantineNative(outputLease)
+			return false
+		}
+		n, err := c.input.writeNative(inputLease, zmodemCancelSequence)
+		if err != nil || n != len(zmodemCancelSequence) {
+			_ = c.output.quarantineNative(outputLease)
+			return false
+		}
+		timer := time.NewTimer(nativePassiveRemoteConfirmTimeout)
+		defer timer.Stop()
+		select {
+		case remote = <-boundary.completion:
+		case <-timer.C:
+			_ = c.output.quarantineNative(outputLease)
+			return false
+		case <-ctx.Done():
+			_ = c.output.quarantineNative(outputLease)
+			return false
+		}
+	}
+	if remote.err != nil || ctx.Err() != nil {
+		_ = c.output.quarantineNative(outputLease)
+		return false
+	}
+	// Nonzero remote status is expected on abort; the caller still reports
+	// cancellation/failure. Only the verified exit grants permission to type.
+	if err := c.output.restoreVerifiedPassive(outputLease, boundary, guard); err != nil {
+		return false
+	}
+	return c.input.restoreVerifiedPassive(inputLease) == nil
+}
+
+// cancelPassivePicker consumes an already-started, CRC-validated handshake
+// without launching a sidecar or touching a local file.
+func (c *nativeTerminalCoordinator) cancelPassivePicker(
+	ctx context.Context, guard *nativeOnlyOutputGuard, token string,
+) bool {
+	if ctx == nil || ctx.Err() != nil || !nativePassiveTokenValid(token) {
+		return false
+	}
+	inputLease, err := c.input.takeover()
+	if err != nil { return false }
+	boundary := newNativeRemoteBoundarySink(io.Discard, token)
+	outputLease, err := c.output.takeoverCaptured(boundary, guard)
+	if err != nil {
+		if outputLease != 0 { _ = c.output.quarantineNative(outputLease) }
+		return false
+	}
+	return c.recoverPassiveAbort(ctx, inputLease, outputLease, boundary, guard)
 }
