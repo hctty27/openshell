@@ -93,12 +93,12 @@ func TestAIToolApprovalKeepsCommonCommandsQuiet(t *testing.T) {
 	quiet := map[string][]string{
 		"auto": {
 			"ls -la", "ls *.log", "cat *.txt", "grep -r foo *", "ls ~", "ls ~/*", "cat /etc/passwd", "cat /etc/hosts",
-			"systemctl status nginx", "find /var/log -name '*.gz'", "docker ps", "kubectl get pods", "git diff HEAD~1",
+			"systemctl status nginx", "find /var/log -name '*.gz'", "docker ps", "kubectl get pods", "git diff --no-ext-diff --no-textconv HEAD~1",
 			"git status", "git log -n 5 --oneline", "df -h", "ps aux | grep nginx | head -20", "grep -rn TODO .",
 			"journalctl -u nginx -n 50 --no-pager 2>/dev/null", "du -sh /var/log", "free -m", "uname -a",
 		},
 		"review": {
-			"ls -la", "ls *.log", "cat /etc/hosts", "git diff HEAD", "git log -n 5 --oneline", "tree -L 2 /srv",
+			"ls -la", "ls *.log", "cat /etc/hosts", "git diff --no-ext-diff --no-textconv HEAD", "git log -n 5 --oneline", "tree -L 2 /srv",
 			"date +%s", "date -I", "hostname -f",
 		},
 	}

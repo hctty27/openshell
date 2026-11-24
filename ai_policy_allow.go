@@ -258,6 +258,14 @@ func aiShellReadOnlyArgs(name string, args []string) bool {
 			aiAnyShortFlags(args[min(1, len(args)):], "oO") {
 			return false
 		}
+		// Git may execute repository-configured diff.external / textconv helpers
+		// even when the user supplied no explicit --ext-diff or --textconv.
+		// Only allow diff-producing commands when both features are disabled.
+		if sub == "diff" || sub == "show" || sub == "log" && aiGitLogDisplaysDiff(args[1:]) {
+			if !aiGitDiffHelpersDisabled(args[1:]) {
+				return false
+			}
+		}
 		if !map[string]bool{"status": true, "log": true, "diff": true, "show": true, "rev-parse": true, "remote": true, "branch": true, "describe": true}[sub] ||
 			(sub == "branch" && len(args) > 1 && args[1] != "-a" && args[1] != "-r" && args[1] != "--list" && args[1] != "-v" && args[1] != "-vv") ||
 			(sub == "remote" && len(args) > 1 && args[1] != "-v") {
@@ -270,6 +278,30 @@ func aiShellReadOnlyArgs(name string, args []string) bool {
 		}
 	}
 	return true
+}
+
+// aiGitDiffHelpersDisabled demands explicit safeguards before any path
+// that may render diffs. Both options must precede the pathspec separator;
+// a flag written after -- names a file instead of changing Git behavior.
+func aiGitDiffHelpersDisabled(args []string) bool {
+	noExt, noText := false, false
+	for _, a := range args {
+		if a == "--" { break }
+		switch a {
+		case "--no-ext-diff": noExt = true
+		case "--no-textconv": noText = true
+		case "--ext-diff", "--textconv": return false
+		}
+	}
+	return noExt && noText
+}
+
+// aiGitLogDisplaysDiff checks options that enable patch or diffstat output.
+// Plain log metadata, such as --oneline, does not invoke diff converters.
+func aiGitLogDisplaysDiff(args []string) bool {
+	return aiAnyShortFlags(args, "p") ||
+		aiHasLongFlag(args, "--patch", "--stat", "--numstat", "--shortstat", "--name-only",
+			"--name-status", "--dirstat", "--summary", "--raw", "--check")
 }
 
 // aiShellNormalized removes the quoting and escape characters the shell
