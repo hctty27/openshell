@@ -17,12 +17,11 @@ const blankProvider = (): AIProvider => ({
   id: "", name: "", baseUrl: "", hasKey: false, models: [],
 });
 
-function providerSignature(provider: AIProvider, key: string): string {
+function providerSignature(provider: AIProvider): string {
   return JSON.stringify({
     name: provider.name,
     baseUrl: provider.baseUrl,
     models: provider.models.map(model => ({ id: model.id, contextWindow: model.contextWindow })),
-    key,
   });
 }
 
@@ -44,14 +43,14 @@ export default function AIProviderSettings({ onDirtyChange }: Props) {
   const [providers, setProviders] = useState<AIProvider[]>([]);
   const [draft, setDraft] = useState<AIProvider>(blankProvider);
   const [key, setKey] = useState("");
-  const [baseline, setBaseline] = useState(() => providerSignature(blankProvider(), ""));
+  const [baseline, setBaseline] = useState(() => providerSignature(blankProvider()));
   const [runtimeDirty, setRuntimeDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const providerDirty = providerSignature(draft, key) !== baseline;
+  const providerDirty = key.length > 0 || providerSignature(draft) !== baseline;
   const dirty = section === "providers" ? providerDirty : runtimeDirty;
 
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
@@ -60,7 +59,7 @@ export default function AIProviderSettings({ onDirtyChange }: Props) {
     const next = provider ? { ...provider, models: provider.models.map(model => ({ ...model })) } : blankProvider();
     setDraft(next);
     setKey("");
-    setBaseline(providerSignature(next, ""));
+    setBaseline(providerSignature(next));
     setError("");
     setSuccess("");
   };

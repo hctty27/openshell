@@ -76,7 +76,7 @@ func checkAIProvider(ctx context.Context, baseURL, key, model string) (AITestPro
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 	if resp.StatusCode != http.StatusOK {
-		detail := strings.TrimSpace(string(data))
+		detail := strings.TrimSpace(redactAIKey(string(data), key))
 		var cause error
 		if detail != "" { cause = errorString(detail) }
 		code := "aiTestHTTPStatus"
