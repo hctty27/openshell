@@ -49,6 +49,9 @@ type App struct {
 	xshellPreview *XshellImportPreview
 	mu           sync.Mutex
 	transient    map[string]string
+	transientTimers map[string]*time.Timer
+	credentialEpoch map[string]uint64
+	credentialsClosed bool
 	challenges   map[string]*sshclient.HostKeyError
 	tabRefs      map[string]domain.ConnectionRef
 	localTerminals map[string]*localTerminalSession
@@ -187,6 +190,10 @@ func (a *App) QuitConfirmed() {
  if a.quit != nil { a.quit() }
 }
 func (a *App) shutdown(context.Context) {
+	a.mu.Lock()
+	a.credentialsClosed = true
+	for key := range a.transient { a.deleteTransientLocked(key) }
+	a.mu.Unlock()
 	a.stopAllAI()
 	a.nativeZmodem.Close()
 	a.sftp.Close()
@@ -350,10 +357,12 @@ func (a *App) State() (AppState, error) {
 // clearSessionCredentialsLocked invalidates both the session fallback and
 // credentials cached per terminal tab. Caller must hold a.mu.
 func (a *App) clearSessionCredentialsLocked(sessionID string) {
+ if a.credentialEpoch == nil { a.credentialEpoch = make(map[string]uint64) }
+ a.credentialEpoch[sessionID]++
  suffix := ":" + sessionID
  for key := range a.transient {
   if key == "session:"+sessionID || (strings.HasPrefix(key, "connection:") && strings.HasSuffix(key, suffix)) {
-   delete(a.transient, key)
+   a.deleteTransientLocked(key)
   }
  }
 }
@@ -378,7 +387,7 @@ func (a *App) SaveSession(req SaveSessionRequest) (domain.Session, error) {
 			a.clearSessionCredentialsLocked(row.ID)
 		}
 		if !req.SaveSecret && req.Secret != "" {
-			a.transient[key] = req.Secret
+			a.cacheTransientLocked(key, req.Secret, transientSessionCredentialTTL)
 		}
 	}
 	return row, e
@@ -592,6 +601,10 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 		return ConnectResult{}, apperror.New("invalidTerminalTab", nil)
 	}
 	a.mu.Lock()
+	if a.credentialsClosed {
+		a.mu.Unlock()
+		return ConnectResult{}, apperror.New("applicationIsClosed", nil)
+	}
 	s, e := a.store.GetSession(a.ctx, sessionID)
 	if e != nil {
 		a.mu.Unlock()
@@ -599,6 +612,10 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 	}
 	a.connectEpoch[tabID]++
 	epoch := a.connectEpoch[tabID]
+	credentialEpoch := a.credentialEpoch[sessionID]
+	if previous := a.tabRefs[tabID]; previous.SessionID != "" && previous.SessionID != sessionID {
+		a.deleteTransientLocked("connection:"+tabID+":"+previous.SessionID)
+	}
 	a.tabRefs[tabID] = domain.ConnectionRef{TabID: tabID, SessionID: sessionID}
 	if secret == "" {
 		secret = a.transient["connection:"+tabID+":"+sessionID]
@@ -606,7 +623,8 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 	}
 	a.mu.Unlock()
 	a.stopLocalTerminal(tabID, "")
-	if secret == "" && s.CredentialRef != "" {
+	fromVault := secret == "" && s.CredentialRef != ""
+	if fromVault {
 		secret, e = a.secrets.Get(a.ctx, s.CredentialRef)
 		if e != nil {
 			return ConnectResult{}, apperror.New("couldNotReadLoginCredentialsEnterThemAgain", nil)
@@ -648,17 +666,16 @@ func (a *App) Connect(tabID, sessionID, secret string) (ConnectResult, error) {
 	}
 	home, _ := a.ssh.Home(ref)
 	a.mu.Lock()
-	if a.connectEpoch[tabID] != epoch {
+	if a.connectEpoch[tabID] != epoch || a.credentialsClosed {
 		a.mu.Unlock()
 		a.ssh.Disconnect(ref)
 		return ConnectResult{}, apperror.New("connectionCancelled", nil)
 	}
-	a.mu.Unlock()
-	if secret != "" {
-		a.mu.Lock()
-		a.transient["connection:"+tabID+":"+sessionID] = secret
-		a.mu.Unlock()
+	// Cache writes must be atomic with connection and credential generation checks.
+	if !fromVault && secret != "" && a.credentialEpoch[sessionID] == credentialEpoch {
+		a.cacheTransientLocked("connection:"+tabID+":"+sessionID, secret, transientConnectionCredentialTTL)
 	}
+	a.mu.Unlock()
 	return ConnectResult{Ref: ref, Home: home}, nil
 }
 func (a *App) TrustHost(challengeID string) error {
@@ -750,7 +767,7 @@ func (a *App) Reconnect(tabID, sessionID string) (ConnectResult, error) {
 	if s.AuthType == "password" && secret == "" && s.CredentialRef == "" {
 		return ConnectResult{}, apperror.New("couldNotReadLoginCredentialsEnterThemAgain", nil)
 	}
-	return a.Connect(tabID, sessionID, secret)
+	return a.Connect(tabID, sessionID, "")
 }
 
 // CancelConnecting cancels an in-flight connection or automatic retry for one tab.
@@ -758,7 +775,7 @@ func (a *App) CancelConnecting(tabID string) {
 	a.mu.Lock()
 	a.connectEpoch[tabID]++
 	ref := a.tabRefs[tabID]
-	delete(a.transient, "connection:"+tabID+":"+ref.SessionID)
+	a.deleteTransientLocked("connection:"+tabID+":"+ref.SessionID)
 	a.mu.Unlock()
 	a.sftp.CancelTab(tabID)
 	a.ssh.CancelTab(tabID)
@@ -771,7 +788,7 @@ func (a *App) Disconnect(ref domain.ConnectionRef) error {
 		return nil
 	}
 	a.connectEpoch[ref.TabID]++
-	delete(a.transient, "connection:"+ref.TabID+":"+ref.SessionID)
+	a.deleteTransientLocked("connection:"+ref.TabID+":"+ref.SessionID)
 	a.mu.Unlock()
 	a.sftp.CancelTab(ref.TabID)
 	a.ssh.CancelTab(ref.TabID)
@@ -782,11 +799,7 @@ func (a *App) CloseTab(tabID string) error {
 	a.stopLocalTerminal(tabID, "")
 	a.mu.Lock()
 	ref := a.tabRefs[tabID]
-	a.mu.Unlock()
-	a.mu.Lock()
-	delete(a.transient, "connection:"+tabID+":"+ref.SessionID)
-	a.mu.Unlock()
-	a.mu.Lock()
+	a.deleteTransientLocked("connection:"+tabID+":"+ref.SessionID)
 	delete(a.tabRefs, tabID)
 	a.connectEpoch[tabID]++
 	a.mu.Unlock()
