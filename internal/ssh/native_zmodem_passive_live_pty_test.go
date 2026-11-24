@@ -214,22 +214,37 @@ func TestNativeZmodemPassiveLiveInteractivePTY(t *testing.T) {
 				}
 				manager.mu.Lock()
 				c := manager.connections[ref.TabID]
+				alive := c != nil && c.terminal != nil
 				poisoned := c != nil && c.nativeTerminalPoisoned
-				var buffered bool
-				if c != nil && c.outputGuard != nil {
-					_, _, buffered = c.outputGuard.pendingCapture()
-				}
 				manager.mu.Unlock()
-				if !poisoned || buffered { t.Fatal("cancelled passive picker reenabled SSH or retained handshake buffer") }
-				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte("pwd\r")));
-					!errors.Is(err, errNativeTerminalInputBusy) {
-					t.Fatalf("cancelled remote session allowed user input: %v", err)
-				}
+				if !alive || poisoned { t.Fatal("verified Bash picker cancellation did not restore the same PTY") }
 				if _, err := manager.PassiveZmodemSelection(ref, id); err == nil {
 					t.Fatal("cancelled picker still authorized a transfer")
 				}
-				t.Logf("real remote %s: cancellation quarantined PTY and freed prebuffer (delay=%dms)", tc.name, delayMS)
-				return
+				probe := "printf 'CANCEL_OK_%s\\n' \"$((6*7))\"\r"
+				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte(probe))); err != nil {
+					t.Fatalf("cancelled picker left SSH input locked: %v", err)
+				}
+				deadline := time.After(5*time.Second)
+				outputTail := ""
+				for !strings.Contains(outputTail, "CANCEL_OK_42") {
+					select {
+					case chunk := <-terminalOutput:
+						outputTail += chunk
+					case <-deadline:
+						t.Fatalf("Bash did not execute next command after cancel: %q", outputTail)
+					}
+				}
+				// Retry the same transfer on the original generation.
+				if err := manager.Write(ref, base64.StdEncoding.EncodeToString([]byte(wire))); err != nil { t.Fatal(err) }
+				select {
+				case retry := <-intents:
+					newID, ok := retry["selectionId"].(uint64)
+					if !ok || newID <= id || retry["direction"] != tc.direction { t.Fatalf("invalid retry: %v", retry) }
+					id = newID
+				case <-time.After(12*time.Second):
+					t.Fatal("second picker not available after cancel")
+				}
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			if verifiedBash {
