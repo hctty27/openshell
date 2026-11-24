@@ -1,5 +1,7 @@
 # OpenShell 原生 ZMODEM 交互式终端实验入口
 
+> **历史开发记录（不适用于当前正式版）。** 本文保留早期实验的技术背景，不是当前操作说明。旧兼容引擎、trz/tsz、实验入口及实验开关已移除。请使用 [当前单文件使用说明](native-zmodem-auto-command.md) 和 [Windows GUI 验收清单](native-zmodem-gui-acceptance.md)。
+
 > 该功能是**开发者手动开启**的试验功能，不替换现有 `trzsz-go` 或 MSYS2。默认不接管终端直接输入的 `rz/sz`；可通过独立双开关启用受限的命令意图识别（见下文），不是纯协议帧自动接管。初次使用请连接隔离 Linux 测试机或 Docker SSH Lab，勿先用于生产会话。
 
 ## 启用与兼容模式

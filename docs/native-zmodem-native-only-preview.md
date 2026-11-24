@@ -1,5 +1,7 @@
 # Windows 原生 ZMODEM 独立预览包
 
+> **历史开发记录（不适用于当前正式版）。** 本文保留早期实验的技术背景，不是当前操作说明。旧兼容引擎、trz/tsz、实验入口及实验开关已移除。请使用 [当前单文件使用说明](native-zmodem-auto-command.md) 和 [Windows GUI 验收清单](native-zmodem-gui-acceptance.md)。
+
 此预览包用于在 Windows 桌面上完成**无本地 `lrzsz-win32`、无 `msys-2.0.dll`** 的 ZMODEM 实机验收，并非正式稳定版。
 
 ## 下载位置
