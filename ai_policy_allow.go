@@ -391,7 +391,7 @@ var aiPythonSafeModules = map[string]bool{
 }
 
 var aiPythonImport = regexp.MustCompile(`(?m)^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w., ]+))`)
-var aiPythonUnsafe = regexp.MustCompile(`\b(open|exec|eval|compile|__import__|getattr|setattr|delattr|globals|locals|vars|input|breakpoint|exit|quit|help|memoryview)\s*\(|__\w+__|\.\s*_[A-Za-z0-9_]*|\bfrom\s+[\w.]*\._[A-Za-z0-9_]*\s+import\b|\bfrom\s+[\w.]+\s+import\s+(?:\([^)]*_[A-Za-z0-9_]*[^)]*\)|[^;\n]*_[A-Za-z0-9_]*)|\bimport\s+[\w.]*\._[A-Za-z0-9_]*|\b(os|sys|subprocess|shutil|socket|pathlib|ctypes|importlib|pickle|marshal|builtins|signal|threading|multiprocessing|asyncio|io|tempfile|glob|urllib|http|requests)\b|(?m:^\s*[!%])`)
+var aiPythonUnsafe = regexp.MustCompile(`\b(open|exec|eval|compile|__import__|getattr|setattr|delattr|globals|locals|vars|input|breakpoint|exit|quit|help|memoryview)\b|__\w+__|\.\s*_[A-Za-z0-9_]*|\bfrom\s+[\w.]*\._[A-Za-z0-9_]*\s+import\b|\bfrom\s+[\w.]+\s+import\s+(?:\([^)]*_[A-Za-z0-9_]*[^)]*\)|[^;\n]*_[A-Za-z0-9_]*)|\bimport\s+[\w.]*\._[A-Za-z0-9_]*|\b(os|sys|subprocess|shutil|socket|pathlib|ctypes|importlib|pickle|marshal|builtins|signal|threading|multiprocessing|asyncio|io|tempfile|glob|urllib|http|requests)\b|(?m:^\s*[!%])`)
 
 // aiPythonSafe reports whether a Python snippet only computes with values and
 // safe standard modules. Anything else needs approval in automatic mode too.
