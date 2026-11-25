@@ -20,6 +20,10 @@ func TestAIPythonSafeRejectsPrivateModuleAccess(t *testing.T) {
 		"f\"{ｏｐｅｎ('/tmp/victim', 'w')}\"",
 		"import operator, random\noperator.attrgetter('_os')(random).remove('/tmp/victim')",
 		"import time\ntime.sleep(1000)",
+		"f.write('changed')",
+		"cursor.execute('DELETE FROM users')",
+		"session.post('https://example.invalid')",
+		"file.read()",
 	}
 	for _, code := range unsafe {
 		if aiPythonSafe(code) {
