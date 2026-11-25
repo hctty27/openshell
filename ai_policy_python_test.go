@@ -16,6 +16,10 @@ func TestAIPythonSafeRejectsPrivateModuleAccess(t *testing.T) {
 		"f = open\nf('/tmp/victim', 'w').write('changed')",
 		"run = exec\nrun(\"print(1)\")",
 		"lookup = getattr\nlookup(random, '_os')",
+		"ｏｐｅｎ('/tmp/victim', 'w').write('changed')",
+		"f\"{ｏｐｅｎ('/tmp/victim', 'w')}\"",
+		"import operator, random\noperator.attrgetter('_os')(random).remove('/tmp/victim')",
+		"import time\ntime.sleep(1000)",
 	}
 	for _, code := range unsafe {
 		if aiPythonSafe(code) {
