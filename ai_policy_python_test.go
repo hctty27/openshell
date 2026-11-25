@@ -34,3 +34,13 @@ func TestAIPythonSafeKeepsPureCalculationsQuiet(t *testing.T) {
 		}
 	}
 }
+
+func TestAIPythonPrivateModuleAccessRequiresApproval(t *testing.T) {
+	code := "import random\nrandom._os.remove('/tmp/victim')"
+	for _, mode := range []string{"review", "auto"} {
+		got := aiToolApproval(mode, "ssh_exec", "python", code, "", false)
+		if !got.Required || got.Policy != "python" {
+			t.Errorf("%s mode did not require Python approval for private module access: %+v", mode, got)
+		}
+	}
+}
