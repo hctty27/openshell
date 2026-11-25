@@ -34,6 +34,8 @@ func TestAIPythonSafeKeepsPureCalculationsQuiet(t *testing.T) {
 		"import math\nmath.sqrt(9)",
 		"from decimal import Decimal\nDecimal('1.25')",
 		"import random\nrandom.randint(1, 10)",
+		"message = '中文'; message",
+		"# 中文注释\n1 + 1",
 	}
 	for _, code := range safe {
 		if !aiPythonSafe(code) {
