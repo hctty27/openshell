@@ -2,6 +2,10 @@
 
 ## 未发布
 
+## 1.0.37 — 2026-11-25
+
+- fix(ai): harden automatic Python approval checks
+
 ## 1.0.36 — 2026-11-24
 
 - 修复原生 ZMODEM sidecar 协议故障导致 SSH stdout 中断的潜在路径；传输失败仍保留安全隔离（#312）。
