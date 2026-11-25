@@ -40,7 +40,7 @@ func TestAIToolApprovalIgnoresModelOptOut(t *testing.T) {
 		{"review", "ssh_exec", "", "systemctl status nginx", "", false, false, ""},
 		{"review", "ssh_exec", "", "journalctl -u nginx -n 50 --no-pager 2>/dev/null", "", false, false, ""},
 		{"review", "ssh_exec", "", "ls *.log", "", false, false, ""},
-		// The model can request review for operations that are not proven harmless.
+		// The model may add a prompt when it identifies context-specific risk.
 		{"review", "ssh_exec", "", "df -h", "", true, true, "model"},
 		// Automatic mode stops for destructive commands, secrets and anything
 		// it cannot prove read-only.
