@@ -13,6 +13,10 @@ func TestAISFTPPolicyUsesCanonicalTarget(t *testing.T) {
         {"auto", "sftp_read", "/tmp/link", "/tmp/innocent.txt", "unverified", true, true},
         {"auto", "sftp_read", "/srv/a.txt", "/srv/a.txt", "", false, false},
         {"auto", "sftp_write", "/srv/a.txt", "/srv/a.txt", "", false, false},
+        {"review", "sftp_write", "/srv/a.txt", "/srv/a.txt", "", false, false},
+        {"review", "sftp_write", "/srv/a.txt", "/srv/a.txt", "model", false, true},
+        {"review", "sftp_write", "/tmp/link", "/srv/a.txt", "unverified", true, true},
+        {"review", "sftp_write", "/tmp/link", "/etc/ssh/sshd_config", "write", true, true},
         {"auto", "sftp_read", "/etc/shadow", "/tmp/shadow", "sensitive", true, true},
         {"review", "sftp_read", "/tmp/alias", "/tmp/innocent.txt", "unverified", true, true},
     } {
