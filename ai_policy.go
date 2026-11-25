@@ -194,17 +194,27 @@ func aiToolApproval(mode, tool, program, command, filePath string, modelAsked bo
 		if aiPathIsSensitive(filePath) {
 			return aiApprovalPolicy{true, "sensitive"}
 		}
-		// A write into /etc, a shell startup file or similar needs approval
-		// in automatic mode too, as the same write through ssh_exec would.
-		if review || aiWriteIsSystem(filePath) {
+		// System directories and shell startup files are always protected.
+		// Ordinary project/application files are risk-assessed by the model
+		// in review mode instead of prompting for every single write.
+		if aiWriteIsSystem(filePath) {
 			return aiApprovalPolicy{true, "write"}
+		}
+		if review && modelAsked {
+			return aiApprovalPolicy{true, "model"}
 		}
 		return aiApprovalPolicy{}
 	case "ssh_exec":
 		switch program {
 		case "python":
-			if review || !aiPythonSafe(command) {
+			// Pure computation over in-memory values is safe in either mode.
+			// File, process, network, dynamic-code and unknown-module access
+			// cannot be proven harmless and always needs approval.
+			if !aiPythonSafe(command) {
 				return aiApprovalPolicy{true, "python"}
+			}
+			if review && modelAsked {
+				return aiApprovalPolicy{true, "model"}
 			}
 			return aiApprovalPolicy{}
 		case "mysql", "psql", "redis":
@@ -232,8 +242,8 @@ func aiToolApproval(mode, tool, program, command, filePath string, modelAsked bo
 		if review && modelAsked {
 			return aiApprovalPolicy{true, "model"}
 		}
-		// Allowlist: in both modes only commands that parse cleanly and are
-		// known to be read-only run without approval.
+		// Keep shell execution conservative: only commands that parse cleanly
+		// and are known to be read-only run without approval in either mode.
 		if !aiShellReadOnly(command) || aiShellFileAccessNeedsApproval(command) {
 			return aiApprovalPolicy{true, "unverified"}
 		}
