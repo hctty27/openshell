@@ -13,6 +13,9 @@ func TestAIPythonSafeRejectsPrivateModuleAccess(t *testing.T) {
 		"import random._os",
 		"import random._os as private_os",
 		"import math\nmath._internal",
+		"f = open\nf('/tmp/victim', 'w').write('changed')",
+		"run = exec\nrun(\"print(1)\")",
+		"lookup = getattr\nlookup(random, '_os')",
 	}
 	for _, code := range unsafe {
 		if aiPythonSafe(code) {
