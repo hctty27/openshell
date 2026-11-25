@@ -391,12 +391,80 @@ var aiPythonSafeModules = map[string]bool{
 }
 
 var aiPythonImport = regexp.MustCompile(`(?m)^\s*(?:from\s+([\w.]+)\s+import|import\s+([\w., ]+))`)
-var aiPythonUnsafe = regexp.MustCompile(`\b(open|exec|eval|compile|__import__|getattr|setattr|delattr|globals|locals|vars|input|breakpoint|exit|quit|help|memoryview)\s*\(|__\w+__|\b(os|sys|subprocess|shutil|socket|pathlib|ctypes|importlib|pickle|marshal|builtins|signal|threading|multiprocessing|asyncio|io|tempfile|glob|urllib|http|requests)\b|(?m:^\s*[!%])`)
+var aiPythonUnsafe = regexp.MustCompile(`\b(open|exec|eval|compile|__import__|getattr|setattr|delattr|globals|locals|vars|input|breakpoint|exit|quit|help|memoryview|attrgetter|methodcaller|sleep|tzset|clock_settime|clock_settime_ns|write|writelines|flush|truncate|read|readline|readlines|readinto|write_text|write_bytes|read_text|read_bytes|close|unlink|remove|rmdir|mkdir|makedirs|rmtree|rename|chmod|chown|symlink|link|touch|system|popen|spawn|connect|send|sendall|recv|bind|listen|accept|shutdown|kill|terminate|start|execute|executemany|executescript|commit|rollback|request|post|put|patch|delete)\b|__\w+__|\.\s*_[A-Za-z0-9_]*|\bfrom\s+[\w.]*\._[A-Za-z0-9_]*\s+import\b|\bfrom\s+[\w.]+\s+import\s+(?:\([^)]*_[A-Za-z0-9_]*[^)]*\)|[^;\n]*_[A-Za-z0-9_]*)|\bimport\s+[\w.]*\._[A-Za-z0-9_]*|\b(os|sys|subprocess|shutil|socket|pathlib|ctypes|importlib|pickle|marshal|builtins|signal|threading|multiprocessing|asyncio|io|tempfile|glob|urllib|http|requests)\b|(?m:^\s*[!%])`)
+
+// aiPythonHasNonASCIIExecutableText rejects non-ASCII source outside ordinary
+// string literals and comments. Python normalizes identifiers with NFKC, so
+// full-width "ｏｐｅｎ" is compiled as the builtin "open". F-strings are
+// executable expressions; conservatively reject non-ASCII anywhere inside one.
+func aiPythonHasNonASCIIExecutableText(code string) bool {
+	var quote byte
+	triple, fString, comment := false, false, false
+	for i := 0; i < len(code); {
+		c := code[i]
+		if comment {
+			if c == '\n' {
+				comment = false
+			}
+			i++
+			continue
+		}
+		if quote != 0 {
+			if fString && c >= 0x80 {
+				return true
+			}
+			if c == '\\' {
+				i += 2
+				continue
+			}
+			if triple {
+				if i+2 < len(code) && code[i] == quote && code[i+1] == quote && code[i+2] == quote {
+					quote, triple, fString = 0, false, false
+					i += 3
+					continue
+				}
+				i++
+				continue
+			}
+			if c == quote {
+				quote, fString = 0, false
+			}
+			i++
+			continue
+		}
+		if c == '#' {
+			comment = true
+			i++
+			continue
+		}
+		if c == '\'' || c == '"' {
+			start := i
+			for start > 0 && ((code[start-1] >= 'a' && code[start-1] <= 'z') ||
+				(code[start-1] >= 'A' && code[start-1] <= 'Z')) {
+				start--
+			}
+			prefix := strings.ToLower(code[start:i])
+			fString = prefix == "f" || prefix == "fr" || prefix == "rf"
+			quote = c
+			triple = i+2 < len(code) && code[i+1] == c && code[i+2] == c
+			i++
+			if triple {
+				i += 2
+			}
+			continue
+		}
+		if c >= 0x80 {
+			return true
+		}
+		i++
+	}
+	return false
+}
 
 // aiPythonSafe reports whether a Python snippet only computes with values and
 // safe standard modules. Anything else needs approval in automatic mode too.
 func aiPythonSafe(code string) bool {
-	if strings.TrimSpace(code) == "" || aiPythonUnsafe.MatchString(code) || strings.Contains(code, "\\x") {
+	if strings.TrimSpace(code) == "" || aiPythonHasNonASCIIExecutableText(code) || aiPythonUnsafe.MatchString(code) || strings.Contains(code, "\\x") {
 		return false
 	}
 	for _, m := range aiPythonImport.FindAllStringSubmatch(code, -1) {

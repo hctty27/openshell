@@ -40,7 +40,7 @@ func TestAIToolApprovalIgnoresModelOptOut(t *testing.T) {
 		{"review", "ssh_exec", "", "systemctl status nginx", "", false, false, ""},
 		{"review", "ssh_exec", "", "journalctl -u nginx -n 50 --no-pager 2>/dev/null", "", false, false, ""},
 		{"review", "ssh_exec", "", "ls *.log", "", false, false, ""},
-		// The model can always add a prompt.
+		// The model may add a prompt when it identifies context-specific risk.
 		{"review", "ssh_exec", "", "df -h", "", true, true, "model"},
 		// Automatic mode stops for destructive commands, secrets and anything
 		// it cannot prove read-only.
@@ -53,6 +53,8 @@ func TestAIToolApprovalIgnoresModelOptOut(t *testing.T) {
 		{"auto", "ssh_exec", "", "df -h", "", true, false, ""},
 		// File tools.
 		{"review", "sftp_write", "", "", "/etc/nginx/nginx.conf", false, true, "write"},
+		{"review", "sftp_write", "", "", "/srv/app/main.go", false, false, ""},
+		{"review", "sftp_write", "", "", "/srv/app/main.go", true, true, "model"},
 		{"auto", "sftp_write", "", "", "/tmp/notes.txt", false, false, ""},
 		{"auto", "sftp_write", "", "", "/srv/app/config.yml", false, false, ""},
 		{"auto", "sftp_write", "", "", "/etc/passwd", false, true, "write"},
@@ -66,7 +68,9 @@ func TestAIToolApprovalIgnoresModelOptOut(t *testing.T) {
 		{"auto", "sftp_list", "", "", "/var/log", false, false, ""},
 		{"auto", "sftp_read", "", "", "/proc/1/environ", false, true, "sensitive"},
 		// Interactive clients.
-		{"review", "ssh_exec", "python", "1+1", "", false, true, "python"},
+		{"review", "ssh_exec", "python", "1+1", "", false, false, ""},
+		{"review", "ssh_exec", "python", "1+1", "", true, true, "model"},
+		{"review", "ssh_exec", "python", "open('/tmp/x', 'w').write('x')", "", false, true, "python"},
 		{"auto", "ssh_exec", "python", "1+1", "", false, false, ""},
 		{"auto", "ssh_exec", "python", "import os; os.remove('x')", "", false, true, "python"},
 		{"review", "ssh_exec", "mysql", "SELECT 1", "", false, false, ""},
