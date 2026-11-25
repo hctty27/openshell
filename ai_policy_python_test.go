@@ -39,6 +39,7 @@ func TestAIPythonSafeKeepsPureCalculationsQuiet(t *testing.T) {
 		"from decimal import Decimal\nDecimal('1.25')",
 		"import random\nrandom.randint(1, 10)",
 		"message = '中文'; message",
+		"'hello world'.replace('world', 'there')",
 		"# 中文注释\n1 + 1",
 	}
 	for _, code := range safe {
