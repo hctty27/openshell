@@ -2,6 +2,10 @@
 
 ## 未发布
 
+## 1.0.38 — 2026-11-27
+
+- fix: share WebView2 user data across releases
+
 ## 1.0.37 — 2026-11-25
 
 - fix(ai): harden automatic Python approval checks
