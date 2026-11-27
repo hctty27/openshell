@@ -30,12 +30,23 @@ func main() {
             _ = os.Setenv("PATH", helperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
         }
     }
+    cacheRoot, err := os.UserCacheDir()
+    if err != nil { log.Fatal("无法获取 OpenShell 缓存目录：", err) }
+    webviewDataDir := sharedWebviewUserDataPath(cacheRoot)
+    if err := os.MkdirAll(webviewDataDir, 0o700); err != nil {
+      log.Fatal("无法创建 WebView2 用户数据目录：", err)
+    }
+
     service, err := NewApp()
     if err != nil { log.Fatal("无法初始化应用：", err) }
     ctx, cancel := context.WithCancel(context.Background())
     service.startup(ctx)
     desktop := application.New(application.Options{
       Name: branding.Name,
+      Windows: application.WindowsOptions{
+        // Share one WebView2 profile across versioned portable EXEs and the installer build.
+        WebviewUserDataPath: webviewDataDir,
+      },
       Services: []application.Service{application.NewService(service)},
       Assets: application.AssetOptions{Handler: application.BundledAssetFileServer(assets)},
       ShouldQuit: func() bool { return !service.beforeClose(ctx) },
