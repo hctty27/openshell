@@ -1,4 +1,5 @@
 import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowDownToLine, ArrowUpFromLine, FolderOpen, ChevronUp, ClipboardCopy, File, Folder, FolderPlus, RefreshCw, Info, Eye, EyeOff, FolderSymlink, Pencil, Trash2, Shield, X, CheckCircle2, CircleAlert, LoaderCircle, FileText, RotateCcw, ArrowLeftRight } from "lucide-react";
 import { api, listen, errorText } from "../bridge";
@@ -811,8 +812,9 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
           ))}
         </div>}
       </div>}
-      {(editor || editorLoadingPath) && (
+      {(editor || editorLoadingPath) && createPortal(
         <ModalSurface
+          modal={false}
           className="sftp-editor-dialog"
           aria-label={t("sftp:editText")}
           onDismiss={()=>void closeEditor()}
@@ -854,7 +856,8 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
               <button type="button" onClick={()=>void closeEditor()}>{t("common:cancel")}</button>
             </footer>
           </section>}
-        </ModalSurface>
+        </ModalSurface>,
+        document.body,
       )}
       {menu && <FloatingContextMenu {...menu} onClose={()=>setMenu(null)}/>}
     </div>

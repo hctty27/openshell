@@ -457,7 +457,7 @@ test("saving a remote file does not discard edits made during the upload", async
   expect(screen.getByTestId("sftp-edit-dirty").textContent).toBe("dirty");
 });
 
-test("remote SFTP editor uses a native modal and requires confirmation to discard changes", async () => {
+test("remote SFTP editor is non-modal and still confirms before discarding changes", async () => {
   const source: SFTPDocument = {
     path: "/root/config.yaml", content: "original", revision: "initial", size: 8,
   };
@@ -471,6 +471,8 @@ test("remote SFTP editor uses a native modal and requires confirmation to discar
   const modal = screen.getByRole("dialog", { name: t("sftp:editText") }) as HTMLDialogElement;
   expect(modal.classList.contains("sftp-editor-dialog")).toBe(true);
   expect(modal.open).toBe(true);
+  expect(modal.getAttribute("aria-modal")).toBeNull();
+  expect(modal.parentElement).toBe(document.body);
 
   fireEvent.change(draft, { target: { value: "unsaved" } });
   fireEvent(modal, new Event("cancel", { cancelable: true }));

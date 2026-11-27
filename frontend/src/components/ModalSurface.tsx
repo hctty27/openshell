@@ -6,6 +6,8 @@ interface ModalSurfaceProps extends Omit<DialogHTMLAttributes<HTMLDialogElement>
   locked?: boolean;
   closeOnBackdrop?: boolean;
   onOpen?(): void;
+  /** Render without making the rest of the workspace inert. */
+  modal?: boolean;
 }
 
 /**
@@ -24,6 +26,7 @@ export default function ModalSurface({
   locked = false,
   closeOnBackdrop = true,
   onOpen,
+  modal = true,
   ...attributes
 }: ModalSurfaceProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -32,13 +35,23 @@ export default function ModalSurface({
     const dialog = dialogRef.current;
     if (!dialog) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (typeof dialog.showModal === "function") dialog.showModal();
-    else dialog.setAttribute("open", "");
+    if (modal) {
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+    } else {
+      // A non-modal dialog remains visually above the workspace, but leaves
+      // the terminal and other controls outside it interactive.
+      if (typeof dialog.show === "function") dialog.show();
+      else dialog.setAttribute("open", "");
+    }
     onOpen?.();
     return () => {
+      const shouldRestoreFocus = modal || dialog.contains(document.activeElement);
       if (dialog.open && typeof dialog.close === "function") dialog.close();
       else dialog.removeAttribute("open");
-      if (previous?.isConnected) previous.focus();
+      // Do not steal focus back from the terminal after the user has clicked
+      // outside a non-modal editor.
+      if (shouldRestoreFocus && previous?.isConnected) previous.focus();
     };
   }, []);
 
@@ -47,8 +60,17 @@ export default function ModalSurface({
       {...attributes}
       ref={dialogRef}
       className={`modal-surface ${className}`.trim()}
-      aria-modal="true"
+      aria-modal={modal ? true : undefined}
       onCancel={(event) => {
+        event.preventDefault();
+        if (!locked) onDismiss();
+      }}
+      onKeyDown={(event) => {
+        attributes.onKeyDown?.(event);
+        // Non-modal dialogs do not get the browser's modal Escape handling.
+        // Only close when focus is in the editor; Escape in the terminal must
+        // continue to reach the remote shell.
+        if (modal || event.defaultPrevented || event.key !== "Escape") return;
         event.preventDefault();
         if (!locked) onDismiss();
       }}

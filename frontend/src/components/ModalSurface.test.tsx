@@ -14,6 +14,37 @@ test("opens as a dialog and dismisses via Escape", () => {
   expect(onDismiss).toHaveBeenCalledOnce();
 });
 
+test("non-modal dialogs use show() and leave the background interactive", () => {
+  const originalShow = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "show");
+  const originalShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, "showModal");
+  const show = vi.fn(function (this: HTMLDialogElement) { this.setAttribute("open", ""); });
+  const showModal = vi.fn(function (this: HTMLDialogElement) { this.setAttribute("open", ""); });
+  Object.defineProperty(HTMLDialogElement.prototype, "show", { configurable: true, value: show });
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: showModal });
+  const onBackgroundClick = vi.fn();
+  try {
+    render(
+      <>
+        <button onClick={onBackgroundClick}>Background action</button>
+        <ModalSurface modal={false} aria-label="Editor" onDismiss={vi.fn()}>
+          <button>Inside editor</button>
+        </ModalSurface>
+      </>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Editor" });
+    expect(show).toHaveBeenCalledOnce();
+    expect(showModal).not.toHaveBeenCalled();
+    expect(dialog.hasAttribute("aria-modal")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Background action" }));
+    expect(onBackgroundClick).toHaveBeenCalledOnce();
+  } finally {
+    if (originalShow) Object.defineProperty(HTMLDialogElement.prototype, "show", originalShow);
+    else Reflect.deleteProperty(HTMLDialogElement.prototype, "show");
+    if (originalShowModal) Object.defineProperty(HTMLDialogElement.prototype, "showModal", originalShowModal);
+    else Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+  }
+});
+
 test("locked dialogs cannot be dismissed", () => {
   const onDismiss = vi.fn();
   render(
