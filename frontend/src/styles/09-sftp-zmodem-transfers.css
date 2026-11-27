@@ -69,6 +69,7 @@
 .sftp-editor-pending footer {display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:8px}
 .sftp-editor-pending footer button {border:1px solid var(--border);border-radius:6px;padding:6px 11px;color:var(--text-primary)}
 .sftp-editor-pending footer button:hover {background:var(--hover)}
+.sftp-editor-loading-path {max-width:100%;overflow-wrap:anywhere;color:var(--text-secondary);font-size:11px}
 .sftp-editor-pending strong {font-size:13px;color:var(--text-primary);font-weight:600}
 .sftp-editor-error-icon {color:var(--text-muted)}
 .sftp-editor-error-message {max-width:100%;overflow-wrap:anywhere;white-space:pre-wrap}

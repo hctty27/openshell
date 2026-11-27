@@ -924,6 +924,7 @@ export default function SFTPView({refID,onNotice,hideTaskQueue = false,onRemoteD
                   <span className="sftp-editor-error-message">{editorLoadError}</span>
                 </> : <>
                   <LoaderCircle size={20} className="spin"/>
+                  <span className="sftp-editor-loading-path">{editorLoadingPath}</span>
                   <strong>{t("sftp:editorReading")}</strong>
                   <span>{t("sftp:editorReadingHint")}</span>
                 </>}

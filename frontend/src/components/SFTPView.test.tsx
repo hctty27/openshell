@@ -557,11 +557,19 @@ test("SFTP editor tabs retain independent drafts while switching between remote 
   vi.mocked(api.SFTPReadRemoteTextRequest).mockImplementation(async (_ref, path) => path === config.path ? config : nginx);
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
   fireEvent.doubleClick((await screen.findByText("config.yaml")).closest('[role="listitem"]')!);
-  const configDraft = await waitFor(() => document.querySelector<HTMLTextAreaElement>('[data-editor-path="/root/config.yaml"] [data-testid="sftp-edit-draft"]'));
+  const configDraft = await waitFor(() => {
+    const element = document.querySelector<HTMLTextAreaElement>('[data-editor-path="/root/config.yaml"] [data-testid="sftp-edit-draft"]');
+    if (!element) throw new Error("config editor tab did not mount");
+    return element;
+  });
   fireEvent.change(configDraft!, { target: { value: "config edited" } });
   fireEvent.click(screen.getByRole("button", { name: t("sftp:fileManager") }));
   fireEvent.doubleClick((await screen.findByText("nginx.conf")).closest('[role="listitem"]')!);
-  const nginxDraft = await waitFor(() => document.querySelector<HTMLTextAreaElement>('[data-editor-path="/root/nginx.conf"] [data-testid="sftp-edit-draft"]'));
+  const nginxDraft = await waitFor(() => {
+    const element = document.querySelector<HTMLTextAreaElement>('[data-editor-path="/root/nginx.conf"] [data-testid="sftp-edit-draft"]');
+    if (!element) throw new Error("nginx editor tab did not mount");
+    return element;
+  });
   expect(nginxDraft!.value).toBe("nginx original");
   fireEvent.click(screen.getByRole("tab", { name: /config\.yaml/ }));
   expect(configDraft!.value).toBe("config edited");

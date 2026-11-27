@@ -111,7 +111,6 @@ export default function SFTPFileEditor({
       }),
     });
     viewRef.current = view;
-    if (active) view.focus();
     let alive = true;
     const description = LanguageDescription.matchFilename(sftpLanguages, path);
     if (description) {
