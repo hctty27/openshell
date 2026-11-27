@@ -6,7 +6,8 @@
 
 - Session profiles, folders, SSH host-key trust records, preferences, saved AI provider settings, and saved conversations are stored in local SQLite data (normally `%APPDATA%\OpenShell\state.db`). Conversation records may include your prompts, AI answers, tool calls and terminal outputs.
 - Saved SSH passwords, private-key passphrases, and AI provider API keys are stored through Windows Credential Manager. A private key remains at the path the user selected; the app stores that path.
-- Microsoft Edge WebView2 stores its browser profile, cache, cookies and site data under `%LOCALAPPDATA%\\OpenShell\\WebView2`. This profile is shared across OpenShell releases and is separate from the SQLite application database.\n- A local diagnostic collector can store bounded operation categories, error codes, timings and resource counters in the OpenShell cache directory. It deliberately excludes terminal text, raw command text, credentials, host addresses and file contents. It is **not uploaded** by OpenShell. Exporting a diagnostic ZIP is a separate user action, and sharing that ZIP is up to the user.
+- Microsoft Edge WebView2 stores its browser profile, cache, cookies and site data under `%LOCALAPPDATA%\OpenShell\WebView2`. This profile is shared across OpenShell releases and is separate from the SQLite application database.
+- A local diagnostic collector can store bounded operation categories, error codes, timings and resource counters in the OpenShell cache directory. It deliberately excludes terminal text, raw command text, credentials, host addresses and file contents. It is **not uploaded** by OpenShell. Exporting a diagnostic ZIP is a separate user action, and sharing that ZIP is up to the user.
 - User-requested uploads, downloads, file editing, and session backup/export operate on paths the user chooses. A session backup may include hostnames and user names but is not a credential backup.
 
 ## When information leaves the device
@@ -43,7 +44,7 @@ Contact the maintainer through [GitHub Issues](https://github.com/hctty27/opensh
 
 ## 中文隐私说明
 
-OpenShell 将 SSH 会话、文件夹、偏好和 AI 对话保存在本机 SQLite 中，SSH 密码及 AI API Key 通过 Windows 凭据管理器保存。私钥通常只记录文件路径，不复制私钥内容。WebView2 的浏览器缓存、Cookie 和站点数据保存在 `%LOCALAPPDATA%\\OpenShell\\WebView2`，不同 OpenShell 版本共用该目录。
+OpenShell 将 SSH 会话、文件夹、偏好和 AI 对话保存在本机 SQLite 中，SSH 密码及 AI API Key 通过 Windows 凭据管理器保存。私钥通常只记录文件路径，不复制私钥内容。WebView2 的浏览器缓存、Cookie 和站点数据保存在 `%LOCALAPPDATA%\OpenShell\WebView2`，不同 OpenShell 版本共用该目录。
 
 **会主动产生网络通信的场景：** 连接用户配置的 SSH/SFTP 服务器、执行远程命令和传输文件；使用用户配置的 AI 模型时，向其 API 地址发送对话、相关终端上下文、命令结果及鉴权信息；用户点击外部文档、下载等链接时，由浏览器联系对应网站。AI 服务商和远程服务器有各自的隐私政策。建议 AI API 使用 HTTPS。
 
