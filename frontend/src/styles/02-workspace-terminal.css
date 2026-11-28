@@ -829,3 +829,30 @@
   white-space: nowrap;
 }
 .terminal-connection-error-actions button.primary { border-color: var(--accent); color: var(--accent); }
+
+
+/* Keep the terminal visible while the SFTP editor is docked in the file panel. */
+@media (max-width: 1280px) {
+  .workspace-file-panel:has(.sftp-editor-docked:not([hidden])) {
+    position: relative;
+    inset: auto;
+    flex: 0 0 min(var(--workspace-panel-width, 420px), 62%, max(0px, calc(100% - 400px)));
+    width: auto;
+    box-shadow: none;
+  }
+}
+@media (max-width: 760px) {
+  .workspace-workarea:has(.sftp-editor-docked:not([hidden])) {
+    flex-direction: column;
+  }
+  .workspace-file-panel:has(.sftp-editor-docked:not([hidden])) {
+    flex: 0 0 45%;
+    width: auto;
+    height: 45%;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+  .workspace-file-panel:has(.sftp-editor-docked:not([hidden])) .workspace-panel-resize-handle {
+    display: none;
+  }
+}

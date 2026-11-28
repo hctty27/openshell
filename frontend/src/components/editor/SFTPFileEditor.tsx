@@ -25,13 +25,14 @@ interface Props {
   onChange(content: string): void;
   onSave(content: string): void;
   onClose(): void;
+  active: boolean;
 }
 
 const displayIndent = (value: { mode: "spaces" | "tabs"; size: IndentSize }) =>
   (value.mode === "tabs" ? "Tab" : t("sftp:editorSpaces")) + ": " + value.size;
 
 export default function SFTPFileEditor({
-  path, initialContent, dirty, saving, onChange, onSave, onClose,
+  path, initialContent, dirty, saving, onChange, onSave, onClose, active,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -110,13 +111,12 @@ export default function SFTPFileEditor({
       }),
     });
     viewRef.current = view;
-    view.focus();
-    let active = true;
+    let alive = true;
     const description = LanguageDescription.matchFilename(sftpLanguages, path);
     if (description) {
       setLanguageName(description.name);
       void description.load().then(support => {
-        if (!active) return;
+        if (!alive) return;
         syntaxSupport.current = support;
         if (readSFTPEditorPreferences().syntaxHighlight) {
           view.dispatch({ effects: languageCompartment.current.reconfigure(support) });
@@ -124,11 +124,18 @@ export default function SFTPFileEditor({
       }).catch(() => setLanguageName(t("sftp:editorPlainText")));
     }
     return () => {
-      active = false;
+      alive = false;
       viewRef.current = null;
       view.destroy();
     };
   }, [path]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !active) return;
+    view.requestMeasure();
+    view.focus();
+  }, [active]);
 
   useEffect(() => {
     const view = viewRef.current;

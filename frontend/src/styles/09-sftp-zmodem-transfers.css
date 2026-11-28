@@ -42,19 +42,34 @@
 .sftp-sync-controls button:disabled { opacity: .4; }
 .sftp-retry-actions {display:flex;align-items:center;gap:3px}
 .sftp-retry-actions button:hover {color:var(--accent)}
-.modal-surface.sftp-editor-dialog {
-  position: fixed;
-  inset: 0;
-  z-index: 130;
-  margin: auto;
-  width: min(1200px,85vw);
-  height: min(780px,80vh);
-  overflow: hidden;
-  background: var(--panel);
-  border-radius: 10px;
-}
+.sftp-browser-workspace {display:flex;flex:1;flex-direction:column;min-height:0;min-width:0;overflow:hidden}
+.sftp-browser-workspace[hidden],.sftp-editor-docked[hidden] {display:none}
+.sftp-editor-docked {display:flex;flex:1;flex-direction:column;min-height:0;min-width:0;width:100%;overflow:hidden;background:var(--panel);color:var(--text-primary)}
+.sftp-editor-tabbar {display:flex;align-items:center;gap:6px;flex:0 0 36px;min-width:0;height:36px;padding:0 8px;border-bottom:1px solid var(--border);background:var(--panel)}
+.sftp-editor-back {display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;height:26px;padding:0 8px;border:1px solid var(--border);border-radius:5px;color:var(--text-secondary);font-size:11px}
+.sftp-editor-back:hover {background:var(--hover);color:var(--text-primary)}
+.sftp-editor-back:disabled {opacity:.45;cursor:default}
+.sftp-editor-tablist {display:flex;align-items:stretch;gap:3px;flex:1;min-width:0;height:100%;overflow-x:auto;overflow-y:hidden}
+.sftp-editor-tab {display:flex;align-items:center;gap:2px;flex:0 0 auto;max-width:220px;min-width:80px;border-bottom:2px solid transparent;color:var(--text-secondary)}
+.sftp-editor-tab.active {border-bottom-color:var(--accent-fill);background:var(--surface);color:var(--text-primary)}
+.sftp-editor-tab > button {display:inline-flex;align-items:center;gap:6px;min-width:0;height:100%;padding:0 6px;font-size:11px}
+.sftp-editor-tab > button:first-child {flex:1;overflow:hidden}
+.sftp-editor-tab > button:first-child > span:not(.sftp-editor-tab-dirty) {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sftp-editor-tab-close {flex:0 0 auto;width:22px;justify-content:center;color:var(--text-muted)}
+.sftp-editor-tab-close:hover {color:var(--text-primary);background:var(--hover);border-radius:4px}
+.sftp-editor-tab button:disabled {opacity:.45;cursor:default}
+.sftp-editor-tab-dirty {color:var(--warning);font-size:9px}
+.sftp-editor-content {position:relative;display:flex;flex:1;min-height:0;min-width:0;overflow:hidden}
+.sftp-editor-tab-content {position:absolute;inset:0;display:flex;min-height:0;min-width:0;overflow:hidden}
+.sftp-editor-tab-pane {display:none;flex:1;min-height:0;min-width:0;overflow:hidden}
+.sftp-editor-tab-pane.active {display:flex}
+.sftp-editor-tab-pane > .sftp-editor {height:100%}
 .sftp-editor-loading {display:flex;align-items:center;justify-content:center;gap:10px;min-height:180px;width:100%;height:100%;font-size:12px;color:var(--text-muted)}
-.sftp-editor-pending {flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;background:var(--surface);color:var(--text-muted);font-size:12px}
+.sftp-editor-pending {position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;min-height:0;padding:24px;text-align:center;background:var(--surface);color:var(--text-muted);font-size:12px}
+.sftp-editor-pending footer {display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:8px}
+.sftp-editor-pending footer button {border:1px solid var(--border);border-radius:6px;padding:6px 11px;color:var(--text-primary)}
+.sftp-editor-pending footer button:hover {background:var(--hover)}
+.sftp-editor-loading-path {max-width:100%;overflow-wrap:anywhere;color:var(--text-secondary);font-size:11px}
 .sftp-editor-pending strong {font-size:13px;color:var(--text-primary);font-weight:600}
 .sftp-editor-error-icon {color:var(--text-muted)}
 .sftp-editor-error-message {max-width:100%;overflow-wrap:anywhere;white-space:pre-wrap}
@@ -261,7 +276,6 @@
 .sftp-editor-status select {max-width:160px;cursor:pointer}
 .sftp-editor-status > span:last-child {margin-left:auto;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:700px) {
-  .modal-surface.sftp-editor-dialog {width:calc(100vw - 32px);height:min(95vh,calc(100vh - 32px))}
   .sftp-editor-status {gap:7px;padding:0 7px}
 }
 

@@ -38,16 +38,20 @@ vi.mock("@wailsio/runtime", () => ({
 }));
 
 vi.mock("./editor/SFTPFileEditor", () => ({
-  default: ({initialContent,dirty,onChange,onSave}: {
+  default: ({path,initialContent,dirty,onChange,onSave,onClose,active}: {
+    path: string;
     initialContent: string;
     dirty: boolean;
     onChange(content: string): void;
     onSave(content: string): void;
+    onClose(): void;
+    active: boolean;
   }) => (
-    <div>
+    <div data-editor-path={path} hidden={!active}>
       <textarea data-testid="sftp-edit-draft" defaultValue={initialContent} onChange={event=>onChange(event.target.value)}/>
       <span data-testid="sftp-edit-dirty">{dirty ? "dirty" : "clean"}</span>
-      <button type="button" onClick={()=>onSave(document.querySelector<HTMLTextAreaElement>('[data-testid="sftp-edit-draft"]')?.value ?? "")}>save mock</button>
+      <button type="button" onClick={()=>onSave(document.querySelector<HTMLTextAreaElement>(`[data-editor-path="${path}"] [data-testid="sftp-edit-draft"]`)?.value ?? "")}>save mock</button>
+      <button type="button" onClick={onClose}>close mock</button>
     </div>
   ),
 }));
@@ -457,118 +461,120 @@ test("saving a remote file does not discard edits made during the upload", async
   expect(screen.getByTestId("sftp-edit-dirty").textContent).toBe("dirty");
 });
 
-test("remote SFTP editor is non-modal and still confirms before discarding changes", async () => {
-  const source: SFTPDocument = {
-    path: "/root/config.yaml", content: "original", revision: "initial", size: 8,
-  };
-  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
-    side === "remote" ? [file("config.yaml", source.path)] : []);
+test("remote SFTP editor is docked inside the SFTP panel and confirms before discarding changes", async () => {
+  const source: SFTPDocument = { path: "/root/config.yaml", content: "original", revision: "initial", size: 8 };
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) => side === "remote" ? [file("config.yaml", source.path)] : []);
   vi.mocked(api.SFTPReadRemoteTextRequest).mockResolvedValue(source);
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
-
   fireEvent.doubleClick((await screen.findByText("config.yaml")).closest('[role="listitem"]')!);
   const draft = await screen.findByTestId("sftp-edit-draft") as HTMLTextAreaElement;
-  const modal = screen.getByRole("dialog", { name: t("sftp:editText") }) as HTMLDialogElement;
-  expect(modal.classList.contains("sftp-editor-dialog")).toBe(true);
-  expect(modal.open).toBe(true);
-  expect(modal.getAttribute("aria-modal")).toBeNull();
-  expect(modal.parentElement).toBe(document.body);
-
+  const dock = screen.getByRole("region", { name: t("sftp:editText") });
+  expect(dock.classList.contains("sftp-editor-docked")).toBe(true);
+  expect(dock.parentElement?.classList.contains("sftp-view")).toBe(true);
+  expect(document.querySelector(".sftp-editor-dialog")).toBeNull();
   fireEvent.change(draft, { target: { value: "unsaved" } });
-  fireEvent(modal, new Event("cancel", { cancelable: true }));
+  fireEvent.click(within(dock).getByRole("button", { name: "close mock" }));
   let confirmation = await screen.findByRole("dialog", { name: t("sftp:discardEditorTitle") });
   fireEvent.click(within(confirmation).getByRole("button", { name: t("common:cancel") }));
-  expect(modal.open).toBe(true);
+  expect(dock.isConnected).toBe(true);
   expect(draft.value).toBe("unsaved");
-
-  fireEvent(modal, new Event("cancel", { cancelable: true }));
+  fireEvent.click(within(dock).getByRole("button", { name: "close mock" }));
   confirmation = await screen.findByRole("dialog", { name: t("sftp:discardEditorTitle") });
   fireEvent.click(within(confirmation).getByRole("button", { name: t("sftp:discard") }));
-  await waitFor(() => expect(document.querySelector(".sftp-editor-dialog")).toBeNull());
+  await waitFor(() => expect(document.querySelector(".sftp-editor-docked")).toBeNull());
 });
 
 test("remote editor opens immediately and ignores a cancelled read", async () => {
-  const source: SFTPDocument = {
-    path: "/root/config.yaml", content: "original", revision: "initial", size: 8,
-  };
-  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
-    side === "remote" ? [file("config.yaml", source.path)] : []);
+  const source: SFTPDocument = { path: "/root/config.yaml", content: "original", revision: "initial", size: 8 };
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) => side === "remote" ? [file("config.yaml", source.path)] : []);
   let finishRead: (document: SFTPDocument) => void = () => {};
-  vi.mocked(api.SFTPReadRemoteTextRequest).mockImplementation(() =>
-    new Promise(resolve => { finishRead = resolve; }));
+  vi.mocked(api.SFTPReadRemoteTextRequest).mockImplementation(() => new Promise(resolve => { finishRead = resolve; }));
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
-
   const row = (await screen.findByText("config.yaml")).closest('[role="listitem"]')!;
   fireEvent.doubleClick(row);
   fireEvent.doubleClick(row);
   expect(api.SFTPReadRemoteTextRequest).toHaveBeenCalledTimes(1);
-  const modal = screen.getByRole("dialog", { name: t("sftp:editText") });
-  expect(within(modal).getByText(t("sftp:editorReading"))).toBeTruthy();
-  expect(within(modal).getByText("/root/config.yaml")).toBeTruthy();
-
-  fireEvent.click(within(modal).getByRole("button", { name: t("common:close") }));
-  await waitFor(() => expect(document.querySelector(".sftp-editor-dialog")).toBeNull());
+  const dock = screen.getByRole("region", { name: t("sftp:editText") });
+  expect(within(dock).getByText(t("sftp:editorReading"))).toBeTruthy();
+  expect(within(dock).getByText("/root/config.yaml")).toBeTruthy();
+  fireEvent.click(within(dock).getByRole("button", { name: t("common:cancel") }));
+  await waitFor(() => expect(document.querySelector(".sftp-editor-docked")).toBeNull());
   expect(api.SFTPCancelReadRemoteText).toHaveBeenCalledWith(expect.stringMatching(/^sftp-read-/));
   await act(async () => finishRead(source));
-  expect(document.querySelector(".sftp-editor-dialog")).toBeNull();
+  expect(document.querySelector(".sftp-editor-docked")).toBeNull();
 });
 
 test("SFTP editor loading can be dismissed by Escape without opening a late result", async () => {
   const source: SFTPDocument = { path: "/root/config.yaml", content: "original", revision: "initial", size: 8 };
-  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
-    side === "remote" ? [file("config.yaml", source.path)] : []);
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) => side === "remote" ? [file("config.yaml", source.path)] : []);
   let finishRead: (document: SFTPDocument) => void = () => {};
-  vi.mocked(api.SFTPReadRemoteTextRequest).mockImplementation(() =>
-    new Promise(resolve => { finishRead = resolve; }));
+  vi.mocked(api.SFTPReadRemoteTextRequest).mockImplementation(() => new Promise(resolve => { finishRead = resolve; }));
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
-
   fireEvent.doubleClick((await screen.findByText("config.yaml")).closest('[role="listitem"]')!);
-  const modal = screen.getByRole("dialog", { name: t("sftp:editText") });
-  expect(within(modal).getByRole("button", { name: t("common:cancel") })).toBeTruthy();
-  fireEvent(modal, new Event("cancel", { cancelable: true }));
-  await waitFor(() => expect(document.querySelector(".sftp-editor-dialog")).toBeNull());
+  const dock = screen.getByRole("region", { name: t("sftp:editText") });
+  fireEvent.keyDown(dock, { key: "Escape" });
+  await waitFor(() => expect(document.querySelector(".sftp-editor-docked")).toBeNull());
   expect(api.SFTPCancelReadRemoteText).toHaveBeenCalledTimes(1);
   await act(async () => finishRead(source));
-  expect(document.querySelector(".sftp-editor-dialog")).toBeNull();
+  expect(document.querySelector(".sftp-editor-docked")).toBeNull();
 });
 
 test("SFTP editor shows a retry option when a remote read fails", async () => {
   const source: SFTPDocument = { path: "/root/config.yaml", content: "original", revision: "initial", size: 8 };
-  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
-    side === "remote" ? [file("config.yaml", source.path)] : []);
-  vi.mocked(api.SFTPReadRemoteTextRequest)
-    .mockRejectedValueOnce(new Error("network unavailable"))
-    .mockResolvedValueOnce(source);
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) => side === "remote" ? [file("config.yaml", source.path)] : []);
+  vi.mocked(api.SFTPReadRemoteTextRequest).mockRejectedValueOnce(new Error("network unavailable")).mockResolvedValueOnce(source);
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
-
   fireEvent.doubleClick((await screen.findByText("config.yaml")).closest('[role="listitem"]')!);
-  const modal = screen.getByRole("dialog", { name: t("sftp:editText") });
-  expect(await within(modal).findByText(t("sftp:editorLoadFailed"))).toBeTruthy();
-  expect(within(modal).getByText(/network unavailable/)).toBeTruthy();
-  fireEvent.click(within(modal).getByRole("button", { name: t("sftp:editorRetry") }));
+  const dock = screen.getByRole("region", { name: t("sftp:editText") });
+  expect(await within(dock).findByText(t("sftp:editorLoadFailed"))).toBeTruthy();
+  expect(within(dock).getByText(/network unavailable/)).toBeTruthy();
+  fireEvent.click(within(dock).getByRole("button", { name: t("sftp:editorRetry") }));
   expect(await screen.findByTestId("sftp-edit-draft")).toBeTruthy();
   expect(api.SFTPReadRemoteTextRequest).toHaveBeenCalledTimes(2);
 });
 
-test("remote editor keeps the same dialog shell while loading and after content arrives", async () => {
+test("docked editor shell stays mounted while loading and after content arrives", async () => {
   const source: SFTPDocument = { path: "/root/config.yaml", content: "original", revision: "initial", size: 8 };
-  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) =>
-    side === "remote" ? [file("config.yaml", source.path)] : []);
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) => side === "remote" ? [file("config.yaml", source.path)] : []);
   let finishRead: (document: SFTPDocument) => void = () => {};
-  vi.mocked(api.SFTPReadRemoteTextRequest).mockImplementation(() =>
-    new Promise(resolve => { finishRead = resolve; }));
+  vi.mocked(api.SFTPReadRemoteTextRequest).mockImplementation(() => new Promise(resolve => { finishRead = resolve; }));
   render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
-
   fireEvent.doubleClick((await screen.findByText("config.yaml")).closest('[role="listitem"]')!);
-  const modal = screen.getByRole("dialog", { name: t("sftp:editText") });
-  const initialClassName = modal.className;
-  expect(initialClassName).toBe("modal-surface sftp-editor-dialog");
-  expect(within(modal).getByText(t("sftp:editorReading"))).toBeTruthy();
-
+  const dock = screen.getByRole("region", { name: t("sftp:editText") });
+  const initialClassName = dock.className;
+  expect(initialClassName).toBe("sftp-editor-docked");
+  expect(within(dock).getByText(t("sftp:editorReading"))).toBeTruthy();
   await act(async () => finishRead(source));
   expect(await screen.findByTestId("sftp-edit-draft")).toBeTruthy();
-  expect(screen.getByRole("dialog", { name: t("sftp:editText") })).toBe(modal);
-  expect(modal.className).toBe(initialClassName);
+  expect(screen.getByRole("region", { name: t("sftp:editText") })).toBe(dock);
+  expect(dock.className).toBe(initialClassName);
+});
+
+test("SFTP editor tabs retain independent drafts while switching between remote files", async () => {
+  const config: SFTPDocument = { path: "/root/config.yaml", content: "config original", revision: "config-r1", size: 14 };
+  const nginx: SFTPDocument = { path: "/root/nginx.conf", content: "nginx original", revision: "nginx-r1", size: 14 };
+  vi.mocked(api.SFTPList).mockImplementation(async (_ref, side) => side === "remote" ? [file("config.yaml", config.path), file("nginx.conf", nginx.path)] : []);
+  vi.mocked(api.SFTPReadRemoteTextRequest).mockImplementation(async (_ref, path) => path === config.path ? config : nginx);
+  render(<DialogProvider><SFTPView refID={ref} onNotice={vi.fn()}/></DialogProvider>);
+  fireEvent.doubleClick((await screen.findByText("config.yaml")).closest('[role="listitem"]')!);
+  const configDraft = await waitFor(() => {
+    const element = document.querySelector<HTMLTextAreaElement>('[data-editor-path="/root/config.yaml"] [data-testid="sftp-edit-draft"]');
+    if (!element) throw new Error("config editor tab did not mount");
+    return element;
+  });
+  fireEvent.change(configDraft!, { target: { value: "config edited" } });
+  fireEvent.click(screen.getByRole("button", { name: t("sftp:fileManager") }));
+  fireEvent.doubleClick((await screen.findByText("nginx.conf")).closest('[role="listitem"]')!);
+  const nginxDraft = await waitFor(() => {
+    const element = document.querySelector<HTMLTextAreaElement>('[data-editor-path="/root/nginx.conf"] [data-testid="sftp-edit-draft"]');
+    if (!element) throw new Error("nginx editor tab did not mount");
+    return element;
+  });
+  expect(nginxDraft!.value).toBe("nginx original");
+  fireEvent.click(screen.getByRole("tab", { name: /config\.yaml/ }));
+  expect(configDraft!.value).toBe("config edited");
+  fireEvent.click(screen.getByRole("tab", { name: /nginx\.conf/ }));
+  expect(nginxDraft!.value).toBe("nginx original");
 });
 
 test("multi-selection submits one atomic SFTP transfer batch", async () => {
